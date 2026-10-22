@@ -1282,6 +1282,22 @@ code for a platform no deferred-validation run has used yet.
 **Payback trigger:** a goal integrated from Windows defers a command, or
 Windows becomes a supported operator platform for goal integration.
 
+## Worktree setup cannot stop a Windows descendant that outlives its shell
+
+**What:** On timeout or failure, claim-time `post_worktree_cmd` kills its
+process group and waits for it to empty on Unix (ADR-0117 D-34 amendment).
+On Windows it can kill the tree only while the shell runs: once the root
+exited, its PID may be reused, so killing a tree by it could hit an
+unrelated process. A descendant that outlives its shell there survives the
+bound and can keep writing the worktree after the setup lock is released.
+
+**Why deferred:** Owning the tree after its root exits needs a Job Object per
+attempt, the same platform work the deferred-validation entry above defers;
+no Windows host has run claim-time setup in a recorded run.
+
+**Payback trigger:** Windows becomes a supported agent host for claim-time
+setup, or a Windows setup is observed leaving a process behind.
+
 ## Deferred-validation batch does not load tool env files
 
 **What:** The deferred-validation batch runs commands in its own worktree,

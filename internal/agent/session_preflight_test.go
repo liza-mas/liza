@@ -152,7 +152,7 @@ func TestSessionPreflightBlocksInvalidLaunchAndAllowsRepair(t *testing.T) {
 				t.Fatal(err)
 			}
 			// A successful setup child does not make the supervisor session ready.
-			if err := ops.RunPostWorktreeCmd(fixture.projectRoot, "exit 0", worktree, nil); err != nil {
+			if err := ops.RunPostWorktreeCmd(fixture.projectRoot, "exit 0", worktree, time.Minute, nil); err != nil {
 				t.Fatalf("setup prerequisite: %v", err)
 			}
 			config := fixture.config(fixture.authorityA)

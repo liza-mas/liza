@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -135,6 +136,30 @@ func TestEffectiveMaxInstances(t *testing.T) {
 			}
 			if got := models.EffectiveMaxInstances(tt.roleMax, config.MaxInstances); got != tt.want {
 				t.Fatalf("EffectiveMaxInstances() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEffectivePostWorktreeCmdTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want time.Duration
+	}{
+		{name: "absent", data: "{}\n", want: models.DefaultPostWorktreeCmdTimeoutSeconds * time.Second},
+		{name: "zero", data: "post_worktree_cmd_timeout_seconds: 0\n", want: models.DefaultPostWorktreeCmdTimeoutSeconds * time.Second},
+		{name: "negative", data: "post_worktree_cmd_timeout_seconds: -5\n", want: models.DefaultPostWorktreeCmdTimeoutSeconds * time.Second},
+		{name: "configured", data: "post_worktree_cmd_timeout_seconds: 300\n", want: 300 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config models.Config
+			if err := yaml.Unmarshal([]byte(tt.data), &config); err != nil {
+				t.Fatalf("unmarshal config: %v", err)
+			}
+			if got := models.EffectivePostWorktreeCmdTimeout(config); got != tt.want {
+				t.Fatalf("EffectivePostWorktreeCmdTimeout() = %s, want %s", got, tt.want)
 			}
 		})
 	}

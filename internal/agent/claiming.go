@@ -186,7 +186,7 @@ func ensureDoerWorktreeSetup(projectRoot, agentID, role, taskID, worktreeRel str
 		// Protected resumes ran setup before preflight and ownership renewal.
 		return nil
 	}
-	setupErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, filepath.Join(projectRoot, worktreeRel), authority)
+	setupErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, filepath.Join(projectRoot, worktreeRel), models.EffectivePostWorktreeCmdTimeout(state.Config), authority)
 	if setupErr == nil {
 		return nil
 	}

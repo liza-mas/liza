@@ -19,6 +19,9 @@ import (
 
 // Tests here change package-level setup timing, so they do not run in parallel.
 
+// testSetupTimeout bounds setups that are not testing the bound.
+const testSetupTimeout = time.Minute
+
 type setupFixture struct {
 	root      string
 	statePath string
@@ -51,7 +54,12 @@ func newSetupFixture(t *testing.T) setupFixture {
 
 func (f setupFixture) run(t *testing.T, cmd string) *PostWorktreeSetupError {
 	t.Helper()
-	err := RunPostWorktreeCmd(f.root, cmd, f.worktree, nil)
+	return f.runWithin(t, cmd, testSetupTimeout)
+}
+
+func (f setupFixture) runWithin(t *testing.T, cmd string, timeout time.Duration) *PostWorktreeSetupError {
+	t.Helper()
+	err := RunPostWorktreeCmd(f.root, cmd, f.worktree, timeout, nil)
 	if err == nil {
 		return nil
 	}
@@ -274,7 +282,7 @@ func TestRunPostWorktreeCmd_SerializesOneWorktreeOnly(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- RunPostWorktreeCmd(f.root, call.cmd, call.dir, nil)
+			errs <- RunPostWorktreeCmd(f.root, call.cmd, call.dir, testSetupTimeout, nil)
 		}()
 	}
 	wg.Wait()
@@ -298,7 +306,7 @@ func TestRunPostWorktreeCmd_SerializesOneWorktreeOnly(t *testing.T) {
 func TestRunPostWorktreeCmd_LockTimeoutDegradesDespiteOlderSuccess(t *testing.T) {
 	f := newSetupFixture(t)
 	f.seedOutcome(t, "5 ok "+time.Now().UTC().Format(time.RFC3339Nano)+"\n")
-	t.Cleanup(SetWorktreeSetupLockTimeoutForTest(200 * time.Millisecond))
+	t.Cleanup(SetWorktreeSetupLockSlackForTest(100 * time.Millisecond))
 	artifacts, err := newWorktreeSetupArtifacts(f.root, f.worktree)
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +321,8 @@ func TestRunPostWorktreeCmd_LockTimeoutDegradesDespiteOlderSuccess(t *testing.T)
 	}()
 	<-held
 
-	setupErr := f.run(t, "touch ran")
+	// The waiter gives up after its own bound plus the slack.
+	setupErr := f.runWithin(t, "touch ran", 100*time.Millisecond)
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
@@ -491,7 +500,7 @@ func TestWorktreeSetupArtifactsKeyByFullPath(t *testing.T) {
 	if f.run(t, "echo first-worktree; exit 1") == nil {
 		t.Fatal("first setup passed, want failure")
 	}
-	if err := RunPostWorktreeCmd(f.root, "echo second-worktree; exit 1", twin, nil); err == nil {
+	if err := RunPostWorktreeCmd(f.root, "echo second-worktree; exit 1", twin, testSetupTimeout, nil); err == nil {
 		t.Fatal("second setup passed, want failure")
 	}
 

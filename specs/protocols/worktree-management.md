@@ -72,7 +72,11 @@ recorded, a reviewer claim is released back to the task's reviewable status, and
 the affected agent is marked degraded so it stops claiming instead of retrying.
 Reviewer setup failures do not block the task — blocking would return it to the
 doer's executing status and discard review-ready work. Setups of one worktree
-are serialized across processes and a failed run is retried once. The command's
+are serialized across processes and a failed run is retried once. Each setup
+call is bounded by `config.post_worktree_cmd_timeout_seconds` (default 1800 s),
+counted from lock acquisition and covering the retry; on expiry the setup's
+process group is killed and the call fails closed like any other failure
+(ADR-0117 D-34 amendment). The command's
 output never reaches logs or state: a setup command can print secrets that
 cannot be masked from this process, so only the masked command, the worktree
 path, the exit status, and the path of a private output file (0600, the last

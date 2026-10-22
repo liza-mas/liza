@@ -432,7 +432,7 @@ func prepareResumedValidation(projectRoot, taskID, agentID, worktree string, ses
 		worktree = filepath.Join(projectRoot, worktree)
 	}
 	if state.Config.PostWorktreeCmd != nil {
-		if err := RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, worktree, authority); err != nil {
+		if err := RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, worktree, models.EffectivePostWorktreeCmdTimeout(state.Config), authority); err != nil {
 			if degraded := degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID, authority, err); degraded != nil {
 				return nil, degraded
 			}

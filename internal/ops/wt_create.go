@@ -71,6 +71,7 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 
 	integrationBranch := state.Config.IntegrationBranch
 	postCmd := state.Config.PostWorktreeCmd
+	postCmdTimeout := models.EffectivePostWorktreeCmdTimeout(state.Config)
 	copyEnvFiles := state.Config.CopyWorktreeEnvFiles
 	scipSearchLanguages := append([]string(nil), state.Config.ScipSearch...)
 
@@ -98,7 +99,7 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
 			// Fail closed: an unprepared worktree must not be reported as ready.
 			if postCmd != nil {
-				if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, nil); err != nil {
+				if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, postCmdTimeout, nil); err != nil {
 					return nil, err
 				}
 			}
@@ -157,7 +158,7 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	// Fail closed: the worktree stays on disk for inspection, but creation
 	// reports failure rather than handing over an unprepared checkout.
 	if postCmd != nil {
-		if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, nil); err != nil {
+		if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, postCmdTimeout, nil); err != nil {
 			return nil, err
 		}
 	}

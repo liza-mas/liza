@@ -6,7 +6,8 @@ ACCEPTED — Supersedes the failure-handling decision of ADR-0031. The configura
 mechanism, trust model, and stack-agnostic constraint of ADR-0031 remain in force.
 Amended 2026-10-22 (D-74): setup is serialized per worktree and retried once, the
 child's output tail is kept in a private file, and a later passing setup clears
-the setup degradation it disproves. See the amendment at the end.
+the setup degradation it disproves. Amended 2026-10-23 (D-34): each setup call
+is bounded by a configurable timeout. See the amendments at the end.
 
 ## Context and Problem Statement
 
@@ -174,3 +175,46 @@ Deferred-validation lanes keep their own runner (ADR-0204).
 
 Implemented in `internal/ops/post_worktree_setup.go`, `post_worktree_setup_error.go`,
 `agent_health.go`, `claim_task.go`, and `internal/agent/claiming.go`.
+
+## Amendment — 2026-10-23 (D-34): bounded setup
+
+**Context.** Claim-time setup ran with no deadline. In one run a host's broken
+IPv6 left `bun install`'s registry fetch in TCP SYN-SENT for about 12 minutes
+on every fresh worktree. The setup never exited, so the fail-closed path above
+(which acts on a failed exit) never ran. The claiming agents looked idle and
+healthy, with live heartbeats and no alert, anomaly or degraded mark, and fresh
+claims stopped across the run.
+
+**Decisions.**
+
+1. **Configurable bound.** `config.post_worktree_cmd_timeout_seconds` bounds
+   each `RunPostWorktreeCmd` call. A non-positive or absent value means 1800 s,
+   the bound deferred validation already applies to the same command. The
+   budget starts once the call holds the worktree's setup lock and covers both
+   attempts, the retry pause included. A setup that exceeds it returns the
+   setup error `timed out after <bound>` and takes the existing fail-closed
+   path. A timed-out setup is not retried.
+2. **Waiting for the lock.** A waiter now waits for the holder's bound plus a
+   1-minute slack, instead of a fixed 30 minutes.
+3. **Process cleanup.** Each attempt runs in its own process group. On Unix the
+   deadline kills the whole group, even after the shell has exited, so a
+   descendant that holds the output pipes cannot outlive the bound. The group of
+   a failed or timed-out attempt is emptied before a retry starts and before the
+   lock is released. If it cannot be emptied, the setup fails with no retry. A
+   passing attempt is not reaped, so a setup that detaches a process with its
+   output redirected keeps its earlier behavior.
+4. **Windows limitation.** Windows can kill the tree only while its root process
+   is still alive. A descendant that outlives its shell there is not stopped
+   (TECH_DEBT).
+
+**Consequences.** A setup that legitimately takes longer than the bound now
+degrades the agent. Operators raise the key for slow cold setups, or lower it
+where a hang is the likely failure. The 1800 s default bounds an indefinite
+hang but would not have caught the 12-minute one. The setup child no longer
+shares the caller's process group, so a terminal interrupt of the caller does
+not reach it directly. Every other command run with `configProcessGroupKill`
+already makes this trade-off.
+
+Implemented in `internal/ops/post_worktree_setup.go` and
+`internal/models/config.go`, with callers passing
+`models.EffectivePostWorktreeCmdTimeout`.

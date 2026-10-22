@@ -147,6 +147,20 @@ func EffectiveHighChurnRejectionThreshold(config Config) int {
 	return config.HighChurnRejectionThreshold
 }
 
+// DefaultPostWorktreeCmdTimeoutSeconds bounds one claim-time setup call
+// (ADR-0117, D-34 amendment); it matches the deferred-validation setup bound.
+const DefaultPostWorktreeCmdTimeoutSeconds = 1800
+
+// EffectivePostWorktreeCmdTimeout returns the configured positive setup bound
+// or the default.
+func EffectivePostWorktreeCmdTimeout(config Config) time.Duration {
+	seconds := DefaultPostWorktreeCmdTimeoutSeconds
+	if config.PostWorktreeCmdTimeoutSeconds > 0 {
+		seconds = config.PostWorktreeCmdTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 // EffectiveMaxInstances returns the live-agent cap for a role: the role's own
 // positive max-instances, else the positive project default, else
 // DefaultMaxInstances. Registration and pool auto-repair share it.
@@ -217,7 +231,10 @@ type Config struct {
 	AutoResume               bool                          `yaml:"auto_resume,omitempty"`
 	NoFollowUp               bool                          `yaml:"no_follow_up,omitempty"`
 	PostWorktreeCmd          *string                       `yaml:"post_worktree_cmd,omitempty"`
-	CopyWorktreeEnvFiles     bool                          `yaml:"copy_worktree_env_files,omitempty"`
+	// PostWorktreeCmdTimeoutSeconds bounds each setup call; non-positive means
+	// DefaultPostWorktreeCmdTimeoutSeconds.
+	PostWorktreeCmdTimeoutSeconds int  `yaml:"post_worktree_cmd_timeout_seconds,omitempty"`
+	CopyWorktreeEnvFiles          bool `yaml:"copy_worktree_env_files,omitempty"`
 	// RuntimeInputRegistry is the repository-relative path of the runtime-input
 	// recipe registry, read at the integration commit (ADR-0169). Empty means
 	// no task may declare runtime inputs.

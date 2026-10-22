@@ -156,6 +156,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	var taskStatus models.TaskStatus
 	var integrationBranch string
 	var postWorktreeCmd *string
+	var postWorktreeCmdTimeout time.Duration
 	var copyWorktreeEnvFiles bool
 	var scipSearchLanguages []string
 	var leaseDuration int
@@ -276,6 +277,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	taskStatus = task.Status
 	integrationBranch = state.Config.IntegrationBranch
 	postWorktreeCmd = state.Config.PostWorktreeCmd
+	postWorktreeCmdTimeout = models.EffectivePostWorktreeCmdTimeout(state.Config)
 	copyWorktreeEnvFiles = state.Config.CopyWorktreeEnvFiles
 	scipSearchLanguages = append([]string(nil), state.Config.ScipSearch...)
 	leaseDuration = state.Config.LeaseDuration
@@ -365,6 +367,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 			taskStatus,
 			integrationBranch,
 			postWorktreeCmd,
+			postWorktreeCmdTimeout,
 			copyWorktreeEnvFiles,
 			scipSearchLanguages,
 			leaseDuration,
@@ -399,6 +402,7 @@ func completeClaimTaskAfterValidation(
 	taskStatus models.TaskStatus,
 	integrationBranch string,
 	postWorktreeCmd *string,
+	postWorktreeCmdTimeout time.Duration,
 	copyWorktreeEnvFiles bool,
 	scipSearchLanguages []string,
 	leaseDuration int,
@@ -550,7 +554,7 @@ func completeClaimTaskAfterValidation(
 	// treats it as a stale resource. The caller classifies this error as an
 	// infrastructure failure and degrades the agent, which bounds retries.
 	if postWorktreeCmd != nil && strategy.shouldRunPostWorktreeCmd(worktreePhase) {
-		if postErr := RunPostWorktreeCmd(projectRoot, *postWorktreeCmd, claimCtx.worktreeDir, authority); postErr != nil {
+		if postErr := RunPostWorktreeCmd(projectRoot, *postWorktreeCmd, claimCtx.worktreeDir, postWorktreeCmdTimeout, authority); postErr != nil {
 			log.Printf("ERROR: claim-task %s: %v", taskID, postErr)
 			return nil, postErr
 		}

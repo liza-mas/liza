@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -34,21 +36,22 @@ const (
 
 var (
 	postWorktreeSetupRetryDelayNanos atomic.Int64
-	worktreeSetupLockTimeoutNanos    atomic.Int64
+	worktreeSetupLockSlackNanos      atomic.Int64
 )
 
 func init() {
 	postWorktreeSetupRetryDelayNanos.Store(int64(2 * time.Second))
-	// Long enough for a holder's full setup (both attempts); a waiter that
-	// outlasts it fails closed like any other setup failure.
-	worktreeSetupLockTimeoutNanos.Store(int64(30 * time.Minute))
+	// A waiter waits for a holder's full setup bound plus this slack (output
+	// draining, cleanup, bookkeeping); one that outlasts it fails closed like
+	// any other setup failure.
+	worktreeSetupLockSlackNanos.Store(int64(time.Minute))
 }
 
-// SetWorktreeSetupLockTimeoutForTest temporarily changes how long a setup waits
-// for another setup of the same worktree.
-func SetWorktreeSetupLockTimeoutForTest(timeout time.Duration) func() {
-	previous := worktreeSetupLockTimeoutNanos.Swap(int64(timeout))
-	return func() { worktreeSetupLockTimeoutNanos.Store(previous) }
+// SetWorktreeSetupLockSlackForTest temporarily changes how much longer than its
+// own setup bound a setup waits for another setup of the same worktree.
+func SetWorktreeSetupLockSlackForTest(slack time.Duration) func() {
+	previous := worktreeSetupLockSlackNanos.Swap(int64(slack))
+	return func() { worktreeSetupLockSlackNanos.Store(previous) }
 }
 
 // SetPostWorktreeSetupRetryDelayForTest temporarily changes the pause before
@@ -71,11 +74,14 @@ func SetPostWorktreeSetupRetryDelayForTest(delay time.Duration) func() {
 // passes records an outcome that clears setup degradation it disproves, with
 // the caller's authority (nil for operator and CLI paths).
 //
+// timeout bounds the whole call once it holds the worktree, retry included
+// (D-34 amendment); a setup that outlives it is killed and fails closed.
+//
 // Trust model: the command comes from state.yaml in the project runtime directory in
 // the project root. Write access to state.yaml implies write access to the
 // repo (same trust boundary as Makefile, .github/workflows/, package.json
 // scripts). No additional confirmation gate is needed.
-func RunPostWorktreeCmd(projectRoot, cmdStr, dir string, authority *models.AgentAuthority) error {
+func RunPostWorktreeCmd(projectRoot, cmdStr, dir string, timeout time.Duration, authority *models.AgentAuthority) error {
 	artifacts, err := newWorktreeSetupArtifacts(projectRoot, dir)
 	if err != nil {
 		return newPostWorktreeSetupError(cmdStr, dir, err)
@@ -84,18 +90,20 @@ func RunPostWorktreeCmd(projectRoot, cmdStr, dir string, authority *models.Agent
 	if err != nil {
 		return newPostWorktreeSetupError(cmdStr, dir, err)
 	}
-	timeout := time.Duration(worktreeSetupLockTimeoutNanos.Load())
+	lockWait := timeout + time.Duration(worktreeSetupLockSlackNanos.Load())
 	var setupErr *PostWorktreeSetupError
 	var passedSeq uint64
 	entered := false
-	lockErr := lock.WithTimeout(timeout).WithLockOperation("worktree-setup", func() error {
+	lockErr := lock.WithTimeout(lockWait).WithLockOperation("worktree-setup", func() error {
 		entered = true
-		setupErr, passedSeq = runPostWorktreeSetupLocked(cmdStr, dir, artifacts)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		setupErr, passedSeq = runPostWorktreeSetupLocked(ctx, timeout, cmdStr, dir, artifacts)
 		return nil
 	})
 	if !entered {
 		if filelock.IsLockErrorType(lockErr, filelock.LockErrorTimeout) {
-			lockErr = fmt.Errorf("another setup in this worktree is still running after %s: %w", timeout, lockErr)
+			lockErr = fmt.Errorf("another setup in this worktree is still running after %s: %w", lockWait, lockErr)
 		}
 		return newPostWorktreeSetupError(cmdStr, dir, lockErr)
 	}
@@ -110,14 +118,15 @@ func RunPostWorktreeCmd(projectRoot, cmdStr, dir string, authority *models.Agent
 
 // runPostWorktreeSetupLocked runs the attempts and records their evidence. It
 // returns the failure, or the outcome sequence of a pass (0 when unrecorded).
-func runPostWorktreeSetupLocked(cmdStr, dir string, artifacts worktreeSetupArtifacts) (*PostWorktreeSetupError, uint64) {
+func runPostWorktreeSetupLocked(ctx context.Context, timeout time.Duration, cmdStr, dir string, artifacts worktreeSetupArtifacts) (*PostWorktreeSetupError, uint64) {
 	var failures []postWorktreeSetupAttempt
 	var lastErr error
 	for attempt := 1; attempt <= postWorktreeSetupAttempts; attempt++ {
-		if attempt > 1 {
-			time.Sleep(time.Duration(postWorktreeSetupRetryDelayNanos.Load()))
+		if attempt > 1 && !pauseBeforeSetupRetry(ctx) {
+			lastErr = fmt.Errorf("timed out after %s before the retry: %w", timeout, lastErr)
+			break
 		}
-		result := runPostWorktreeSetupAttempt(cmdStr, dir, attempt)
+		result := runPostWorktreeSetupAttempt(ctx, timeout, cmdStr, dir, attempt)
 		if result.err == nil {
 			lastErr = nil
 			break
@@ -126,6 +135,9 @@ func runPostWorktreeSetupLocked(cmdStr, dir string, artifacts worktreeSetupArtif
 		failures = append(failures, result)
 		log.Printf("WARNING: post-worktree setup attempt %d/%d failed in %s: %s: %v",
 			attempt, postWorktreeSetupAttempts, dir, boundPostWorktreeCmd(secretmask.New().MaskText(cmdStr)), result.err)
+		if result.final {
+			break
+		}
 	}
 
 	outputPath := ""
@@ -150,24 +162,90 @@ func runPostWorktreeSetupLocked(cmdStr, dir string, artifacts worktreeSetupArtif
 	return setupErr, 0
 }
 
+// pauseBeforeSetupRetry waits the retry delay and reports whether the setup
+// bound leaves time to retry.
+func pauseBeforeSetupRetry(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	timer := time.NewTimer(time.Duration(postWorktreeSetupRetryDelayNanos.Load()))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return ctx.Err() == nil
+	}
+}
+
 type postWorktreeSetupAttempt struct {
 	attempt int
 	at      time.Time
 	err     error
 	output  *outputTail
+	// final marks a failure no retry may follow: the bound expired, or the
+	// attempt's processes could not be stopped.
+	final bool
 }
 
-func runPostWorktreeSetupAttempt(cmdStr, dir string, attempt int) postWorktreeSetupAttempt {
+// runPostWorktreeSetupAttempt runs one attempt in its own process group. On
+// Unix the deadline kills the whole group even after the shell exits, so a
+// descendant holding the output pipes cannot outlive the bound; a failed or
+// timed-out attempt's group is emptied before the caller retries or releases
+// the setup lock. Windows can only kill the tree while its root lives
+// (TECH_DEBT): a descendant that outlives its shell there is not stopped.
+func runPostWorktreeSetupAttempt(ctx context.Context, timeout time.Duration, cmdStr, dir string, attempt int) postWorktreeSetupAttempt {
 	result := postWorktreeSetupAttempt{attempt: attempt, at: time.Now().UTC(), output: &outputTail{limit: postWorktreeSetupOutputTailBytes}}
-	cmd, err := shellCommand(cmdStr, dir)
+	cmd, err := shellCommandContext(ctx, cmdStr, dir)
 	if err != nil {
 		result.err = err
 		return result
 	}
 	cmd.Stdout = result.output
 	cmd.Stderr = result.output
+	configProcessGroupKill(cmd)
 	cmd.WaitDelay = postWorktreeSetupWaitDelay
-	result.err = cmd.Run()
+	if err := cmd.Start(); err != nil {
+		result.err = err
+		if ctx.Err() != nil {
+			result.err, result.final = fmt.Errorf("timed out after %s: %w", timeout, err), true
+		}
+		return result
+	}
+	pid := cmd.Process.Pid
+	groupKill := runtime.GOOS != "windows"
+	stopDeadlineKill := func() bool { return true }
+	if groupKill {
+		killed := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			defer close(killed)
+			_ = signalProcessGroup(pid, os.Kill)
+		})
+		// Joins a kill already started, so none outlives the attempt.
+		stopDeadlineKill = func() bool {
+			if stop() {
+				return true
+			}
+			<-killed
+			return false
+		}
+	}
+	result.err = cmd.Wait()
+	deadlineKilled := !stopDeadlineKill()
+	timedOut := deadlineKilled || (result.err != nil && ctx.Err() != nil)
+	if !timedOut && result.err == nil {
+		return result
+	}
+	if timedOut {
+		cause := result.err
+		if cause == nil {
+			cause = ctx.Err()
+		}
+		result.err, result.final = fmt.Errorf("timed out after %s: %w", timeout, cause), true
+	}
+	if groupKill && !reapProcessGroup(pid, postWorktreeSetupWaitDelay) {
+		result.err, result.final = fmt.Errorf("%w; setup left processes that could not be stopped", result.err), true
+	}
 	return result
 }
 

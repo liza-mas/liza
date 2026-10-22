@@ -249,7 +249,7 @@ func TestSetPostWorktreeCmdAfterScaffoldPreparesNextClaim(t *testing.T) {
 	if err != nil || string(data) != "ready" {
 		t.Fatalf("claim lacked prepared artifacts: %v", err)
 	}
-	if err := RunPostWorktreeCmd(root, "sh bootstrap.sh", worktree, nil); err != nil {
+	if err := RunPostWorktreeCmd(root, "sh bootstrap.sh", worktree, testSetupTimeout, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := testhelpers.MustGit(t, worktree, "status", "--porcelain"); got != "" {

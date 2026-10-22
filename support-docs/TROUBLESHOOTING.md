@@ -124,6 +124,9 @@ checkout (ADR-0117).
 private file `recover_hint` names under `§BRAND_PROJECT_DIRNAME§/worktree-setup/`. Read it, or run
 the command named in `recover_hint` inside the worktree it names, fix whatever fails,
 then run `§BRAND_BINARY_NAME§ clear-agent-degraded <agent-id>` and restart the agent.
+A `last_error` reading `timed out after <bound>` means the setup ran past
+`config.post_worktree_cmd_timeout_seconds` and was killed: find what hangs (often a
+network fetch) or, for a setup that is slow but sound, raise the key in state.yaml.
 A transient failure needs none of this: setup is retried once, and a later passing
 setup of the same worktree clears that task's earlier setup degradation by itself. Fresh doer claims abort before the claim is recorded, so
 the task keeps its prior status; a resumed task stays assigned to its agent and
