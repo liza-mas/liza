@@ -54,6 +54,38 @@ func holdsUnsatisfiedReservation(state *models.State, resolver *pipeline.Resolve
 	})
 }
 
+// reservationSelectingChild returns an unsatisfied reservation of task that
+// waits on childID as a generated child of its provider (D-172). Validation
+// refuses such a reservation once the child is retired without a same-slot
+// successor, so a permanent retirement must name it first.
+func reservationSelectingChild(state *models.State, resolver *pipeline.Resolver, task *models.Task, childID string) (models.ProviderReservation, bool) {
+	for _, res := range task.ProviderReservations {
+		dep, ok := models.ReservationDependency(res, state)
+		if !ok || models.ResolveReservation(res, state, resolver).Satisfied() {
+			continue
+		}
+		if direct, named := declaresProvider(state, resolver, dep, childID); named && !direct {
+			return res, true
+		}
+	}
+	return models.ProviderReservation{}, false
+}
+
+// reservationRetirementHolder labels the live placement of task that a
+// permanent retirement of targetID would strand, or returns "" when none does.
+func reservationRetirementHolder(state *models.State, resolver *pipeline.Resolver, task *models.Task, targetID string) string {
+	if task.ID == targetID || task.Status.IsTerminal() {
+		return ""
+	}
+	if holdsUnsatisfiedReservation(state, resolver, task, targetID) {
+		return task.ID + " provider_reservations"
+	}
+	if res, ok := reservationSelectingChild(state, resolver, task, targetID); ok {
+		return fmt.Sprintf("%s provider_reservations on %s at %s", task.ID, res.ProviderTask, res.Transition)
+	}
+	return ""
+}
+
 func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.Resolver, targetID string, retirement providerRetirement) error {
 	if target := state.FindTask(targetID); target != nil && target.PlanAmendment != nil && target.PlanAmendment.Pending != "" {
 		return &PreconditionError{Reason: "cannot retire an original with a pending reviewed amendment"}
@@ -77,8 +109,8 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 		}) {
 			holders = append(holders, task.ID)
 		}
-		if permanent && !task.Status.IsTerminal() && holdsUnsatisfiedReservation(state, resolver, task, targetID) {
-			holders = append(holders, task.ID+" provider_reservations")
+		if holder := reservationRetirementHolder(state, resolver, task, targetID); permanent && holder != "" {
+			holders = append(holders, holder)
 		}
 		outputLive := !task.TransitionsExecuted["replanned"] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task)
 		// A terminal owner still applies its descendant waits until its output

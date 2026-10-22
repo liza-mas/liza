@@ -28,8 +28,9 @@ passed it. An operator resume or proceed authorizes it directly. Held plans are
 expanded by no path until an operator clears the hold.
 
   --pass         orchestrator: the plan's declared checks can run; refused
-                 while an upstream plan is replanned, held or unreviewed, and
-                 on a held plan
+                 while an upstream plan is replanned, held or unreviewed, on
+                 a held plan, and while its hand-off would retire an original
+                 that a live reservation still waits on
   --notes-file <file>
                  pass only: JSON [{"output_index":0,"message":"guidance"}];
                  advisory child validation guidance, never contract changes;

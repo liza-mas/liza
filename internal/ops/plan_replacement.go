@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -161,20 +162,8 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 				// Only pre-existing holders have reproducible input material.
 				// A holder created by this discarded candidate is a graph fault.
 				originalID := plan.Output[refusal.index].Supersedes
-				priorState := s
-				if len(result.replacements.children[originalID]) == 1 {
-					// Compare the remaining barrier after accounting for the
-					// reservations transferred in this candidate. Normalize only
-					// an observation copy; never release persisted placement.
-					priorState = db.CloneState(s)
-					for i := range priorState.Tasks {
-						holder := &priorState.Tasks[i]
-						holder.ProviderReservations = slices.DeleteFunc(holder.ProviderReservations, func(res models.ProviderReservation) bool {
-							return models.EffectiveReservationProvider(s, res.ProviderTask) == originalID
-						})
-					}
-				}
-				if prior := rejectReferencedProviderRetirement(priorState, resolver, originalID, retirePermanently); prior == nil || prior.Error() != refusal.Error() {
+				unique := len(result.replacements.children[originalID]) == 1
+				if prior := planReplacementRetirementBarrier(s, resolver, originalID, unique); prior == nil || prior.Error() != refusal.Error() {
 					return discard(refusal.err)
 				}
 			}
@@ -186,6 +175,76 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 	}
 	*s = *candidate
 	return err
+}
+
+// planReplacementRetirementBarrier is the permanent-retirement barrier that
+// generation applies to originalID, judged on state before the candidate.
+func planReplacementRetirementBarrier(s *models.State, resolver *pipeline.Resolver, originalID string, uniqueSuccessor bool) error {
+	return rejectReferencedProviderRetirement(planReplacementPriorState(s, originalID, uniqueSuccessor), resolver, originalID, retirePermanently)
+}
+
+// planReplacementPriorState is s as the retirement of originalID sees it: a
+// unique successor first takes over the reservations whose effective provider
+// is the original (ADR-0196), so those are dropped from an observation copy.
+// Persisted placement is never released here.
+func planReplacementPriorState(s *models.State, originalID string, uniqueSuccessor bool) *models.State {
+	if !uniqueSuccessor {
+		return s
+	}
+	prior := db.CloneState(s)
+	for i := range prior.Tasks {
+		holder := &prior.Tasks[i]
+		holder.ProviderReservations = slices.DeleteFunc(holder.ProviderReservations, func(res models.ProviderReservation) bool {
+			return models.EffectiveReservationProvider(s, res.ProviderTask) == originalID
+		})
+	}
+	return prior
+}
+
+// planReplacementPassBarrier refuses a pass whose per-subtask hand-off would
+// strand a live placement on a declared original (D-172). Only reservations
+// are judged: they survive into a retiring holder's successor, while typed
+// declarations of an original retired earlier in the same hand-off do not, so
+// those are left to generation's ordered barrier. Originals still in flight
+// and upstream waits are left to classification and generation.
+func planReplacementPassBarrier(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, plan *models.Task) error {
+	perSubtask := false
+	for _, name := range domain.selectedGatedTransitions(plan) {
+		if definition, err := buildTransitionDefFromPipeline(resolver, name); err == nil && definition.cardinality == "per-subtask" {
+			perSubtask = true
+		}
+	}
+	if !perSubtask {
+		return nil
+	}
+	outputs := map[string]int{}
+	var originals []string
+	for _, entry := range plan.Output {
+		if entry.Supersedes == "" {
+			continue
+		}
+		if outputs[entry.Supersedes] == 0 {
+			originals = append(originals, entry.Supersedes)
+		}
+		outputs[entry.Supersedes]++
+	}
+	for _, id := range originals {
+		if original := state.FindTask(id); original == nil || original.Status.IsTerminal() {
+			continue
+		}
+		prior := planReplacementPriorState(state, id, outputs[id] == 1)
+		var holders []string
+		for i := range prior.Tasks {
+			if holder := reservationRetirementHolder(prior, resolver, &prior.Tasks[i], id); holder != "" {
+				holders = append(holders, holder)
+			}
+		}
+		if len(holders) > 0 {
+			return &PreconditionError{Reason: fmt.Sprintf("task %s cannot pass: its hand-off would retire %s while %s still wait on it; move or release that placement with %s, then pass again",
+				plan.ID, id, strings.Join(holders, ", "), brand.Command("reserve-provider"))}
+		}
+	}
+	return nil
 }
 
 // applyPlanReplacements retires each declared original with the children

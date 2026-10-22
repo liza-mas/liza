@@ -145,6 +145,9 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 			if input.Action == PlanCheckActionPass && stderrors.As(changeErr, &refusal) {
 				refusal.Reason += lineageRepairHint(state, resolver, task)
 			}
+			if input.Action == PlanCheckActionPass && changeErr == nil && next.changed {
+				changeErr = planReplacementPassBarrier(state, resolver, domain, task)
+			}
 		}
 		if changeErr != nil {
 			return changeErr

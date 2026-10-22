@@ -599,10 +599,14 @@ Under auto-resume nobody reviews a `PLANNING_COMPLETE` checkpoint, so the orches
 
 Automatic paths (auto-resume, supervisor transition passes) create children only from passed plans. When you resume a checkpoint yourself, undispositioned plans are expanded too — your resume is the review — but a held plan never is, and the sprint does not complete while one is held. After doing the held plan's ask, run `§BRAND_BINARY_NAME§ plan-check <task-id> --clear`; the orchestrator then reviews it again. Many-to-one cohorts and automatic transitions need no disposition. If a `PLANNING_COMPLETE` turn leaves a plan undecided, the unchanged plan stops waking the orchestrator, keeps the sprint open and raises `PLAN DISPOSITION MISSING`; an operator note to the plan re-admits it for one turn, or `§BRAND_BINARY_NAME§ proceed` expands it directly.
 
-An initial output-validation or selective-inheritance refusal raises
-`PLAN HANDOFF FAILED` and remains visible in status. Unchanged inputs stop
-automatic retries/planning wakes while keeping the sprint open; relevant repair
-allows retry. If a separate correction is already merged, an operator can retire
+An initial output-validation, selective-inheritance or provider-retirement
+refusal raises `PLAN HANDOFF FAILED` and remains visible in status. Unchanged
+inputs stop automatic retries/planning wakes while keeping the sprint open;
+relevant repair allows retry. A replacement that would strand a writer reserved
+on the retiring child's parent is such a refusal, and `plan-check --pass`
+refuses it up front: move the placement with `§BRAND_BINARY_NAME§
+reserve-provider`. Other skips of a passed plan alert once ("was skipped") and
+keep retrying. If a separate correction is already merged, an operator can retire
 the unused original with `§BRAND_BINARY_NAME§ plan-check ORIGINAL --replaced-by
 MERGED_CORRECTION`; see
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md)

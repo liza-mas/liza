@@ -163,6 +163,36 @@ func TestPlanHandoffFailureUpstreamRepair(t *testing.T) {
 	}
 }
 
+// D-172 item 3: a passed plan's transition refused for a reason that is not a
+// classified input refusal stays retryable, but is no longer a WARN line only.
+func TestPlanHandoffUnclassifiedSkipAlerts(t *testing.T) {
+	t.Parallel()
+	original, holder := d89Writer("original"), d89Writer("later")
+	original.MaxOutputs = 3
+	holder.ProviderReservations = d89Reservations(original.ID)
+	plan := d89Plan(original.ID)
+	plan.Output[0].TaskDependsOn = []string{holder.ID}
+	root, statePath := setupPlanReplacementTest(t, plan, original, holder)
+	alertCount := func() int {
+		content, _ := os.ReadFile(paths.New(root).AlertsLogPath())
+		return strings.Count(string(content), "PLAN HANDOFF FAILED")
+	}
+	for attempt := range 2 {
+		report, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requireFailureNaming(t, report, "cycle")
+		if got := handoffFailureCount(readReplacementState(t, statePath).FindTask(replacementPlanID)); got != 0 {
+			t.Fatalf("attempt %d persisted %d observations; a graph fault must stay retryable", attempt, got)
+		}
+		content, _ := os.ReadFile(paths.New(root).AlertsLogPath())
+		if got := alertCount(); got != 1 || !strings.Contains(string(content), replacementPlanID+" transition "+providerOpsTransition+" was skipped") {
+			t.Fatalf("attempt %d: %d PLAN HANDOFF FAILED alerts in %q, want one naming the skipped transition", attempt, got, content)
+		}
+	}
+}
+
 func TestPlanHandoffFailureStructuralRefusal(t *testing.T) {
 	plan := withPlanCheck(handoffPlan("failed-plan", "code-planning-pair"), models.PlanCheckPassed, "")
 	plan.Output[0].Desc = ""

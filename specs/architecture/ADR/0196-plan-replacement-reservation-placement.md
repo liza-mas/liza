@@ -3,7 +3,8 @@
 ## Status
 
 ACCEPTED. Amends [ADR-0161](0161-plan-declared-replacement.md) and
-[ADR-0195](0195-provider-reservations-for-inserted-writers.md).
+[ADR-0195](0195-provider-reservations-for-inserted-writers.md). Amended
+2026-10-22 (D-172).
 
 ## Context
 
@@ -66,3 +67,35 @@ and cannot silently inherit an old reviewed slot's meaning.
   and loses transaction atomicity.
 - Allow placed splits: needs explicit all-successor reservation semantics,
   beyond the unique-successor correction required by D-89.
+
+## Amendment (2026-10-22, D-172)
+
+A correction's output superseded a child C of plan P while a writer reserved
+P at C's transition. The transfer above retargets only reservations whose
+effective provider is the original, so this one still selected C; full
+candidate validation then refused the retired child. That refusal was not a
+classified hand-off failure: it recurred at every pass, the plan kept waking
+the orchestrator, and only a WARN line named it. `plan-check --pass` had
+admitted the plan because it judges the current state.
+
+- **Barrier.** The permanent-retirement barrier also holds an unsatisfied
+  reservation that selects the retiring task as a generated child of its
+  provider, named `<holder> provider_reservations on <provider> at
+  <transition>`. A same-pair `replace-task` still passes: the slot resolves to
+  its successor. A plan-declared replacement is refused as a
+  `provider_retirement` hand-off failure, persisted and alerted like the
+  others.
+- **Pass.** `plan-check --pass` runs the barrier's reservation clauses, after
+  this ADR's transfer, for each live original a per-subtask hand-off declares,
+  and refuses with the holder named. Typed declarations are left to
+  generation: an original retired earlier in the same hand-off stops holding,
+  which only the ordered transaction sees. It is a snapshot, not a dry-run of
+  the transition; generation stays authoritative.
+- **Visibility.** A passed plan's gated transition skipped for a failure that
+  no observation classifies raises one `PLAN HANDOFF FAILED` alert per task,
+  transition and masked error. It keeps retrying.
+
+The orchestrator repairs the placement with `reserve-provider` (ADR-0195 §5).
+Carrying such a reservation to the successor automatically stays out of scope:
+it would need reservations to follow plan-declared lineage (rejected above) and
+an all-work meaning when P has other children (with D-167).

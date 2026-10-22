@@ -207,3 +207,15 @@ func writeHandoffFailureAlert(projectRoot string, failure PlanHandoffFailure, no
 			brand.Command("resume"), brand.Command("plan-check", failure.TaskID, "--replaced-by", "<merged-correction>")),
 	})
 }
+
+// writeHandoffSkipAlert surfaces a passed plan's skipped transition that no
+// input observation classifies (D-172). It stays retryable, so the alert is
+// once per task, transition and masked error.
+func writeHandoffSkipAlert(projectRoot string, skipped TransitionFailure, now time.Time) error {
+	message := secretmask.New().MaskText(skipped.Error)
+	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN HANDOFF FAILED",
+		OnceKey: "PLAN HANDOFF FAILED|" + skipped.SourceTaskID + "|" + skipped.Transition + "|unclassified|" + lifecycleDigest([]byte(message)),
+		Message: fmt.Sprintf("task %s transition %s was skipped: %s; it is retried at each pass until its inputs change", skipped.SourceTaskID, skipped.Transition, message),
+	})
+}

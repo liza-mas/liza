@@ -3,6 +3,8 @@ package ops
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -333,5 +336,197 @@ func TestPlanReplacement_ReservationRecoveryAndReplay(t *testing.T) {
 	}
 	if err := statevalidate.ValidateState(state, root, true, io.Discard); err != nil {
 		t.Fatalf("recovery left invalid state: %v", err)
+	}
+}
+
+// D-172 (B-420 shape): the correction replaces a child that its parent's
+// reservation selects. The parent stays live, so ADR-0196 transfers nothing,
+// and the barrier must name the holder before generation.
+const d172Holder = "later provider_reservations on parent at " + providerOpsTransition
+
+func d172Tasks() (parent, child, holder models.Task) {
+	parent = withPlanCheck(handoffPlan("parent", "architecture-pair"), models.PlanCheckPassed, "")
+	parent.TransitionsExecuted = map[string]bool{providerOpsTransition: true}
+	child = d89Writer(perSubtaskChildID(parent.ID, providerOpsTransition, 0))
+	child.ParentTask = &parent.ID
+	holder = d89Writer("later")
+	holder.ProviderReservations = []models.ProviderReservation{{ProviderTask: parent.ID, Transition: providerOpsTransition}}
+	return parent, child, holder
+}
+
+func d172Alerts(t *testing.T, root string) string {
+	t.Helper()
+	content, err := os.ReadFile(paths.New(root).AlertsLogPath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return string(content)
+}
+
+func TestPlanReplacement_ReservationSelectingRetiredChildRefusesHandoff(t *testing.T) {
+	t.Parallel()
+	parent, child, holder := d172Tasks()
+	root, statePath := setupPlanReplacementTest(t, parent, child, holder, d89Plan(child.ID))
+	before := readReplacementState(t, statePath)
+	if err := statevalidate.ValidateState(before, root, true, io.Discard); err != nil {
+		t.Fatalf("invalid reproduction fixture: %v", err)
+	}
+
+	first, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireFailureNaming(t, first, d172Holder)
+	state := readReplacementState(t, statePath)
+	if state.FindTask(d89Successor(0)) != nil || state.FindTask(child.ID).Status != child.Status || !models.HoldsReservation(state.FindTask(holder.ID), parent.ID, providerOpsTransition) {
+		t.Fatal("refusal committed candidate changes")
+	}
+	plan := state.FindTask(replacementPlanID)
+	if got := handoffFailureCount(plan); got != 1 || plan.History[len(plan.History)-1].Extra["failure_class"] != handoffProviderRefusal {
+		t.Fatalf("refusal observations = %d, last %+v; want one %s observation", got, plan.History[len(plan.History)-1], handoffProviderRefusal)
+	}
+	if got := strings.Count(d172Alerts(t, root), "PLAN HANDOFF FAILED"); got != 1 {
+		t.Fatalf("PLAN HANDOFF FAILED alerts = %d, want 1", got)
+	}
+
+	second, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+	if err != nil || len(second.Results) != 0 || len(second.Failures) != 0 {
+		t.Fatalf("unchanged refusal was retried: err=%v report=%+v", err, second)
+	}
+	requireNothingGenerated(t, state, readReplacementState(t, statePath))
+	if got := strings.Count(d172Alerts(t, root), "PLAN HANDOFF FAILED"); got != 1 {
+		t.Fatalf("unchanged refusal alerted again: %d alerts", got)
+	}
+
+	// Moving the placement behind the correction repairs the input.
+	if err := db.For(statePath).Modify(func(s *models.State) error {
+		s.FindTask(holder.ID).ProviderReservations = []models.ProviderReservation{{ProviderTask: replacementPlanID, Transition: providerOpsTransition}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	repaired, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+	if err != nil || len(repaired.Failures) != 0 || !transitionedSources(t, repaired)[replacementPlanID] {
+		t.Fatalf("repaired hand-off refused: err=%v report=%+v", err, repaired)
+	}
+	state = readReplacementState(t, statePath)
+	requireRetiredBy(t, state, child.ID, d89Successor(0))
+	if err := statevalidate.ValidateState(state, root, true, io.Discard); err != nil {
+		t.Fatalf("repaired hand-off left invalid state: %v", err)
+	}
+}
+
+func TestPlanCheckPassRefusesReplacementStrandingReservation(t *testing.T) {
+	t.Parallel()
+	for _, holding := range []string{"parent", "original", "none"} {
+		t.Run(holding, func(t *testing.T) {
+			t.Parallel()
+			parent, child, holder := d172Tasks()
+			switch holding {
+			case "original":
+				// ADR-0196 retargets it to the unique successor at hand-off.
+				child.MaxOutputs = 3
+				holder.ProviderReservations = d89Reservations(child.ID)
+			case "none":
+				holder.ProviderReservations = nil
+			}
+			root, statePath := setupD172PlanCheck(t, d89Plan(child.ID), parent, child, holder)
+			beforeBytes := replacementBytes(t, statePath)
+
+			_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: replacementPlanID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
+			if holding != "parent" {
+				requireD172Passed(t, statePath, err)
+				return
+			}
+			requireProviderOpsAtomicRefusal(t, statePath, beforeBytes, err, "cannot pass", child.ID, d172Holder, "reserve-provider")
+		})
+	}
+}
+
+// A typed holder that the same correction retires first no longer holds when
+// the provider is retired, so the pass must not refuse what the hand-off runs.
+func TestPlanCheckPassAdmitsHolderRetiredFirst(t *testing.T) {
+	t.Parallel()
+	provider, holder := d89Writer("provider"), d89Writer("holder")
+	holder.DescendantDependencies = []models.DescendantDependency{{AtTransition: d89WriterTransition, ProviderDependencies: []models.ProviderDependency{{ProviderTask: provider.ID, Transition: d89WriterTransition, Outputs: []int{0}}}}}
+	root, statePath := setupD172PlanCheck(t, d89Plan(holder.ID, provider.ID), holder, provider)
+
+	_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: replacementPlanID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
+	requireD172Passed(t, statePath, err)
+	report, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+	if err != nil || len(report.Failures) != 0 || !transitionedSources(t, report)[replacementPlanID] {
+		t.Fatalf("passed hand-off refused: err=%v report=%+v", err, report)
+	}
+	if err := statevalidate.ValidateState(readReplacementState(t, statePath), root, true, io.Discard); err != nil {
+		t.Fatalf("hand-off left invalid state: %v", err)
+	}
+}
+
+// setupD172PlanCheck writes a valid replacement fixture whose plan is
+// undispositioned, with the orchestrator and spec files plan-check needs.
+func setupD172PlanCheck(t *testing.T, plan models.Task, tasks ...models.Task) (string, string) {
+	t.Helper()
+	plan.PlanCheck = nil
+	root, statePath := setupPlanReplacementTest(t, append(tasks, plan)...)
+	state := readReplacementState(t, statePath)
+	state.Agents["orchestrator-1"] = testhelpers.RegisteredTestAgent("orchestrator")
+	testhelpers.WriteInitialState(t, statePath, state)
+	testhelpers.CreateSpecFile(t, root, "vision.md", "# Vision\n")
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# README\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := statevalidate.ValidateState(state, root, true, io.Discard); err != nil {
+		t.Fatalf("invalid reproduction fixture: %v", err)
+	}
+	return root, statePath
+}
+
+func requireD172Passed(t *testing.T, statePath string, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("pass refused: %v", err)
+	}
+	if got := readPlanCheck(t, statePath, replacementPlanID); got == nil || got.Verdict != models.PlanCheckPassed {
+		t.Fatalf("plan check = %+v, want passed", got)
+	}
+}
+
+func TestRetirementBarrierFollowsSameParentReplacement(t *testing.T) {
+	t.Parallel()
+	root, _ := setupPlanReplacementTest(t)
+	resolver, _, err := loadResolver(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, shape := range []string{"live", "abandoned", "replace-task"} {
+		t.Run(shape, func(t *testing.T) {
+			t.Parallel()
+			parent, child, holder := d172Tasks()
+			tasks := []models.Task{parent, holder}
+			switch shape {
+			case "abandoned":
+				child.Status = models.TaskStatusAbandoned
+			case "replace-task":
+				successor := d89Writer("successor")
+				successor.ParentTask = &parent.ID
+				successor.Supersedes = &child.ID
+				child.Status = models.TaskStatusSuperseded
+				child.SupersededBy = []string{successor.ID}
+				child.History = append(child.History, models.TaskHistoryEntry{Event: models.TaskEventSuperseded, Time: time.Now().UTC(), Extra: map[string]any{models.ReplacementTaskIDExtra: successor.ID}})
+				tasks = append(tasks, successor)
+			}
+			state := testhelpers.CreateValidState()
+			state.Tasks = append(tasks, child)
+			err := rejectReferencedProviderRetirement(state, resolver, child.ID, retirePermanently)
+			if shape == "replace-task" {
+				if err != nil {
+					t.Fatalf("same-pair replacement keeps the slot, but the barrier refused: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), d172Holder) {
+				t.Fatalf("barrier error = %v, want %q", err, d172Holder)
+			}
+		})
 	}
 }

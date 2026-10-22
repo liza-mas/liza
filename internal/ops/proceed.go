@@ -1336,6 +1336,7 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	var results []ProceedResult
 	var failures []TransitionFailure
 	var observedFailures []PlanHandoffFailure
+	var skippedHandoffs []TransitionFailure
 	fail := func(taskID, transition string, err error) {
 		failures = append(failures, TransitionFailure{SourceTaskID: taskID, Transition: transition, Error: err.Error()})
 	}
@@ -1552,6 +1553,12 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 					}
 					if !errors.Is(err, errTransitionAlreadyExecuted) && !errors.Is(err, errManyToOneCohortIncomplete) {
 						fail(p.taskID, p.name, err)
+						// A passed plan's skip that no observation classifies stays
+						// retryable, but must not live in a WARN line only (D-172).
+						if task != nil && task.PlanCheckVerdictOf() == models.PlanCheckPassed && handoff.GatesTransition(task, p.name) &&
+							!task.TransitionsExecuted[p.name] && handoff.TransitionFailure(s, task, p.name) == nil {
+							skippedHandoffs = append(skippedHandoffs, failures[len(failures)-1])
+						}
 					}
 					continue
 				}
@@ -1605,6 +1612,13 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	for _, observation := range observedFailures {
 		if alertErr := writeHandoffFailureAlert(projectRoot, observation, now); alertErr != nil {
 			warning := fmt.Sprintf("plan handoff failure alert write failed: %v", alertErr)
+			warnings = append(warnings, warning)
+			log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
+		}
+	}
+	for _, skipped := range skippedHandoffs {
+		if alertErr := writeHandoffSkipAlert(projectRoot, skipped, now); alertErr != nil {
+			warning := fmt.Sprintf("plan handoff skip alert write failed: %v", alertErr)
 			warnings = append(warnings, warning)
 			log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
 		}
