@@ -29,7 +29,9 @@ jobs:
     uses: ./.github/workflows/ci-core.yml
     with:
       setup_python: true
-      macos_on_pr: true
+      # macOS runs on main pushes and tags, and releases wait for it; pull
+      # requests wait on Linux and Windows only.
+      macos_on_pr: false
 
   release:
     name: Release verified tag
