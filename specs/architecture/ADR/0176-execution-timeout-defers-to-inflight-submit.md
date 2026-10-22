@@ -28,6 +28,22 @@ wait for an admission slot writes its marker before waiting, with window
 `AcceptanceMaxTimeoutSeconds` + 10 minutes: the wait plus the batch never exceed
 the acceptance cap, so the grace bound is unchanged.
 
+Amended 2026-10-22 (D-174): cancelling as soon as the marker ended killed the
+session before the agent could act on a non-admitted outcome; the claim was
+released as `agent interrupted` and the next claim repeated the batch blind.
+Liveness is now decided by a probe that ignores the marker deadline (marker
+present for the task and generation, process alive). Once the submit is no
+longer running, the session gets a fixed 10-minute hand-back, never extended by
+later markers, so it ends no later than timeout + 4 h 10 min + 10 min. If the
+session then ends with the task still executing under the agent, the supervisor
+blocks it (fenced on generation, doer claim and transition): "admission
+interrupted by session deadline" when a submit was still running at the end of
+the grace or of the hand-back, "no longer observable … admission outcome
+unknown" otherwise, since no typed outcome is recorded on the task. An admitted
+or moved task is left alone and logged as a normal end. The progress watchdog
+keeps its own clock during the hand-back; if it fires first it blocks the task
+with its own reason. No path releases such a task silently.
+
 ## Context
 
 `submit-for-review` runs a strict task's canonical acceptance commands

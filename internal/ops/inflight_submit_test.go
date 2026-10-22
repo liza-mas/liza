@@ -27,9 +27,15 @@ func TestInflightSubmitMarkerRoundTrip(t *testing.T) {
 	if want := now.Add(30*time.Second + submitGraceMargin); !ok || !deadline.Equal(want) {
 		t.Fatalf("InflightSubmitDeadline = (%s, %v), want (%s, true)", deadline, ok, want)
 	}
+	if !InflightSubmitRunning(root, inflightTestAuthority, "task-1") {
+		t.Fatal("InflightSubmitRunning = false for a live marker")
+	}
 	remove()
 	if _, ok := InflightSubmitDeadline(root, inflightTestAuthority, "task-1", now); ok {
 		t.Fatal("removed marker still reports an in-flight submit")
+	}
+	if InflightSubmitRunning(root, inflightTestAuthority, "task-1") {
+		t.Fatal("removed marker still reports a running submit")
 	}
 	entries, err := os.ReadDir(paths.New(root).InflightSubmitDir())
 	if err != nil || len(entries) != 0 {
@@ -46,10 +52,12 @@ func TestInflightSubmitDeadlineRefusesMarkersItCannotTrust(t *testing.T) {
 		taskID    string
 		authority models.AgentAuthority
 		raw       string
+		// running: the submit is still observable past its deadline (D-174).
+		running bool
 	}{
 		"other task":       {taskID: "task-2"},
 		"other generation": {authority: models.AgentAuthority{ID: inflightTestAuthority.ID, Generation: "generation-2"}},
-		"expired deadline": {mutate: func(m *inflightSubmitMarker) { m.Deadline = now.Add(-time.Second) }},
+		"expired deadline": {mutate: func(m *inflightSubmitMarker) { m.Deadline = now.Add(-time.Second) }, running: true},
 		"deadline beyond the maximum grace": {mutate: func(m *inflightSubmitMarker) {
 			m.Deadline = m.StartedAt.Add(MaxInflightSubmitGrace + time.Second)
 		}},
@@ -89,6 +97,9 @@ func TestInflightSubmitDeadlineRefusesMarkersItCannotTrust(t *testing.T) {
 
 			if deadline, ok := InflightSubmitDeadline(root, authority, taskID, now); ok {
 				t.Fatalf("InflightSubmitDeadline accepted the marker (deadline %s)", deadline)
+			}
+			if running := InflightSubmitRunning(root, authority, taskID); running != tc.running {
+				t.Fatalf("InflightSubmitRunning = %v, want %v", running, tc.running)
 			}
 		})
 	}

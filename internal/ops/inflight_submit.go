@@ -88,17 +88,38 @@ func writeInflightSubmitMarker(projectRoot string, authority models.AgentAuthori
 // the future and within MaxInflightSubmitGrace of its start. Unreadable
 // markers are skipped, so the caller keeps its ordinary timeouts.
 func InflightSubmitDeadline(projectRoot string, authority models.AgentAuthority, taskID string, now time.Time) (time.Time, bool) {
+	var latest time.Time
+	for _, marker := range liveInflightSubmitMarkers(projectRoot, authority, taskID) {
+		if marker.Deadline.After(now) && marker.Deadline.After(latest) {
+			latest = marker.Deadline
+		}
+	}
+	return latest, !latest.IsZero()
+}
+
+// InflightSubmitRunning reports whether a submit of the given registration for
+// taskID is still running, whatever its marker's deadline: a marker past its
+// deadline whose process is alive still counts (D-174). Unreadable markers do
+// not, so their submit is no longer observable.
+func InflightSubmitRunning(projectRoot string, authority models.AgentAuthority, taskID string) bool {
+	return len(liveInflightSubmitMarkers(projectRoot, authority, taskID)) > 0
+}
+
+// liveInflightSubmitMarkers returns the readable markers that name taskID and
+// the registration's generation, stay within MaxInflightSubmitGrace of their
+// start, and whose process is alive.
+func liveInflightSubmitMarkers(projectRoot string, authority models.AgentAuthority, taskID string) []inflightSubmitMarker {
 	prefix, ok := inflightSubmitPrefix(authority.ID)
 	if !ok {
-		return time.Time{}, false
+		return nil
 	}
 	dir := paths.New(projectRoot).InflightSubmitDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return time.Time{}, false
+		return nil
 	}
 	digest := lifecycleDigest([]byte(authority.Generation))
-	var latest time.Time
+	var live []inflightSubmitMarker
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".json") {
@@ -113,13 +134,19 @@ func InflightSubmitDeadline(projectRoot string, authority models.AgentAuthority,
 			continue
 		}
 		if marker.TaskID != taskID || marker.GenerationDigest != digest ||
-			!marker.Deadline.After(now) || marker.Deadline.After(marker.StartedAt.Add(MaxInflightSubmitGrace)) ||
+			marker.Deadline.After(marker.StartedAt.Add(MaxInflightSubmitGrace)) ||
 			!IsProcessAlive(marker.PID) {
 			continue
 		}
-		if marker.Deadline.After(latest) {
-			latest = marker.Deadline
-		}
+		live = append(live, marker)
 	}
-	return latest, !latest.IsZero()
+	return live
+}
+
+// WriteInflightSubmitMarkerForTest writes a marker for the calling process
+// with the given deadline, as a submit of authority for taskID would. The
+// returned func removes it.
+func WriteInflightSubmitMarkerForTest(projectRoot string, authority models.AgentAuthority, taskID string, deadline time.Time) (remove func()) {
+	now := time.Now().UTC()
+	return writeInflightSubmitMarker(projectRoot, authority, taskID, deadline.Sub(now)-submitGraceMargin, now)
 }

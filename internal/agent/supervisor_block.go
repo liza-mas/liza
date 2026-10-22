@@ -64,6 +64,43 @@ func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, auth
 	})
 }
 
+// blockExecutingTaskFromSupervisor is blockTaskFromSupervisor for a task that
+// must still be executing under this agent's doer claim: an admitted, blocked,
+// moved, released or reassigned task is left alone. blocked reports whether
+// the BLOCKED transition committed.
+func blockExecutingTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, authority models.AgentAuthority, reason string) (blocked bool, err error) {
+	pipelineTransitions, err := ops.LoadPipelineTransitions(projectRoot)
+	if err != nil {
+		return false, fmt.Errorf("load pipeline transitions for supervisor block: %w", err)
+	}
+	pr, err := ops.LoadResolverForModels(projectRoot)
+	if err != nil {
+		return false, fmt.Errorf("load pipeline resolver for supervisor block: %w", err)
+	}
+	// Locked read: this is the fence in front of the save and the transition.
+	state, err := bb.Read()
+	if err != nil {
+		return false, err
+	}
+	if err := ops.RequireAgentAuthority(state, authority); err != nil {
+		return false, err
+	}
+	task, executing := findExecutingTaskForAgent(state, taskID, authority.ID, pr)
+	if !executing {
+		return false, nil
+	}
+	// The same transition ID inside the transaction proves the task is still
+	// in the executing state observed here.
+	expected := models.TaskTransitionID(task)
+	commitBlockedDoerWIP(projectRoot, authority, taskID, reason)
+	matched := false
+	err = transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
+		matched = supervisorTaskSlot(t, authority.ID) == "doer" && models.TaskTransitionID(t) == expected
+		return matched
+	})
+	return matched && err == nil, err
+}
+
 // blockReleasedTaskFromSupervisor blocks the task whose claim this
 // supervisor's exit just released: the crash and abandoned-job loops decide
 // after resetAgentAfterExit. It acts only on that exact unowned continuation,

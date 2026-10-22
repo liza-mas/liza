@@ -84,6 +84,8 @@ ERROR: Failed to register agent planner-1 (collision?)
 
 **Expected behavior:** Supervisor kills CLI, resets agent to IDLE, retries after 5s delay. This is self-recovering.
 
+A session held past its timeout for its own `submit-for-review` is the exception: if it ends with the task still unadmitted, the task is BLOCKED with "admission interrupted by session deadline" or "in-flight submit is no longer observable". Check the agent output for the submit's result, then unblock (for example with a larger budget) rather than letting a re-claim repeat the batch.
+
 **When to investigate:**
 - Frequent timeouts indicate underlying issues (bad test, broken tooling)
 - Check agent prompt files (`§BRAND_PROJECT_DIRNAME§/agent-prompts/`) to see work in progress

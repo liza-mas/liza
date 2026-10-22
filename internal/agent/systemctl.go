@@ -374,7 +374,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 	}
 
 	// Create timeout context for CLI execution
-	execCtx, cancelExec := withExecutionDeadline(ctx, config.ExecutionTimeout, taskID, sessionInflightSubmit(config, taskID))
+	execCtx, cancelExec := withExecutionDeadline(ctx, config.ExecutionTimeout, taskID, sessionInflightSubmit(config, taskID), sessionSubmitRunning(config, taskID))
 	defer cancelExec()
 	stopReviewWatchdog, err := startReviewExecutionWatchdog(execCtx, config, taskID, models.NormalizeHeartbeatInterval(runtimeConfig.HeartbeatInterval), cancelExec)
 	if err != nil {
@@ -451,6 +451,12 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 			"task_id", taskID,
 			"reason", watchdogResult.Reason)
 		return 0, result.Output, nil
+	}
+
+	// A session held past its timeout for its own submit ends with that
+	// submit's task settled, never silently released (D-174).
+	if cause := context.Cause(execCtx); errors.Is(cause, errInflightSubmitInterrupted) || errors.Is(cause, errSubmitHandbackEnded) {
+		return endSessionAfterInflightSubmit(config, taskID, cause), result.Output, nil
 	}
 
 	// Check if execution timed out
