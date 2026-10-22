@@ -283,19 +283,11 @@ func loadDeclaredAcceptanceInput(root string, state *models.State, task *models.
 	if err != nil || refs == nil {
 		return content("strict Source References are required")
 	}
-	for _, direct := range refs.DirectReferences {
-		revision := direct.EffectiveRevision(refs.SourceRevision)
-		span, _, err := readReferenceBlob(root, revision, direct.Path)
-		if err != nil {
-			return readRefusal("cannot resolve pinned reference "+direct.ID+": "+err.Error(), err)
+	if reason, readFailure := referenceBoundsRefusal(root, refs); reason != "" {
+		if readFailure {
+			return fail(reason)
 		}
-		if _, err := referenceSection(span, direct.Heading); err != nil {
-			var heading *referencecontract.HeadingMatchError
-			if errors.As(err, &heading) {
-				return content("cannot resolve exact heading for reference " + direct.ID)
-			}
-			return content(fmt.Sprintf("reference %s: %v", direct.ID, err))
-		}
+		return content(reason)
 	}
 
 	var source *models.AcceptanceSource
@@ -698,6 +690,32 @@ func referenceSection(content, heading string) (string, error) {
 	return section, nil
 }
 
+// referenceBoundsRefusal resolves every Direct Reference of an acceptance
+// carrier under the bounds claim adopts it with: the file under
+// ReferenceFileMaxBytes, the cited section under ReferenceSectionMaxBytes.
+// Claim and planning submission both call it, so a plan whose coding children
+// claim would refuse is refused before review instead of after merge (D-171).
+// It returns "" when every reference resolves; otherwise the reason, and
+// whether it is a failed Git read rather than content the author can fix.
+func referenceBoundsRefusal(root string, refs *referencecontract.Contract) (reason string, readFailure bool) {
+	for _, direct := range refs.DirectReferences {
+		revision := direct.EffectiveRevision(refs.SourceRevision)
+		content, _, err := readReferenceBlob(root, revision, direct.Path)
+		if err != nil {
+			var refused *acceptanceArtifactRefusal
+			return "cannot resolve pinned reference " + direct.ID + ": " + err.Error(), !errors.As(err, &refused)
+		}
+		if _, err := referenceSection(content, direct.Heading); err != nil {
+			var heading *referencecontract.HeadingMatchError
+			if errors.As(err, &heading) {
+				return "cannot resolve exact heading for reference " + direct.ID + ": " + err.Error(), false
+			}
+			return fmt.Sprintf("reference %s: %v", direct.ID, err), false
+		}
+	}
+	return "", false
+}
+
 // carrierSpanIdentity is the identity of an allocation: the object id of the
 // section a verdict covered, not of the file that carries it.
 //
@@ -827,7 +845,7 @@ func readBoundedEntry(g *git.Git, path string, entry git.TreeEntry, present bool
 		return "", "", &acceptanceArtifactRefusal{"acceptance artifact cannot be sized: " + path}
 	}
 	if entry.Size > limit {
-		return "", "", &acceptanceArtifactRefusal{fmt.Sprintf("acceptance artifact exceeds %d KiB: %s", limit/1024, path)}
+		return "", "", &acceptanceArtifactRefusal{fmt.Sprintf("acceptance artifact exceeds %d KiB (%d bytes): %s", limit/1024, entry.Size, path)}
 	}
 	content, err := g.ReadBlobObject(blob)
 	if err != nil {

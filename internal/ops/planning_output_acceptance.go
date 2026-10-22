@@ -192,6 +192,15 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 			if _, err := acceptanceDeferrals(models.Config{}, contract, output.RuntimeInputs); err != nil {
 				return fail(err.Error())
 			}
+			// The coding child's claim resolves these references under these
+			// bounds; refusing here keeps an unclaimable plan from merging (D-171).
+			refs, err := referencecontract.Parse(strings.ReplaceAll(content, "\r\n", "\n"))
+			if err != nil || refs == nil {
+				return fail("strict Source References are required")
+			}
+			if reason, _ := referenceBoundsRefusal(root, refs); reason != "" {
+				return fail(reason)
+			}
 		}
 		if contract == nil {
 			if err := notStrict(); err != nil {

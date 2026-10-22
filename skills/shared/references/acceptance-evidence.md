@@ -145,7 +145,8 @@ unchanged HEAD. Failure leaves the prior review state intact.
   versions. Paths must be clean repository-relative non-credential paths, with
   no symlink/submodule proof files.
 - Direct Reference targets: the cited section 256 KiB after line-ending
-  normalization, in a file of at most 4 MiB.
+  normalization, in a file of at most 4 MiB. Planning submission refuses a
+  declaration over either bound, as claim would.
 - Total execution timeout: 600 seconds by default, configurable from 1 to 14400
   seconds in the reviewed declaration. Aggregate captured output: 1 MiB;
   overflow fails admission instead of reporting truncated success.

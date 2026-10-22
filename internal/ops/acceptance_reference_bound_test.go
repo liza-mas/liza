@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -98,7 +99,7 @@ func TestAcceptanceReferenceBoundAppliesToCitedSection(t *testing.T) {
 			goal: boundGoal(boundIdentitySection(referenceSectionBound, "\r\n"), "\r\n"), identity: boundIdentitySection(referenceSectionBound, "\n")},
 		{name: "file over the cap",
 			goal:  padReferenceFile(boundGoal(smallIdentitySection, "\n"), referenceFileBound+1),
-			class: AcceptanceFaultContent, reason: []string{"cannot resolve pinned reference identity", fmt.Sprintf("exceeds %d KiB", referenceFileBound/1024)}},
+			class: AcceptanceFaultContent, reason: []string{"cannot resolve pinned reference identity", fmt.Sprintf("exceeds %d KiB", referenceFileBound/1024), fmt.Sprintf("%d bytes", referenceFileBound+1)}},
 		{name: "section over the bound",
 			goal:  boundGoal(boundIdentitySection(referenceSectionBound+1, "\n"), "\n"),
 			class: AcceptanceFaultContent, reason: []string{"identity", fmt.Sprint(referenceSectionBound + 1), fmt.Sprint(referenceSectionBound)}},
@@ -209,6 +210,65 @@ func TestObligationDriftIgnoresGrowthOutsideTheSectionOfALargeFile(t *testing.T)
 			}
 			if len(drifts) != 1 || drifts[0].change != obligationDriftStale || drifts[0].key.current == "" {
 				t.Fatalf("detected %+v; want one stale drift whose current section was read", drifts)
+			}
+		})
+	}
+}
+
+// D-171: planning submission applies claim's reference bounds, so a plan whose
+// coding children claim would refuse is refused before review, not after merge.
+func TestPlanningSubmissionRefusesReferencesClaimWouldRefuse(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		goal   string
+		reason []string // empty = submission admitted
+	}{
+		{name: "small section in a file over the old whole-file bound",
+			goal: padReferenceFile(boundGoal(smallIdentitySection, "\n"), 300*1024)},
+		{name: "section at the bound",
+			goal: boundGoal(boundIdentitySection(referenceSectionBound, "\n"), "\n")},
+		{name: "CRLF section at the normalized bound",
+			goal: boundGoal(boundIdentitySection(referenceSectionBound, "\r\n"), "\r\n")},
+		{name: "file over the cap",
+			goal:   padReferenceFile(boundGoal(smallIdentitySection, "\n"), referenceFileBound+1),
+			reason: []string{"identity", fmt.Sprintf("exceeds %d KiB", referenceFileBound/1024), fmt.Sprintf("%d bytes", referenceFileBound+1)}},
+		{name: "section over the bound",
+			goal:   boundGoal(boundIdentitySection(referenceSectionBound+1, "\n"), "\n"),
+			reason: []string{"identity", fmt.Sprint(referenceSectionBound + 1), fmt.Sprint(referenceSectionBound)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a planner's committed acceptance carrier pinned to tc.goal.
+			root := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, root)
+			writeDriftFile(t, root, "specs/acceptance-goal.md", tc.goal)
+			testhelpers.MustGit(t, root, "add", "--all")
+			testhelpers.MustGit(t, root, "commit", "-m", "test: record the referenced file")
+			pin := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+			writeDriftFile(t, root, "specs/acceptance-plan.md", fmt.Sprintf("# Code plan\n\n## Source References\nSource revision: %q\n\n### Direct References\n- \"identity\": \"specs/acceptance-goal.md#Identity\"\n\n### Obligation Coverage\n- \"AC-identity\" -> \"identity\"\n\n## Task 1\n\n### Acceptance Contract\n```json\n{\"version\":1,\"manifest\":\"acceptance/task-1.json\",\"obligations\":[\"AC-identity\"],\"validation\":[\"sh boundary_test.sh\"],\"timeout_seconds\":10,\"approved_proofs\":[]}\n```\n", pin))
+			testhelpers.MustGit(t, root, "add", "--all")
+			testhelpers.MustGit(t, root, "commit", "-m", "test: declare the child's acceptance")
+			commit := testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+			task := &models.Task{ID: "planner", Type: models.TaskTypePlanning, Output: []models.OutputEntry{{
+				Desc: "Reject malformed identity", PlanRef: "specs/acceptance-plan.md#Task 1", Validation: []string{"sh boundary_test.sh"},
+			}}}
+
+			// WHEN the planning submission validates its output's acceptance.
+			err := validatePlanningOutputAcceptance(root, task, commit)
+
+			// THEN it refuses exactly what claim would refuse, naming reference, size and bound.
+			if len(tc.reason) == 0 {
+				if err != nil {
+					t.Fatalf("validatePlanningOutputAcceptance() = %v; want the plan admitted", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("validatePlanningOutputAcceptance() = nil; want the oversized reference refused at submission")
+			}
+			for _, want := range tc.reason {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %q", err, want)
+				}
 			}
 		})
 	}
