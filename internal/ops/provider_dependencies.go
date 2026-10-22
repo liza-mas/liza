@@ -15,9 +15,10 @@ import (
 // providerRetirement says whether retiring a task mints a replan successor.
 // Only replan does; every other retirement (supersession, cancellation,
 // plan-check replacement) is permanent: the task can never be replanned.
-// A same-pair replace-task of a selected child is permanent too, but the
-// child's slot already resolves to the successor (ADR-0191), so no
-// declaration names the retired child any more.
+// A same-pair replace-task or unique plan-declared replacement of a selected
+// child is permanent too, but the child's slot already resolves to the
+// successor (ADR-0191, ADR-0214), so no declaration names the retired child
+// any more.
 type providerRetirement bool
 
 const (
@@ -40,7 +41,8 @@ const (
 // direct declaration never follows replan lineage, but a child retired by
 // replan still holds: lineage would silently resolve the slot to the
 // successor, hiding the staleness. A child replaced by same-pair replace-task
-// is not held at all: its slot follows the successor (ADR-0191).
+// or a unique plan-declared successor is not held at all: its slot follows the
+// successor (ADR-0191, ADR-0214).
 //
 // A live descendant declaration holds without exception (ADR-0193): it never
 // goes stale, so its holder is reported before any mutation.

@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -162,8 +163,7 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 				// Only pre-existing holders have reproducible input material.
 				// A holder created by this discarded candidate is a graph fault.
 				originalID := plan.Output[refusal.index].Supersedes
-				unique := len(result.replacements.children[originalID]) == 1
-				if prior := planReplacementRetirementBarrier(s, resolver, originalID, unique); prior == nil || prior.Error() != refusal.Error() {
+				if prior := planReplacementRetirementBarrier(s, candidate, resolver, taskID, originalID, result.replacements.children[originalID]); prior == nil || prior.Error() != refusal.Error() {
 					return discard(refusal.err)
 				}
 			}
@@ -178,9 +178,12 @@ func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID,
 }
 
 // planReplacementRetirementBarrier is the permanent-retirement barrier that
-// generation applies to originalID, judged on state before the candidate.
-func planReplacementRetirementBarrier(s *models.State, resolver *pipeline.Resolver, originalID string, uniqueSuccessor bool) error {
-	return rejectReferencedProviderRetirement(planReplacementPriorState(s, originalID, uniqueSuccessor), resolver, originalID, retirePermanently)
+// generation applies to originalID, judged on state before the candidate:
+// after the ADR-0196 transfer, with a unique successor taken from generated
+// already carrying the original's selected child slot (ADR-0214).
+func planReplacementRetirementBarrier(s, generated *models.State, resolver *pipeline.Resolver, planID, originalID string, children []string) error {
+	prior := prospectiveRetirement(planReplacementPriorState(s, originalID, len(children) == 1), generated, planID, originalID, children)
+	return rejectReferencedProviderRetirement(prior, resolver, originalID, retirePermanently)
 }
 
 // planReplacementPriorState is s as the retirement of originalID sees it: a
@@ -206,7 +209,10 @@ func planReplacementPriorState(s *models.State, originalID string, uniqueSuccess
 // are judged: they survive into a retiring holder's successor, while typed
 // declarations of an original retired earlier in the same hand-off do not, so
 // those are left to generation's ordered barrier. Originals still in flight
-// and upstream waits are left to classification and generation.
+// and upstream waits are left to classification and generation. A unique
+// successor strands nothing: the ADR-0196 transfer moves direct placement and
+// the original's selected child slot follows it (ADR-0214), so only a split
+// original is judged.
 func planReplacementPassBarrier(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, plan *models.Task) error {
 	perSubtask := false
 	for _, name := range domain.selectedGatedTransitions(plan) {
@@ -229,13 +235,12 @@ func planReplacementPassBarrier(state *models.State, resolver *pipeline.Resolver
 		outputs[entry.Supersedes]++
 	}
 	for _, id := range originals {
-		if original := state.FindTask(id); original == nil || original.Status.IsTerminal() {
+		if original := state.FindTask(id); original == nil || original.Status.IsTerminal() || outputs[id] == 1 {
 			continue
 		}
-		prior := planReplacementPriorState(state, id, outputs[id] == 1)
 		var holders []string
-		for i := range prior.Tasks {
-			if holder := reservationRetirementHolder(prior, resolver, &prior.Tasks[i], id); holder != "" {
+		for i := range state.Tasks {
+			if holder := reservationRetirementHolder(state, resolver, &state.Tasks[i], id); holder != "" {
 				holders = append(holders, holder)
 			}
 		}
@@ -269,7 +274,7 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 		if retiredByChildren(original, children) {
 			continue
 		}
-		if err := rejectReferencedProviderRetirement(s, resolver, originalID, retirePermanently); err != nil {
+		if err := rejectReferencedProviderRetirement(prospectiveRetirement(s, s, planID, originalID, children), resolver, originalID, retirePermanently); err != nil {
 			for index, entry := range s.FindTask(planID).Output {
 				if entry.Supersedes == originalID {
 					return &handoffInputError{class: handoffProviderRefusal, index: index, err: err}
@@ -293,6 +298,36 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 	}
 	recordPlanReplacements(s.FindTask(planID), set, result.RetiredTaskIDs)
 	return nil
+}
+
+// prospectiveRetirement is the barrier's view of retiring originalID into a
+// unique successor: a probe of base in which the original is already
+// SUPERSEDED by it, so a selected child slot resolves to the successor before
+// the barrier runs, as replace-task's supersession entry arranges (ADR-0191,
+// ADR-0214). generated is the candidate holding the successor and the plan's
+// executed marker. A successor base lacks is copied with its lineage fields
+// only: a holder the discarded candidate would create is never pre-existing.
+// A split retires permanently, so base is returned unchanged.
+func prospectiveRetirement(base, generated *models.State, planID, originalID string, children []string) *models.State {
+	if len(children) != 1 {
+		return base
+	}
+	successor, plan := generated.FindTask(children[0]), generated.FindTask(planID)
+	if successor == nil || plan == nil || base.FindTask(originalID) == nil {
+		return base
+	}
+	probe := db.CloneState(base)
+	if probe.FindTask(successor.ID) == nil {
+		probe.Tasks = append(probe.Tasks, models.Task{ID: successor.ID, RolePair: successor.RolePair, Status: successor.Status,
+			ParentTasks: slices.Clone(successor.EffectiveParentTasks()), Supersedes: successor.Supersedes})
+	}
+	if planned := probe.FindTask(planID); planned != nil {
+		planned.TransitionsExecuted = maps.Clone(plan.TransitionsExecuted)
+	}
+	original := probe.FindTask(originalID)
+	original.Status = models.TaskStatusSuperseded
+	original.SupersededBy = slices.Clone(children)
+	return probe
 }
 
 // transferPlanReplacementPlacement prepares all writer placements before any

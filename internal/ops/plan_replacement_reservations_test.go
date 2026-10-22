@@ -340,8 +340,10 @@ func TestPlanReplacement_ReservationRecoveryAndReplay(t *testing.T) {
 }
 
 // D-172 (B-420 shape): the correction replaces a child that its parent's
-// reservation selects. The parent stays live, so ADR-0196 transfers nothing,
-// and the barrier must name the holder before generation.
+// reservation selects. The parent stays live, so ADR-0196 transfers nothing.
+// A unique successor carries the selected slot and the reservation with it
+// (ADR-0214); a split has none, so the barrier must name the holder before
+// generation.
 const d172Holder = "later provider_reservations on parent at " + providerOpsTransition
 
 func d172Tasks() (parent, child, holder models.Task) {
@@ -363,10 +365,36 @@ func d172Alerts(t *testing.T, root string) string {
 	return string(content)
 }
 
-func TestPlanReplacement_ReservationSelectingRetiredChildRefusesHandoff(t *testing.T) {
+func TestPlanReplacement_ReservationSelectingReplacedChildFollowsSuccessor(t *testing.T) {
 	t.Parallel()
 	parent, child, holder := d172Tasks()
 	root, statePath := setupPlanReplacementTest(t, parent, child, holder, d89Plan(child.ID))
+
+	report, err := ExecuteTransitionsReportWith(root, "", AdmitReviewed)
+	if err != nil || len(report.Failures) != 0 || !transitionedSources(t, report)[replacementPlanID] {
+		t.Fatalf("unique replacement refused: err=%v report=%+v", err, report)
+	}
+	state := readReplacementState(t, statePath)
+	requireRetiredBy(t, state, child.ID, d89Successor(0))
+	if !models.HoldsReservation(state.FindTask(holder.ID), parent.ID, providerOpsTransition) {
+		t.Fatal("hand-off rewrote the parent reservation")
+	}
+	resolver, _, err := loadResolver(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := models.ResolveReservation(holder.ProviderReservations[0], state, resolver); result.Kind != models.DependencyUnsatisfiedPending || !slices.Equal(result.BlockingIDs, []string{d89Successor(0)}) {
+		t.Fatalf("reservation = %+v, want pending on %s", result, d89Successor(0))
+	}
+	if err := statevalidate.ValidateState(state, root, true, io.Discard); err != nil {
+		t.Fatalf("hand-off left invalid state: %v", err)
+	}
+}
+
+func TestPlanReplacement_ReservationSelectingSplitChildRefusesHandoff(t *testing.T) {
+	t.Parallel()
+	parent, child, holder := d172Tasks()
+	root, statePath := setupPlanReplacementTest(t, parent, child, holder, d89Plan(child.ID, child.ID))
 	before := readReplacementState(t, statePath)
 	if err := statevalidate.ValidateState(before, root, true, io.Discard); err != nil {
 		t.Fatalf("invalid reproduction fixture: %v", err)
@@ -410,7 +438,7 @@ func TestPlanReplacement_ReservationSelectingRetiredChildRefusesHandoff(t *testi
 		t.Fatalf("repaired hand-off refused: err=%v report=%+v", err, repaired)
 	}
 	state = readReplacementState(t, statePath)
-	requireRetiredBy(t, state, child.ID, d89Successor(0))
+	requireRetiredBy(t, state, child.ID, d89Successor(0), d89Successor(1))
 	if err := statevalidate.ValidateState(state, root, true, io.Discard); err != nil {
 		t.Fatalf("repaired hand-off left invalid state: %v", err)
 	}
@@ -418,11 +446,14 @@ func TestPlanReplacement_ReservationSelectingRetiredChildRefusesHandoff(t *testi
 
 func TestPlanCheckPassRefusesReplacementStrandingReservation(t *testing.T) {
 	t.Parallel()
-	for _, holding := range []string{"parent", "original", "none"} {
+	for _, holding := range []string{"parent of a split", "parent of a unique replacement", "original", "none"} {
 		t.Run(holding, func(t *testing.T) {
 			t.Parallel()
 			parent, child, holder := d172Tasks()
+			plan := d89Plan(child.ID)
 			switch holding {
+			case "parent of a split":
+				plan = d89Plan(child.ID, child.ID)
 			case "original":
 				// ADR-0196 retargets it to the unique successor at hand-off.
 				child.MaxOutputs = 3
@@ -430,11 +461,12 @@ func TestPlanCheckPassRefusesReplacementStrandingReservation(t *testing.T) {
 			case "none":
 				holder.ProviderReservations = nil
 			}
-			root, statePath := setupD172PlanCheck(t, d89Plan(child.ID), parent, child, holder)
+			// A unique successor carries the parent's selected slot (ADR-0214).
+			root, statePath := setupD172PlanCheck(t, plan, parent, child, holder)
 			beforeBytes := replacementBytes(t, statePath)
 
 			_, err := RecordPlanCheck(root, PlanCheckInput{TaskID: replacementPlanID, Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
-			if holding != "parent" {
+			if holding != "parent of a split" {
 				requireD172Passed(t, statePath, err)
 				return
 			}

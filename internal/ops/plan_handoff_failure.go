@@ -117,9 +117,10 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 		}
 		material["provider_retirement"] = map[string]any{
 			"original": originalID, "status": original.Status, "role_pair": original.RolePair, "barrier": barrier,
-			// D-89 changes retirement admission. Retry observations made under
-			// the old policy once; unchanged new-policy refusals stay suppressed.
-			"reservation_transfer_policy": 1,
+			// D-89 and D-167 change retirement admission. Retry observations
+			// made under an old policy once; unchanged new-policy refusals stay
+			// suppressed.
+			"reservation_transfer_policy": 1, "selected_child_lineage_policy": 1,
 		}
 	}
 	encoded, err := json.Marshal(material)

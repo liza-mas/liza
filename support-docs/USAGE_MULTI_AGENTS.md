@@ -602,8 +602,9 @@ Automatic paths (auto-resume, supervisor transition passes) create children only
 An initial output-validation, selective-inheritance or provider-retirement
 refusal raises `PLAN HANDOFF FAILED` and remains visible in status. Unchanged
 inputs stop automatic retries/planning wakes while keeping the sprint open;
-relevant repair allows retry. A replacement that would strand a writer reserved
-on the retiring child's parent is such a refusal, and `plan-check --pass`
+relevant repair allows retry. A replacement that splits a child a writer
+reserved through its parent is such a refusal (a unique replacement carries the
+reservation to its successor), and `plan-check --pass`
 refuses it up front: move the placement with `§BRAND_BINARY_NAME§
 reserve-provider`. Other skips of a passed plan alert once ("was skipped") and
 keep retrying. If a separate correction is already merged, an operator can retire

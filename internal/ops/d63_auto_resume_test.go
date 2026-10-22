@@ -124,7 +124,8 @@ func TestD63SelectedProviderChildRefusalRepairs(t *testing.T) {
 	original.RolePair = "code-planning-pair"
 	original.Output = []models.OutputEntry{providerOpsOutput()}
 	plan := withPlanCheck(handoffPlan("plan", "architecture-pair"), models.PlanCheckPassed, "")
-	plan.Output = []models.OutputEntry{replacingOutput(original.ID)}
+	// A split: a unique successor would carry the consumer's slot (ADR-0214).
+	plan.Output = []models.OutputEntry{replacingOutput(original.ID), replacingOutput(original.ID)}
 	consumer := claimedOnce(codingTask("consumer", models.TaskStatusReady))
 	consumer.ProviderDependencies = providerOpsDependency(provider.ID, 0)
 	root, statePath := setupPlanCheckTest(t, provider, original, plan, consumer)

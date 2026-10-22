@@ -1093,10 +1093,12 @@ and provider edges, pending-provider production, and projected future children
 with sibling, concrete, inherited and provider prerequisites. Later authoring
 or generation that closes a latent cycle is refused before persistence.
 
-A selected child resolves to its replan successor or same-pair `replace-task`
-replacement, chained in any order
-([ADR-0184](ADR/0184-replan-lineage-dependency-repair.md),
-[ADR-0191](ADR/0191-replace-task-successors-carry-selected-child-slots.md)); a
+A selected child resolves to its replan successor, same-pair `replace-task`
+replacement or unique same-pair plan-declared successor (the child the
+correcting plan generated from its one output naming it), chained in any
+order ([ADR-0184](ADR/0184-replan-lineage-dependency-repair.md),
+[ADR-0191](ADR/0191-replace-task-successors-carry-selected-child-slots.md),
+[ADR-0214](ADR/0214-plan-declared-replacements-carry-selected-child-slots.md)); a
 child so replaced is no longer named, so its replacement neither holds on nor
 blocks consumers. An active task or live output declaration prevents
 retiring/replanning its provider or selected child; historical terminal

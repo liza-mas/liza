@@ -268,11 +268,12 @@ func ProviderDependencyChildren(dep ProviderDependency, pr PipelineResolver) (Pr
 	return td, children, nil
 }
 
-// EffectiveProviderChildren is the projection with each replanned or
-// replace-task-replaced child resolved to its ProviderChildSuccessor, which
-// keeps the provider's output slot and parent. An unresolvable child keeps its
-// projected ID, so the retirement checks on it still fail closed. Output
-// indexes are never mapped.
+// EffectiveProviderChildren is the projection with each replanned,
+// replace-task-replaced or uniquely plan-replaced child resolved to its
+// SelectedChildSuccessor, which keeps the provider's output slot (a plan
+// replacement under the plan's parentage, see SelectedChildProvenance). An
+// unresolvable child keeps its projected ID, so the retirement checks on it
+// still fail closed. Output indexes are never mapped.
 func EffectiveProviderChildren(dep ProviderDependency, state *State, pr PipelineResolver) (ProviderTransition, []string, error) {
 	if state != nil {
 		if provider := state.FindTask(dep.ProviderTask); provider != nil && provider.AmendsPlan != "" {
@@ -293,11 +294,38 @@ func EffectiveProviderChildren(dep ProviderDependency, state *State, pr Pipeline
 		}
 	}
 	for i, id := range children {
-		if successor, ok := ProviderChildSuccessor(state, id); ok {
+		if successor, ok := SelectedChildSuccessor(state, id, pr); ok {
 			children[i] = successor.ID
 		}
 	}
 	return td, children, nil
+}
+
+// SelectedChildProvenance reports whether child may fill the slot projected
+// as projectedID: the target role pair and a single parent that is the
+// provider, or, for a plan replacement's successor, the slot's verified
+// SelectedChildSuccessor of a projected child that itself has that
+// provenance. A foreign-parent task is never accepted on its own, and a
+// successor never launders a projected task the provider did not generate.
+func SelectedChildProvenance(state *State, td ProviderTransition, providerID, projectedID string, child *Task, pr PipelineResolver) bool {
+	parents := child.EffectiveParentTasks()
+	if child.RolePair != td.TargetRolePair || len(parents) != 1 {
+		return false
+	}
+	if child.ID == projectedID {
+		return parents[0] == providerID
+	}
+	// Any successor, whatever its own parent, continues the slot only if the
+	// projected task it replaces is the provider's child.
+	original := state.FindTask(projectedID)
+	if original == nil || original.RolePair != td.TargetRolePair || !slices.Equal(original.EffectiveParentTasks(), []string{providerID}) {
+		return false
+	}
+	if parents[0] == providerID {
+		return true
+	}
+	successor, ok := SelectedChildSuccessor(state, projectedID, pr)
+	return ok && successor.ID == child.ID
 }
 
 // ProviderRetired reports a provider whose reviewed output can never be
@@ -477,6 +505,10 @@ func resolveProviderDependency(dep ProviderDependency, state *State, pr Pipeline
 	if ProviderRetired(provider) {
 		return invalid("provider task or handoff was retired")
 	}
+	_, projected, err := ProviderDependencyChildren(dep, pr)
+	if err != nil {
+		return invalid(err.Error())
+	}
 	for position, output := range dep.Outputs {
 		if output >= len(provider.Output) {
 			if len(provider.Output) > 0 || provider.Status == TaskStatusMerged {
@@ -486,8 +518,7 @@ func resolveProviderDependency(dep ProviderDependency, state *State, pr Pipeline
 			return invalid(fmt.Sprintf("provider output index %d has Kind and may be deduplicated", output))
 		}
 		if child := state.FindTask(children[position]); child != nil {
-			parents := child.EffectiveParentTasks()
-			if child.RolePair != td.TargetRolePair || len(parents) != 1 || parents[0] != provider.ID {
+			if !SelectedChildProvenance(state, td, provider.ID, projected[position], child, pr) {
 				return invalid(fmt.Sprintf("selected provider child %s has wrong role or provenance", child.ID))
 			}
 			if child.TransitionsExecuted["replanned"] || child.PlanHandoffRetired() || (child.Status.IsTerminal() && child.Status != TaskStatusMerged) {

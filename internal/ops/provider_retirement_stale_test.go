@@ -476,6 +476,15 @@ func fixPlan(original string) models.Task {
 	return fix
 }
 
+// splitFixPlan supersedes original with two children. Without a unique
+// successor the retirement stays permanent: a unique one carries the slot
+// (D-167, plan_replacement_child_slot_test.go).
+func splitFixPlan(original string) models.Task {
+	fix := fixPlan(original)
+	fix.Output = append(fix.Output, replacingOutput(original))
+	return fix
+}
+
 // admitFixPlan runs reviewed admission and reports fixPlan's own failure.
 func admitFixPlan(root string) error {
 	report, err := ExecuteTransitionsReportWith(root, "manual", AdmitReviewed)
@@ -512,9 +521,9 @@ func staleSlotRetirements() []staleSlotRetirement {
 	}
 	return []staleSlotRetirement{
 		{
-			// I-409: a corrective plan's hand-off supersedes the child.
-			name: "plan-declared replacement", provider: "provider", child: "provider-cp-0",
-			tasks:  func(passed bool) []models.Task { return expanded(passed, fixPlan("provider-cp-0")) },
+			// I-409: a corrective plan's hand-off splits the child.
+			name: "plan-declared split", provider: "provider", child: "provider-cp-0",
+			tasks:  func(passed bool) []models.Task { return expanded(passed, splitFixPlan("provider-cp-0")) },
 			retire: admitFixPlan,
 		},
 		{
@@ -539,9 +548,9 @@ func staleSlotRetirements() []staleSlotRetirement {
 		},
 		{
 			// The slot already resolves through lineage to its successor.
-			name: "plan-declared replacement of the effective successor", provider: "arm", child: "arm-cp-0-replan-1",
+			name: "plan-declared split of the effective successor", provider: "arm", child: "arm-cp-0-replan-1",
 			tasks: func(passed bool) []models.Task {
-				tasks := append(replannedProviderChildTasks(models.TaskStatusDraftCodingPlan), fixPlan("arm-cp-0-replan-1"))
+				tasks := append(replannedProviderChildTasks(models.TaskStatusDraftCodingPlan), splitFixPlan("arm-cp-0-replan-1"))
 				return append(tasks, staleSlotConsumer("arm", passed)...)
 			},
 			retire: admitFixPlan,
@@ -705,9 +714,9 @@ func staleDraftRetirements() []staleDraftRetirement {
 	}
 	return []staleDraftRetirement{
 		{
-			// I-421: a corrective plan's hand-off supersedes the selected child.
-			name: "plan-declared replacement of the selected child", retired: "provider-cp-0",
-			tasks:  func() []models.Task { return slot(fixPlan("provider-cp-0")) },
+			// I-421: a corrective plan's hand-off splits the selected child.
+			name: "plan-declared split of the selected child", retired: "provider-cp-0",
+			tasks:  func() []models.Task { return slot(splitFixPlan("provider-cp-0")) },
 			retire: admitFixPlan,
 		},
 		{

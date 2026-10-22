@@ -440,8 +440,9 @@ comes first. The next report lists these rulings under `Auto-approved:`, most ex
   `unblock-task --rebase-on --allow-dirty` path: snapshot first, then verify HEAD and restored tracked changes.
 - **Sweep provider consumers before any supersession** — before relaying a ruling or approval that
   supersedes tasks, scan live tasks' `provider_dependencies` for the affected provider plans and output
-  indexes. Output indexes do not transfer to a replacement, so every consumer that selects a retired child
-  re-blocks. Name those consumers in the relay, or prefer a route that does not supersede (for example a
+  indexes. A unique same-pair `replace-task` or plan-declared successor carries a selected child's slot;
+  any other retirement (a split, supersede-task, cancellation, or a direct declaration of the child)
+  re-blocks every consumer that selects the retired child. Name those consumers in the relay, or prefer a route that does not supersede (for example a
   budget exception at unblock).
 - **You break it, you fix it** — whatever an operator action damages, repair it at once and report
   afterwards; do not wait for approval to undo your own mistake.

@@ -111,6 +111,11 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 		if models.ProviderRetired(provider) && !stale() {
 			v.add(fmt.Errorf("%s references retired provider %s", label, provider.ID))
 		}
+		_, projected, err := models.ProviderDependencyChildren(dep, resolver)
+		if err != nil {
+			v.add(fmt.Errorf("%s: %w", label, err))
+			continue
+		}
 		for position, output := range dep.Outputs {
 			if output >= len(provider.Output) {
 				if len(provider.Output) > 0 || provider.Status == models.TaskStatusMerged {
@@ -120,8 +125,7 @@ func validateProviderOwner(v *violations, state *models.State, resolver *pipelin
 				v.add(fmt.Errorf("%s output %d has Kind and may be deduplicated; its child identity is not stable", label, output))
 			}
 			if child := state.FindTask(children[position]); child != nil {
-				parents := child.EffectiveParentTasks()
-				if child.RolePair != transition.TargetRolePair || len(parents) != 1 || parents[0] != provider.ID {
+				if !models.SelectedChildProvenance(state, transition, provider.ID, projected[position], child, resolver) {
 					v.add(fmt.Errorf("%s child %s has incorrect provider provenance or role_pair", label, child.ID))
 				}
 				if models.ProviderRetired(child) && !stale() {

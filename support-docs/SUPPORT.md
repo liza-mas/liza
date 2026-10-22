@@ -516,10 +516,11 @@ in favor of an unrelated merged correction is intended, use the retirement
 action rather than another replan; its
 preconditions are listed in
 [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md).
-A replacement refused because `<holder> provider_reservations on <plan> at
-<transition>` still selects the retiring child is repaired by moving that
+A split replacement refused because `<holder> provider_reservations on <plan>
+at <transition>` still selects the retiring child is repaired by moving that
 placement with `§BRAND_BINARY_NAME§ reserve-provider`; `plan-check --pass`
-refuses the same case up front. A `PLAN HANDOFF FAILED` alert that says the
+refuses the same case up front. A unique replacement needs no repair: the
+reservation waits for the successor. A `PLAN HANDOFF FAILED` alert that says the
 transition "was skipped" is unclassified: it is not repair evidence and the
 transition keeps retrying, so read the named error.
 

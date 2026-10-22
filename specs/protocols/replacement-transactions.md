@@ -266,8 +266,11 @@ transaction-final reservation and its prior value in history.
 
 An original with incoming unsatisfied placement, outgoing reservations, or a
 nonzero cap cannot be split. Ordinary unplaced splits remain legal. Typed
-positional provider/descendant declarations keep their existing retirement
-barriers; they are never transferred by this operation. A failure discards
+positional provider/descendant declarations are never rewritten by this
+operation. A selected child slot follows a unique successor
+([ADR-0214](../architecture/ADR/0214-plan-declared-replacements-carry-selected-child-slots.md)),
+so the retirement barrier sees the original as already retired into it;
+direct declarations and splits keep their barriers. A failure discards
 placement, cap and history changes with the rest of the candidate.
 
 Eligibility is `replace-task`'s source rule: role-pair initial or rejected,

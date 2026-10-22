@@ -99,3 +99,8 @@ The orchestrator repairs the placement with `reserve-provider` (ADR-0195 §5).
 Carrying such a reservation to the successor automatically stays out of scope:
 it would need reservations to follow plan-declared lineage (rejected above) and
 an all-work meaning when P has other children (with D-167).
+
+Superseded for a unique successor by [ADR-0214](0214-plan-declared-replacements-carry-selected-child-slots.md):
+the reservation resolves through the selected child slot, which follows the
+successor, so it waits for that successor's work. The barrier and the pass
+check above now refuse only a split original.

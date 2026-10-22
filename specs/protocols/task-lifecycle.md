@@ -131,9 +131,11 @@ triage. An externally reconciled INTEGRATION_FAILED draft becomes a stale
 unexpanded plan (ADR-0185).
 
 A replanned selected child resolves to its replan successor (same slot, same
-parent), and a child replaced by same-pair `replace-task` resolves to its
-replacement (ADR-0191): the replacement neither refuses on nor blocks its
-consumers, which wait for the successor. Without a unique successor the child
+parent), a child replaced by same-pair `replace-task` resolves to its
+replacement (ADR-0191), and a child replaced by a unique same-pair
+plan-declared successor resolves to that successor (ADR-0214): the
+replacement neither refuses on nor blocks its consumers, which wait for the
+successor. Without a unique successor the child
 stays retired. A replanned provider
 is never remapped. Replan clones dependencies through live successors. A MERGED,
 untransitioned plan still naming a replanned upstream is repaired with
@@ -148,8 +150,9 @@ See [Provider Dependencies](../architecture/blackboard-schema.md#provider-depend
 [ADR-0186](../architecture/ADR/0186-stale-selected-child-slots-on-unexpanded-plans.md),
 [ADR-0187](../architecture/ADR/0187-stale-provider-declarations-on-unstarted-consumers.md),
 [ADR-0188](../architecture/ADR/0188-stale-provider-declarations-in-draft-output.md),
-[ADR-0190](../architecture/ADR/0190-replanned-providers-release-unstarted-direct-declarations.md) and
-[ADR-0191](../architecture/ADR/0191-replace-task-successors-carry-selected-child-slots.md).
+[ADR-0190](../architecture/ADR/0190-replanned-providers-release-unstarted-direct-declarations.md),
+[ADR-0191](../architecture/ADR/0191-replace-task-successors-carry-selected-child-slots.md) and
+[ADR-0214](../architecture/ADR/0214-plan-declared-replacements-carry-selected-child-slots.md).
 
 ## Reviewed Plan Corrections
 

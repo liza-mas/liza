@@ -26,13 +26,33 @@ func ReplanSuccessor(state *State, id string) (*Task, bool) {
 // successor keeps its parent and role_pair. Any mix of replans and such
 // replacements is followed. Supersession, cancellation and plan-declared
 // replacement stay permanent retirements; the walk stops at such a task.
+// Reservation provider aliasing and validation-note attribution use it; a
+// selected child slot uses SelectedChildSuccessor.
 func ProviderChildSuccessor(state *State, id string) (*Task, bool) {
+	return followLineage(state, id, providerChildStep)
+}
+
+// SelectedChildSuccessor is ProviderChildSuccessor for a consumer's selected
+// child slot, which also follows a unique same-pair plan-declared replacement
+// (D-167): the correcting plan's reviewed output names the child in
+// supersedes and generated the successor, which delivers the same work under
+// the plan's provenance. The child was never MERGED (replacement eligibility),
+// so no consumer consumed it. A split, or a successor that is not provably
+// the declaring output's generated child, stays a permanent retirement.
+func SelectedChildSuccessor(state *State, id string, pr PipelineResolver) (*Task, bool) {
 	return followLineage(state, id, func(state *State, task *Task) (*Task, bool) {
-		if task.TransitionsExecuted["replanned"] {
-			return replanStep(state, task)
+		if next, retired := providerChildStep(state, task); retired {
+			return next, true
 		}
-		return replacementStep(state, task)
+		return planReplacementStep(state, task, pr)
 	})
+}
+
+func providerChildStep(state *State, task *Task) (*Task, bool) {
+	if task.TransitionsExecuted["replanned"] {
+		return replanStep(state, task)
+	}
+	return replacementStep(state, task)
 }
 
 // lineageStep reports whether task was retired into a lineage successor and,
@@ -106,6 +126,54 @@ func replacementStep(state *State, task *Task) (*Task, bool) {
 		return nil, true
 	}
 	return next, true
+}
+
+// planReplacementStep follows a plan-declared replacement: task is SUPERSEDED
+// by exactly one successor naming it in supersedes, which only plan
+// generation writes across parents (replan keeps them). That successor
+// carries the slot only when it has task's role_pair and a single parent
+// plan, other than task's parents, whose one output superseding task
+// generated it at an executed transition. Otherwise the retirement resolves
+// nothing.
+func planReplacementStep(state *State, task *Task, pr PipelineResolver) (*Task, bool) {
+	if task.Status != TaskStatusSuperseded || len(task.SupersededBy) != 1 {
+		return nil, false
+	}
+	next := state.FindTask(task.SupersededBy[0])
+	if next == nil || next.Supersedes == nil || *next.Supersedes != task.ID {
+		return nil, false
+	}
+	parents := next.EffectiveParentTasks()
+	if next.RolePair != task.RolePair || len(parents) != 1 || slices.Contains(task.EffectiveParentTasks(), parents[0]) {
+		return nil, true
+	}
+	plan := state.FindTask(parents[0])
+	if plan == nil {
+		return nil, true
+	}
+	index := -1
+	for i, entry := range plan.Output {
+		if entry.Supersedes != task.ID {
+			continue
+		}
+		if index >= 0 {
+			return nil, true
+		}
+		index = i
+	}
+	if index < 0 {
+		return nil, true
+	}
+	for transition, executed := range plan.TransitionsExecuted {
+		if !executed {
+			continue
+		}
+		td, ids, err := ProviderDependencyChildren(ProviderDependency{ProviderTask: plan.ID, Transition: transition, Outputs: []int{index}}, pr)
+		if err == nil && td.SourceRolePair == plan.RolePair && td.TargetRolePair == next.RolePair && ids[0] == next.ID {
+			return next, true
+		}
+	}
+	return nil, true
 }
 
 func sameLineageSlot(successor, original *Task) bool {
