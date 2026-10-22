@@ -489,6 +489,8 @@ are loaded at runtime from the provider catalog.
 | `deferred_validation.batch_every_merges` | 5 | 1 | — | count | Forward merges per periodic deferred-validation batch (ADR-0204); set by editing state.yaml |
 | `deferred_validation.setup_timeout_seconds` | 1800 | 1 | — | seconds | Bound on `post_worktree_cmd` before each batch probe; set by editing state.yaml |
 | `deferred_validation.rulings` | (none) | — | — | list | Exact commands deferred at strict admission on operator authority; written only by `deferred-validation rule`/`unrule` |
+| `deferred_validation.inert_paths` | (none) | — | — | Git glob pathspecs | Paths whose changes never stop a command's latest pass from being carried forward to a new HEAD (`**` crosses directories, `*` does not); set by editing state.yaml |
+| `deferred_validation.scopes` | (none) | — | — | list of `command`, `paths` | Per exact command, the Git glob pathspecs it covers; a change outside them carries its latest pass forward. Fixing a wrong entry does not reopen a recorded batch: run `deferred-validation run --force`. Set by editing state.yaml |
 | `admission_limits` | (none) | 1 | 64 | list | Per class of command substrings, how many canonical commands execute at once; see [Admission limits](#admission-limits); written only by `admission-limit set`/`remove` |
 | `validation_preflight.probe_timeout_seconds` | 60 | 1 | — | seconds | Deadline per `validation_prerequisites` probe; set by editing state.yaml |
 | `validation_preflight.timeout_seconds` | 120 | 1 | — | seconds | Deadline for all probes of one preflight check; checks inside a provider tool call stay capped at 30; set by editing state.yaml |

@@ -90,7 +90,14 @@ var deferredValidationRunCmd = &cobra.Command{
 passed batch there already covers them. It is a no-op while another runner holds
 the lock. A failed batch, or exhausted attempts, at an unchanged HEAD is not
 retried without --force. Merges and integration reconciliation start this
-command automatically.`,
+command automatically.
+
+A command whose newest execution passed at an ancestor of HEAD is carried
+forward, not run, when nothing changed since in the paths
+config.deferred_validation.scopes declares for it (the whole tree when none)
+outside config.deferred_validation.inert_paths. --force carries nothing forward
+and re-executes every command, also at a covered HEAD: use it after correcting a
+scope or inert path that was too narrow.`,
 	Args: cobra.NoArgs,
 	RunE: deferredValidationOpenRun(func(cmd *cobra.Command, root string) (any, error) {
 		force, _ := cmd.Flags().GetBool("force")
@@ -153,7 +160,7 @@ func init() {
 		sub.Flags().String("ruling", "", "decision that authorizes this change")
 		_ = sub.MarkFlagRequired("ruling")
 	}
-	deferredValidationRunCmd.Flags().Bool("force", false, "retry after a failed batch or exhausted attempts at the same HEAD")
+	deferredValidationRunCmd.Flags().Bool("force", false, "re-execute every command, also after a failed batch, exhausted attempts or a covering batch at the same HEAD")
 	for _, sub := range []*cobra.Command{deferredValidationRuleCmd, deferredValidationUnruleCmd, deferredValidationRetireCmd, deferredValidationSettleCmd, deferredValidationRunCmd, deferredValidationStatusCmd} {
 		addJSONFlag(sub)
 		deferredValidationCmd.AddCommand(sub)

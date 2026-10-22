@@ -62,6 +62,77 @@ func TestDeferredValidationBatchCovers(t *testing.T) {
 	if batch.Covers(commands) {
 		t.Fatal("a failed batch covers commands")
 	}
+	batch.Status = DeferredValidationBatchPassed
+	batch.Results[1].Status = DeferredValidationResultCarriedForward
+	if !batch.Covers(commands) {
+		t.Fatal("a carried-forward result does not cover its command")
+	}
+	batch.Results[1].Status = DeferredValidationResultNotRun
+	if batch.Covers(commands) {
+		t.Fatal("a not-run result covers its command")
+	}
+}
+
+func TestDeferredValidationLatestExecutionSkipsCarriedAndNotRun(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	result := func(status DeferredValidationResultStatus) []DeferredValidationResult {
+		return []DeferredValidationResult{{CommandSHA256: sha, Status: status}}
+	}
+	ledger := &DeferredValidationLedger{Batches: []DeferredValidationBatch{
+		{ID: 1, Results: result(DeferredValidationResultPassed)},
+		{ID: 2, Results: result(DeferredValidationResultFailed)},
+		{ID: 3, Results: result(DeferredValidationResultCarriedForward)},
+		{ID: 4, Results: result(DeferredValidationResultNotRun)},
+	}}
+	batch, execution := ledger.LatestExecutionFor(sha)
+	if batch == nil || batch.ID != 2 || execution.Status != DeferredValidationResultFailed {
+		t.Fatalf("latest execution = %+v %+v, want batch 2's failure", batch, execution)
+	}
+	if batch, _ := ledger.LatestExecutionFor(strings.Repeat("b", 64)); batch != nil {
+		t.Fatalf("a command never executed has latest execution %+v", batch)
+	}
+}
+
+// A newer failure outlives retention, so it can never be pruned in favour of
+// an older pass that carry-forward would then reuse.
+func TestDeferredValidationPruneBatchesKeepsLatestExecutionOfEachCommand(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	ledger := &DeferredValidationLedger{Batches: []DeferredValidationBatch{
+		{ID: 1, Results: []DeferredValidationResult{{CommandSHA256: sha, Status: DeferredValidationResultPassed}}},
+		{ID: 2, Results: []DeferredValidationResult{{CommandSHA256: sha, Status: DeferredValidationResultFailed}}},
+	}}
+	for i := range DeferredValidationBatchRetention {
+		ledger.Batches = append(ledger.Batches, DeferredValidationBatch{ID: 3 + i, Results: []DeferredValidationResult{{CommandSHA256: sha, Status: DeferredValidationResultNotRun}}})
+	}
+	ledger.PruneBatches()
+	if batch, execution := ledger.LatestExecutionFor(sha); batch == nil || batch.ID != 2 || execution.Status != DeferredValidationResultFailed {
+		t.Fatalf("latest execution after pruning = %+v, want batch 2's failure", batch)
+	}
+	if latest := ledger.LatestPassFor(sha); latest == nil || latest.ID != 1 {
+		t.Fatalf("latest pass after pruning = %+v, want batch 1", latest)
+	}
+}
+
+func TestDeferredValidationLedgerViolationsRequireCarriedFrom(t *testing.T) {
+	commit := strings.Repeat("c", 40)
+	for _, tc := range []struct {
+		name    string
+		result  DeferredValidationResult
+		invalid bool
+	}{
+		{"carried with commit", DeferredValidationResult{Status: DeferredValidationResultCarriedForward, CarriedFrom: commit}, false},
+		{"carried without commit", DeferredValidationResult{Status: DeferredValidationResultCarriedForward}, true},
+		{"carried with short commit", DeferredValidationResult{Status: DeferredValidationResultCarriedForward, CarriedFrom: "abc"}, true},
+		{"passed with commit", DeferredValidationResult{Status: DeferredValidationResultPassed, CarriedFrom: commit}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.result.CommandSHA256 = strings.Repeat("a", 64)
+			ledger := &DeferredValidationLedger{Batches: []DeferredValidationBatch{{ID: 1, Commit: commit, Status: DeferredValidationBatchPassed, Results: []DeferredValidationResult{tc.result}}}}
+			if got := len(DeferredValidationLedgerViolations(ledger)) > 0; got != tc.invalid {
+				t.Fatalf("violations = %v, want invalid=%v", DeferredValidationLedgerViolations(ledger), tc.invalid)
+			}
+		})
+	}
 }
 
 func TestDeferredValidationPruneBatchesKeepsLatestPassOfEachCommand(t *testing.T) {

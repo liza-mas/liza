@@ -10,7 +10,8 @@ D-97 (a).
 Amended 2026-10-14 ([ADR-0209](0209-admission-limits.md)): each probe takes its
 command's admission slots from the pool canonical admission uses. Amended
 2026-10-19 (D-223): a probe waits for them until they free, lanes prepare one
-at a time, and a failed setup is retried once.
+at a time, and a failed setup is retried once. Amended 2026-10-22 (D-230): a
+command's pass is carried forward to a HEAD that changed nothing it covers.
 
 ## Context
 
@@ -224,3 +225,46 @@ lane starts. A daemonized slot holder now keeps a batch waiting until the holder
 exits or the operator halts, instead of costing one of the per-HEAD attempts.
 A setup racing a task worktree's own setup in another process is not
 serialized; the single retry covers a transient one.
+
+## Amendment (2026-10-22, D-230 items 3–4, D-223 item 3)
+
+The completion gate still needed a batch that executed every command at the
+exact final HEAD, so a docs-only merge after the last pass, or a change no
+command depends on, cost a full batch (1.3 to 2 h in one run). An operator
+reran only the affected suites by hand (D168), with no record in the ledger.
+
+The runner now decides, per effective command, whether its latest pass holds
+at HEAD, and records the decision in the batch. A command is **carried
+forward** (result `carried_forward`, `carried_from` the commit of that pass)
+when all of these hold:
+
+- its newest *execution* (`passed`, `failed` or `contaminated`; a carried or
+  not-run result is no execution) passed, in a batch that did not end
+  `descendants_unstoppable`. A newer executed failure always re-runs it;
+- that pass's commit is HEAD or an ancestor of it;
+- `git diff` between the two, with renames split into a deletion and an
+  addition, changes nothing in the paths `config.deferred_validation.scopes`
+  declares for the exact command (the whole tree when none), outside
+  `config.deferred_validation.inert_paths`.
+
+Entries are Git glob pathspecs, set by the operator in state.yaml; nothing
+classifies paths by default. An empty entry, a declared scope without paths,
+or an entry carrying its own pathspec magic (`:`) disables carry-forward for
+the affected commands, and so does any Git failure: doubt executes. With no
+configuration, only an identical tree carries. A later batch at the same HEAD
+therefore re-runs only the commands that have not passed there (D-223 item 3),
+and a merge or revert that leaves the tree unchanged reuses every pass. Lanes
+are created only for executed commands; a batch that carries everything
+prepares no worktree.
+
+The gate is unchanged and still reads no Git: `Covers` counts a carried result
+as a pass. Retention keeps each command's latest execution as well as its
+latest pass, so a pruned newer failure can never let an older pass carry. Bisect
+keeps its executed-pass baseline (§6). `run --force` carries nothing forward
+and runs even at a covered HEAD. It is the recovery when a scope or inert path
+was too narrow: editing the configuration does not reopen a recorded batch.
+
+Consequences: a wrong scope or inert path hides a regression in its command
+until an in-scope change or a forced run re-executes it.
+Each carried result names its source commit, so the ledger shows which evidence
+was reused. No waiver distinct from `retire` exists.

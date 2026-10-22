@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -194,8 +195,9 @@ func latestDeferredBatchAt(ledger *models.DeferredValidationLedger, commit strin
 }
 
 // deferredValidationGate is the completion barrier: global integration does
-// not complete until a batch at HEAD passed every effective deferred command.
-// It does not hold a generation request (D-230). It reads no Git.
+// not complete until a batch at HEAD passed, or carried forward, every
+// effective deferred command. It does not hold a generation request (D-230).
+// It reads no Git: the runner decided carry-forward when it ran the batch.
 func deferredValidationGate(state *models.State, integrationHEAD string) (waiting, blocked *IntegrationProgressReason) {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
@@ -333,8 +335,10 @@ func revListSet(projectRoot string, args ...string) (map[string]bool, error) {
 
 // deferredValidationWanted reports whether a batch should start at head: the
 // effective set is not covered by a passed batch there, no failed batch or
-// exhausted attempts at head suppress it (unless forced), and it is either
-// periodically due or required by the integration gate.
+// exhausted attempts at head suppress it, and it is either periodically due
+// or required by the integration gate. Force overrides all three: it is the
+// operator's re-execution, also of a HEAD covered by carried-forward passes
+// a wrong scope or inert path admitted (D-230).
 func deferredValidationWanted(projectRoot string, state *models.State, head string, force, explicit bool) (bool, string, error) {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
@@ -342,10 +346,10 @@ func deferredValidationWanted(projectRoot string, state *models.State, head stri
 		return false, "nothing_deferred", nil
 	}
 	latest := latestDeferredBatchAt(ledger, head)
-	if latest != nil && latest.Covers(commands) {
-		return false, "covered", nil
-	}
 	if !force {
+		if latest != nil && latest.Covers(commands) {
+			return false, "covered", nil
+		}
 		if latest != nil && latest.Status == models.DeferredValidationBatchFailed {
 			return false, "failed_at_head", nil
 		}
@@ -1232,9 +1236,10 @@ func (r *deferredValidationRunner) storeOutput(full string) string {
 	return hash
 }
 
-// execute runs one batch at head, one lane per command. It never returns an
-// error: every outcome, including infrastructure failure and halt, is a
-// recorded batch. Results and culprits keep the effective command order.
+// execute runs one batch at head, one lane per command it does not carry
+// forward. It never returns an error: every outcome, including infrastructure
+// failure and halt, is a recorded batch. Results and culprits keep the
+// effective command order.
 func (r *deferredValidationRunner) execute(ctx context.Context, state *models.State, head string, forced bool) models.DeferredValidationBatch {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
@@ -1258,27 +1263,40 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 		batch.Status, batch.Reason, batch.FinishedAt = status, reason, time.Now().UTC()
 		return batch
 	}
-	worktrees, res := r.resetLanes(ctx, head, len(commands))
-	if res.err != nil {
-		if res.halted {
-			return finish(models.DeferredValidationBatchAborted, "halted")
+	carried, halted := r.carryForward(ctx, state, head, commands, forced)
+	if halted {
+		return finish(models.DeferredValidationBatchAborted, "halted")
+	}
+	var worktrees []string
+	if executed := len(commands) - len(carried); executed > 0 {
+		var res execResult
+		if worktrees, res = r.resetLanes(ctx, head, executed); res.err != nil {
+			if res.halted {
+				return finish(models.DeferredValidationBatchAborted, "halted")
+			}
+			return finish(models.DeferredValidationBatchInfraFailed, deferredStateText(r.mask(fmt.Sprintf("prepare batch worktree: %v", res.err))))
 		}
-		return finish(models.DeferredValidationBatchInfraFailed, deferredStateText(r.mask(fmt.Sprintf("prepare batch worktree: %v", res.err))))
 	}
 	lanes := make([]deferredValidationLane, len(commands))
 	var wg sync.WaitGroup
 	for i, command := range commands {
+		if result, ok := carried[command.CommandSHA256]; ok {
+			lanes[i] = deferredValidationLane{result: result}
+			continue
+		}
+		worktree := worktrees[0]
+		worktrees = worktrees[1:]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			lanes[i] = r.runLane(ctx, state, worktrees[i], head, command)
+			lanes[i] = r.runLane(ctx, state, worktree, head, command)
 			if lanes[i].halted {
 				r.endBatch(false, "")
 			}
 		}()
 	}
 	wg.Wait()
-	status, reason, halted := models.DeferredValidationBatchPassed, "", false
+	status, reason := models.DeferredValidationBatchPassed, ""
 	for _, lane := range lanes {
 		batch.Results = append(batch.Results, lane.result)
 		if lane.culprit != nil {
@@ -1288,7 +1306,8 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 		switch {
 		case lane.result.Status == models.DeferredValidationResultFailed:
 			status = models.DeferredValidationBatchFailed
-		case lane.result.Status != models.DeferredValidationResultPassed && status == models.DeferredValidationBatchPassed:
+		case lane.result.Status != models.DeferredValidationResultPassed && lane.result.Status != models.DeferredValidationResultCarriedForward &&
+			status == models.DeferredValidationBatchPassed:
 			status = models.DeferredValidationBatchInfraFailed
 		}
 		if reason == "" {
@@ -1306,6 +1325,90 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 
 func (r *deferredValidationRunner) notRun(command models.DeferredValidationCommand) models.DeferredValidationResult {
 	return models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultNotRun, ExitCode: -1}
+}
+
+// carryForward returns, by command digest, the carried_forward results of the
+// commands whose latest pass still holds at head (D-230): the command's newest
+// execution passed, in a batch that certified what it observed, at an
+// ancestor of head, and nothing changed since in its declared scope (the whole
+// tree when none) outside the inert paths. A forced batch carries nothing;
+// any doubt executes the command. The bool reports a halt.
+func (r *deferredValidationRunner) carryForward(ctx context.Context, state *models.State, head string, commands []models.DeferredValidationCommand, forced bool) (map[string]models.DeferredValidationResult, bool) {
+	carried := map[string]models.DeferredValidationResult{}
+	if forced {
+		return carried, false
+	}
+	ledger := deferredValidationLedger(state)
+	for _, command := range commands {
+		batch, execution := ledger.LatestExecutionFor(command.CommandSHA256)
+		if batch == nil || execution.Status != models.DeferredValidationResultPassed || batch.Reason == deferredValidationReasonUnstoppable {
+			continue
+		}
+		pathspecs, ok := deferredCarryPathspecs(state.Config, command.Command)
+		if !ok {
+			fmt.Fprintf(r.log, "deferred-validation: %q runs: its scope or inert paths hold an empty or ':'-prefixed pathspec\n", r.mask(command.Command))
+			continue
+		}
+		unchanged, res := r.unchangedSince(ctx, batch.Commit, head, pathspecs)
+		if res.halted {
+			return nil, true
+		}
+		if res.err != nil {
+			fmt.Fprintf(r.log, "deferred-validation: %q runs: cannot compare %s with %s: %s\n", r.mask(command.Command), batch.Commit, head, r.mask(deferredFailureText(res)))
+			continue
+		}
+		if unchanged {
+			now := time.Now().UTC()
+			carried[command.CommandSHA256] = models.DeferredValidationResult{
+				Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultCarriedForward,
+				StartedAt: now, FinishedAt: now, CarriedFrom: batch.Commit,
+			}
+		}
+	}
+	return carried, false
+}
+
+// unchangedSince reports whether from is head or an ancestor of it and no path
+// matching pathspecs differs between them. Renames count on both sides.
+func (r *deferredValidationRunner) unchangedSince(ctx context.Context, from, head string, pathspecs []string) (bool, execResult) {
+	if from == head {
+		return true, execResult{}
+	}
+	if ancestor, res := r.isAncestor(ctx, from, head); !ancestor {
+		return false, res
+	}
+	args := append([]string{"--glob-pathspecs", "diff", "--quiet", "--no-ext-diff", "--no-renames", from, head, "--"}, pathspecs...)
+	res := r.git(ctx, r.root, args...)
+	if res.err != nil && !res.halted && res.exitCode == 1 {
+		return false, execResult{}
+	}
+	return res.err == nil, res
+}
+
+// deferredCarryPathspecs is the Git pathspec list whose changes stop command's
+// pass from being carried forward: its declared scope, or the whole tree, minus
+// the inert paths. Operator entries are glob patterns; an empty one, a declared
+// scope without paths, or one carrying its own pathspec magic is refused.
+func deferredCarryPathspecs(config models.Config, command string) ([]string, bool) {
+	invalid := func(pattern string) bool {
+		return strings.TrimSpace(pattern) == "" || strings.HasPrefix(pattern, ":")
+	}
+	pathspecs := []string{"."}
+	if scope := models.DeferredValidationScopeFor(config, command); scope != nil {
+		if len(scope.Paths) == 0 || slices.ContainsFunc(scope.Paths, invalid) {
+			return nil, false
+		}
+		pathspecs = slices.Clone(scope.Paths)
+	}
+	if config.DeferredValidation != nil {
+		for _, inert := range config.DeferredValidation.InertPaths {
+			if invalid(inert) {
+				return nil, false
+			}
+			pathspecs = append(pathspecs, ":(exclude)"+inert)
+		}
+	}
+	return pathspecs, true
 }
 
 // deferredValidationLane is what one lane observed: its command's result at

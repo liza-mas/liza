@@ -1450,6 +1450,10 @@ config:
       - command: "make test-e2e"
         ruling: "decision D-97"
         recorded_at: 2026-10-10T10:00:00Z
+    inert_paths: ["docs/**"]    # Git glob pathspecs whose changes never stop a pass being carried forward; operator-edited
+    scopes:                     # Paths (Git glob pathspecs) an exact command covers; operator-edited
+      - command: "make test-e2e"
+        paths: ["src/**", "e2e/**"]
   validation_preflight:         # Optional; validation_prerequisites probe deadlines
     probe_timeout_seconds: 60   # Per probe; non-positive uses 60
     timeout_seconds: 120        # All probes of one check; non-positive uses 120; in-session checks capped at 30
@@ -1460,6 +1464,9 @@ admission skipped (`index`, masked `command`, `command_sha256`,
 `timeout_seconds`, `authority: contract|operator`); `commands[]` then holds only
 the executed ones. See
 [acceptance-evidence.md](../protocols/acceptance-evidence.md#deferred-commands).
+A batch result in `goal.integration.deferred_validation.batches[].results[]`
+with `status: carried_forward` was not executed: `carried_from` names the
+commit of the pass it reuses (ADR-0204 amendment 2026-10-22).
 
 **Circuit-breaker response and compatibility model:** `WARNING`, `CHECKPOINT`,
 and `HALT` are typed responses. Only `HALT` is a trigger: it sets

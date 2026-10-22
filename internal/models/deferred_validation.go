@@ -36,6 +36,33 @@ type DeferredValidationConfig struct {
 	// DefaultDeferredValidationSetupTimeoutSeconds.
 	SetupTimeoutSeconds int                        `yaml:"setup_timeout_seconds,omitempty" json:"setup_timeout_seconds,omitempty"`
 	Rulings             []DeferredValidationRuling `yaml:"rulings,omitempty" json:"rulings,omitempty"`
+	// InertPaths are Git glob pathspecs whose changes never stop a command's
+	// latest pass from being carried forward (D-230).
+	InertPaths []string `yaml:"inert_paths,omitempty" json:"inert_paths,omitempty"`
+	// Scopes declare the paths an exact command covers; a change outside
+	// them does not stop its latest pass from being carried forward (D-230).
+	Scopes []DeferredValidationScope `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+}
+
+// DeferredValidationScope declares, as Git glob pathspecs, the paths whose
+// changes can alter one exact command's outcome.
+type DeferredValidationScope struct {
+	Command string   `yaml:"command" json:"command"`
+	Paths   []string `yaml:"paths" json:"paths"`
+}
+
+// DeferredValidationScopeFor returns the declared scope of an exact command,
+// or nil.
+func DeferredValidationScopeFor(config Config, command string) *DeferredValidationScope {
+	if config.DeferredValidation == nil {
+		return nil
+	}
+	for i := range config.DeferredValidation.Scopes {
+		if config.DeferredValidation.Scopes[i].Command == command {
+			return &config.DeferredValidation.Scopes[i]
+		}
+	}
+	return nil
 }
 
 // DeferredValidationRuling defers one exact canonical command for every
@@ -150,13 +177,26 @@ const (
 	// could not be prepared (checkout, setup or a clean tree failed).
 	DeferredValidationResultUnavailable DeferredValidationResultStatus = "unavailable"
 	DeferredValidationResultNotRun      DeferredValidationResultStatus = "not_run"
+	// DeferredValidationResultCarriedForward is a command not run because
+	// nothing in its scope changed since its latest executed pass, named by
+	// CarriedFrom (D-230).
+	DeferredValidationResultCarriedForward DeferredValidationResultStatus = "carried_forward"
 )
 
 // IsValid reports whether the status is part of the persisted schema.
 func (s DeferredValidationResultStatus) IsValid() bool {
 	switch s {
 	case DeferredValidationResultPassed, DeferredValidationResultFailed, DeferredValidationResultContaminated,
-		DeferredValidationResultUnavailable, DeferredValidationResultNotRun:
+		DeferredValidationResultUnavailable, DeferredValidationResultNotRun, DeferredValidationResultCarriedForward:
+		return true
+	}
+	return false
+}
+
+// Executed reports whether the command ran to an outcome on the code.
+func (s DeferredValidationResultStatus) Executed() bool {
+	switch s {
+	case DeferredValidationResultPassed, DeferredValidationResultFailed, DeferredValidationResultContaminated:
 		return true
 	}
 	return false
@@ -179,7 +219,8 @@ type DeferredValidationBatch struct {
 // Excerpt are masked presentation; Excerpt is bounded to the state text limit.
 // OutputSHA256 names a failed command's full masked output in the project's
 // tool-result store (`tool-result read`); it is empty when the capture
-// overflowed (output omitted) or the store could not keep it.
+// overflowed (output omitted) or the store could not keep it. CarriedFrom is
+// the commit of the pass a carried_forward result reuses.
 type DeferredValidationResult struct {
 	Command       string                         `yaml:"command" json:"command"`
 	CommandSHA256 string                         `yaml:"command_sha256" json:"command_sha256"`
@@ -189,6 +230,7 @@ type DeferredValidationResult struct {
 	FinishedAt    time.Time                      `yaml:"finished_at" json:"finished_at"`
 	Excerpt       string                         `yaml:"excerpt,omitempty" json:"excerpt,omitempty"`
 	OutputSHA256  string                         `yaml:"output_sha256,omitempty" json:"output_sha256,omitempty"`
+	CarriedFrom   string                         `yaml:"carried_from,omitempty" json:"carried_from,omitempty"`
 }
 
 // DeferredValidationCulprit attributes one failing command. TaskID is set only
@@ -295,14 +337,15 @@ func (ledger *DeferredValidationLedger) BatchesAt(commit string) []DeferredValid
 	return batches
 }
 
-// Covers reports whether a passed batch ran every command in commands.
+// Covers reports whether a passed batch passed or carried forward every
+// command in commands.
 func (batch DeferredValidationBatch) Covers(commands []DeferredValidationCommand) bool {
 	if batch.Status != DeferredValidationBatchPassed {
 		return false
 	}
 	ran := map[string]bool{}
 	for _, result := range batch.Results {
-		if result.Status == DeferredValidationResultPassed {
+		if result.Status == DeferredValidationResultPassed || result.Status == DeferredValidationResultCarriedForward {
 			ran[result.CommandSHA256] = true
 		}
 	}
@@ -329,6 +372,22 @@ func (ledger *DeferredValidationLedger) LatestPassFor(commandSHA string) *Deferr
 	return nil
 }
 
+// LatestExecutionFor returns the most recent batch that executed the command,
+// and that execution; a carried-forward or not-run result is no execution.
+func (ledger *DeferredValidationLedger) LatestExecutionFor(commandSHA string) (*DeferredValidationBatch, *DeferredValidationResult) {
+	if ledger == nil {
+		return nil, nil
+	}
+	for i := len(ledger.Batches) - 1; i >= 0; i-- {
+		for j, result := range ledger.Batches[i].Results {
+			if result.CommandSHA256 == commandSHA && result.Status.Executed() {
+				return &ledger.Batches[i], &ledger.Batches[i].Results[j]
+			}
+		}
+	}
+	return nil, nil
+}
+
 // HighestBatchID is the largest batch identity ever written, pruned or not.
 func (ledger *DeferredValidationLedger) HighestBatchID() int {
 	if ledger == nil {
@@ -352,7 +411,9 @@ func (ledger *DeferredValidationLedger) AppendBatch(batch DeferredValidationBatc
 }
 
 // PruneBatches keeps the newest DeferredValidationBatchRetention batches plus
-// the latest batch in which each command passed, preserving order.
+// the latest batch in which each command passed and the latest that executed
+// it, preserving order: a pruned newer failure must never let an older pass
+// be carried forward.
 func (ledger *DeferredValidationLedger) PruneBatches() {
 	if ledger == nil || len(ledger.Batches) <= DeferredValidationBatchRetention {
 		return
@@ -361,11 +422,15 @@ func (ledger *DeferredValidationLedger) PruneBatches() {
 	for i := len(ledger.Batches) - DeferredValidationBatchRetention; i < len(ledger.Batches); i++ {
 		keep[i] = true
 	}
-	seen := map[string]bool{}
+	passed, executed := map[string]bool{}, map[string]bool{}
 	for i := len(ledger.Batches) - 1; i >= 0; i-- {
 		for _, result := range ledger.Batches[i].Results {
-			if result.Status == DeferredValidationResultPassed && !seen[result.CommandSHA256] {
-				seen[result.CommandSHA256] = true
+			if result.Status == DeferredValidationResultPassed && !passed[result.CommandSHA256] {
+				passed[result.CommandSHA256] = true
+				keep[i] = true
+			}
+			if result.Status.Executed() && !executed[result.CommandSHA256] {
+				executed[result.CommandSHA256] = true
 				keep[i] = true
 			}
 		}
@@ -412,6 +477,10 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 		for j, result := range batch.Results {
 			if !isHexDigest(result.CommandSHA256, 64) || !result.Status.IsValid() {
 				errs = append(errs, fmt.Errorf("%s.results[%d]: requires command_sha256 and a valid status", field, j))
+			}
+			if (result.Status == DeferredValidationResultCarriedForward) != (result.CarriedFrom != "") ||
+				(result.CarriedFrom != "" && !isHexDigest(result.CarriedFrom, 40)) {
+				errs = append(errs, fmt.Errorf("%s.results[%d]: a carried_forward result, and only one, requires a full carried_from commit", field, j))
 			}
 		}
 		for j, culprit := range batch.Culprits {
