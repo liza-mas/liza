@@ -1062,6 +1062,7 @@ Failure propagation and compound interaction effects.
 - Early sampling: downstream pair processes one `output[]` entry as a pilot before the full fan-out is committed
 - Decomposition cost estimator: flag `output[]` entries that would produce >N downstream tasks for human review before `liza proceed`
 - Cross-sprint error attribution: when downstream tasks block, trace back to the upstream `output[]` entry and accumulate error counts per upstream pair
+- Reconciliation join per decomposition root: a planner/reviewer task checks that the reviewed children compose (interfaces, lifecycle, coverage) before the handoff checkpoint, with approval bound to an input snapshot and invalidated when a covered child is revised or superseded. Designed as W7 of the retired local goal `20260913-prevent-blocked-tasks-chains`; start only with a reproducible non-composition case, since the join adds latency and can become a near-global barrier
 
 ---
 
