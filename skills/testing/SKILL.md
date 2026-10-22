@@ -49,8 +49,10 @@ Tests are the immune system — they reject bugs, not document them.
 - Systematic edge cases: None, boundaries, dates
 - Branch coverage: success and failure paths
 
-**Assertion Strength:** Would this assertion pass for a broken implementation?
-If yes (tautology, type-only, existence-only, shape-only), strengthen it.
+**Assertion Strength:** Would this test pass for a broken implementation?
+If yes (tautology, type-only, existence-only, shape-only), strengthen it. Each negative, exclusion
+or isolation test guards one refusal path and must go red without it: the fixture reaches the state
+that path decides and breaks only that path, and the oracle is not derived from the input under test.
 
 **Mocking Discipline:** Test the code, not the scaffolding.
 Heavy mock setup suggests you're testing assumptions about dependencies, not behavior.

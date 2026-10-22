@@ -44,7 +44,12 @@ Read the epic at {{.EpicRef}} for requirement context and user stories at specs/
    not trigger the TDD requirement in item 3. The test's invariant (what it validates)
    must be preserved.
 8. Invoke skill: clean-code at the end of the implementation
-9. Validate ALL done_when criteria are met
+9. Validate ALL done_when criteria are met. Before submit, name the refusal path each negative,
+   exclusion or isolation proof guards and check it goes red without that path (testing:
+   Assertion Strength): disable the path once and see the intended assertion fail for that
+   reason, not an error or another assertion; restore it and see the proof green. Where
+   disabling is impractical, argue from the fixture why no other path or missing state could
+   make it pass.
 10. If context exhaustion is near (~90%): run {{binaryName}} handoff --json with summary + next_action (or structured fields), then exit with code 42
 {{- else if eq .Role "code-planner"}}
 
