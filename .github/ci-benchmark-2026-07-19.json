@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "retrieved_at": "2026-07-19T20:08:10Z",
+  "repository": "liza-mas/liza",
+  "pull_request": 99,
+  "hosted": {
+    "provider": "GitHub Actions",
+    "workflow_id": 235652292,
+    "selection": {
+      "event": "pull_request",
+      "status": "success",
+      "ordering": "newest to oldest before 2026-07-19T18:57:51Z",
+      "included": "first seven runs with successful final-attempt ubuntu-latest and macos-latest jobs",
+      "workflow_wall_definition": "updated_at minus run_started_at",
+      "job_runtime_definition": "completed_at minus started_at",
+      "queue_definition": "started_at minus created_at",
+      "trial_count": 7
+    },
+    "baseline_runs": [
+      {"run_id": 29415285530, "attempt": 1, "head_sha": "87782c0ce5d8318026ada2771e95bc74444b341d", "wall_seconds": 481, "linux_seconds": 284, "linux_queue_seconds": 2, "macos_seconds": 477, "macos_queue_seconds": 3},
+      {"run_id": 29363238333, "attempt": 1, "head_sha": "1cc5e196151bb0d1d5213ff19306aae22948bc10", "wall_seconds": 390, "linux_seconds": 265, "linux_queue_seconds": 2, "macos_seconds": 386, "macos_queue_seconds": 2},
+      {"run_id": 28765220516, "attempt": 2, "head_sha": "01f8785c8b1a425783738659a433895b42db2082", "wall_seconds": 424, "linux_seconds": 276, "linux_queue_seconds": 1, "macos_seconds": 420, "macos_queue_seconds": 2},
+      {"run_id": 28763866016, "attempt": 1, "head_sha": "1947e77243f64c1d9252701b8959dda49e6dd5d0", "wall_seconds": 354, "linux_seconds": 279, "linux_queue_seconds": 2, "macos_seconds": 351, "macos_queue_seconds": 2},
+      {"run_id": 28754270342, "attempt": 1, "head_sha": "136de2987624b671f06aca89c0f223eff28bd81b", "wall_seconds": 288, "linux_seconds": 276, "linux_queue_seconds": 1, "macos_seconds": 284, "macos_queue_seconds": 2},
+      {"run_id": 28479610536, "attempt": 1, "head_sha": "c7840a596516d70977075a70b1ca9575aaff18b6", "wall_seconds": 302, "linux_seconds": 288, "linux_queue_seconds": 2, "macos_seconds": 300, "macos_queue_seconds": 2},
+      {"run_id": 28478483788, "attempt": 1, "head_sha": "06632431502d108f68a21f92f109e77c3c21f3b0", "wall_seconds": 300, "linux_seconds": 281, "linux_queue_seconds": 2, "macos_seconds": 297, "macos_queue_seconds": 2}
+    ],
+    "baseline_statistics": {
+      "wall_seconds": {"median": 354, "p95_nearest_rank": 481, "median_95_percent_sign_test_interval": [288, 481]},
+      "linux_seconds": {"median": 279, "p95_nearest_rank": 288, "median_95_percent_sign_test_interval": [265, 288]},
+      "macos_seconds": {"median": 351, "p95_nearest_rank": 477, "median_95_percent_sign_test_interval": [284, 477]},
+      "combined_runner_seconds": {"median": 630, "p95_nearest_rank": 761, "median_95_percent_sign_test_interval": [560, 761]},
+      "interval_note": "The minimum-to-maximum non-randomized sign-test interval has 98.4375% coverage at n=7; evolving sources and caches violate iid assumptions, so bounds are descriptive."
+    },
+    "optimized_run": {
+      "run_id": 29699676751,
+      "url": "https://github.com/liza-mas/liza/actions/runs/29699676751",
+      "head_sha": "8810a9ea7fe6d9f73ffbbd9c7de4d5536845ee2e",
+      "wall_seconds": 196,
+      "linux_seconds": 150,
+      "linux_queue_seconds": 2,
+      "macos_seconds": 192,
+      "macos_queue_seconds": 3,
+      "combined_runner_seconds": 342,
+      "success_oracle": "Linux and macOS reusable-workflow jobs completed successfully; release skipped by pull-request policy",
+      "trial_count": 1,
+      "p95": null,
+      "confidence_interval": null
+    },
+    "descriptive_changes_percent": {
+      "wall": -44.632768,
+      "linux": -46.236559,
+      "macos": -45.299145,
+      "combined_runner": -45.714286
+    },
+    "workflow_blobs": {
+      "historical_caller": "c67fe98b6f7ac64d5dd3bb8ec9110a73ab983f81",
+      "optimized_caller": "bf3e91893c677e21a6c382b7741280170b50eae1",
+      "optimized_reusable_core": "d5cb5621b2a63d32bfac2a5ee9af0a3f8642d1ee"
+    },
+    "confounders": [
+      "Source and test workloads differ across historical SHAs.",
+      "Two historical runs saved setup-go caches; the other samples restored cache hits.",
+      "Runner aliases and VM images are mutable.",
+      "The optimized sample has n=1."
+    ],
+    "subprocess_count": "unknown; unavailable from GitHub Actions APIs",
+    "agent_facing_operations": "not applicable; workflows invoke no LLM agents",
+    "model_token_counts": "not applicable"
+  },
+  "cross_repo_act": {
+    "repository": "omni3ai/execution-engine",
+    "environment": "act 0.2.89; Docker 29.4.0; macOS 27.0 arm64; linux/amd64 runner image sha256:5d6a17640b25694988b9db5a4145537b9918e5430116b2cf90d84e837609b382; fresh caches",
+    "protocol": "three serial trials per exact-SHA variant; /usr/bin/time -lp; nearest-rank p95; 27 ordered size-three bootstrap resamples",
+    "baseline": {"head_sha": "9daabf8108a698622afa22fd819eb4128098d61c", "elapsed_seconds": [1384.31, 1223.81, 878.12], "median": 1223.81, "p95": 1384.31, "median_95_ci": [878.12, 1384.31], "docker_exec_starts": [16, 14, 14]},
+    "optimized": {"head_sha": "23b60d07a4c96e322e7f4e5a62f91aeea9d23307", "elapsed_seconds": [781.24, 599.18, 496.63], "median": 599.18, "p95": 781.24, "median_95_ci": [496.63, 781.24], "docker_exec_starts": [9, 9, 9]},
+    "index_matched_descriptive_percent_reduction": {"values": [43.56, 51.04, 43.44], "median": 43.56, "p95": 51.04, "observed_range": [43.44, 51.04]},
+    "success_oracle": "All six invocations completed and reached real tests with clean worktrees; zero workflows succeeded, so timing is directional failed-workflow evidence.",
+    "valid_invocations": 6,
+    "excluded_invocations": 1,
+    "agent_facing_operations": 0,
+    "model_token_operations_inside_benchmark": 0,
+    "orchestration_tokens": "outside benchmark boundary; unavailable"
+  }
+}

@@ -3146,7 +3146,7 @@ func TestInitCommandWithConfig_AutodetectsAndPersistsValidatedScipSearchLanguage
 // testhelpers repeats the index gate suffixes because it cannot import the
 // packages that define them; this keeps the two lists in step.
 func TestIndexEnvGateNamesMatchPackageGates(t *testing.T) {
-	want := []string{stacklit.EnvEnableStacklit, scipsearch.EnvEnableScipSearch, functionalclusters.EnvEnableFunctionalClusters}
+	want := []string{stacklit.EnvEnableStacklit, scipsearch.EnvEnableScipSearch, functionalclusters.EnvEnableFunctionalClusters, semble.EnvEnableSemble}
 	if got := testhelpers.IndexEnvGateNames(); !slices.Equal(got, want) {
 		t.Fatalf("testhelpers.IndexEnvGateNames() = %v, want %v", got, want)
 	}

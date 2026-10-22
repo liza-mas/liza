@@ -1,4 +1,4 @@
-.PHONY: build test test-fast test-race test-e2e clean install lint check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -122,6 +122,9 @@ sync-embedded:
 
 # Build the binaries
 build: sync-embedded
+	@$(MAKE) build-nosync
+
+build-nosync:
 	@echo "Building $(BINARY_NAME) (version=$(VERSION), commit=$(GIT_COMMIT), date=$(BUILD_DATE))"
 	@go build $(LDFLAGS) -o $(BINARY_FILE) ./cmd/liza
 
@@ -129,7 +132,41 @@ build: sync-embedded
 # IMPORTANT: Always use `make test`, not bare `go test ./...`.
 # The sync-embedded step copies contracts/ and skills/ into internal/embedded/ for go:embed.
 # claude-settings.json and hooks/ are mastered directly in internal/embedded/.
-test: sync-embedded check-testhelpers
+ci-prepare: sync-embedded check-testhelpers
+
+ci-test-nosync: ci-test-go-nosync test-python-nosync
+
+ci-test-go-nosync:
+	@$(MAKE) -j2 test-units-race-nosync ci-test-slow-race-nosync
+
+ci-test-compat-nosync:
+	@$(MAKE) -j2 test-units-nosync ci-test-slow-nosync
+
+# CI runs two concurrent lanes balanced on Linux race timings (run
+# 39760117947): internal/integration then cmd/liza (~430s) beside every other
+# package (~775s at -p 2). internal/integration runs once, with the e2e tag;
+# the e2e-tagged files only add the sprint tests to that package.
+CI_UNIT_PACKAGES = $$(go list ./... | grep -v -e '/internal/integration$$' -e '/cmd/liza$$')
+
+ci-test-slow-race-nosync: test-integration-nosync
+	go test -race -timeout 30m ./cmd/liza/
+
+ci-test-slow-nosync: test-integration-nosync
+	go test ./cmd/liza/
+
+test-units-nosync:
+	go test $(CI_UNIT_PACKAGES)
+
+test-units-race-nosync:
+	go test -race -timeout 30m -p 2 $(CI_UNIT_PACKAGES)
+
+test-integration-nosync:
+	go test -race -tags e2e -timeout 30m -count=1 ./internal/integration/
+
+test: ci-prepare
+	@$(MAKE) test-nosync
+
+test-nosync:
 	go test ./...
 
 # Run the short test subset for fast local feedback
@@ -151,12 +188,22 @@ test-fast: sync-embedded check-testhelpers
 # tolerances are the real fragility (TECH_DEBT.md); this gate has to be
 # trustworthy before the work that depends on it can fix them. Raise this only
 # with evidence that the tolerances survive the contention.
-test-race: sync-embedded check-testhelpers
+test-race: ci-prepare
+	@$(MAKE) test-race-nosync
+
+test-race-nosync:
 	go test -race -timeout 30m -p 2 ./...
 
 # Run e2e tests (full sprint sequence with mock CLI — ~40s)
-test-e2e: sync-embedded check-testhelpers
+test-e2e: ci-prepare
+	@$(MAKE) test-e2e-nosync
+
+test-e2e-nosync:
 	go test -race -tags e2e -run '^(TestFullSprintSequence|TestTerminalDependencyRecovery)$$' ./internal/integration/ -count=1
+
+# Run the log analyzer tests in the uv-locked environment
+test-python-nosync:
+	uv run --frozen python3 -m pytest skills/liza-logs/scripts
 
 # Run tests with a per-invocation, self-cleaning coverage profile
 coverage: sync-embedded check-testhelpers
@@ -229,8 +276,16 @@ check-embedded:
 	@echo "✓ Embedded artifacts are consistent with masters"
 
 # Run linters
-lint: sync-embedded check-testhelpers check-embedded
-	go fmt ./...
+lint: ci-prepare check-embedded
+	@$(MAKE) lint-nosync
+
+lint-nosync:
+	@unformatted="$$(gofmt -l $$(find . -name '*.go' -type f -not -path './vendor/*'))"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "Go files need formatting:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
 	go vet ./...
 
 # Tidy dependencies
@@ -285,14 +340,29 @@ package: release
 help:
 	@echo "Available targets:"
 	@echo "  build              - Build $(BINARY_NAME) binary"
+	@echo "  build-nosync       - Build against an already-synced checkout"
+	@echo "  ci-prepare         - Sync generated files and run shared CI checks"
+	@echo "  ci-test-nosync     - Run race, integration, and Python tests without syncing"
+	@echo "  ci-test-go-nosync  - Run race units and integration tests concurrently without syncing"
+	@echo "  ci-test-compat-nosync - Run units and integration tests concurrently without syncing"
+	@echo "  ci-test-slow-nosync - Run integration then cmd/liza tests (CI lane)"
+	@echo "  ci-test-slow-race-nosync - Run integration then cmd/liza race tests (CI lane)"
+	@echo "  test-units-nosync  - Run all packages except internal/integration"
+	@echo "  test-units-race-nosync - Run all packages except internal/integration with race"
+	@echo "  test-integration-nosync - Run internal/integration once, including e2e tests"
 	@echo "  test               - Run the full suite without race or coverage instrumentation"
+	@echo "  test-nosync        - Run the full suite against an already-synced checkout"
 	@echo "  test-fast          - Run the short test subset"
 	@echo "  test-race          - Run the full suite with race instrumentation"
+	@echo "  test-race-nosync   - Run the race suite against an already-synced checkout"
 	@echo "  test-e2e           - Run e2e full sprint test (~40s, requires -tags e2e)"
+	@echo "  test-e2e-nosync    - Run e2e tests against an already-synced checkout"
+	@echo "  test-python-nosync - Run the log analyzer Python tests with uv"
 	@echo "  coverage           - Run tests with coverage report"
 	@echo "  clean              - Clean build artifacts"
 	@echo "  install            - Install $(BINARY_NAME) binary"
 	@echo "  lint               - Run linters (includes testhelpers check)"
+	@echo "  lint-nosync        - Run nonmutating format and vet checks without syncing"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"

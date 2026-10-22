@@ -7,11 +7,11 @@ import (
 )
 
 // indexEnvGateSuffixes names the index feature gates by suffix. testhelpers
-// cannot import stacklit, scipsearch or functionalclusters to read their
-// constants, since those packages' own tests import testhelpers, so the
+// cannot import stacklit, scipsearch, functionalclusters or semble to read
+// their constants, since those packages' own tests import testhelpers, so the
 // suffixes are repeated here. TestIndexEnvGateNamesMatchPackageGates in
 // internal/commands keeps them in step.
-var indexEnvGateSuffixes = []string{"ENABLE_STACKLIT", "ENABLE_SCIP_SEARCH", "ENABLE_FUNCTIONAL_CLUSTERS"}
+var indexEnvGateSuffixes = []string{"ENABLE_STACKLIT", "ENABLE_SCIP_SEARCH", "ENABLE_FUNCTIONAL_CLUSTERS", "ENABLE_SEMBLE"}
 
 // IndexEnvGateNames returns the branded env names of the index feature gates.
 func IndexEnvGateNames() []string {

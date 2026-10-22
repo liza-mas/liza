@@ -1,0 +1,249 @@
+name: CI core
+
+on:
+  workflow_call:
+    inputs:
+      setup_python:
+        description: Install uv and run the repository's Python test target from its uv.lock
+        required: false
+        default: false
+        type: boolean
+      macos_on_pr:
+        description: Run the macOS compatibility job for pull requests
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      verified_sha:
+        description: Commit checked out and verified by the Linux CI job
+        value: ${{ jobs.linux.outputs.verified_sha }}
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A restored GOCACHE must never replay cached test results.
+      GOFLAGS: -count=1
+    outputs:
+      verified_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Record verified source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          # Replaced by the weekly cache below: setup-go keys on go.sum only,
+          # so its entry was never refreshed and went stale.
+          cache: false
+
+      # One entry per job per ISO week keeps the repository cache footprint
+      # bounded; Go trims build-cache entries unused for five days.
+      - name: Locate Go caches
+        id: go-dirs
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: go-linux-test-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          restore-keys: |
+            go-linux-test-${{ hashFiles('go.sum') }}-
+            go-linux-test-
+
+      # Executes the pi init-gate extension (TypeScript) in its tests; node
+      # 24 strips types natively.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: inputs.setup_python
+        with:
+          python-version: "3.12"
+
+      # Tests compile embedded files; the lint job verifies they are committed.
+      - name: Prepare generated artifacts
+        run: make ci-prepare
+
+      - name: Run race and integration tests in parallel
+        if: ${{ ! inputs.setup_python }}
+        run: make ci-test-go-nosync
+
+      - name: Run race, integration, and Python tests
+        if: inputs.setup_python
+        run: make ci-test-nosync
+
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  # Lint, vet, and build run beside the tests instead of before them.
+  lint:
+    name: Linux lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          # Replaced by the weekly cache below: setup-go keys on go.sum only,
+          # so its entry was never refreshed and went stale.
+          cache: false
+
+      # One entry per job per ISO week keeps the repository cache footprint
+      # bounded; Go trims build-cache entries unused for five days.
+      - name: Locate Go caches
+        id: go-dirs
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: go-linux-lint-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          restore-keys: |
+            go-linux-lint-${{ hashFiles('go.sum') }}-
+            go-linux-lint-
+
+      - name: Prepare and verify generated artifacts
+        run: |
+          make ci-prepare
+          if ! git diff --quiet -- . || \
+             [ -n "$(git status --porcelain --untracked-files=all -- .)" ]; then
+            echo "ci-prepare changed tracked files; regenerate and commit them:" >&2
+            git diff --exit-code -- .
+            git status --short --untracked-files=all -- . >&2
+            exit 1
+          fi
+
+      - name: Run linters
+        run: make lint-nosync
+
+      # Vet the Windows build here rather than on the 2-vCPU Windows runner.
+      # Cross-compiled packages use CGO_ENABLED=0, matching the Windows job,
+      # which has no C toolchain in use.
+      - name: Vet for Windows
+        run: GOOS=windows go vet ./...
+
+      - name: Build
+        run: make build-nosync
+
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  macos:
+    name: macOS compatibility
+    if: github.event_name != 'pull_request' || inputs.macos_on_pr
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      # A restored GOCACHE must never replay cached test results.
+      GOFLAGS: -count=1
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          # Replaced by the weekly cache below: setup-go keys on go.sum only,
+          # so its entry was never refreshed and went stale.
+          cache: false
+
+      # One entry per job per ISO week keeps the repository cache footprint
+      # bounded; Go trims build-cache entries unused for five days.
+      - name: Locate Go caches
+        id: go-dirs
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: go-macos-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          restore-keys: |
+            go-macos-${{ hashFiles('go.sum') }}-
+            go-macos-
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: inputs.setup_python
+        with:
+          python-version: "3.12"
+
+      - name: Prepare generated artifacts
+        run: make ci-prepare
+
+      # Race coverage runs on Linux; macOS checks platform compatibility.
+      - name: Run unit and integration tests in parallel
+        run: make ci-test-compat-nosync
+
+      - name: Run Python tests
+        if: inputs.setup_python
+        run: make test-python-nosync
+
+      - name: Build
+        run: make build-nosync
+
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
