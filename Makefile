@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync test test-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -137,7 +137,23 @@ ci-prepare: sync-embedded check-testhelpers
 ci-test-nosync: ci-test-go-nosync test-python-nosync
 
 ci-test-go-nosync:
-	@$(MAKE) -j2 test-race-nosync test-e2e-nosync
+	@$(MAKE) -j2 test-units-race-nosync test-integration-nosync
+
+ci-test-compat-nosync:
+	@$(MAKE) -j2 test-units-nosync test-integration-nosync
+
+# CI runs internal/integration once, with the e2e tag, beside the other
+# packages; the e2e-tagged files only add the sprint tests to that package.
+CI_UNIT_PACKAGES = $$(go list ./... | grep -v '/internal/integration$$')
+
+test-units-nosync:
+	go test $(CI_UNIT_PACKAGES)
+
+test-units-race-nosync:
+	go test -race -timeout 30m -p 2 $(CI_UNIT_PACKAGES)
+
+test-integration-nosync:
+	go test -race -tags e2e -timeout 30m -count=1 ./internal/integration/
 
 test: ci-prepare
 	@$(MAKE) test-nosync
@@ -318,8 +334,12 @@ help:
 	@echo "  build              - Build $(BINARY_NAME) binary"
 	@echo "  build-nosync       - Build against an already-synced checkout"
 	@echo "  ci-prepare         - Sync generated files and run shared CI checks"
-	@echo "  ci-test-nosync     - Run race, e2e, and Python tests without syncing"
-	@echo "  ci-test-go-nosync  - Run race and e2e tests concurrently without syncing"
+	@echo "  ci-test-nosync     - Run race, integration, and Python tests without syncing"
+	@echo "  ci-test-go-nosync  - Run race units and integration tests concurrently without syncing"
+	@echo "  ci-test-compat-nosync - Run units and integration tests concurrently without syncing"
+	@echo "  test-units-nosync  - Run all packages except internal/integration"
+	@echo "  test-units-race-nosync - Run all packages except internal/integration with race"
+	@echo "  test-integration-nosync - Run internal/integration once, including e2e tests"
 	@echo "  test               - Run the full suite without race or coverage instrumentation"
 	@echo "  test-nosync        - Run the full suite against an already-synced checkout"
 	@echo "  test-fast          - Run the short test subset"

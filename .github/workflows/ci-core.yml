@@ -100,11 +100,11 @@ jobs:
       - name: Vet for Windows
         run: GOOS=windows go vet ./...
 
-      - name: Run race and e2e tests in parallel
+      - name: Run race and integration tests in parallel
         if: ${{ ! inputs.setup_python }}
         run: make ci-test-go-nosync
 
-      - name: Run race, e2e, and Python tests
+      - name: Run race, integration, and Python tests
         if: inputs.setup_python
         run: make ci-test-nosync
 
@@ -176,8 +176,8 @@ jobs:
         run: make ci-prepare
 
       # Race coverage runs on Linux; macOS checks platform compatibility.
-      - name: Run Go and e2e tests in parallel
-        run: make -j2 test-nosync test-e2e-nosync
+      - name: Run unit and integration tests in parallel
+        run: make ci-test-compat-nosync
 
       - name: Run Python tests
         if: inputs.setup_python
