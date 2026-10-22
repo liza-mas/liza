@@ -25,6 +25,9 @@ jobs:
     name: Linux checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # A restored GOCACHE must never replay cached test results.
+      GOFLAGS: -count=1
     outputs:
       verified_sha: ${{ steps.source.outputs.sha }}
     steps:
@@ -39,7 +42,32 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-          cache: true
+          # Replaced by the weekly cache below: setup-go keys on go.sum only,
+          # so its entry was never refreshed and went stale.
+          cache: false
+
+      # One entry per OS per ISO week keeps the repository cache footprint
+      # bounded; Go trims build-cache entries unused for five days.
+      - name: Locate Go caches
+        id: go-dirs
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: go-linux-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          restore-keys: |
+            go-linux-${{ hashFiles('go.sum') }}-
+            go-linux-
 
       # Executes the pi init-gate extension (TypeScript) in its tests; node
       # 24 strips types natively.
@@ -83,11 +111,23 @@ jobs:
       - name: Build
         run: make build-nosync
 
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
   macos:
     name: macOS compatibility
     if: github.event_name != 'pull_request' || inputs.macos_on_pr
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      # A restored GOCACHE must never replay cached test results.
+      GOFLAGS: -count=1
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -96,7 +136,32 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-          cache: true
+          # Replaced by the weekly cache below: setup-go keys on go.sum only,
+          # so its entry was never refreshed and went stale.
+          cache: false
+
+      # One entry per OS per ISO week keeps the repository cache footprint
+      # bounded; Go trims build-cache entries unused for five days.
+      - name: Locate Go caches
+        id: go-dirs
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "week=$(date -u +%G-W%V)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go caches
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: go-macos-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          restore-keys: |
+            go-macos-${{ hashFiles('go.sum') }}-
+            go-macos-
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -120,3 +185,12 @@ jobs:
 
       - name: Build
         run: make build-nosync
+
+      - name: Save Go caches
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-dirs.outputs.gocache }}
+            ${{ steps.go-dirs.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
