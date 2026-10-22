@@ -53,6 +53,22 @@ func TestDetectOrchestratorWakeTriggers_BlockedOnDirectPlannerPrefersPlanningCom
 	}
 }
 
+// D-177: GIVEN a never-assessed blocked task whose only wait on the merged
+// planner is a provider reservation (14 Oct uw-12 shape)
+// WHEN the orchestrator wake is selected
+// THEN PLANNING_COMPLETE wins, as for a direct dependency.
+func TestDetectOrchestratorWakeTriggers_BlockedOnReservedPlannerPrefersPlanningComplete(t *testing.T) {
+	consumer := blockedConsumer("consumer")
+	consumer.ProviderReservations = []models.ProviderReservation{{ProviderTask: "provider-plan", Transition: "code-plan-to-coding"}}
+	state := planningPreferenceState(mergedPlanner("provider-plan"), consumer)
+
+	result := DetectOrchestratorWakeTriggers(state, nil, nil, nil)
+
+	if result.Trigger != WakeTriggerPlanningComplete || result.Count != 1 {
+		t.Fatalf("wake = %s/%d, want PLANNING_COMPLETE/1: the reserved hand-off needs the checkpoint", result.Trigger, result.Count)
+	}
+}
+
 // GIVEN a blocked task whose assessment awaits a planner (not a dependency)
 // WHEN that planner merges with untransitioned output (09:14Z shape)
 // THEN the now-actionable blocker yields to PLANNING_COMPLETE.

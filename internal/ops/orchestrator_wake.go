@@ -134,9 +134,10 @@ func currentBlockerCandidate(state *models.State, task *models.Task) AssessmentF
 
 // BlockedTasksAwaitPlanningHandoff reports whether an actionable BLOCKED task
 // waits on planning output that only a PLANNING_COMPLETE checkpoint can
-// materialize: a dependency or awaited task (either followed through
-// supersession) that is a planned, PLANNING_COMPLETE-eligible planner that
-// merged, or was released by a plan-check, after the last transition attempt.
+// materialize: a dependency, awaited task or typed provider declaration (see
+// providerWaits), followed through supersession, that is a planned,
+// PLANNING_COMPLETE-eligible planner that merged, or was released by a
+// plan-check, after the last transition attempt.
 // A BLOCKED_TASKS turn cannot checkpoint, so such a wake
 // is wasted. The attempt bound keeps a planner whose transition already failed
 // from outranking blocked triage again in this sprint.
@@ -150,11 +151,11 @@ func BlockedTasksAwaitPlanningHandoff(state *models.State, handoff PlanHandoffDo
 		if task.Status != models.TaskStatusBlocked || !isTaskActionableSinceAssessment(task, state) {
 			continue
 		}
-		waitsOn := task.DependsOn
+		waitsOn := append(slices.Clone(task.DependsOn), providerWaits(state, task)...)
 		if awaited, ok := currentEpisodeAwaitedTasks(task); ok {
-			waitsOn = append(slices.Clone(waitsOn), awaited...)
+			waitsOn = append(waitsOn, awaited...)
 		}
-		// Both lists follow supersession to the replacement that will merge.
+		// Every list follows supersession to the replacement that will merge.
 		for _, id := range waitsOn {
 			for _, candidate := range append([]string{id}, resolver.Resolve(id).Path...) {
 				if awaitsPlanningTransition(state, candidate, handoff) {
@@ -164,6 +165,23 @@ func BlockedTasksAwaitPlanningHandoff(state *models.State, handoff PlanHandoffDo
 		}
 	}
 	return false
+}
+
+// providerWaits names the providers whose generated children task's typed
+// declarations wait on: its provider dependencies, its reservations (through
+// the successor readiness follows) and the providers its descendant
+// declarations sequence its future outputs behind. Once such a provider has
+// merged, --awaits refuses it, so these edges are the only record that the
+// task waits on its hand-off (D-177).
+func providerWaits(state *models.State, task *models.Task) []string {
+	var ids []string
+	for _, dep := range append(slices.Clone(task.ProviderDependencies), models.DescendantProviderDependencies(task.DescendantDependencies)...) {
+		ids = append(ids, dep.ProviderTask)
+	}
+	for _, res := range task.ProviderReservations {
+		ids = append(ids, models.EffectiveReservationProvider(state, res.ProviderTask))
+	}
+	return ids
 }
 
 func awaitsPlanningTransition(state *models.State, plannerID string, handoff PlanHandoffDomain) bool {
