@@ -114,6 +114,7 @@ jobs:
             printf 'GOMODCACHE=%s\n' "$(win gowork/gomod)"
             printf 'SHARD_DIR=%s\n' "$(win shard)"
             printf 'TESTSHARD=%s\n' "$(win testshard.exe)"
+            printf 'GO_CACHE_WEEK=%s\n' "$(date -u +%G-W%V)"
             if [ "$DEV_DRIVE_ENABLED" = true ]; then
               printf 'GOTMPDIR=%s\n' "$(win gowork/tmp)"
               printf 'TEMP=%s\n' "$(win gowork/tmp)"
@@ -135,7 +136,9 @@ jobs:
           path: |
             ${{ runner.temp }}\gowork\go-build
             ${{ runner.temp }}\gowork\gomod
-          key: go-windows-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          # One entry per shard per ISO week: per-commit keys pushed the
+          # repository past its 10 GB Actions cache limit.
+          key: go-windows-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-${{ env.GO_CACHE_WEEK }}
           restore-keys: |
             go-windows-${{ matrix.shard }}-${{ hashFiles('go.sum') }}-
             go-windows-${{ matrix.shard }}-
