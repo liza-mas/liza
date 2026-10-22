@@ -103,6 +103,9 @@ func TestInitProject_Success(t *testing.T) {
 	if state.Config.Mode != models.SystemModeRunning {
 		t.Errorf("Mode = %v, want RUNNING", state.Config.Mode)
 	}
+	if !state.Config.TerminalTaskArchival {
+		t.Error("TerminalTaskArchival = false, want new runs to archive terminal tasks")
+	}
 	if state.Config.IntegrationBranch != "integration" {
 		t.Errorf("IntegrationBranch = %q, want %q", state.Config.IntegrationBranch, "integration")
 	}

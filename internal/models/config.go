@@ -162,8 +162,9 @@ func EffectiveMaxInstances(roleMax, configured int) int {
 
 // Config holds system configuration parameters
 type Config struct {
-	// TerminalTaskArchival is explicitly enabled by operator maintenance after
-	// all processes understand the cold terminal-record format (ADR-0183).
+	// TerminalTaskArchival is on for runs initialized since ADR-0215; operator
+	// maintenance enables it for older runs once every process understands the
+	// cold terminal-record format (ADR-0183).
 	TerminalTaskArchival            bool `yaml:"terminal_task_archival,omitempty" json:"terminal_task_archival,omitempty"`
 	MaxCoderIterations              int  `yaml:"max_coder_iterations"`
 	MaxReviewCycles                 int  `yaml:"max_review_cycles"`

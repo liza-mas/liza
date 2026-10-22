@@ -25,13 +25,15 @@ This file is written to `§BRAND_PROJECT_DIRNAME§/SUPPORT.md` during `§BRAND_B
 read state from a complete published snapshot without acquiring the state lock.
 A snapshot can already be stale while it is being decoded or used, because
 writers keep publishing. Later mutations still revalidate current state under
-lock. Auto-repair and `validate --repair` still take the lock for their own
-reads and repairs. Process
+lock. Auto-repair reads a snapshot too; each agent it starts registers under
+the lock. `validate --repair` still takes the lock for its reads and repairs. Process
 and filesystem diagnostics are separate observations. Do not edit state in place
 while agents are running.
 
 ### Terminal task storage
 
+New runs start with `config.terminal_task_archival` on, and each merge archives
+newly terminal tasks. For an older run,
 `§BRAND_BINARY_NAME§ archive-terminal-tasks --json` is operator maintenance:
 it enables `config.terminal_task_archival` and drains bounded batches. Upgrade
 every process before enabling it. Terminal rows in physical `state.yaml`
@@ -551,8 +553,10 @@ An automatic resume expands a merged plan's reviewed hand-off (manual `per-subta
 Mutating lifecycle commands return `result.outcome` and one server-selected
 `result.safe_action`, including on `ok:false` failures. Follow that field:
 `continue` proceeds, `stop` ends task work, `requery` inspects current state
-and possible effects, `retry` repeats the original request serially under the
-bounded retry policy, and `correct_input` fixes the named invalid fields.
+and possible effects, `retry` repeats the original request serially after about
+30 s, 1, 2 and 4 min and then stops and reports (it does not name its cause, so
+it never leads to a state-lock-timeout block), and `correct_input` fixes the
+named invalid fields.
 Never derive retry from error text. Preserve the original
 `--request-id` + `--expected-transition` pair and payload across retries;
 refreshing the token creates a new request and requires reevaluation.

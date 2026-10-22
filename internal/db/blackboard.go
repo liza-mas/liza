@@ -42,13 +42,19 @@ type Blackboard struct {
 	// megabyte-scale YAML per call starves the CPU the lock holders need.
 	// The cached value is never handed out directly — ReadCached returns a
 	// deep copy so callers keep a state they may mutate freely.
-	cacheMu           sync.RWMutex
-	cachedState       *models.State
-	cachedMtime       time.Time
-	archiveMu         sync.Mutex
-	archiveCache      map[string]terminalArchiveCacheEntry
-	archiveCacheBytes int
+	cacheMu     sync.RWMutex
+	cachedState *models.State
+	cachedMtime time.Time
+	// archive is shared with the instances derived from this one.
+	archive *terminalArchiveCache
+	// retryCtx is the WithLockRetryContext context; nil otherwise.
+	retryCtx context.Context
 }
+
+// StateLockTimeout bounds an ordinary state-lock wait. A cold transaction on a
+// long run's state can hold the lock for several seconds under host load, so
+// the wait spans a few queued holders instead of failing behind one (D-189).
+const StateLockTimeout = 30 * time.Second
 
 // defaultLockTimeoutNanos overrides the lock wait of Blackboards created by
 // New when positive. Only SetDefaultLockTimeoutForTest sets it.
@@ -58,13 +64,14 @@ var defaultLockTimeoutNanos atomic.Int64
 // Use For() in production code to get a shared process-level singleton.
 // New is intended for tests that need independent instances.
 func New(statePath string) *Blackboard {
-	fileLock := filelock.New(statePath)
-	if timeout := time.Duration(defaultLockTimeoutNanos.Load()); timeout > 0 {
-		fileLock = fileLock.WithTimeout(timeout)
+	timeout := StateLockTimeout
+	if override := time.Duration(defaultLockTimeoutNanos.Load()); override > 0 {
+		timeout = override
 	}
 	return &Blackboard{
 		statePath: statePath,
-		fileLock:  fileLock,
+		fileLock:  filelock.New(statePath).WithTimeout(timeout),
+		archive:   &terminalArchiveCache{},
 	}
 }
 
@@ -113,9 +120,10 @@ func ResetInstance(statePath string) {
 }
 
 // WithLockTimeout creates a new independent instance with a custom lock timeout;
-// cached bytes are copied at creation time but diverge afterward. The returned
-// instance is intentionally NOT registered in the singleton map — it is a
-// short-lived specialization for callers that need different lock behavior.
+// cached bytes are copied at creation time but diverge afterward, while the
+// decoded archive-object cache stays shared. The returned instance is
+// intentionally NOT registered in the singleton map — it is a short-lived
+// specialization for callers that need different lock behavior.
 func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 	bb.cacheMu.RLock()
 	cachedState := bb.cachedState
@@ -127,6 +135,8 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 		fileLock:    bb.fileLock.WithTimeout(timeout),
 		cachedState: cachedState,
 		cachedMtime: cachedMtime,
+		archive:     bb.archive,
+		retryCtx:    bb.retryCtx,
 	}
 	return newBB
 }
@@ -134,9 +144,10 @@ func (bb *Blackboard) WithLockTimeout(timeout time.Duration) *Blackboard {
 // WithLockRetryContext returns an independent supervisor instance whose lock
 // acquisition retries timeouts with backoff until ctx ends. Mutation callbacks
 // still run once, and all state/authority validation stays under the lock.
-// It is not cached by For and does not share lock metrics or cached state.
+// It is not cached by For and does not share lock metrics or cached state; it
+// shares the decoded archive-object cache.
 func (bb *Blackboard) WithLockRetryContext(ctx context.Context) *Blackboard {
-	return &Blackboard{statePath: bb.statePath, fileLock: bb.fileLock.WithRetryContext(ctx)}
+	return &Blackboard{statePath: bb.statePath, fileLock: bb.fileLock.WithRetryContext(ctx), archive: bb.archive, retryCtx: ctx}
 }
 
 // EnableMetrics enables lock metrics collection.
@@ -612,6 +623,7 @@ func (bb *Blackboard) Write(state *models.State) error {
 
 // Modify performs an atomic read-modify-write operation
 func (bb *Blackboard) Modify(fn func(*models.State) error) error {
+	bb.warmTerminalArchive()
 	published := false
 	err := bb.fileLock.WithLockOperation("modify", func() error {
 		data, err := readStateFile(bb.statePath)

@@ -214,6 +214,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 			History:        []models.CircuitBreakerHistory{},
 		},
 		Config: models.Config{
+			TerminalTaskArchival:            true,
 			MaxCoderIterations:              10,
 			MaxReviewCycles:                 5,
 			MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),

@@ -100,3 +100,23 @@ func TestValidateReadsSnapshotWhileStateLockHeld(t *testing.T) {
 		})
 	}
 }
+
+func TestRepairAgentPoolReadsSnapshotWhileStateLockHeld(t *testing.T) {
+	t.Cleanup(db.SetDefaultLockTimeoutForTest(snapshotReadLockTimeout))
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		testhelpers.BuildTaskByStatus("plan-1", models.TaskStatusDraftCodingPlan, time.Now().UTC()),
+	}
+	projectRoot := writeRepairAgentPoolState(t, state)
+	var calls []spawnedAgentCall
+	withFakeRepairSpawner(t, &calls, nil)
+	testhelpers.HoldFileLock(t, paths.New(projectRoot).StatePath())
+
+	result, err := RepairAgentPool(RepairAgentPoolOptions{ProjectRoot: projectRoot, Missing: true, DryRun: true})
+	if err != nil {
+		t.Fatalf("pool repair while the state lock is held: %v", err)
+	}
+	if len(result.Missing) != 1 || result.Missing[0].Role != "code-planner" {
+		t.Fatalf("missing roles = %+v, want code-planner", result.Missing)
+	}
+}

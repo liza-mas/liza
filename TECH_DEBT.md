@@ -335,9 +335,12 @@ cache cost, about 53 KiB per row) overflowed the former 16 MiB decoded-object
 cache: random eviction churned it on every read, and `readTerminalTask` took 52%
 of sampled agent CPU in a perf profile. The cache limit is now 128 MiB and a full cache stops
 admitting instead of evicting, so hits degrade to about limit/working set.
-Each `Blackboard` instance holds its own cache: a supervisor has two, and each
-`Patient()` instance starts cold. Entries for terminal tasks rewritten after
-archival stay cached for the supervisor's lifetime.
+Instances derived from a `Blackboard` share its cache, and `Modify` decodes
+uncached objects before taking the state lock
+([ADR-0215](specs/architecture/ADR/0215-archived-history-leaves-the-state-lock-hold.md)),
+so an object the full cache refuses is decoded on every transaction, outside
+the lock. Entries for terminal tasks rewritten after archival stay cached for
+the process's lifetime.
 
 **Why deferred:** Restoring archived rows only for readers that need them, or
 caching the restored state between publications, requires auditing which database
@@ -349,8 +352,8 @@ rule. Sizing the cache keeps the ADR intact and removed most of the cost
 **Payback trigger:** about 1,200 archived rows in `state.yaml` (half the limit
 at 53 KiB per row; row size varies, so the count only approximates cache cost),
 or `readTerminalTask` above 20% of an agent CPU profile. Then restore archived
-rows on demand or cache restored state per publication, and let short-lived
-instances share the singleton's cache.
+rows on demand or cache restored state per publication. D-189's run reached
+1104 archived rows (58 MB of objects) without overflowing the cache.
 
 ## Archive objects have no sweep; Windows directory durability
 
@@ -1380,3 +1383,25 @@ without weakening what each asserts.
 
 **Payback trigger:** the next failure of either test, or before deploying a
 binary that contains D-174. Capture full output to a unique file first.
+
+## Live state histories grow without bound
+
+**What:** Run-wide records stay in live `state.yaml` for the whole run and
+every transaction decodes, validates and emits them. On D-189's run (3.08 MB
+live state): `human_notes` 0.52 MB, `goal` 0.50 MB (`integration` 0.41 MB),
+`validation_readiness` 0.49 MB, `anomalies` 0.23 MB, `circuit_breaker` history
+0.11 MB. Live YAML decode and emission were 19% of a cold transaction's
+in-lock CPU; the share of the four histories D-189 named is estimated, not
+measured, at 6-13% of a hold.
+
+**Why deferred:** Each has readers that need retention rules first: agents and
+note-consumption tracking read `human_notes`, circuit-breaker analysis and
+blocked recovery (`models/blocked_recovery.go`) read history windows, and
+validation preflight (`ops/validation_preflight.go`) reads
+`validation_readiness`. ADR-0215 removed the larger
+per-transaction cost (archived-object decoding and validation).
+
+**Payback trigger:** live `state.yaml` above 2 MB in a run with archival on, or
+a profile showing live decode and emission above 30% of a state-lock hold.
+Then define per-record retention (cap, archive to immutable objects like
+terminal tasks, or move to side records) with each reader's window.

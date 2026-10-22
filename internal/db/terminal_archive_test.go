@@ -198,13 +198,13 @@ func TestTerminalArchiveCacheKeepsAdmittedEntries(t *testing.T) {
 	writeColdTerminalTaskState(t, p, rows, true)
 
 	cachedDigests := func(bb *Blackboard) (map[string]bool, int) {
-		bb.archiveMu.Lock()
-		defer bb.archiveMu.Unlock()
-		digests := make(map[string]bool, len(bb.archiveCache))
-		for digest := range bb.archiveCache {
+		bb.archive.mu.Lock()
+		defer bb.archive.mu.Unlock()
+		digests := make(map[string]bool, len(bb.archive.entries))
+		for digest := range bb.archive.entries {
 			digests[digest] = true
 		}
-		return digests, bb.archiveCacheBytes
+		return digests, bb.archive.bytes
 	}
 	read := func(t *testing.T, bb *Blackboard) (map[string]bool, int) {
 		t.Helper()

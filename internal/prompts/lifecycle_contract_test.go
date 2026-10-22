@@ -58,6 +58,53 @@ func TestLifecycleResultGuidance_AllRoles(t *testing.T) {
 	}
 }
 
+// A structured retry may be state-lock, admission-slot or runtime-input
+// contention: its schedule ends in stop, never in a recovery mutation that
+// would presume a cause (D-189).
+func TestLifecycleRetryScheduleEndsInStop(t *testing.T) {
+	for role, roleType := range map[string]string{"coder": "doer", "code-reviewer": "reviewer"} {
+		t.Run(roleType, func(t *testing.T) {
+			base, err := BuildBasePrompt(BasePromptConfig{
+				Role: role, AgentID: role + "-1", TaskID: "task-1",
+				ProjectRoot: "/repo", StatePath: "/repo/.liza/state.yaml",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recovery, err := BuildRoleContext(role, []string{"cli-failure-recovery"}, &RoleContextData{
+				Role: role, RoleType: roleType, AgentID: role + "-1", TaskID: "task-1", ReviewCommit: "abc",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			output := base + recovery
+			var retry string
+			for _, line := range strings.Split(output, "\n") {
+				if strings.HasPrefix(line, "- retry:") {
+					retry = line
+				}
+			}
+			for _, required := range []string{
+				"not a CLI failure", "after about 30 s, 1, 2 and 4 min", "never launch parallel retries",
+				"If the fourth retry still returns retry, stop and report",
+				"do not infer a cause, add --state-lock-timeout or use CLI FAILURE RECOVERY",
+			} {
+				if !strings.Contains(retry, required) {
+					t.Errorf("retry rule lacks %q:\n%s", required, retry)
+				}
+			}
+			for _, required := range []string{
+				"Use this fallback only when no lifecycle result is available",
+				"Preserve the original request-id + expected-transition pair",
+			} {
+				if !strings.Contains(output, required) {
+					t.Errorf("missing safeguard %q", required)
+				}
+			}
+		})
+	}
+}
+
 func TestLifecycleSubmissionEmitters_CaptureImmutableCommit(t *testing.T) {
 	for _, section := range []string{
 		"architect-tools", "code-planner-tools", "coder-tools", "epic-planner-tools",

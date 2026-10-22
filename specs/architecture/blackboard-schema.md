@@ -873,9 +873,13 @@ tasks:
   transition identities, dependencies, repair evidence and retained replay
   receipts are unchanged by physical archival. Existing receipt archives remain
   inspection-only; their reference and compact receipt form are part of the
-  terminal payload. Full candidate and hygiene validation use logical records.
-- **Cache and errors.** A per-blackboard decoded-object cache is bounded by
-  bytes. Verify current object bytes/digest on every read, including cache hits,
+  terminal payload. Full candidate and hygiene validation use logical records;
+  an archived row whose payload equals a cache entry already validated in
+  this process is validated as its stub (ADR-0215).
+- **Cache and errors.** A decoded-object cache, shared by a blackboard and the
+  instances derived from it, is bounded by bytes. Before taking the state
+  lock, `Modify` decodes and validates the objects the published state
+  references that the cache has not validated yet (ADR-0215). Verify current object bytes/digest on every read, including cache hits,
   and clone mutable returned data. Missing, corrupt, mismatched or unsupported
   objects fail explicitly with task, digest and path; eviction never discards
   evidence or changes results.
@@ -888,8 +892,9 @@ tasks:
   retry even when identical bytes exist. Windows directory durability remains
   best-effort. Object storage is shared with receipt archives without changing
   their format-version-1 envelopes or public operations. No archive sweep.
-- **Enablement and maintenance.** `config.terminal_task_archival` defaults off.
-  Operator-only `archive-terminal-tasks` enables it explicitly and drains
+- **Enablement and maintenance.** `config.terminal_task_archival` is set at
+  initialization (ADR-0215); for older runs, operator-only
+  `archive-terminal-tasks` enables it explicitly and drains
   bounded transactions: eight tasks, soft 4 MiB, first-object progress.
   Recheck eligibility under the state lock. Enabled post-merge maintenance
   handles newly terminal records/backlog, and later terminal mutations remain
@@ -1778,8 +1783,8 @@ an mtime cache. A read qualifies only when the state it returns is displayed,
 observed, or used as launch-input validation, and any consequent state mutation or
 authority decision re-reads under the lock or is guarded by locked registration.
 The read itself is lock-free, but the command around it may still take locks. For
-example, `watch` and TUI auto-repair take `RepairAgentPool`'s locked read, and
-`validate --repair` repairs under lock. Writers publish closed temporary files by atomic
+example, `validate --repair` repairs under lock; `RepairAgentPool` reads a
+snapshot and each start registers under the lock. Writers publish closed temporary files by atomic
 rename; inspection sees either publication, never a partially written state.
 The TUI's periodic read skips the parse when `state.yaml` is the publication it
 last read, calling `Blackboard.RefreshSnapshot` instead: archive evidence is
@@ -1817,8 +1822,8 @@ most once: failures after callback entry, filesystem errors and authority
 refusals are never replayed by this mechanism. Completed-turn bookkeeping and
 unregistration have separate 60s shutdown budgets. Runtime-input declaration
 discovery also uses a snapshot;
-malformed state still refuses launch. Ordinary command locks retain their
-bounded acquisition timeout.
+malformed state still refuses launch. Ordinary state-lock acquisitions wait up
+to 30s (other file locks 10s; ADR-0215).
 
 ---
 

@@ -2,6 +2,7 @@ package db
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/liza-mas/liza/internal/archiveobject"
@@ -39,10 +42,25 @@ type terminalArchiveObject struct {
 	ValueYAML     string `json:"value_yaml"`
 }
 
+// terminalArchiveCache holds decoded archive objects by digest. A Blackboard
+// shares it with the instances derived from it, so a fenced or patient
+// transaction does not decode again what its process already decoded.
+type terminalArchiveCache struct {
+	mu      sync.Mutex
+	entries map[string]terminalArchiveCacheEntry
+	bytes   int
+}
+
 type terminalArchiveCacheEntry struct {
 	task  *models.Task // immutable; readers receive deep copies
 	bytes int
+	// validated records that this payload passed state hygiene validation in
+	// this process, so writes that leave it unchanged need not validate it again.
+	validated bool
 }
+
+// terminalDecodeTestHook observes each archive object decoded on a cache miss.
+var terminalDecodeTestHook func(digest string)
 
 // TerminalArchiveError locates evidence that cannot be restored. It never
 // degrades to an absent field, including after a decoded-object cache hit.
@@ -160,28 +178,127 @@ func (bb *Blackboard) rememberTerminalTask(digest string, task *models.Task, enc
 		return
 	}
 	copy = cloneTerminalTask(&copy)
-	bb.archiveMu.Lock()
-	defer bb.archiveMu.Unlock()
-	if bb.archiveCache == nil {
-		bb.archiveCache = make(map[string]terminalArchiveCacheEntry)
+	cache := bb.archive
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.entries == nil {
+		cache.entries = make(map[string]terminalArchiveCacheEntry)
 	}
-	if _, present := bb.archiveCache[digest]; present {
+	if _, present := cache.entries[digest]; present {
 		return
 	}
 	// Every read scans all archived rows: evicting to admit would churn a
 	// partial fit into near-zero hits, while refusing keeps ~limit/working set.
 	// Entries for terminal tasks rewritten after archival stay until exit.
-	if bb.archiveCacheBytes+cost > terminalArchiveCacheMaxBytes {
+	if cache.bytes+cost > terminalArchiveCacheMaxBytes {
 		return
 	}
-	bb.archiveCache[digest] = terminalArchiveCacheEntry{task: &copy, bytes: cost}
-	bb.archiveCacheBytes += cost
+	cache.entries[digest] = terminalArchiveCacheEntry{task: &copy, bytes: cost}
+	cache.bytes += cost
 }
 
 func (bb *Blackboard) cachedTerminalTask(digest string) *models.Task {
-	bb.archiveMu.Lock()
-	defer bb.archiveMu.Unlock()
-	return bb.archiveCache[digest].task
+	entry, _ := bb.cachedTerminalEntry(digest)
+	return entry.task
+}
+
+func (bb *Blackboard) cachedTerminalEntry(digest string) (terminalArchiveCacheEntry, bool) {
+	bb.archive.mu.Lock()
+	defer bb.archive.mu.Unlock()
+	entry, ok := bb.archive.entries[digest]
+	return entry, ok
+}
+
+// markTerminalTaskValidated records a successful hygiene validation of the
+// cached payload for digest. Objects the cache refused stay unmarked, so they
+// are validated on every write as before.
+func (bb *Blackboard) markTerminalTaskValidated(digest string) {
+	bb.archive.mu.Lock()
+	defer bb.archive.mu.Unlock()
+	if entry, ok := bb.archive.entries[digest]; ok {
+		entry.validated = true
+		bb.archive.entries[digest] = entry
+	}
+}
+
+var (
+	terminalArchiveKey = []byte("terminal_archive:")
+	terminalDigestKey  = []byte("sha256:")
+)
+
+// needsTerminalArchiveWarmup reports whether a published state may reference an
+// archive object this cache has not validated. It scans bytes instead of parsing
+// YAML and is only a cost hint: a "terminal_archive:" key without a nearby digest
+// is ordinary text, while an unreadable digest after one triggers a full warm-up.
+func (bb *Blackboard) needsTerminalArchiveWarmup(data []byte) bool {
+	var digests []string
+	for rest, found := data, false; ; {
+		if _, rest, found = bytes.Cut(rest, terminalArchiveKey); !found {
+			break
+		}
+		_, value, hasDigest := bytes.Cut(rest[:min(len(rest), 256)], terminalDigestKey)
+		if !hasDigest {
+			continue
+		}
+		value = bytes.TrimLeft(value, " \"'")
+		digest := string(value[:min(len(value), 64)])
+		if !archiveobject.IsDigest(digest) {
+			return true
+		}
+		digests = append(digests, digest)
+	}
+	bb.archive.mu.Lock()
+	defer bb.archive.mu.Unlock()
+	for _, digest := range digests {
+		if !bb.archive.entries[digest].validated {
+			return true
+		}
+	}
+	return false
+}
+
+// warmTerminalArchive decodes and hygiene-validates, without the state lock,
+// the archived objects the current publication references that this cache has
+// not validated yet, so the transaction that follows finds them decoded and
+// validated. It runs on every Modify, so digests published since an earlier
+// call are covered. It authorizes nothing: the locked read re-verifies every
+// object's bytes, digest and identity, and reports the errors ignored here.
+// Objects published after this read are decoded under the lock as before.
+func (bb *Blackboard) warmTerminalArchive() {
+	ctx := bb.retryCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	data, err := readStateFile(bb.statePath)
+	if err != nil || !bb.needsTerminalArchiveWarmup(data) {
+		return
+	}
+	state, err := decodeState(data, "archive warm-up")
+	if err != nil {
+		return
+	}
+	for i := range state.Tasks {
+		stub := &state.Tasks[i]
+		if stub.TerminalArchive == nil {
+			continue
+		}
+		if entry, _ := bb.cachedTerminalEntry(stub.TerminalArchive.SHA256); entry.validated {
+			continue
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		task, err := bb.verifiedTerminalTask(stub)
+		if err != nil {
+			continue
+		}
+		if statehygiene.ValidateState(&models.State{Tasks: []models.Task{*task}}) == nil {
+			bb.markTerminalTaskValidated(stub.TerminalArchive.SHA256)
+		}
+	}
 }
 
 func (bb *Blackboard) readTerminalTask(stub *models.Task) (models.Task, error) {
@@ -225,6 +342,9 @@ func (bb *Blackboard) verifiedTerminalTask(stub *models.Task) (*models.Task, err
 	cached := bb.cachedTerminalTask(ref.SHA256)
 	cacheMiss := cached == nil
 	if cached == nil {
+		if terminalDecodeTestHook != nil {
+			terminalDecodeTestHook(ref.SHA256)
+		}
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.DisallowUnknownFields()
 		var object terminalArchiveObject
@@ -321,8 +441,34 @@ func (bb *Blackboard) marshalLogicalState(state *models.State) ([]byte, error) {
 	if !hasArchive {
 		return marshalStateForWrite(state)
 	}
-	if err := statehygiene.ValidateState(state); err != nil {
+	// An archived row whose payload equals its cached object, already validated
+	// in this process, is validated as its stub; every other row is validated in
+	// full at its own index. unchanged also spares the projection a comparison.
+	unchanged := make([]bool, len(state.Tasks))
+	view := *state
+	view.Tasks = slices.Clone(state.Tasks)
+	for i := range state.Tasks {
+		task := &state.Tasks[i]
+		if task.TerminalArchive == nil || !state.Config.TerminalTaskArchival {
+			continue
+		}
+		entry, ok := bb.cachedTerminalEntry(task.TerminalArchive.SHA256)
+		if !ok {
+			continue
+		}
+		payload := terminalPayload(task)
+		unchanged[i] = reflect.DeepEqual(&payload, entry.task)
+		if unchanged[i] && entry.validated {
+			view.Tasks[i] = models.Task{ID: task.ID, Status: task.Status, Created: task.Created, TerminalArchive: task.TerminalArchive}
+		}
+	}
+	if err := statehygiene.ValidateState(&view); err != nil {
 		return nil, fmt.Errorf("state hygiene validation failed: %w", err)
+	}
+	for i := range state.Tasks {
+		if unchanged[i] {
+			bb.markTerminalTaskValidated(state.Tasks[i].TerminalArchive.SHA256)
+		}
 	}
 	physical := reflect.New(terminalPhysicalStateType).Elem()
 	source := reflect.ValueOf(state).Elem()
@@ -352,9 +498,7 @@ func (bb *Blackboard) marshalLogicalState(state *models.State) ([]byte, error) {
 		if ref.ArchivedAt.IsZero() || !archiveobject.IsDigest(ref.SHA256) {
 			return nil, fmt.Errorf("task %s terminal archive has an invalid reference", task.ID)
 		}
-		payload := terminalPayload(task)
-		cached := bb.cachedTerminalTask(ref.SHA256)
-		if cached == nil || !reflect.DeepEqual(&payload, cached) {
+		if !unchanged[i] {
 			data, err := EncodeTerminalTask(task)
 			if err != nil {
 				return nil, err
@@ -366,7 +510,9 @@ func (bb *Blackboard) marshalLogicalState(state *models.State) ([]byte, error) {
 				}
 				ref.SHA256, ref.ArchivedAt = digest, time.Now().UTC()
 			}
+			// The view above validated this payload in full.
 			bb.rememberTerminalTask(digest, task, len(data))
+			bb.markTerminalTaskValidated(digest)
 		}
 		tasks[i] = map[string]any{"id": task.ID, "status": task.Status, "created": task.Created, "terminal_archive": ref}
 	}

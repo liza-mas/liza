@@ -1077,6 +1077,9 @@ func verifyInitialization(t *testing.T, tmpDir, description, specRef string) {
 	if state.Config.Mode != models.SystemModeRunning {
 		t.Errorf("state.Config.Mode = %q, want %q", state.Config.Mode, models.SystemModeRunning)
 	}
+	if !state.Config.TerminalTaskArchival {
+		t.Error("state.Config.TerminalTaskArchival = false, want new runs to archive terminal tasks")
+	}
 	if state.Config.DoerMaxWait != models.DefaultDoerMaxWait {
 		t.Errorf("state.Config.DoerMaxWait = %d, want %d", state.Config.DoerMaxWait, models.DefaultDoerMaxWait)
 	}

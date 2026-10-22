@@ -257,7 +257,9 @@ func RepairAgentPoolCommand(opts RepairAgentPoolOptions) error {
 
 func RepairAgentPool(opts RepairAgentPoolOptions) (*RepairAgentPoolResult, error) {
 	statePath := paths.New(opts.ProjectRoot).StatePath()
-	state, err := db.For(statePath).Read()
+	// Observation only: each start registers under the lock, where max-instances
+	// is enforced, so a snapshot need not wait behind writers.
+	state, err := db.For(statePath).ReadSnapshot()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}

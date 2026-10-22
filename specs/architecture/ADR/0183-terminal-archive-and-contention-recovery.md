@@ -64,7 +64,8 @@ require these gaps addressed while preserving existing fences and gates.
    durability logic. Acceptance-receipt APIs and format-version-1 objects remain
    compatible. Their inspection-only hydration stays separate: an archived
    receipt is still absent from the ordinary logical task until inspection.
-7. `config.terminal_task_archival` defaults off. Operator maintenance
+7. `config.terminal_task_archival` defaults off (amended by ADR-0215: runs
+   initialized since then start with it on). Operator maintenance
    `archive-terminal-tasks` explicitly enables it and drains bounded batches:
    at most eight tasks, soft 4 MiB, with the first object always progressing.
    Eligibility is rechecked under the lock. Enabled post-merge maintenance
