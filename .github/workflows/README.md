@@ -1,19 +1,19 @@
 # Shared CI workflow contract
 
-`ci-core.yml` is the reusable CI implementation for Liza and downstream forks,
-including `omni3ai/execution-engine`.
+`ci-core.yml` is the reusable Linux and macOS CI implementation for Liza and
+the forks that merge it, including `omni3ai/execution-engine`. Forks receive it
+through upstream merges and call it as a local workflow
+(`uses: ./.github/workflows/ci-core.yml`); nothing pins this repository.
 
-Availability and compatibility contract:
+Customize it without editing it, so upstream merges stay conflict-free:
 
-- Keep this repository public and `.github/workflows/ci-core.yml` at its current
-  path while downstream callers reference it.
-- Consumers must pin a full commit SHA that is reachable from reviewed `main`.
-- Coordinate any repository rename, visibility change, workflow path change, or
-  incompatible input/output change with downstream consumers before applying it.
-- Update consumers only after this workflow passes Linux and macOS CI at the
-  candidate SHA.
-- If ownership must move, publish an identical immutable revision at the new
-  location and repin every consumer before removing the old location.
+- Repository policy goes through its inputs (`setup_python`, `macos_on_pr`).
+- Suites go through the Makefile targets it calls: `ci-prepare`,
+  `lint-nosync`, `ci-test-nosync` (with `setup_python`), `ci-test-go-nosync`
+  (without it), `ci-test-compat-nosync` and `test-python-nosync` (macOS), and
+  `build-nosync`. A fork adds its own suites to these targets.
+- Repository-specific jobs (Windows shards, publishing, releases) live in the
+  caller's `ci.yml`.
 
-These rules make the shared implementation immutable for each caller while
-preventing silent drift between Liza and its forks.
+If a fork needs a change these extension points cannot express, add an input or
+target here upstream rather than diverging downstream.
