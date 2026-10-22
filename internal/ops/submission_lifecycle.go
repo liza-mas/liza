@@ -130,7 +130,53 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, "unknown")
 	})
 	blockRuntimeInputRefusal(projectRoot, taskID, agentID, authority, err)
+	blockBatchTimeoutRefusal(projectRoot, taskID, agentID, authority, err)
 	return result, err
+}
+
+// submitBatchTimeoutBlockTestHook runs after a batch-timeout submit released
+// its locks and before it blocks the task; tests use it to race the block.
+var submitBatchTimeoutBlockTestHook func()
+
+// blockBatchTimeoutRefusal moves a task whose submit settled a batch timeout
+// under the admission timeout retry policy to BLOCKED for a budget ruling,
+// after the submission's locks are released (ADR-0216). The block is fenced
+// to the transition the submit's own retirement produced, so a task released,
+// unblocked or reclaimed meanwhile is never blocked by this stale outcome.
+func blockBatchTimeoutRefusal(projectRoot, taskID, agentID string, authority *models.AgentAuthority, err error) {
+	var refusal *AcceptanceEvidenceError
+	if !errors.As(err, &refusal) || refusal.Class != AcceptanceFaultBatchTimeout {
+		return
+	}
+	var retired *LifecycleError
+	if !errors.As(err, &retired) || retired.Outcome.TransitionID == "" {
+		refusal.BlockSkipped = "the task's state after this submit could not be confirmed; inspect it before blocking"
+		return
+	}
+	if submitBatchTimeoutBlockTestHook != nil {
+		submitBatchTimeoutBlockTestHook()
+	}
+	transition := retired.Outcome.TransitionID
+	reason := fmt.Sprintf("canonical admission timed out under admission_timeout_retry (ruling %s): %s", refusal.Ruling, refusal.Reason)
+	question := fmt.Sprintf("Raise the canonical admission budget for %s with a budget exception ruling, or correct timeout_seconds?", taskID)
+	opts := MarkBlockedOptions{Request: LifecycleRequestOptions{RequestID: "admission-timeout:" + transition[:16], ExpectedTransition: transition}}
+	var blockErr error
+	if authority != nil {
+		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, opts)
+	} else {
+		_, blockErr = MarkBlockedWithOptions(projectRoot, taskID, reason, []string{question}, agentID, opts)
+	}
+	// Only an observed different transition proves the task moved on; any
+	// other refusal leaves the block to the doer.
+	var moved *LifecycleError
+	switch {
+	case blockErr == nil:
+		refusal.Blocked = true
+	case errors.As(blockErr, &moved) && moved.Outcome.TransitionID != "" && moved.Outcome.TransitionID != transition:
+		refusal.BlockSkipped = "the task moved on after this submit"
+	default:
+		refusal.BlockFailed = true
+	}
 }
 
 // blockRuntimeInputRefusal moves a task whose submission gate refused a

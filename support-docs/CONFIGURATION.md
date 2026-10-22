@@ -493,6 +493,7 @@ are loaded at runtime from the provider catalog.
 | `deferred_validation.inert_paths` | (none) | — | — | Git glob pathspecs | Paths whose changes never stop a command's latest pass from being carried forward to a new HEAD (`**` crosses directories, `*` does not); set by editing state.yaml |
 | `deferred_validation.scopes` | (none) | — | — | list of `command`, `paths` | Per exact command, the Git glob pathspecs it covers; a change outside them carries its latest pass forward. Fixing a wrong entry does not reopen a recorded batch: run `deferred-validation run --force`. Set by editing state.yaml |
 | `admission_limits` | (none) | 1 | 64 | list | Per class of command substrings, how many canonical commands execute at once; see [Admission limits](#admission-limits); written only by `admission-limit set`/`remove` |
+| `admission_timeout_retry` | (none) | — | — | `budget_factor`, `max_timeout_seconds`, `ruling` | Re-run a coding submit's timed-out canonical batch once at a raised budget; see [Admission timeout retry](#admission-timeout-retry); set by editing state.yaml |
 | `validation_preflight.probe_timeout_seconds` | 60 | 1 | — | seconds | Deadline per `validation_prerequisites` probe; set by editing state.yaml |
 | `validation_preflight.timeout_seconds` | 120 | 1 | — | seconds | Deadline for all probes of one preflight check; checks inside a provider tool call stay capped at 30; set by editing state.yaml |
 | `auto_checkpoint_summary` | true | — | — | boolean | Auto-runs checkpoint-summary when the sprint reaches a checkpoint and writes `§BRAND_PROJECT_DIRNAME§/checkpoint-summary.md` |
@@ -570,6 +571,35 @@ process group, forwards interrupts to it, and releases its slots once the group
 is gone; if a descendant may survive, the slots stay held until it exits and
 `admit` fails naming the slot directories. Put `admit` outside `run-live`,
 never inside it.
+
+### Admission timeout retry
+
+A batch that times out under contention usually passes unchanged or at a larger
+budget. Instead of ruling each case with `unblock-task --budget-exception`, the
+operator can record a standing ruling
+([ADR-0216](../specs/architecture/ADR/0216-admission-timeout-retry-policy.md)):
+
+```yaml
+config:
+  admission_timeout_retry:
+    budget_factor: 2          # 1..14400; 1 re-runs at the same budget
+    max_timeout_seconds: 7200 # 0..14400; 0 = the 14400 s cap
+    ruling: "decision D-123"  # the human decision; single line, at most 256 bytes
+```
+
+When a coding task's `submit-for-review` batch reaches its own budget, the
+whole batch re-runs once in the same submit and admission slots, at
+`budget_factor` × the budget, lowered to `max_timeout_seconds`, the cap, and
+what still fits the submit envelope (slot wait, batch and retry within the cap
+plus the 2 h floor). A failing command, a cancelled submit or output overflow is
+never re-run, nor is a task declaring a `single_use` runtime input or one whose
+timed-out run left files in the worktree. Commands must tolerate a full replay:
+only Git cleanliness is checked, not databases or other external state. A
+passing retry is recorded as the receipt's `timeout_retry` and shown to the
+reviewer. If the retry times out or cannot run, the submit blocks the task for
+a budget ruling. An invalid policy is ignored; a timeout under it names the
+invalid field. `update-review-commit`, the heal and the deferred runner never
+retry.
 
 ## Optional Tool Activation
 

@@ -134,6 +134,18 @@ before preparing or rebasing; a class that stays full refuses
 `acceptance.admission_slot` as `RETRYABLE` with no effects, and the same
 submission is retried ([ADR-0209](../architecture/ADR/0209-admission-limits.md)).
 
+With `config.admission_timeout_retry` set, a coding submit whose batch reaches
+its own deadline re-runs the whole batch once, in the same slots and grant, if
+the worktree is still clean and no `single_use` runtime input is declared. Its
+budget is `budget_factor` × the batch budget, lowered to
+`max_timeout_seconds`, the cap and the submit envelope (wait, batch and retry
+within cap + floor); a retry shorter than the batch budget is not run. The
+first marker covers the retry, and preparation refuses a batch or retry budget
+other than the one that marker was published for (`STATE_CHANGED`, no command
+run). A passing retry sets the receipt's `timeout_retry`; a timeout the policy
+settles otherwise is refused as `batch_timeout` and the submit blocks the task,
+fenced to its own transition ([ADR-0216](../architecture/ADR/0216-admission-timeout-retry-policy.md)).
+
 A submit reports its queue position, preparation and batch on stderr, also
 under `--json`, at each change and every 5 minutes; stdout carries only the
 result. While a caller's submit of a task runs, that caller's next submit of

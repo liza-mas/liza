@@ -39,6 +39,10 @@ const (
 	// AcceptanceFaultAdmissionSlot is an admission limit whose class had no
 	// free slot in time (ADR-0209). No command ran; a later retry can pass.
 	AcceptanceFaultAdmissionSlot AcceptanceFault = "admission_slot"
+	// AcceptanceFaultBatchTimeout is a batch that reached its own budget under
+	// an admission timeout retry policy whose retry also timed out or could
+	// not run (ADR-0216). The submit then blocks the task for a budget ruling.
+	AcceptanceFaultBatchTimeout AcceptanceFault = "batch_timeout"
 )
 
 // AcceptanceClaimObservation is what a refused claim validated against: the
@@ -66,6 +70,10 @@ type AcceptanceEvidenceError struct {
 	// BLOCKED; BlockFailed that it tried and could not.
 	Blocked     bool
 	BlockFailed bool
+	// Ruling names the policy of a batch-timeout refusal; BlockSkipped says
+	// why its submit did not block the task.
+	Ruling       string
+	BlockSkipped string
 }
 
 func (e *AcceptanceEvidenceError) Error() string {
@@ -78,6 +86,18 @@ func (e *AcceptanceEvidenceError) Error() string {
 			message += "; the task is now BLOCKED until the operator records the input and runs " + brand.Command("unblock-task", e.TaskID)
 		case e.BlockFailed:
 			message += fmt.Sprintf("; blocking the task failed, so run %s with this reason and stop", brand.Command("mark-blocked", e.TaskID))
+		}
+		return acceptanceExecutionMask(os.Environ())(message)
+	}
+	if e.Class == AcceptanceFaultBatchTimeout {
+		message = fmt.Sprintf("task %s %s: %s — admission_timeout_retry (ruling %s) settled this timeout; do not resubmit or change the evidence", e.TaskID, e.Field, e.Reason, e.Ruling)
+		switch {
+		case e.Blocked:
+			message += fmt.Sprintf("; the task is now BLOCKED for a budget ruling (%s) or a timeout_seconds correction", brand.Command("unblock-task", e.TaskID, "--budget-exception", "<seconds>", "--budget-ruling", "<decision-id>"))
+		case e.BlockFailed:
+			message += fmt.Sprintf("; blocking the task failed, so run %s with this reason and stop", brand.Command("mark-blocked", e.TaskID))
+		case e.BlockSkipped != "":
+			message += "; the task was not blocked: " + e.BlockSkipped
 		}
 		return acceptanceExecutionMask(os.Environ())(message)
 	}
@@ -912,7 +932,10 @@ func checkAcceptanceWorktree(root, taskID, commit string) error {
 // either; slots already in held (submit's pre-admission) stay the caller's to
 // release, otherwise they are released on return (ADR-0209). The batch budget
 // starts once they are held. Cancelling ctx stops the wait or the command.
-func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Task, input *acceptanceInput, commit string, gate runtimeInputGate, config models.Config, held *admissionSlots) (*models.AcceptanceReceipt, error) {
+// A batch reaching its own budget under retry's policy re-runs once in full
+// within the same slots and grant, or is refused as a batch timeout
+// (ADR-0216); a nil retry (no policy, or a caller without one) never re-runs.
+func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Task, input *acceptanceInput, commit string, gate runtimeInputGate, config models.Config, held *admissionSlots, retry *timeoutRetryPlan) (*models.AcceptanceReceipt, error) {
 	receipt, err := prepareAcceptanceReceipt(root, task, input, commit)
 	if err != nil || receipt == nil {
 		return receipt, err
@@ -934,9 +957,40 @@ func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Tas
 	}
 	budget := acceptanceBatchTimeout(input.batchTimeoutSeconds)
 	held.progress.set(fmt.Sprintf("running canonical validation, batch budget %s", budget), time.Now().Add(budget))
-	receipt.Commands, err = executeAcceptanceCommandsWith(ctx, task.ID, git.New(root).GetWorktreePath(task.ID), commands, indices, input.batchTimeoutSeconds, grant, held.files())
+	worktree := git.New(root).GetWorktreePath(task.ID)
+	receipt.Commands, err = executeAcceptanceCommandsWith(ctx, task.ID, worktree, commands, indices, input.batchTimeoutSeconds, grant, held.files())
+	var timeout *acceptanceBatchTimeoutError
+	if errors.As(err, &timeout) && retry.applies() {
+		first := err
+		refuse := func(why string) error {
+			return &AcceptanceEvidenceError{TaskID: task.ID, Field: "acceptance.execution", Reason: fmt.Sprintf("%s after %s; %s", first, budget, why), Class: AcceptanceFaultBatchTimeout, Ruling: retry.ruling}
+		}
+		if retry.seconds == 0 {
+			return nil, refuse("no retry: " + retry.noRetry)
+		}
+		if checkAcceptanceWorktree(root, task.ID, commit) != nil {
+			return nil, refuse("no retry: the timed-out batch left the worktree changed")
+		}
+		retryBudget := acceptanceBatchTimeout(retry.seconds)
+		retryLabel := retryBudget.String()
+		if retry.clippedBy != "" {
+			retryLabel += ", clipped by " + retry.clippedBy
+		}
+		held.progress.set(fmt.Sprintf("batch timed out at command[%d]; re-running the whole batch once, budget %s (admission_timeout_retry, ruling %s)", timeout.Index, retryLabel, retry.ruling), time.Now().Add(retryBudget))
+		receipt.Commands, err = executeAcceptanceCommandsWith(ctx, task.ID, worktree, commands, indices, retry.seconds, grant, held.files())
+		if errors.Is(err, errAcceptanceBatchTimedOut) {
+			return nil, refuse(fmt.Sprintf("the whole-batch retry at %s also timed out", retryLabel))
+		}
+		if err == nil {
+			receipt.TimeoutRetry = retry.record(timeout.Index, input.batchTimeoutSeconds)
+		}
+	}
 	if err != nil {
-		return nil, acceptanceError(task.ID, "acceptance.execution", err.Error())
+		reason := err.Error()
+		if errors.Is(err, errAcceptanceBatchTimedOut) && retry != nil && retry.invalid != nil {
+			reason += "; admission_timeout_retry is set but invalid (" + retry.invalid.Error() + "): no retry"
+		}
+		return nil, acceptanceError(task.ID, "acceptance.execution", reason)
 	}
 	if err := checkAcceptanceWorktree(root, task.ID, commit); err != nil {
 		return nil, err
@@ -966,6 +1020,7 @@ func recheckAcceptanceReceipt(root string, state *models.State, task *models.Tas
 		return err
 	}
 	expected.Commands = receipt.Commands
+	expected.TimeoutRetry = receipt.TimeoutRetry
 	if sameDeferrals(expected.Deferred, receipt.Deferred) {
 		expected.Deferred = receipt.Deferred
 	}
@@ -996,6 +1051,7 @@ func validateAcceptanceForAssignment(root string, state *models.State, task *mod
 		return err
 	}
 	expected.Commands = receipt.Commands
+	expected.TimeoutRetry = receipt.TimeoutRetry
 	expected.Deferred = receipt.Deferred
 	if !reflect.DeepEqual(expected, receipt) {
 		return acceptanceError(task.ID, "acceptance.receipt", "receipt does not match validated manifest and canonical commands")
@@ -1041,5 +1097,9 @@ func validateReceiptExecutions(taskID string, input *acceptanceInput, receipt *m
 			return acceptanceError(taskID, "acceptance.receipt.commands", "missing or unsuccessful canonical execution")
 		}
 	}
-	return nil
+	executed := make(map[int]bool, len(receipt.Commands))
+	for i := range input.contract.Validation {
+		executed[i] = !skipped[i]
+	}
+	return validateTimeoutRetryRecord(taskID, receipt, executed)
 }

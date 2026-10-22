@@ -450,7 +450,7 @@ func (h *orphanHeal) finish(observed *models.Task, request LifecycleRequest, old
 		return h.fail(observed, request, oldHead, deterministicHealRefusal(err), "acceptance input refused", err)
 	}
 	gate := runtimeInputGate{projectRoot: h.in.ProjectRoot, bb: h.bb, authority: h.in.Authority, actor: h.in.AgentID, operation: healOrphanedReviewBaseOperation}
-	receipt, err := executeAcceptanceReceipt(context.Background(), h.in.ProjectRoot, observed, acceptance, newHead, gate, state.Config, nil)
+	receipt, err := executeAcceptanceReceipt(context.Background(), h.in.ProjectRoot, observed, acceptance, newHead, gate, state.Config, nil, nil)
 	if err != nil {
 		return h.fail(observed, request, oldHead, deterministicHealRefusal(err), "fresh acceptance evidence refused", err)
 	}

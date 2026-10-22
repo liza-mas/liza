@@ -140,7 +140,7 @@ func updateReviewCommitLocked(projectRoot, taskID, changedBy string) (*UpdateRev
 			}
 			return releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions)
 		}}
-	receipt, err := executeAcceptanceReceipt(context.Background(), projectRoot, task, acceptance, wtHEAD, gate, state.Config, nil)
+	receipt, err := executeAcceptanceReceipt(context.Background(), projectRoot, task, acceptance, wtHEAD, gate, state.Config, nil, nil)
 	if err != nil {
 		return nil, err
 	}

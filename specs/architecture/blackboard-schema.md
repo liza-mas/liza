@@ -1464,6 +1464,10 @@ config:
   validation_preflight:         # Optional; validation_prerequisites probe deadlines
     probe_timeout_seconds: 60   # Per probe; non-positive uses 60
     timeout_seconds: 120        # All probes of one check; non-positive uses 120; in-session checks capped at 30
+  admission_timeout_retry:      # Optional (ADR-0216); operator-edited; absent = no retry
+    budget_factor: 2            # Retry budget = factor x batch budget, 1..14400
+    max_timeout_seconds: 7200   # 0..14400; 0 = the engine cap
+    ruling: "decision D-123"    # Standing human decision; --budget-ruling rules
 ```
 
 A strict task's `acceptance_receipt.deferred[]` lists the canonical commands
@@ -1471,6 +1475,10 @@ admission skipped (`index`, masked `command`, `command_sha256`,
 `timeout_seconds`, `authority: contract|operator`); `commands[]` then holds only
 the executed ones. See
 [acceptance-evidence.md](../protocols/acceptance-evidence.md#deferred-commands).
+Its optional `timeout_retry` (`timed_out_index`, `timeout_seconds`,
+`retry_timeout_seconds`, `configured_timeout_seconds`, `clipped_by`, `ruling`)
+says `commands[]` come from one full re-run after the batch timed out
+([ADR-0216](ADR/0216-admission-timeout-retry-policy.md)).
 A batch result in `goal.integration.deferred_validation.batches[].results[]`
 with `status: carried_forward` was not executed: `carried_from` names the
 commit of the pass it reuses (ADR-0204 amendment 2026-10-22). One with

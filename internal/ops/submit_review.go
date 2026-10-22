@@ -332,6 +332,30 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		}
 	}
 
+	// Pre-admission's limits and retry policy snapshot and its slots govern the
+	// batch; a class they lack is taken at execution, within the same deadline
+	// (ADR-0209). An early marker covers one batch and retry budget, so any
+	// other is refused before anything changes (ADR-0216).
+	admissionConfig, held := state.Config, (*admissionSlots)(nil)
+	if invocation.admission != nil {
+		admissionConfig, held = invocation.admission.config, invocation.admission.slots
+	}
+	var retryPlan *timeoutRetryPlan
+	limited := false
+	if acceptance != nil {
+		commands, _ := acceptance.executedCommands()
+		limited = len(models.AdmissionLimitsFor(admissionConfig, commands)) > 0
+		doerRole, _ := resolver.DoerRole(task.RolePair)
+		retryPlan = planTimeoutRetry(admissionConfig, doerRole, task.RuntimeInputs, acceptance.batchTimeoutSeconds, limited)
+		if early := invocation.admission; early != nil && early.removeMarker != nil &&
+			(early.budgetSeconds != acceptance.batchTimeoutSeconds || early.retrySeconds != retryPlan.retrySeconds()) {
+			return nil, &LifecycleError{
+				Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, "requery", "none"),
+				Err:     fmt.Errorf("task %s: the canonical admission budget changed after the submit queued; no command ran: resubmit the same commit", taskID),
+			}
+		}
+	}
+
 	var preparation models.LifecyclePreparation
 	if err := modifyLifecycleState(bb, authority, func(current *models.State) error {
 		live := current.FindTask(taskID)
@@ -438,20 +462,11 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 		return nil, err
 	}
 
-	// Pre-admission's limits snapshot and slots govern the batch; a class they
-	// lack is taken at execution, within the same deadline (ADR-0209).
-	admissionConfig, held := state.Config, (*admissionSlots)(nil)
-	if invocation.admission != nil {
-		admissionConfig, held = invocation.admission.config, invocation.admission.slots
-	}
 	var acceptanceBatch time.Duration
 	if acceptance != nil {
-		acceptanceBatch = acceptanceBatchTimeout(acceptance.batchTimeoutSeconds)
 		// A marker written after preparation must also cover a slot wait still
-		// ahead: wait and batch together stay within the cap plus the floor.
-		if commands, _ := acceptance.executedCommands(); len(models.AdmissionLimitsFor(admissionConfig, commands)) > 0 {
-			acceptanceBatch += submitAdmissionSlotWait(acceptance.batchTimeoutSeconds)
-		}
+		// ahead: wait, batch and retry together stay within the cap plus the floor.
+		acceptanceBatch = submitAdmissionWindow(acceptance.batchTimeoutSeconds, limited, retryPlan)
 	}
 	return &preparedSubmission{
 		acceptanceBatch: acceptanceBatch,
@@ -495,7 +510,7 @@ func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, auth
 				slots.progress = invocation.progress
 			}
 			fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, expectedCurrentStatus, agentID, authority)
-			acceptanceReceipt, err := executeAcceptanceReceipt(fenceCtx, projectRoot, task, acceptance, postRebaseCommit, gate, admissionConfig, slots)
+			acceptanceReceipt, err := executeAcceptanceReceipt(fenceCtx, projectRoot, task, acceptance, postRebaseCommit, gate, admissionConfig, slots, retryPlan)
 			if ownSlots {
 				slots.release()
 			}

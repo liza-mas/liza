@@ -19,6 +19,9 @@ type submissionAdmission struct {
 	config       models.Config
 	slots        *admissionSlots
 	removeMarker func()
+	// budgetSeconds and retrySeconds are the batch and retry budgets an early
+	// marker was published for; preparation refuses any other (ADR-0216).
+	budgetSeconds, retrySeconds int
 }
 
 func (a *submissionAdmission) release() {
@@ -45,7 +48,7 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 	if err != nil {
 		return nil, nil
 	}
-	admission := &submissionAdmission{config: models.Config{AdmissionLimits: state.Config.AdmissionLimits}}
+	admission := &submissionAdmission{config: models.Config{AdmissionLimits: state.Config.AdmissionLimits, AdmissionTimeoutRetry: state.Config.AdmissionTimeoutRetry}}
 	task := state.FindTask(taskID)
 	if len(state.Config.AdmissionLimits) == 0 || task == nil || task.AssignedTo == nil || *task.AssignedTo != agentID {
 		return admission, nil
@@ -75,9 +78,12 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 		return admission, nil
 	}
 	if authority != nil {
-		// The marker covers the wait and the batch, which together never
-		// exceed the acceptance cap plus the submit wait floor.
-		window := acceptanceBatchTimeout(input.batchTimeoutSeconds) + submitAdmissionSlotWait(input.batchTimeoutSeconds)
+		// The marker covers the wait, the batch and any planned retry, which
+		// together never exceed the acceptance cap plus the submit wait floor.
+		doerRole, _ := resolver.DoerRole(task.RolePair)
+		plan := planTimeoutRetry(admission.config, doerRole, task.RuntimeInputs, input.batchTimeoutSeconds, true)
+		admission.budgetSeconds, admission.retrySeconds = input.batchTimeoutSeconds, plan.retrySeconds()
+		window := submitAdmissionWindow(input.batchTimeoutSeconds, true, plan)
 		admission.removeMarker = writeInflightSubmitMarker(projectRoot, *authority, taskID, window, time.Now().UTC())
 	}
 	fenceCtx, stopFence := startAcceptanceOwnershipFence(bb, taskID, task.Status, agentID, authority)

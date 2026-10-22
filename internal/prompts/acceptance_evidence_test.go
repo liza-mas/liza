@@ -83,6 +83,32 @@ func TestAcceptanceEvidenceReviewerRendersDeferredCommands(t *testing.T) {
 	}
 }
 
+// ADR-0216: a receipt produced by a timeout retry tells the reviewer the
+// results come from the re-run, at which budget and under which ruling.
+func TestAcceptanceEvidenceReviewerRendersTimeoutRetry(t *testing.T) {
+	now := time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
+	receipt := &models.AcceptanceReceipt{
+		ManifestPath: "acceptance/boundary.json",
+		Commands:     []models.AcceptanceCommandResult{{Command: "db-suite", StartedAt: now, FinishedAt: now}},
+	}
+	data := RoleContextData{Role: "code-reviewer", TaskID: "task-42", AcceptanceReceipt: receipt}
+	output, err := BuildRoleContext(data.Role, []string{"review-task"}, &data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output, "ADMISSION TIMEOUT RETRY") {
+		t.Fatalf("receipt without a retry renders one: %s", output)
+	}
+	receipt.TimeoutRetry = &models.AcceptanceTimeoutRetry{TimedOutIndex: 0, TimeoutSeconds: 7200, RetryTimeoutSeconds: 7200, ConfiguredTimeoutSeconds: 14400, ClippedBy: models.AdmissionRetryClippedByEnvelope, Ruling: "D123"}
+	if output, err = BuildRoleContext(data.Role, []string{"review-task"}, &data); err != nil {
+		t.Fatal(err)
+	}
+	want := "ADMISSION TIMEOUT RETRY: the batch timed out at command[0] after 7200 s and these results come from one full re-run at 7200 s (configured 14400 s, clipped by submit envelope) under admission_timeout_retry, ruling D123."
+	if !strings.Contains(output, want) {
+		t.Fatalf("review prompt missing %q: %s", want, output)
+	}
+}
+
 func TestAcceptanceEvidenceLegacyAndMissingReceiptRendering(t *testing.T) {
 	for _, role := range []string{"coder", "code-reviewer"} {
 		t.Run(role, func(t *testing.T) {

@@ -77,6 +77,9 @@ type AcceptanceReceipt struct {
 	// Deferred lists the canonical commands admission skipped; the
 	// deferred-validation batch satisfies them on integration (ADR-0204).
 	Deferred []AcceptanceDeferredCommand `yaml:"deferred,omitempty" json:"deferred,omitempty"`
+	// TimeoutRetry is set when Commands come from a full re-run after the
+	// batch hit its budget (ADR-0216).
+	TimeoutRetry *AcceptanceTimeoutRetry `yaml:"timeout_retry,omitempty" json:"timeout_retry,omitempty"`
 }
 
 // CommandIndex returns the canonical validation index of Commands[i]:

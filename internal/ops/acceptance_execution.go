@@ -60,23 +60,35 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 		}
 	}
 	mask := acceptanceExecutionMaskWith(masked, grant.secretValues())
-	fail := func(index int, reason string) error {
+	canonical := func(index int) int {
 		if index < len(indices) {
-			index = indices[index]
+			return indices[index]
 		}
-		return fmt.Errorf("acceptance.execution[%d] for task %s: %s", index, mask(taskID), mask(reason))
+		return index
+	}
+	fail := func(index int, reason string) error {
+		return fmt.Errorf("acceptance.execution[%d] for task %s: %s", canonical(index), mask(taskID), mask(reason))
 	}
 	if timeoutSeconds < 0 || timeoutSeconds > referencecontract.AcceptanceMaxTimeoutSeconds {
 		return nil, fail(0, fmt.Sprintf("timeout_seconds must be between 1 and %d", referencecontract.AcceptanceMaxTimeoutSeconds))
 	}
-	ctx, cancel := context.WithTimeout(ctx, acceptanceBatchTimeout(timeoutSeconds))
+	ctx, cancel := context.WithTimeoutCause(ctx, acceptanceBatchTimeout(timeoutSeconds), errAcceptanceBatchTimedOut)
 	defer cancel()
+	// Only the batch's own deadline is a batch timeout; a cancelled caller
+	// reads the same but is not one.
+	timedOut := func(index int) error {
+		err := fail(index, "command batch timed out")
+		if errors.Is(context.Cause(ctx), errAcceptanceBatchTimedOut) {
+			return &acceptanceBatchTimeoutError{Index: canonical(index), err: err}
+		}
+		return err
+	}
 	results := make([]models.AcceptanceCommandResult, 0, len(commands))
 	remaining := acceptanceOutputLimit
 	maskedRemaining := acceptanceOutputLimit
 	for i, command := range commands {
 		if ctx.Err() != nil {
-			return nil, fail(i, "command batch timed out")
+			return nil, timedOut(i)
 		}
 		output := &acceptanceOutputBuffer{remaining: remaining, cancel: cancel}
 		result := models.AcceptanceCommandResult{
@@ -112,7 +124,7 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 		maskedRemaining -= len(result.Output)
 		results = append(results, result)
 		if ctx.Err() != nil {
-			return nil, fail(i, "command batch timed out")
+			return nil, timedOut(i)
 		}
 		if err != nil {
 			// Bound only after masking the complete captured output: a raw
@@ -131,6 +143,19 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 		}
 	}
 	return results, nil
+}
+
+// acceptanceBatchTimeoutError is a batch that reached its own budget while
+// canonical command Index ran or was next; it matches errAcceptanceBatchTimedOut.
+type acceptanceBatchTimeoutError struct {
+	Index int
+	err   error
+}
+
+func (e *acceptanceBatchTimeoutError) Error() string { return e.err.Error() }
+
+func (e *acceptanceBatchTimeoutError) Is(target error) bool {
+	return target == errAcceptanceBatchTimedOut
 }
 
 // Bound raw bytes before masking: redaction must not let a noisy process evade

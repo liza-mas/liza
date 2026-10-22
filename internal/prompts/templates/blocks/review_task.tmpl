@@ -66,6 +66,8 @@ EXECUTION RESULTS:
 {{range $index, $result := .AcceptanceReceipt.Commands -}}
 - command[{{$.AcceptanceReceipt.CommandIndex $index}}]: {{$result.Command}}; exit {{$result.ExitCode}}; {{$result.StartedAt}} → {{$result.FinishedAt}}
 {{end -}}
+{{- with .AcceptanceReceipt.TimeoutRetry}}ADMISSION TIMEOUT RETRY: the batch timed out at command[{{.TimedOutIndex}}] after {{.TimeoutSeconds}} s and these results come from one full re-run at {{.RetryTimeoutSeconds}} s (configured {{.ConfiguredTimeoutSeconds}} s{{if .ClippedBy}}, clipped by {{.ClippedBy}}{{end}}) under admission_timeout_retry, ruling {{.Ruling}}.
+{{end -}}
 {{- if .AcceptanceReceipt.Deferred}}
 DEFERRED (not run at admission; the deferred-validation batch runs them on integration):
 {{range .AcceptanceReceipt.Deferred -}}

@@ -1001,7 +1001,8 @@ gates, and audit records are not fresh requests. Only a scope exception recorded
 with `§BRAND_BINARY_NAME§ unblock-task --scope-exception-file` adds scope: the
 files it names, for the change it states. Only a budget exception recorded with
 `§BRAND_BINARY_NAME§ unblock-task --budget-exception <seconds> --budget-ruling
-<decision-id>` raises a coding task's canonical admission budget (ADR-0207). Restart resident doer/reviewer
+<decision-id>` raises a coding task's canonical admission budget (ADR-0207), apart from the
+one retry `config.admission_timeout_retry` allows a timed-out submit (ADR-0216). Restart resident doer/reviewer
 supervisors after installing this prompt change; existing prompts are snapshots.
 
 **Fix**: If the blocker was another task, the blocked task should list it in `depends_on` so the orchestrator wakes when that task changes. If one direct edge is wrong, use `§BRAND_BINARY_NAME§ retarget-dependency <id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "..."`. For multiple tasks or complete lists, the blocked agent stores the command-free request through `§BRAND_BINARY_NAME§ mark-blocked --repair-request-file <path>` and the orchestrator or operator runs `§BRAND_BINARY_NAME§ apply-dependency-repair <blocked-task-id> --reason "..."`; stale or invalid batches leave every dependency, audit entry, and request unchanged. The task remains BLOCKED until its repair validation passes and it is explicitly unblocked or assessed. Unassigned `§BRAND_BINARY_NAME§ unblock-task <id> --reason "..."` may restore a repaired task with valid pending dependencies to its role-pair initial status, but that task remains dependency-held and unclaimable until every direct dependency is `MERGED`. Adding `--assign-to <doer-agent-id>` is a direct-resume path and remains rejected while any dependency is unmet.

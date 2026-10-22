@@ -249,6 +249,9 @@ type Config struct {
 	// AdmissionLimits caps how many canonical commands of each resource class
 	// execute at once (ADR-0209). Operator-only; empty means no limit.
 	AdmissionLimits []AdmissionLimit `yaml:"admission_limits,omitempty"`
+	// AdmissionTimeoutRetry re-runs a submit's timed-out canonical batch once
+	// (ADR-0216). Operator-only; nil means no retry.
+	AdmissionTimeoutRetry *AdmissionTimeoutRetry `yaml:"admission_timeout_retry,omitempty"`
 	// ValidationPreflight sets the validation-prerequisite probe deadlines.
 	ValidationPreflight *ValidationPreflightConfig `yaml:"validation_preflight,omitempty"`
 	// AutoCheckpointSummary controls whether the runtime auto-invokes the

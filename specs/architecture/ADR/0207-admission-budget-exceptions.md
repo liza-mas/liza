@@ -5,6 +5,8 @@
 ACCEPTED — 2026-10-13. Extends the unblock carrier of
 [ADR-0206](0206-in-task-scope-exceptions.md) to the canonical admission batch
 budget of [ADR-0134](0134-acceptance-evidence-admission.md).
+Amended by [ADR-0216](0216-admission-timeout-retry-policy.md): an operator
+policy may re-run a submit's timed-out batch once at a raised budget.
 Related: [ADR-0176](0176-execution-timeout-defers-to-inflight-submit.md),
 [ADR-0204](0204-deferred-validation-tier.md).
 
