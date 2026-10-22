@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/liza-mas/liza/internal/paths"
 )
 
 // Deferred-validation defaults (ADR-0204).
@@ -181,13 +183,18 @@ const (
 	// nothing in its scope changed since its latest executed pass, named by
 	// CarriedFrom (D-230).
 	DeferredValidationResultCarriedForward DeferredValidationResultStatus = "carried_forward"
+	// DeferredValidationResultKnownRed is a command not run because its newest
+	// execution, at CarriedFrom, failed with a culprit whose fix task, OwnedBy,
+	// is still in flight (D-181).
+	DeferredValidationResultKnownRed DeferredValidationResultStatus = "known_red"
 )
 
 // IsValid reports whether the status is part of the persisted schema.
 func (s DeferredValidationResultStatus) IsValid() bool {
 	switch s {
 	case DeferredValidationResultPassed, DeferredValidationResultFailed, DeferredValidationResultContaminated,
-		DeferredValidationResultUnavailable, DeferredValidationResultNotRun, DeferredValidationResultCarriedForward:
+		DeferredValidationResultUnavailable, DeferredValidationResultNotRun, DeferredValidationResultCarriedForward,
+		DeferredValidationResultKnownRed:
 		return true
 	}
 	return false
@@ -200,6 +207,12 @@ func (s DeferredValidationResultStatus) Executed() bool {
 		return true
 	}
 	return false
+}
+
+// ReusesExecution reports whether the result stands for an earlier execution,
+// named by CarriedFrom, instead of running the command.
+func (s DeferredValidationResultStatus) ReusesExecution() bool {
+	return s == DeferredValidationResultCarriedForward || s == DeferredValidationResultKnownRed
 }
 
 // DeferredValidationBatch records one batch at one integration commit.
@@ -220,7 +233,8 @@ type DeferredValidationBatch struct {
 // OutputSHA256 names a failed command's full masked output in the project's
 // tool-result store (`tool-result read`); it is empty when the capture
 // overflowed (output omitted) or the store could not keep it. CarriedFrom is
-// the commit of the pass a carried_forward result reuses.
+// the commit of the execution a carried_forward (a pass) or known_red (a
+// failure) result reuses; OwnedBy is a known_red result's in-flight fix task.
 type DeferredValidationResult struct {
 	Command       string                         `yaml:"command" json:"command"`
 	CommandSHA256 string                         `yaml:"command_sha256" json:"command_sha256"`
@@ -231,6 +245,7 @@ type DeferredValidationResult struct {
 	Excerpt       string                         `yaml:"excerpt,omitempty" json:"excerpt,omitempty"`
 	OutputSHA256  string                         `yaml:"output_sha256,omitempty" json:"output_sha256,omitempty"`
 	CarriedFrom   string                         `yaml:"carried_from,omitempty" json:"carried_from,omitempty"`
+	OwnedBy       string                         `yaml:"owned_by,omitempty" json:"owned_by,omitempty"`
 }
 
 // DeferredValidationCulprit attributes one failing command. TaskID is set only
@@ -263,6 +278,15 @@ type DeferredValidationRunner struct {
 	// processes ended; the record then fences successors until an operator
 	// settles it.
 	Unsettled string `yaml:"unsettled,omitempty" json:"unsettled,omitempty"`
+	// Abort is an operator's request that this runner end its live batch
+	// (D-181); it lives and dies with the record.
+	Abort *DeferredValidationAbort `yaml:"abort,omitempty" json:"abort,omitempty"`
+}
+
+// DeferredValidationAbort is an operator's recorded request to abort a batch.
+type DeferredValidationAbort struct {
+	Ruling      string    `yaml:"ruling" json:"ruling"`
+	RequestedAt time.Time `yaml:"requested_at" json:"requested_at"`
 }
 
 // EffectiveCommands returns the distinct deferred commands not covered by a
@@ -478,9 +502,13 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 			if !isHexDigest(result.CommandSHA256, 64) || !result.Status.IsValid() {
 				errs = append(errs, fmt.Errorf("%s.results[%d]: requires command_sha256 and a valid status", field, j))
 			}
-			if (result.Status == DeferredValidationResultCarriedForward) != (result.CarriedFrom != "") ||
+			if result.Status.ReusesExecution() != (result.CarriedFrom != "") ||
 				(result.CarriedFrom != "" && !isHexDigest(result.CarriedFrom, 40)) {
-				errs = append(errs, fmt.Errorf("%s.results[%d]: a carried_forward result, and only one, requires a full carried_from commit", field, j))
+				errs = append(errs, fmt.Errorf("%s.results[%d]: a carried_forward or known_red result, and only one, requires a full carried_from commit", field, j))
+			}
+			if (result.Status == DeferredValidationResultKnownRed) != (result.OwnedBy != "") ||
+				(result.OwnedBy != "" && paths.ValidateTaskID(result.OwnedBy) != nil) {
+				errs = append(errs, fmt.Errorf("%s.results[%d]: a known_red result, and only one, requires owned_by, a valid task id", field, j))
 			}
 		}
 		for j, culprit := range batch.Culprits {
@@ -494,6 +522,9 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 	}
 	if runner := ledger.Runner; runner != nil && (runner.Token == "" || !isHexDigest(runner.Commit, 40)) {
 		errs = append(errs, fmt.Errorf("deferred_validation.runner: requires token and a full commit"))
+	}
+	if runner := ledger.Runner; runner != nil && runner.Abort != nil && strings.TrimSpace(runner.Abort.Ruling) == "" {
+		errs = append(errs, fmt.Errorf("deferred_validation.runner.abort: requires a ruling"))
 	}
 	return errs
 }

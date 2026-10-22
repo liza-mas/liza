@@ -23,7 +23,7 @@ before global integration, and bisects a failing command over the merges since
 it last passed. A red batch records an immediate discovery naming the culprit
 task, which wakes the orchestrator.
 
-rule, unrule, retire and settle are operator-only. run and status are open.`, models.DefaultDeferredValidationBatchEveryMerges),
+rule, unrule, retire, settle and abort are operator-only. run and status are open.`, models.DefaultDeferredValidationBatchEveryMerges),
 }
 
 var deferredValidationRuleCmd = &cobra.Command{
@@ -83,20 +83,39 @@ still holds the runner lock.`,
 	}),
 }
 
+var deferredValidationAbortCmd = &cobra.Command{
+	Use:   "abort",
+	Short: "End the live deferred-validation batch",
+	Long: `Ask the live runner to end its batch. Within seconds it stops starting work,
+kills the commands and bisect steps running then, records them not run, and
+keeps every result already finished. The batch ends aborted
+(aborted_by_operator) and is not retried at the same HEAD without run --force;
+the integration gate reports deferred_validation_aborted until a merge or a
+forced run. Refused when no runner holds the lock.`,
+	Args: cobra.NoArgs,
+	RunE: deferredValidationOperatorRun(func(cmd *cobra.Command, root string) (any, error) {
+		ruling, _ := cmd.Flags().GetString("ruling")
+		return ops.AbortDeferredValidation(root, ruling)
+	}),
+}
+
 var deferredValidationRunCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run the deferred-validation batch at integration HEAD",
 	Long: `Run a batch of the effective deferred commands at integration HEAD unless a
 passed batch there already covers them. It is a no-op while another runner holds
-the lock. A failed batch, or exhausted attempts, at an unchanged HEAD is not
-retried without --force. Merges and integration reconciliation start this
-command automatically.
+the lock. A failed or operator-aborted batch, or exhausted attempts, at an
+unchanged HEAD is not retried without --force. Merges and integration
+reconciliation start this command automatically.
 
 A command whose newest execution passed at an ancestor of HEAD is carried
 forward, not run, when nothing changed since in the paths
 config.deferred_validation.scopes declares for it (the whole tree when none)
-outside config.deferred_validation.inert_paths. --force carries nothing forward
-and re-executes every command, also at a covered HEAD: use it after correcting a
+outside config.deferred_validation.inert_paths. A command whose newest execution
+failed, attributed to a culprit whose discovery was converted to a fix task
+still in flight, is recorded known_red and neither run nor bisected until that
+fix merges or dies. --force carries nothing forward, skips nothing and
+re-executes every command, also at a covered HEAD: use it after correcting a
 scope or inert path that was too narrow.`,
 	Args: cobra.NoArgs,
 	RunE: deferredValidationOpenRun(func(cmd *cobra.Command, root string) (any, error) {
@@ -156,12 +175,12 @@ func init() {
 		sub.Flags().String("command", "", "exact canonical command")
 		_ = sub.MarkFlagRequired("command")
 	}
-	for _, sub := range []*cobra.Command{deferredValidationRuleCmd, deferredValidationRetireCmd, deferredValidationSettleCmd} {
+	for _, sub := range []*cobra.Command{deferredValidationRuleCmd, deferredValidationRetireCmd, deferredValidationSettleCmd, deferredValidationAbortCmd} {
 		sub.Flags().String("ruling", "", "decision that authorizes this change")
 		_ = sub.MarkFlagRequired("ruling")
 	}
-	deferredValidationRunCmd.Flags().Bool("force", false, "re-execute every command, also after a failed batch, exhausted attempts or a covering batch at the same HEAD")
-	for _, sub := range []*cobra.Command{deferredValidationRuleCmd, deferredValidationUnruleCmd, deferredValidationRetireCmd, deferredValidationSettleCmd, deferredValidationRunCmd, deferredValidationStatusCmd} {
+	deferredValidationRunCmd.Flags().Bool("force", false, "re-execute every command, also after a failed or aborted batch, exhausted attempts or a covering batch at the same HEAD")
+	for _, sub := range []*cobra.Command{deferredValidationRuleCmd, deferredValidationUnruleCmd, deferredValidationRetireCmd, deferredValidationSettleCmd, deferredValidationAbortCmd, deferredValidationRunCmd, deferredValidationStatusCmd} {
 		addJSONFlag(sub)
 		deferredValidationCmd.AddCommand(sub)
 	}

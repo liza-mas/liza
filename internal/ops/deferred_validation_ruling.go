@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
@@ -20,7 +21,8 @@ import (
 // Operator authority over deferred validation (ADR-0204). A ruling defers an
 // exact canonical command for every strict task listing it; a retirement
 // removes an obsolete command from the effective batch set; settlement clears
-// a predecessor runner the platform cannot fence. Each requires a ruling text
+// a predecessor runner the platform cannot fence; an abort ends the live
+// batch. Each requires a ruling text
 // so the receipt and ledger name the authority they rest on.
 
 // DeferredValidationRulingResult reports one operator write.
@@ -181,6 +183,52 @@ func SettleDeferredValidation(projectRoot, ruling string) (*DeferredValidationRu
 	return result, nil
 }
 
+// AbortDeferredValidation records an operator's request that the live runner
+// end its batch (D-181). A runner is live only while it holds the runner lock;
+// the request is written onto the runner record present at the write, which
+// the runner polls by its own token. "requested" means recorded, not done: the
+// batch's aborted_by_operator reason confirms the abort.
+func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRulingResult, error) {
+	if strings.TrimSpace(ruling) == "" {
+		return nil, &PreconditionError{Reason: "--ruling must name the decision that authorizes this abort"}
+	}
+	dir := deferredValidationDir(projectRoot)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	held, acquired, err := filelock.New(filepath.Join(dir, "runner")).TryHold("deferred-validation-abort")
+	if err != nil {
+		return nil, err
+	}
+	if acquired {
+		_ = held.Release()
+		return nil, &PreconditionError{Reason: fmt.Sprintf("no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by %s when unsettled", brand.Command(deferredValidationOperation, "settle"))}
+	}
+	result := &DeferredValidationRulingResult{Action: "abort"}
+	err = db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
+		previous := db.CloneState(state)
+		ledger := deferredValidationLedger(state)
+		if ledger == nil || ledger.Runner == nil {
+			return &PreconditionError{Reason: "no live deferred-validation batch: the runner holds no batch record"}
+		}
+		if ledger.Runner.Unsettled != "" {
+			return &PreconditionError{Reason: fmt.Sprintf("the runner record is unsettled (%s); confirm none of its processes still runs, then run %s", ledger.Runner.Unsettled, brand.Command(deferredValidationOperation, "settle"))}
+		}
+		if ledger.Runner.Abort != nil {
+			result.Outcome = "unchanged"
+			return nil
+		}
+		ledger.Runner.Abort = &models.DeferredValidationAbort{Ruling: strings.TrimSpace(ruling), RequestedAt: time.Now().UTC()}
+		result.Outcome = "requested"
+		return validateIntegrationLifecycleTransition(previous, state)
+	})
+	auditDeferredValidation("abort", result.Outcome, "", ruling)
+	if err != nil {
+		return nil, fmt.Errorf("abort deferred-validation batch: %w", err)
+	}
+	return result, nil
+}
+
 // DeferredValidationStatus is the operator view of the ledger.
 type DeferredValidationStatus struct {
 	IntegrationHEAD string                                `json:"integration_head"`
@@ -220,7 +268,15 @@ func ReadDeferredValidationStatus(projectRoot string) (*DeferredValidationStatus
 		}
 	}
 	if ledger != nil {
-		status.Runner = ledger.Runner
+		if ledger.Runner != nil {
+			runner := *ledger.Runner
+			if runner.Abort != nil {
+				abort := *runner.Abort
+				abort.Ruling = mask(abort.Ruling)
+				runner.Abort = &abort
+			}
+			status.Runner = &runner
+		}
 		status.Retirements = slices.Clone(ledger.Retirements)
 		for i := range status.Retirements {
 			status.Retirements[i].Command = mask(status.Retirements[i].Command)

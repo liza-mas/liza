@@ -31,6 +31,7 @@ func TestDeferredValidationCLIAuthorityIsOperatorOnly(t *testing.T) {
 			{"deferred-validation", "unrule", "--command", "make long"},
 			{"deferred-validation", "retire", "--command", "make long", "--ruling", "D-97"},
 			{"deferred-validation", "settle", "--ruling", "D-97"},
+			{"deferred-validation", "abort", "--ruling", "D-181"},
 		} {
 			t.Run(envName+"/"+args[1], func(t *testing.T) {
 				resetRootCmdForTest(t)

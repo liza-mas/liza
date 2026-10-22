@@ -12,6 +12,8 @@ command's admission slots from the pool canonical admission uses. Amended
 2026-10-19 (D-223): a probe waits for them until they free, lanes prepare one
 at a time, and a failed setup is retried once. Amended 2026-10-22 (D-230): a
 command's pass is carried forward to a HEAD that changed nothing it covers.
+Amended 2026-10-22 (D-181): a command red with a fix in flight is not re-run,
+and an operator can abort the live batch.
 
 ## Context
 
@@ -268,3 +270,43 @@ Consequences: a wrong scope or inert path hides a regression in its command
 until an in-scope change or a forced run re-executes it.
 Each carried result names its source commit, so the ledger shows which evidence
 was reused. No waiver distinct from `retire` exists.
+
+## Amendment (2026-10-22, D-181)
+
+Once a command was red, attributed and owned by a fix task, every later batch
+ran it and bisected it again (§6), re-proving the same culprit while holding
+admission slots that canonical admissions share; in one run a 45-minute suite
+kept two slots busy while five submits queued. No operator command could end a
+live batch: a halt lets running steps finish (2026-10-14 amendment).
+
+- **Known red.** A command is not run, bisected or given a lane, and is recorded
+  `known_red` (`carried_from` the failure's commit, `owned_by` the fix), when
+  its newest execution failed, in a batch not ended `descendants_unstoppable`,
+  with exactly one culprit naming a task for it, and that (culprit, command)
+  discovery was converted (`set-discovery-disposition`) to a task still in
+  flight: unmerged, following `superseded_by` to a live replacement, and not
+  abandoned. Ownership binds to the newest failure's culprit, so a live fix for
+  an older culprit never suppresses a newer one; an unattributed or ambiguous
+  failure executes. A `known_red` result fails the batch, so the gate blocks
+  with `deferred_validation_failed`; its task list still names bisect culprits
+  only, and its guidance names the fix. It records no culprit, discovery or
+  alert. The fix's merge moves HEAD and the next batch executes the command;
+  `run --force` skips nothing.
+- **Abort.** `deferred-validation abort --ruling` (operator-only) records
+  `runner.abort` on the record of a runner that holds the lock; it is refused
+  when none does or the record is unsettled. The runner polls its own record
+  every 10 s; on a request it fences new admitted starts, ends slot waits and
+  cancels a kill context bound to admitted steps only. A step the kill
+  interrupted while it ran is reaped as any step (an unemptied group still ends
+  `descendants_unstoppable`) and recorded `not_run`, never `failed`, so it is
+  not bisected; a step that exited before the abort keeps its result, and
+  finishing cleanliness reads are never killed. Any abort observed before the
+  batch is recorded ends it `aborted` (`aborted_by_operator`), even when no
+  step needed killing; no trigger retries it at that HEAD, and the gate
+  blocks with `deferred_validation_aborted` until a merge or `run --force`.
+  Halt and stop semantics are unchanged.
+
+Consequences: a second, different regression in a known-red command surfaces
+only once the fix merges or dies. A request that lands after the runner
+published and claimed its next batch aborts that batch; it is audited either
+way, and `requested` means recorded, not done.

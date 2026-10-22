@@ -927,8 +927,9 @@ each analysis also carries immutable `integration_analysis` metadata.
    latest generation clean at HEAD, completion then waits
    (`deferred_validation_pending`) or
    blocks (`deferred_validation_failed` naming culprit tasks, or
-   `deferred_validation_infra` after three batches without a verdict, or
-   `deferred_validation_unsettled` while a runner record awaits settlement). A merge
+   `deferred_validation_infra` after three batches without a verdict,
+   `deferred_validation_unsettled` while a runner record awaits settlement, or
+   `deferred_validation_aborted` after an operator abort). A merge
    that moves HEAD re-evaluates
    ([ADR-0204](../architecture/ADR/0204-deferred-validation-tier.md)). An empty
    global output records a

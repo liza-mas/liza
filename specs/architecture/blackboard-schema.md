@@ -1468,7 +1468,11 @@ the executed ones. See
 [acceptance-evidence.md](../protocols/acceptance-evidence.md#deferred-commands).
 A batch result in `goal.integration.deferred_validation.batches[].results[]`
 with `status: carried_forward` was not executed: `carried_from` names the
-commit of the pass it reuses (ADR-0204 amendment 2026-10-22).
+commit of the pass it reuses (ADR-0204 amendment 2026-10-22). One with
+`status: known_red` was not executed either: `carried_from` names the commit of
+the attributed failure it reuses and `owned_by` the in-flight fix task. The
+runner record's `abort {ruling, requested_at}` is an operator's request to end
+the live batch (ADR-0204 amendment 2026-10-22, D-181).
 
 **Circuit-breaker response and compatibility model:** `WARNING`, `CHECKPOINT`,
 and `HALT` are typed responses. Only `HALT` is a trigger: it sets

@@ -71,6 +71,10 @@ func TestDeferredValidationBatchCovers(t *testing.T) {
 	if batch.Covers(commands) {
 		t.Fatal("a not-run result covers its command")
 	}
+	batch.Results[1].Status = DeferredValidationResultKnownRed
+	if batch.Covers(commands) {
+		t.Fatal("a known-red result covers its command")
+	}
 }
 
 func TestDeferredValidationLatestExecutionSkipsCarriedAndNotRun(t *testing.T) {
@@ -83,6 +87,7 @@ func TestDeferredValidationLatestExecutionSkipsCarriedAndNotRun(t *testing.T) {
 		{ID: 2, Results: result(DeferredValidationResultFailed)},
 		{ID: 3, Results: result(DeferredValidationResultCarriedForward)},
 		{ID: 4, Results: result(DeferredValidationResultNotRun)},
+		{ID: 5, Results: result(DeferredValidationResultKnownRed)},
 	}}
 	batch, execution := ledger.LatestExecutionFor(sha)
 	if batch == nil || batch.ID != 2 || execution.Status != DeferredValidationResultFailed {
@@ -124,6 +129,11 @@ func TestDeferredValidationLedgerViolationsRequireCarriedFrom(t *testing.T) {
 		{"carried without commit", DeferredValidationResult{Status: DeferredValidationResultCarriedForward}, true},
 		{"carried with short commit", DeferredValidationResult{Status: DeferredValidationResultCarriedForward, CarriedFrom: "abc"}, true},
 		{"passed with commit", DeferredValidationResult{Status: DeferredValidationResultPassed, CarriedFrom: commit}, true},
+		{"known red with commit and owner", DeferredValidationResult{Status: DeferredValidationResultKnownRed, CarriedFrom: commit, OwnedBy: "fix-1"}, false},
+		{"known red without owner", DeferredValidationResult{Status: DeferredValidationResultKnownRed, CarriedFrom: commit}, true},
+		{"known red without commit", DeferredValidationResult{Status: DeferredValidationResultKnownRed, OwnedBy: "fix-1"}, true},
+		{"known red with invalid owner", DeferredValidationResult{Status: DeferredValidationResultKnownRed, CarriedFrom: commit, OwnedBy: "../x"}, true},
+		{"failed with owner", DeferredValidationResult{Status: DeferredValidationResultFailed, OwnedBy: "fix-1"}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.result.CommandSHA256 = strings.Repeat("a", 64)

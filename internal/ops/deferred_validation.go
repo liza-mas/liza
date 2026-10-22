@@ -53,6 +53,7 @@ const (
 	integrationProgressBlockedDeferredFailed    = "deferred_validation_failed"
 	integrationProgressBlockedDeferredInfra     = "deferred_validation_infra"
 	integrationProgressBlockedDeferredUnsettled = "deferred_validation_unsettled"
+	integrationProgressBlockedDeferredAborted   = "deferred_validation_aborted"
 
 	// deferredValidationReasonUnstoppable ends a batch whose step left
 	// processes the runner could not establish had ended.
@@ -60,6 +61,9 @@ const (
 	// deferredValidationReasonAdmissionSlotError ends a batch whose probe could
 	// not use its admission slot files.
 	deferredValidationReasonAdmissionSlotError = "admission_slot_error"
+	// deferredValidationReasonOperatorAbort ends a batch an operator aborted
+	// (D-181); no trigger retries it at the same HEAD.
+	deferredValidationReasonOperatorAbort = "aborted_by_operator"
 )
 
 // errDeferredValidationHalted marks a start refused by a halt or stop.
@@ -215,10 +219,20 @@ func deferredValidationGate(state *models.State, integrationHEAD string) (waitin
 			return nil, nil
 		}
 		if latest.Status == models.DeferredValidationBatchFailed {
+			guidance := fmt.Sprintf("deferred-validation batch %d failed at integration HEAD; merge a correction or retire an obsolete command (%s)", latest.ID, brand.Command(deferredValidationOperation, "status"))
+			if owners := deferredKnownRedOwners(latest); len(owners) > 0 {
+				guidance += fmt.Sprintf("; known red, fix in flight: %s", strings.Join(owners, ", "))
+			}
 			return nil, &IntegrationProgressReason{
 				Code:     integrationProgressBlockedDeferredFailed,
 				TaskIDs:  deferredCulpritTasks(latest),
-				Guidance: fmt.Sprintf("deferred-validation batch %d failed at integration HEAD; merge a correction or retire an obsolete command (%s)", latest.ID, brand.Command(deferredValidationOperation, "status")),
+				Guidance: guidance,
+			}
+		}
+		if deferredAbortedByOperator(latest) {
+			return nil, &IntegrationProgressReason{
+				Code:     integrationProgressBlockedDeferredAborted,
+				Guidance: fmt.Sprintf("deferred-validation batch %d was aborted by the operator at integration HEAD; merge, or run %s", latest.ID, brand.Command(deferredValidationOperation, "run", "--force")),
 			}
 		}
 	}
@@ -239,6 +253,24 @@ func deferredCulpritTasks(batch *models.DeferredValidationBatch) []string {
 		}
 	}
 	return uniqueSortedStrings(tasks)
+}
+
+// deferredKnownRedOwners returns the in-flight fix tasks a batch's known_red
+// results name. They are not culprits: the gate's task list names only
+// culprits a bisect proved.
+func deferredKnownRedOwners(batch *models.DeferredValidationBatch) []string {
+	var owners []string
+	for _, result := range batch.Results {
+		if result.Status == models.DeferredValidationResultKnownRed {
+			owners = append(owners, result.OwnedBy)
+		}
+	}
+	return uniqueSortedStrings(owners)
+}
+
+// deferredAbortedByOperator reports whether an operator aborted batch.
+func deferredAbortedByOperator(batch *models.DeferredValidationBatch) bool {
+	return batch.Status == models.DeferredValidationBatchAborted && batch.Reason == deferredValidationReasonOperatorAbort
 }
 
 // deferredValidationBaseline is the commit periodic due-ness counts merges
@@ -334,9 +366,10 @@ func revListSet(projectRoot string, args ...string) (map[string]bool, error) {
 }
 
 // deferredValidationWanted reports whether a batch should start at head: the
-// effective set is not covered by a passed batch there, no failed batch or
-// exhausted attempts at head suppress it, and it is either periodically due
-// or required by the integration gate. Force overrides all three: it is the
+// effective set is not covered by a passed batch there, no failed or
+// operator-aborted batch or exhausted attempts at head suppress it, and it is
+// either periodically due or required by the integration gate. Force
+// overrides each of these: it is the
 // operator's re-execution, also of a HEAD covered by carried-forward passes
 // a wrong scope or inert path admitted (D-230).
 func deferredValidationWanted(projectRoot string, state *models.State, head string, force, explicit bool) (bool, string, error) {
@@ -352,6 +385,9 @@ func deferredValidationWanted(projectRoot string, state *models.State, head stri
 		}
 		if latest != nil && latest.Status == models.DeferredValidationBatchFailed {
 			return false, "failed_at_head", nil
+		}
+		if latest != nil && deferredAbortedByOperator(latest) {
+			return false, "aborted_at_head", nil
 		}
 		if deferredValidationAttemptsAt(ledger, head) >= models.DeferredValidationMaxAttemptsPerCommit {
 			return false, "attempts_exhausted", nil
@@ -486,8 +522,9 @@ func withoutAgentIdentity(environ []string) []string {
 
 // RunDeferredValidationOptions configures one runner invocation.
 type RunDeferredValidationOptions struct {
-	// Force retries a batch at a HEAD whose latest batch failed or whose
-	// attempts are exhausted.
+	// Force retries a batch at a HEAD whose latest batch failed, was aborted
+	// by the operator or whose attempts are exhausted, and executes every
+	// command: nothing is carried forward or skipped as known red.
 	Force bool
 }
 
@@ -585,7 +622,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 			}
 			return result, err
 		}
-		batch := r.execute(ctx, state, head, force)
+		batch := r.execute(ctx, state, head, token, force)
 		published, err := r.publish(token, batch)
 		if err != nil {
 			return result, err
@@ -633,13 +670,20 @@ type deferredValidationRunner struct {
 	// admission slot abort): no lane starts admitted work any more, while a
 	// step already running finishes and keeps its result.
 	ended bool
-	// abortReason names why a probe ended the current batch when that was
-	// its admission slot, not a halt or stop.
+	// abortReason names why the current batch ended when that was not a halt
+	// or stop: a probe's admission slot, or an operator abort.
 	abortReason string
 	// waits bounds the lanes' admission slot waits; endWaits cancels it
 	// when the batch ends. Running commands never see it.
 	waits    context.Context
 	endWaits context.CancelFunc
+	// aborted is set once the runner observed an operator abort of the
+	// current batch, which then ends aborted_by_operator whatever its lanes
+	// observed (D-181). kill is cancelled with it; it kills the admitted
+	// steps running then, never a finishing read (see run).
+	aborted bool
+	kill    context.Context
+	endKill context.CancelFunc
 }
 
 func (r *deferredValidationRunner) isOrphaned() bool {
@@ -653,8 +697,62 @@ func (r *deferredValidationRunner) isOrphaned() bool {
 func (r *deferredValidationRunner) beginBatch(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.ended, r.abortReason = false, ""
+	r.ended, r.abortReason, r.aborted = false, "", false
 	r.waits, r.endWaits = context.WithCancel(ctx)
+	r.kill, r.endKill = context.WithCancel(context.Background())
+}
+
+// killContext is the current batch's kill context, or nil outside a batch.
+func (r *deferredValidationRunner) killContext() context.Context {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.kill
+}
+
+// abortBatch ends the batch as an operator abort: the fence refuses new
+// admitted starts, slot waits end, and the admitted steps running now are
+// killed. Steps already finished keep their results.
+func (r *deferredValidationRunner) abortBatch() {
+	r.endBatch(false, deferredValidationReasonOperatorAbort)
+	r.mu.Lock()
+	r.aborted = true
+	endKill := r.endKill
+	r.mu.Unlock()
+	if endKill != nil {
+		endKill()
+	}
+}
+
+// watchAbort aborts the batch once the runner record holding token carries an
+// operator's abort request. The returned func stops watching and returns
+// once the watcher has.
+func (r *deferredValidationRunner) watchAbort(token string) (stop func()) {
+	done, exited := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(exited)
+		ticker := time.NewTicker(deferredValidationHaltPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				state, err := r.bb.ReadSnapshot()
+				if err != nil {
+					continue
+				}
+				if ledger := deferredValidationLedger(state); ledger != nil && ledger.Runner != nil && ledger.Runner.Token == token && ledger.Runner.Abort != nil {
+					fmt.Fprintf(r.log, "deferred-validation: batch at %s aborted by the operator\n", ledger.Runner.Commit)
+					r.abortBatch()
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-exited
+	}
 }
 
 // endBatch stops every lane from starting admitted work and cancels slot
@@ -854,10 +952,22 @@ type execResult struct {
 // descendants share. A descendant that leaves the group (setsid) escapes
 // this; validation commands must not daemonize. When the group cannot be
 // emptied, the step ends as a halt and no later step starts in any lane. The
-// step also inherits extra, a probe's admission slots (ADR-0209).
+// step also inherits extra, a probe's admission slots (ADR-0209). An operator
+// abort kills an admitted step and ends it as a halt, so it is recorded not
+// run; a finishing read is never killed by it (D-181).
 func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duration, admit bool, build func(context.Context) (*exec.Cmd, error), extra ...*os.File) execResult {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	kill := r.killContext()
+	bound := admit && kill != nil
+	// stopKill reports, by returning false, that the abort's kill already
+	// fired for this step; called right after Wait, it tells an interrupted
+	// execution from one that ended before the abort.
+	stopKill := func() bool { return true }
+	if bound {
+		stopKill = context.AfterFunc(kill, cancel)
+	}
+	defer stopKill()
 	cmd, err := build(ctx)
 	if err != nil {
 		return execResult{exitCode: -1, err: err}
@@ -885,10 +995,12 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 		err = r.startUnlessFenced(cmd, false)
 	}
 	if err != nil {
-		halted := errors.Is(err, errDeferredValidationHalted) || errors.Is(err, errDeferredValidationUnstoppable)
+		// A start refused once the abort fired never ran: it is a halt.
+		halted := errors.Is(err, errDeferredValidationHalted) || errors.Is(err, errDeferredValidationUnstoppable) || (bound && kill.Err() != nil)
 		return execResult{exitCode: -1, err: err, halted: halted}
 	}
 	err = cmd.Wait()
+	interrupted := !stopKill()
 	raw := output.buffer.String()
 	result := execResult{exitCode: -1, err: err, output: r.mask(raw), raw: raw}
 	if cmd.ProcessState != nil {
@@ -897,6 +1009,10 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 	if !r.reap(cmd.Process.Pid, cmd.WaitDelay) {
 		r.endBatch(true, "")
 		result.err, result.halted, result.orphaned = errDeferredValidationUnstoppable, true, true
+		return result
+	}
+	if err != nil && interrupted {
+		result.halted = true
 		return result
 	}
 	if output.overflow {
@@ -1236,39 +1352,53 @@ func (r *deferredValidationRunner) storeOutput(full string) string {
 	return hash
 }
 
-// execute runs one batch at head, one lane per command it does not carry
-// forward. It never returns an error: every outcome, including infrastructure
-// failure and halt, is a recorded batch. Results and culprits keep the
+// execute runs one batch at head, one lane per command it neither carries
+// forward nor skips as known red. It never returns an error: every outcome,
+// including infrastructure failure, halt and operator abort (requested on the
+// record holding token), is a recorded batch. Results and culprits keep the
 // effective command order.
-func (r *deferredValidationRunner) execute(ctx context.Context, state *models.State, head string, forced bool) models.DeferredValidationBatch {
+func (r *deferredValidationRunner) execute(ctx context.Context, state *models.State, head, token string, forced bool) models.DeferredValidationBatch {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
 	batch := models.DeferredValidationBatch{Commit: head, StartedAt: time.Now().UTC(), Forced: forced}
 	r.beginBatch(ctx)
 	defer r.endWaits()
+	defer r.endKill()
+	stopWatching := sync.OnceFunc(r.watchAbort(token))
+	defer stopWatching()
 	finish := func(status models.DeferredValidationBatchStatus, reason string) models.DeferredValidationBatch {
+		// An abort observed at any point before this is the batch's outcome;
+		// none is observed after it.
+		stopWatching()
 		for _, command := range commands[len(batch.Results):] {
 			batch.Results = append(batch.Results, r.notRun(command))
 		}
 		r.mu.Lock()
-		orphaned, abortReason := r.orphaned, r.abortReason
+		orphaned, aborted, abortReason := r.orphaned, r.aborted, r.abortReason
 		r.mu.Unlock()
 		if orphaned {
 			// Nothing a batch observed is certified once a step's processes
 			// may still run.
 			status, reason = models.DeferredValidationBatchAborted, deferredValidationReasonUnstoppable
+		} else if aborted {
+			// Finished results stay; the batch is the operator's abort even
+			// when no running step needed killing.
+			status, reason = models.DeferredValidationBatchAborted, deferredValidationReasonOperatorAbort
 		} else if status == models.DeferredValidationBatchAborted && abortReason != "" {
 			reason = abortReason
 		}
 		batch.Status, batch.Reason, batch.FinishedAt = status, reason, time.Now().UTC()
 		return batch
 	}
-	carried, halted := r.carryForward(ctx, state, head, commands, forced)
+	reused, halted := r.carryForward(ctx, state, head, commands, forced)
 	if halted {
 		return finish(models.DeferredValidationBatchAborted, "halted")
 	}
+	for sha, result := range r.knownRed(state, commands, forced) {
+		reused[sha] = result
+	}
 	var worktrees []string
-	if executed := len(commands) - len(carried); executed > 0 {
+	if executed := len(commands) - len(reused); executed > 0 {
 		var res execResult
 		if worktrees, res = r.resetLanes(ctx, head, executed); res.err != nil {
 			if res.halted {
@@ -1280,7 +1410,7 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 	lanes := make([]deferredValidationLane, len(commands))
 	var wg sync.WaitGroup
 	for i, command := range commands {
-		if result, ok := carried[command.CommandSHA256]; ok {
+		if result, ok := reused[command.CommandSHA256]; ok {
 			lanes[i] = deferredValidationLane{result: result}
 			continue
 		}
@@ -1304,7 +1434,7 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 		}
 		halted = halted || lane.halted
 		switch {
-		case lane.result.Status == models.DeferredValidationResultFailed:
+		case lane.result.Status == models.DeferredValidationResultFailed || lane.result.Status == models.DeferredValidationResultKnownRed:
 			status = models.DeferredValidationBatchFailed
 		case lane.result.Status != models.DeferredValidationResultPassed && lane.result.Status != models.DeferredValidationResultCarriedForward &&
 			status == models.DeferredValidationBatchPassed:
@@ -1366,6 +1496,84 @@ func (r *deferredValidationRunner) carryForward(ctx context.Context, state *mode
 		}
 	}
 	return carried, false
+}
+
+// knownRed returns, by command digest, the known_red results of the commands
+// whose failure is already attributed and whose fix is in flight (D-181): the
+// command's newest execution failed, in a batch that certified what it
+// observed and named exactly one culprit task for it, and that (culprit,
+// command) discovery was converted to a fix task still in flight. Such a
+// command is neither run nor bisected until the fix merges or dies. A forced
+// batch skips nothing; any doubt executes the command.
+func (r *deferredValidationRunner) knownRed(state *models.State, commands []models.DeferredValidationCommand, forced bool) map[string]models.DeferredValidationResult {
+	known := map[string]models.DeferredValidationResult{}
+	if forced {
+		return known
+	}
+	ledger := deferredValidationLedger(state)
+	resolver := models.NewDependencyResolver(state)
+	for _, command := range commands {
+		batch, execution := ledger.LatestExecutionFor(command.CommandSHA256)
+		if batch == nil || execution.Status != models.DeferredValidationResultFailed || batch.Reason == deferredValidationReasonUnstoppable {
+			continue
+		}
+		culprit := deferredSoleCulprit(batch, command.CommandSHA256)
+		if culprit == "" {
+			continue
+		}
+		owner := deferredFixInFlight(state, resolver, culprit, command.CommandSHA256)
+		if owner == "" {
+			continue
+		}
+		fmt.Fprintf(r.log, "deferred-validation: %q not run: it failed at %s (culprit %s) and its fix %s is in flight\n", r.mask(command.Command), batch.Commit, culprit, owner)
+		now := time.Now().UTC()
+		known[command.CommandSHA256] = models.DeferredValidationResult{
+			Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultKnownRed,
+			ExitCode: -1, StartedAt: now, FinishedAt: now, CarriedFrom: batch.Commit, OwnedBy: owner,
+		}
+	}
+	return known
+}
+
+// deferredSoleCulprit is the task batch attributed commandSHA's failure to, or
+// "" when the failure is unattributed, unbisected or attributed ambiguously.
+func deferredSoleCulprit(batch *models.DeferredValidationBatch, commandSHA string) string {
+	task := ""
+	for _, culprit := range batch.Culprits {
+		if culprit.CommandSHA256 != commandSHA {
+			continue
+		}
+		if culprit.TaskID == "" || task != "" {
+			return ""
+		}
+		task = culprit.TaskID
+	}
+	return task
+}
+
+// deferredFixInFlight returns the live task fixing culprit's failure of
+// commandSHA: the (culprit, command) discovery's converted task, or the live
+// replacement it was superseded by, while it is unmerged. It returns "" when
+// no such discovery was converted to a task, or the fix merged or died.
+func deferredFixInFlight(state *models.State, resolver *models.DependencyResolver, culprit, commandSHA string) string {
+	for _, discovery := range state.Discovered {
+		if discovery.By != models.DeferredValidationDiscoveryBy || discovery.Extra["culprit_task"] != culprit || discovery.Extra["command_sha256"] != commandSHA {
+			continue
+		}
+		if discovery.ConvertedToTask == nil || validDispositionSentinels[*discovery.ConvertedToTask] {
+			continue
+		}
+		fix := resolver.Resolve(*discovery.ConvertedToTask)
+		if fix.Satisfied() || fix.Invalid() {
+			continue
+		}
+		for _, id := range fix.BlockingIDs {
+			if task := state.FindTask(id); task != nil && !task.Status.IsTerminal() {
+				return id
+			}
+		}
+	}
+	return ""
 }
 
 // unchangedSince reports whether from is head or an ancestor of it and no path
