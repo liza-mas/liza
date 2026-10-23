@@ -1,0 +1,15 @@
+# before
+
+# after
+[
+  {
+    "Path": "records-2026-09-30.jsonl",
+    "Directory": false,
+    "Content": "{\"schema_version\":1,\"record_id\":\"fixed-record-one\",\"task_id\":\"task-1\",\"role\":\"coder\",\"agent_id\":\"coder-1\",\"supervisor_run_id\":\"fixed-run-1\",\"session_id\":\"fixed-session-1\",\"provider\":\"fixture-provider\",\"started_at\":\"2026-10-01T00:30:00.123+02:00\",\"ended_at\":\"2026-10-01T00:31:00.456+02:00\",\"fresh_input_tokens\":100,\"cache_read_tokens\":20,\"cache_write_tokens\":30,\"output_tokens\":40,\"provenance\":\"terminal_authoritative\",\"exit_code\":0,\"warm_session\":false}\n"
+  },
+  {
+    "Path": "records-2026-10-02.jsonl",
+    "Directory": false,
+    "Content": "{\"schema_version\":1,\"record_id\":\"93b82235e369c9378502a19fc6b487297a126e0951b40bad85d3d85e079f106d\",\"task_id\":\"task-2\",\"role\":\"code-reviewer\",\"agent_id\":\"code-reviewer-1\",\"supervisor_run_id\":\"fixed-run-2\",\"session_id\":\"fixed-session-2\",\"provider\":\"fixture-provider\",\"started_at\":\"2026-10-02T12:30:00.789Z\",\"ended_at\":\"2026-10-02T12:31:00.123Z\",\"fresh_input_tokens\":50,\"cache_read_tokens\":10,\"cache_write_tokens\":0,\"output_tokens\":25,\"provenance\":\"partial\",\"exit_code\":2,\"warm_session\":true}\n"
+  }
+]

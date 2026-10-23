@@ -1,0 +1,6 @@
+# before
+
+# after
+[2026-10-01T10:30:00Z] ⚠️ WATCH: fixed warning
+[2026-10-01T10:31:00Z] 🚨 BLOCKED: task-1 — fixed dependency
+[2026-10-01T10:32:00Z] 🚨 AWAITING HUMAN: task-2 — fixed ask
