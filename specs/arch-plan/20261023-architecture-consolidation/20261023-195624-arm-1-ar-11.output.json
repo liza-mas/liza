@@ -46,7 +46,7 @@
       "3"
     ],
     "desc": "Introduce A2 typed vocabulary W1-W12 with callers converted, name A2 magic values, route truthiness through envgate",
-    "done_when": "W1-W11 use owning types and constants; W12 reuses existing types and constants; listed carriers use them and no W-set control-flow literal remains outside declarations. A2 truthy parsers are removed; oracles pass unchanged; make test, make lint, make test-e2e pass; ADR and index row exist.",
+    "done_when": "W1-W11 use owning types/constants; W12 reuses existing ones; listed carriers use them with no W-set control-flow literals outside declarations. W9 covers every handled ACP method through typed dispatch, unknown-method behavior unchanged. A2 truthy parsers removed; oracles unchanged; make test, make lint, make test-e2e pass; ADR and index row exist.",
     "rca_required": false,
     "scope": "In: W1-W12 types and carriers, A2 literal replacement, named magic values, envgate truthiness, call-site conversions and conformance updates elsewhere and in oracle adapters, one ADR with index row. Out: retyping non-A2 APIs or persisted A1 carriers, A9 adoption of W2/W3, configuration fields.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
