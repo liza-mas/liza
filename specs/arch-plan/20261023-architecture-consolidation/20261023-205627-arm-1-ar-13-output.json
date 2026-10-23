@@ -15,7 +15,7 @@
       "interfaces_consumed": [
         "Area-Boundary Checkpoint Contract"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   },
   {
@@ -45,7 +45,7 @@
         "SI-3",
         "ops kernel"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   },
   {
@@ -81,7 +81,7 @@
         "SI-3",
         "ops kernel"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   },
   {
@@ -115,7 +115,7 @@
         "SI-3",
         "ops kernel"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   },
   {
@@ -148,7 +148,7 @@
         "SI-3",
         "ops kernel"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   },
   {
@@ -181,7 +181,7 @@
         "SI-3",
         "ops kernel"
       ],
-      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership."
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
     }
   }
 ]
