@@ -335,6 +335,27 @@ operator. Human ruling 2026-10-23T16:46Z, applied by the operator:
   `make sync-embedded` leaves the starting tree unchanged. The run's starting commit is the head after
   this commit, recorded by Scope 0.
 
+### D24 — Provenance of goldens changed by a C task (run, 2026-10-23)
+Raised by the Scope 0 architecture (arm-1-ar-0, review R1/R3, iteration 2): master SI-3 H1
+reproduces every oracle golden from the starting commit plus absorbed fixes, while E5 lets a C1–C6
+task change a golden, which no starting-tree regeneration can reproduce. E5 and H1 share the gap.
+Human ruling 2026-10-23T17:46Z, relayed by the operator — option (a′), chained provenance with
+reproduction at each change point:
+- A golden never changed by a C task is reproduced as H1 states (starting commit plus absorbed
+  fixes).
+- For a golden changed by a C task, the regeneration entry point (1) reproduces, from the starting
+  baseline, the blob the golden held before its first C change; (2) for each C change of that
+  golden, in order, checks out the commit that made it in a temporary detached worktree (a read-only
+  checkout, as D22-A3 allows for the start SHA) and reproduces the blob it committed; (3) requires
+  the current blob to equal the last reproduced one. Every golden value is thus reproduced from a
+  named commit; repeated C changes form a chain.
+- Change points are resolved from Git history of the golden path and the C task's ledger record;
+  a record never names its own commit (closes R3).
+- Rejected: (a) chained provenance without reproduction at the change point — leaves the changed
+  value unreproduced; (b) literal H1 with a starting-tree backport per golden-changing C task —
+  adds work to Scopes 16, 18 and 21–24 that the goal does not ask for.
+- E5's text is not edited (reviewed carriers pin "Proof Environment"); this entry is the authority.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
