@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,8 @@ const (
 var (
 	// Claude: "You've hit your session limit · resets 4am (Europe/Paris)".
 	claudeResetText = regexp.MustCompile(`resets (\d{1,2}(?::\d{2})?)\s*(am|pm) \(([^)]+)\)`)
+	// Claude, relative: "Quota resets in 3h 43m.", "resets in 45m".
+	claudeResetInText = regexp.MustCompile(`resets in (?:(\d+)h)?\s*(?:(\d+)m)?`)
 	// Codex prints its reset in host-local time, without the date when same-day:
 	// "try again at Sep 29th, 2026 2:57 AM" or "try again at 2:57 AM".
 	codexResetText = regexp.MustCompile(`try again at (?:([A-Z][a-z]{2}) (\d{1,2})(?:st|nd|rd|th), (\d{4}) )?(\d{1,2}:\d{2}) (AM|PM)`)
@@ -41,7 +44,7 @@ func quotaResetTime(output, message, provider string, now time.Time) time.Time {
 		}
 		m := claudeResetText.FindStringSubmatch(message)
 		if m == nil {
-			return time.Time{}
+			return claudeRelativeResetAt(message, now)
 		}
 		loc, err := time.LoadLocation(m[3])
 		if err != nil {
@@ -89,6 +92,45 @@ func claudeRejectedResetAt(output string) time.Time {
 		}
 	}
 	return resetsAt
+}
+
+// claudeRelativeResetAt resolves a relative "resets in 3h 43m" against now, or
+// returns the zero time when the message announces none.
+func claudeRelativeResetAt(message string, now time.Time) time.Time {
+	m := claudeResetInText.FindStringSubmatch(message)
+	if m == nil || (m[1] == "" && m[2] == "") {
+		return time.Time{}
+	}
+	hours, _ := strconv.Atoi(m[1]) // the pattern admits only digits; "" reads as 0
+	minutes, _ := strconv.Atoi(m[2])
+	return now.Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute).UTC()
+}
+
+// claudeRateLimitedResult returns the text of the last top-level result event
+// that failed with API status 429. A limit may be worded like no quota
+// pattern (#184); its status code is the stable part.
+func claudeRateLimitedResult(output string) (string, bool) {
+	var message string
+	found := false
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var event struct {
+			Type           string `json:"type"`
+			IsError        bool   `json:"is_error"`
+			APIErrorStatus int    `json:"api_error_status"`
+			Result         string `json:"result"`
+		}
+		if json.Unmarshal([]byte(line), &event) != nil || event.Type != "result" {
+			continue
+		}
+		if event.IsError && event.APIErrorStatus == 429 {
+			message, found = event.Result, true
+		}
+	}
+	return message, found
 }
 
 // nextClockTime resolves a date-less clock time in loc to its next occurrence,

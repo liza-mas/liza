@@ -63,6 +63,16 @@ func detectQuotaExhaustionAt(output, cliName string, now time.Time) *QuotaExhaus
 			}
 		}
 	}
+	// A 429 is quota only when it announces a reset: a throttle without one
+	// is left to the crash backoff rather than blocking the fleet for the
+	// 30-minute fallback.
+	if provider == "claude" {
+		if message, ok := claudeRateLimitedResult(output); ok {
+			if resetsAt := quotaResetTime(output, message, provider, now); !resetsAt.IsZero() {
+				return &QuotaExhaustion{Provider: provider, Message: message, ResetsAt: resetsAt}
+			}
+		}
+	}
 	return nil
 }
 

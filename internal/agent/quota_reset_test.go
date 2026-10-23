@@ -50,6 +50,10 @@ func TestDetectQuotaExhaustion_ClaudeResetSources(t *testing.T) {
 		{name: "hour with minutes", output: textResult("2:20pm (Europe/Paris)"), now: "2026-09-24T10:00:00Z", want: "2026-09-24T12:20:00Z"},
 		{name: "passed clock time rolls to next day", output: textResult("4am (Europe/Paris)"), now: "2026-09-24T03:30:00Z", want: "2026-09-25T02:00:00Z"},
 		{name: "just-passed clock time stays today", output: textResult("4am (Europe/Paris)"), now: "2026-09-24T02:30:00Z", want: "2026-09-24T02:00:00Z"},
+		{name: "relative hours and minutes", output: textResult("in 3h 43m."), now: "2026-10-23T08:56:00Z", want: "2026-10-23T12:39:00Z"},
+		{name: "relative minutes", output: textResult("in 45m"), now: "2026-10-23T08:56:00Z", want: "2026-10-23T09:41:00Z"},
+		{name: "relative hours", output: textResult("in 2h"), now: "2026-10-23T08:56:00Z", want: "2026-10-23T10:56:00Z"},
+		{name: "relative without amount", output: textResult("in a while"), now: "2026-10-23T08:56:00Z"},
 		{name: "unknown zone", output: textResult("4am (Nowhere/Invalid)"), now: "2026-09-24T01:54:00Z"},
 		{name: "no reset text", output: `{"type":"error","message":"You've hit your limit."}`, now: "2026-09-24T01:54:00Z"},
 	}

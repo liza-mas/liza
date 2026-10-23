@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,78 @@ func TestDetectQuotaExhaustion_ClaudeSessionLimitMatch(t *testing.T) {
 	}
 	if result.Message == "" {
 		t.Error("Message should not be empty")
+	}
+}
+
+// claudeRateLimitedResult429 is the result event of #184: a Claude limit whose
+// wording matches no quota pattern.
+const claudeRateLimitedResult429 = `{"type":"result","subtype":"success","is_error":true,"api_error_status":429,"terminal_reason":"api_error","result":"API Error: Server is temporarily limiting requests (not your usage limit) · No account can serve this request for claude-opus-5-5: all N accounts are at their quota or rate limit. Quota resets in 3h 43m."}`
+
+func TestDetectQuotaExhaustion_ClaudeRateLimitedResult(t *testing.T) {
+	now := mustParseUTC(t, "2026-10-23T08:56:00Z")
+	withoutReset := strings.Replace(claudeRateLimitedResult429, " Quota resets in 3h 43m.", "", 1)
+	tests := []struct {
+		name      string
+		output    string
+		wantReset string // "" = not detected
+	}{
+		{name: "429 announcing a reset", output: claudeRateLimitedResult429, wantReset: "2026-10-23T12:39:00Z"},
+		{name: "429 without a reset is not quota", output: withoutReset},
+		{name: "other API error status", output: strings.Replace(claudeRateLimitedResult429, `"api_error_status":429`, `"api_error_status":529`, 1)},
+		{name: "successful result", output: strings.Replace(claudeRateLimitedResult429, `"is_error":true`, `"is_error":false`, 1)},
+		{name: "429 fields outside a result event", output: strings.Replace(claudeRateLimitedResult429, `"type":"result"`, `"type":"assistant"`, 1)},
+		{name: "429 quoted in assistant text", output: `{"type":"assistant","message":{"content":[{"type":"text","text":` + strconv.Quote(claudeRateLimitedResult429) + `}]}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qe := detectQuotaExhaustionAt(tt.output, "claude", now)
+			if tt.wantReset == "" {
+				if qe != nil {
+					t.Fatalf("detected quota exhaustion %q, want none", qe.Message)
+				}
+				return
+			}
+			if qe == nil {
+				t.Fatal("expected quota exhaustion detected, got nil")
+			}
+			if qe.Provider != "claude" || !strings.Contains(qe.Message, "Quota resets in 3h 43m") {
+				t.Fatalf("detection = %+v, want claude with the result text", qe)
+			}
+			if got := qe.ResetsAt.UTC().Format(time.RFC3339); got != tt.wantReset {
+				t.Fatalf("ResetsAt = %s, want %s", got, tt.wantReset)
+			}
+		})
+	}
+}
+
+// The supervisor's crash path raises the quota signal for #184's result, so
+// every Claude supervisor stops until the announced reset.
+func TestHandleClassifiedProviderCrash_ClaudeRateLimitedResultRaisesQuotaSignal(t *testing.T) {
+	projectRoot := t.TempDir()
+	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	before := time.Now()
+	if !handleClassifiedProviderCrash(SupervisorConfig{AgentID: "coder-1", ProjectRoot: projectRoot, CLIName: "claude"}, claudeRateLimitedResult429) {
+		t.Fatal("handleClassifiedProviderCrash returned false, want true")
+	}
+
+	until, blocked := QuotaBlockedUntil(projectRoot, "claude")
+	if !blocked {
+		t.Fatal("claude quota signal does not block")
+	}
+	wantMin := before.Add(3*time.Hour + 43*time.Minute + quotaResetGrace).Truncate(time.Second)
+	if until.Before(wantMin) || until.After(wantMin.Add(time.Minute)) {
+		t.Fatalf("block lifts at %s, want the announced reset plus grace (~%s)", until.UTC().Format(time.RFC3339), wantMin.UTC().Format(time.RFC3339))
+	}
+	alerts, err := os.ReadFile(filepath.Join(lizaDir, "alerts.log"))
+	if err != nil {
+		t.Fatalf("read alerts log: %v", err)
+	}
+	if !strings.Contains(string(alerts), "PROVIDER QUOTA EXHAUSTED") {
+		t.Fatalf("alerts log lacks PROVIDER QUOTA EXHAUSTED:\n%s", alerts)
 	}
 }
 
