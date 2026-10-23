@@ -181,12 +181,18 @@ func checkResult(t *testing.T, e *environment, kind oracle.Kind, name string, re
 		e.norm.Check(t, kind, name, result.stdout)
 		return
 	}
+	e.norm.Check(t, kind, name, composeRecord(t, kind, name, result))
+}
+
+func composeRecord(t *testing.T, kind oracle.Kind, name string, result cliResult) []byte {
+	t.Helper()
 	var record []byte
 	if kind == oracle.JSON {
 		var out any
 		decoder := json.NewDecoder(bytes.NewReader(result.stdout))
 		decoder.UseNumber()
-		if err := decoder.Decode(&out); err != nil {
+		// Decode alone accepts a valid prefix and silently drops trailing output.
+		if err := decoder.Decode(&out); err != nil || !json.Valid(result.stdout) {
 			out = string(result.stdout)
 		}
 		status := strings.HasPrefix(name, "status/")
@@ -226,7 +232,29 @@ func checkResult(t *testing.T, e *environment, kind oracle.Kind, name string, re
 		}
 		record = []byte(maskHuman(text))
 	}
-	e.norm.Check(t, kind, name, record)
+	return record
+}
+
+func TestA7JSONRecordWholeStream(t *testing.T) {
+	skipUnlessLinux(t)
+	const clean = `{"count":9007199254740993}`
+	const cleanRecord = `{"exit":7,"stderr":"diagnostic\n","stdout":{"count":9007199254740993}}`
+	cases := []struct{ name, stdout, want string }{
+		{"single document", clean, cleanRecord},
+		{"trailing whitespace", clean + "\n \t", cleanRecord},
+		{"empty", "", `{"exit":7,"stderr":"diagnostic\n","stdout":""}`},
+		{"trailing junk", clean + "\nlog line\n", `{"exit":7,"stderr":"diagnostic\n","stdout":"{\"count\":9007199254740993}\nlog line\n"}`},
+		{"second document", clean + "\n{}\n", `{"exit":7,"stderr":"diagnostic\n","stdout":"{\"count\":9007199254740993}\n{}\n"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := cliResult{stdout: []byte(tc.stdout), stderr: []byte("diagnostic\n"), exit: 7}
+			got := composeRecord(t, oracle.JSON, "get/tasks-json.json", result)
+			if string(got) != tc.want {
+				t.Fatalf("record must preserve the entire stdout stream:\ngot  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
 }
 
 type invocation struct {
