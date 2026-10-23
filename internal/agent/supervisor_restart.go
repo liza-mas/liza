@@ -334,6 +334,68 @@ func (t *spinningTracker) reset(taskID string) {
 	delete(t.byTask, taskID)
 }
 
+// blockSpinningTask records an execution of taskID and blocks the task once it
+// has run more than the spinning threshold without progress. It reports
+// whether the task was blocked.
+func blockSpinningTask(bb *db.Blackboard, config SupervisorConfig, pr models.PipelineResolver, stateBefore *models.State, taskID string, spinTracker *spinningTracker) bool {
+	// Prefer the worktree-aware snapshot: genuine iteration on a task
+	// often progresses only in the worktree, and task-field signatures
+	// alone would count it as spinning (DEV-667).
+	sig, snapshotEligible, err := readSuccessfulTurnProgressSnapshot(config.ProjectRoot, bb, taskID, config.AgentID, pr)
+	if err != nil {
+		GetLogger().Warn("Successful no-progress snapshot failed", "error", err, "task_id", taskID)
+	}
+	if !snapshotEligible || sig == "" {
+		if task := stateBefore.FindTask(taskID); task != nil {
+			sig = exit42TaskProgressSignature(task)
+		}
+	}
+	spinCount := spinTracker.Track(taskID, sig)
+	spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
+	if spinCount <= spinThreshold {
+		return false
+	}
+	reason := fmt.Sprintf("spinning detected: %d consecutive executions for task %s without progress (threshold=%d)",
+		spinCount, taskID, spinThreshold)
+	GetLogger().Error("Spinning detected, blocking task",
+		"task_id", taskID,
+		"agent_id", config.AgentID,
+		"count", spinCount)
+	if alertErr := LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
+		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
+	}
+	if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, reason); blockErr != nil {
+		GetLogger().Warn("Failed to block task from supervisor", "error", blockErr, "task_id", taskID)
+	}
+	spinTracker.reset(taskID)
+	return true
+}
+
+// stopSpinningOrchestrator records an orchestrator execution and stops the
+// system once it has run more than the spinning threshold without progress.
+// It reports whether the system was stopped. With no task ID, progress is the
+// state signature: sprint status, sprint number and task count.
+func stopSpinningOrchestrator(config SupervisorConfig, stateBefore *models.State, spinTracker *spinningTracker) bool {
+	sig := orchestratorProgressSignature(stateBefore)
+	spinCount := spinTracker.Track("orchestrator", sig)
+	spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
+	if spinCount <= spinThreshold {
+		return false
+	}
+	reason := fmt.Sprintf("orchestrator spinning detected: %d consecutive executions without state progress (threshold=%d)",
+		spinCount, spinThreshold)
+	GetLogger().Error("Orchestrator spinning detected, stopping system",
+		"agent_id", config.AgentID,
+		"count", spinCount)
+	if alertErr := LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
+		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
+	}
+	if _, stopErr := ops.Stop(config.ProjectRoot, reason, config.AgentID); stopErr != nil {
+		GetLogger().Warn("Failed to stop system after orchestrator spinning", "error", stopErr)
+	}
+	return true
+}
+
 func effectiveCrashRestartThreshold(cfg models.Config) int {
 	if cfg.CrashRestartThreshold > 0 {
 		return cfg.CrashRestartThreshold

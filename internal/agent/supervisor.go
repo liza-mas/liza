@@ -391,57 +391,11 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			effectiveTask = taskID
 		}
 		if effectiveTask != "" {
-			// Prefer the worktree-aware snapshot: genuine iteration on a task
-			// often progresses only in the worktree, and task-field signatures
-			// alone would count it as spinning (DEV-667).
-			sig, snapshotEligible, err := readSuccessfulTurnProgressSnapshot(config.ProjectRoot, bb, effectiveTask, config.AgentID, resolver)
-			if err != nil {
-				GetLogger().Warn("Successful no-progress snapshot failed", "error", err, "task_id", effectiveTask)
-			}
-			if !snapshotEligible || sig == "" {
-				if task := stateBefore.FindTask(effectiveTask); task != nil {
-					sig = exit42TaskProgressSignature(task)
-				}
-			}
-			spinCount := spinTracker.Track(effectiveTask, sig)
-			spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
-			if spinCount > spinThreshold {
-				reason := fmt.Sprintf("spinning detected: %d consecutive executions for task %s without progress (threshold=%d)",
-					spinCount, effectiveTask, spinThreshold)
-				GetLogger().Error("Spinning detected, blocking task",
-					"task_id", effectiveTask,
-					"agent_id", config.AgentID,
-					"count", spinCount)
-				if alertErr := LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
-					GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
-				}
-				if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.Authority, reason); blockErr != nil {
-					GetLogger().Warn("Failed to block task from supervisor", "error", blockErr, "task_id", effectiveTask)
-				}
-				spinTracker.reset(effectiveTask)
+			if blockSpinningTask(bb, config, resolver, stateBefore, effectiveTask, spinTracker) {
 				continue
 			}
-		} else {
-			// Orchestrator spinning detection: no task ID, so track by state
-			// signature. If the orchestrator keeps executing without changing
-			// sprint status, sprint number, or task count, it is spinning.
-			sig := orchestratorProgressSignature(stateBefore)
-			spinCount := spinTracker.Track("orchestrator", sig)
-			spinThreshold := effectiveSpinningRestartThreshold(stateBefore.Config)
-			if spinCount > spinThreshold {
-				reason := fmt.Sprintf("orchestrator spinning detected: %d consecutive executions without state progress (threshold=%d)",
-					spinCount, spinThreshold)
-				GetLogger().Error("Orchestrator spinning detected, stopping system",
-					"agent_id", config.AgentID,
-					"count", spinCount)
-				if alertErr := LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
-					GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
-				}
-				if _, stopErr := ops.Stop(config.ProjectRoot, reason, config.AgentID); stopErr != nil {
-					GetLogger().Warn("Failed to stop system after orchestrator spinning", "error", stopErr)
-				}
-				return nil
-			}
+		} else if stopSpinningOrchestrator(config, stateBefore, spinTracker) {
+			return nil
 		}
 
 		if reviewer, ok := strategy.(*reviewerStrategy); ok {
