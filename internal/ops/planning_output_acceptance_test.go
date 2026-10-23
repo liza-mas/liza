@@ -339,6 +339,7 @@ func commitWorktreeFiles(t *testing.T, wt string, files map[string]string) strin
 func TestSubmitForReview_ReviewCarriers(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
+		pin       func(t *testing.T, worktree string) string // optional revision the carrier pins instead of base
 		files     func(base, blob string) map[string]string
 		wantError string
 	}{
@@ -382,13 +383,30 @@ func TestSubmitForReview_ReviewCarriers(t *testing.T) {
 			},
 			wantError: "is a blob, not a commit",
 		},
+		{
+			name: "pin to unintegrated path",
+			pin: func(t *testing.T, worktree string) string {
+				// A commit no branch keeps, like an unmerged candidate's evidence.
+				evidence := commitWorktreeFiles(t, worktree, map[string]string{"specs/evidence.md": "# Evidence\n\nUnmerged report.\n"})
+				testhelpers.MustGit(t, worktree, "reset", "--hard", "HEAD~1")
+				return evidence
+			},
+			files: func(pin, _ string) map[string]string {
+				return map[string]string{"specs/extra.md": reviewCarrier(pin, "specs/evidence.md#Evidence")}
+			},
+			wantError: `"specs/evidence.md" is absent at integration HEAD and at the review commit`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// GIVEN a candidate that commits a strict carrier the reviewer could not build
 			root, taskID, _, agentID, bb := setupPlanningAcceptanceSubmission(t, "", false)
 			base := testhelpers.MustGit(t, root, "rev-parse", "integration")
 			blob := testhelpers.MustGit(t, root, "rev-parse", base+":README.md")
-			commit := commitWorktreeFiles(t, git.New(root).GetWorktreePath(taskID), tc.files(base, blob))
+			worktree := git.New(root).GetWorktreePath(taskID)
+			if tc.pin != nil {
+				base = tc.pin(t, worktree)
+			}
+			commit := commitWorktreeFiles(t, worktree, tc.files(base, blob))
 			before, err := bb.Read()
 			if err != nil {
 				t.Fatal(err)

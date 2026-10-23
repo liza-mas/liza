@@ -384,6 +384,36 @@ func TestResolvedReferenceContextPinPredatingReferencedPathNamesRemedy(t *testin
 	}
 }
 
+// A pin to a path that only an unmerged branch carries is neither integrated
+// nor introduced by the reviewed range; the author must get a correctable
+// refusal naming it, not an operational Git failure.
+func TestResolvedReferenceContextPinToUnintegratedPathNamesRemedy(t *testing.T) {
+	repo := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, repo)
+	writeReferenceFixture(t, repo, "README.md", "# Base\n")
+	base := commitReferenceFixture(t, repo, "test: base")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "evidence")
+	writeReferenceFixture(t, repo, "specs/evidence.md", "# Evidence\n\n## Failure\nPreserved failure report.\n")
+	evidenceRevision := commitReferenceFixture(t, repo, "test: add unmerged evidence")
+	testhelpers.MustGit(t, repo, "checkout", "-b", "candidate", "main")
+	writeReferenceFixture(t, repo, "specs/candidate.md", strictCarrier(evidenceRevision, "FAILURE", "specs/evidence.md", "Failure", "# Candidate\n\nPlan citing unmerged evidence.\n"))
+	review := commitReferenceFixture(t, repo, "test: add candidate pinning unmerged evidence")
+	testhelpers.MustGit(t, repo, "checkout", "main")
+
+	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
+	state := referenceTestState(task)
+	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
+	for _, want := range []string{`direct reference "source"`, `"specs/evidence.md"`, "pin " + evidenceRevision + " is not integrated"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("unintegrated pin error = %v, want it to contain %q", err, want)
+		}
+	}
+	var invalid *referencecontract.InvalidCarrierError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("unintegrated pin error = %T %v, want correctable InvalidCarrierError", err, err)
+	}
+}
+
 func TestResolvedReferenceContextReviewCarrierReferenceDeletedAtHeadBlocks(t *testing.T) {
 	repo := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, repo)

@@ -201,6 +201,13 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 			if presentAtBase {
 				return nil, invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))
 			}
+			_, presentAtReview, reviewErr := repo.TreePathMode(localReview, ref.Path)
+			if reviewErr != nil {
+				return nil, reviewErr
+			}
+			if !presentAtReview {
+				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is absent at integration HEAD and at the review commit, so its pin %s is not integrated; pin a revision integration HEAD contains, or commit the file in this submission and re-pin the reference to that commit", ref.ID, ref.Path, revision))
+			}
 			freshRevision, where = localReview, "review commit"
 		}
 		pinned.Span, err = ExtractSection(content, ref.Heading)
