@@ -1,18 +1,92 @@
 [
   {
     "desc": "Size guard (S1/SI-2) as the run's first coding task: archguard helpers, S1 guard, start snapshot, nine area data files, lint target, guard ADR",
-    "done_when": "go test -count=1 ./internal/testguard/archguard/ and make lint pass with 126 ratchet entries (33 files, 93 functions) placed by area, empty S2/layer/allowlist data; checkS1 tests show an unlisted offender, a ceiling overrun, a stale entry and a renamed offender each fail; E0 (D23) and sync-clean holds confirmed before submit; guard ADR indexed.",
+    "done_when": "Race-enabled archguard tests, make lint, and make test / make test-e2e under env -i pass with 126 ratchet entries (33 files, 93 functions) placed by area, empty S2/layer/allowlist data; checkS1 tests show an unlisted offender, a ceiling overrun, a stale entry and a renamed offender each fail; E0 (D23) and sync-clean holds confirmed before submit; guard ADR indexed.",
     "scope": "internal/testguard/archguard/ (all _test.go: helpers, data types, area list, nine area files, start snapshot, S1 guard and tests; testdata/acceptance-s1.json), Makefile (lint-archguard, lint-nosync, .PHONY), one ADR plus README index row. Out: K4 rules and layer data, oracle harness, baseline record, production Go.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 1: Size guard and run holds",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-180805-arm-1-ar-0-cp-0.md",
     "validation": [
-      "go test -count=1 ./internal/testguard/archguard/",
-      "make lint"
+      "go test -race -count=1 ./internal/testguard/archguard/",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
-      {"command": "go test -count=1 ./internal/testguard/archguard/", "executables": ["go"], "probes": [["go", "version"]]},
-      {"command": "make lint", "executables": ["make", "go", "gofmt"], "probes": [["make", "--version"], ["go", "version"]]}
+      {
+        "command": "go test -race -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "go"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
     ]
   }
 ]
