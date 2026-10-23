@@ -492,6 +492,31 @@ document with duplicate keys. The orchestrator already authorised the same exclu
   making A6 wait on A3's merge (serialises unrelated areas).
   Kind: delivery-neutral (tooling classification). Revert: drop the exclude line.
 
+### D33 — K1 lock discipline is non-regression for inherited final revalidation (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:11Z. `arm-1-ar-14` (A5 refactor architecture) blocked on a source conflict
+inside K1. The lock discipline forbids Git or `exec` inside a blackboard `Modify`, while INVARIANTS §5,
+also bound by K1, requires final assignment and start to revalidate the worktree/review commit and the
+integration revision. The baseline does that revalidation with Git inside the transaction:
+`ValidationPreflight.CheckCurrent` (`internal/ops/validation_preflight.go:85`, which calls `GetCommitSHA`
+and runs `git rev-parse`) is called inside `Modify`/`ModifyWithAgentAuthority` at `claim_task.go:597`,
+`claim_reviewer_task.go:436`, `await_resubmission.go:666`, `resume_handoff.go:94`,
+`resume_owned_task.go:133` and `validation_preflight.go:125,344`. These are the starting tree's lines;
+the behaviour binds, not the line numbers.
+- Ruling: for this behaviour-preserving run, K1's lock discipline is non-regression. No refactor adds a
+  Git or `exec` call inside `Modify`. The inherited `CheckCurrent` revalidation stays inside the same
+  final transaction, with the same checks, order and refusals. A refactor may move it with its
+  operation (for example into a concern file or a named helper) but never out of the transaction,
+  and never weakens it. Each area architecture that owns one of these sites lists it as a K1
+  inherited exception. Reviewers check that the count does not grow.
+- Intent relied on: goal Scope (behaviour-preserving) and the closed C1–C6 change list. Moving the
+  revalidation outside the lock changes the concurrency semantics that INVARIANTS §5 protects and
+  is not an authorised change.
+- Rejected: a prerequisite synchronization design now (a behaviour and concurrency change outside
+  C1–C6; needs a human scope decision and its own ADR); dropping the final revalidation (breaks
+  INVARIANTS §5). Kind: oracle-neutral (constraint interpretation).
+- Debt: Git inside `Modify` at the sites above. Payback trigger: a run whose goal admits a
+  synchronization redesign. Revert: the human widens scope, or overrides this ruling.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
