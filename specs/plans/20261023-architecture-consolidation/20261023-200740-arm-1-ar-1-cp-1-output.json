@@ -1,0 +1,148 @@
+[
+  {
+    "desc": "(Must) Add the A1 persistence oracle package for S, AL and UR.",
+    "done_when": "The plan's commands 0–2 pass for all nine state goldens, reproduced from 96c9ad69a; each independently altered golden fails live and check naming its path. The diff is confined to internal/oracle/a1/persist/**, and only adapters import production packages.",
+    "scope": "In: internal/oracle/a1/persist/** tests, adapters, committed fixtures, state goldens, acceptance manifest and opt-in tamper proof. Out: production Go, existing tests, harness, PROVENANCE, CLI surfaces and other oracle areas.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-200740-arm-1-ar-1-cp-1.md#Task 1: A1 persistence oracle package",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/persist/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/persist/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_VERIFY_TAMPER=1 go test -count=1 -timeout 25m -run '^TestOraclePersistenceTamper$' ./internal/oracle/a1/persist",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/persist/...",
+        "executables": [
+          "env",
+          "go",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/persist/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_VERIFY_TAMPER=1 go test -count=1 -timeout 25m -run '^TestOraclePersistenceTamper$' ./internal/oracle/a1/persist",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-0",
+          "outputs": [
+            0
+          ]
+        },
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  }
+]
