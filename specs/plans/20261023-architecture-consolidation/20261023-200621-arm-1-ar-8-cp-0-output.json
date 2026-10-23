@@ -1,0 +1,77 @@
+[
+  {
+    "desc": "A8 prompt oracle: 30 byte-exact role/pair and wake goldens through the supervisor strategy path",
+    "done_when": "TestOraclePrompt passes all 30 inventory IDs with D26 T02/T06 markers, comparing raw Prompt bytes after ReplaceRoot of the case root only; filtered regeneration reproduces every golden from 96c9ad69a; TestOraclePromptAlteredGolden proves one changed byte fails live and regen. Acceptance mappings pass and the diff adds files only under internal/oracle/a8/.",
+    "scope": "New internal/oracle/a8/ test-only package: fixture manifests and labelled repository trees, driver, adapters, 30 prompt goldens, mutation proof and testdata/acceptance.json. Out: production, existing tests, harness/ledger, templates, other areas, TUI, promptbench and rolebudget baselines.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-180843-arm-1-ar-8.md#Scope 1: A8 prompt oracle",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-200621-arm-1-ar-8-cp-0.md#Task 1: A8 prompt oracle package",
+    "rca_required": false,
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [0, 1]
+        },
+        {
+          "upstream_task": "arm-1-ar-0-cp-2-provider-correction-1",
+          "outputs": [0]
+        }
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a8/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -run '^TestOraclePrompt$' ./internal/oracle/a8/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a8/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp A8_ORACLE_MUTATION_CHECK=1 go test -count=1 -run '^TestOraclePromptAlteredGolden$' ./internal/oracle/a8/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a8/...",
+        "executables": ["env", "go", "git", "sh"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -run '^TestOraclePrompt$' ./internal/oracle/a8/...",
+        "executables": ["env", "go", "git", "sh", "gcc"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["gcc", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a8/...",
+        "executables": ["env", "go", "git", "sh", "make"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp A8_ORACLE_MUTATION_CHECK=1 go test -count=1 -run '^TestOraclePromptAlteredGolden$' ./internal/oracle/a8/...",
+        "executables": ["env", "go", "git", "sh", "make"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": ["env", "make", "go", "git", "sh"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "-n", "lint"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git", "sh"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "-n", "test"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go", "git", "sh", "gcc"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "-n", "test-e2e"]]
+      }
+    ]
+  }
+]
