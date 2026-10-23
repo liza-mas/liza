@@ -21,11 +21,13 @@ func (e *InvalidCarrierError) Unwrap() error { return e.Err }
 func invalidCarrier(err error) error { return &InvalidCarrierError{Err: err} }
 
 // ReviewRepository extends Repository with the tree and diff queries needed to
-// discover strict carriers inside a reviewed range.
+// discover strict carriers inside a reviewed range, and the object probe that
+// tells a pin the repository lacks from a failed lookup.
 type ReviewRepository interface {
 	Repository
 	DiffFiles(dir, commitA, commitB string) ([]string, error)
 	TreePathMode(treeish, path string) (mode string, present bool, err error)
+	ObjectType(oid string) (objectType string, present bool, err error)
 }
 
 // ProofPolicy answers, for a merged carrier observed at path with the given
@@ -148,11 +150,20 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview string, contract *Contract, refuses func(referenceID string) bool) ([]Reference, error) {
 	refs := make([]Reference, 0, len(contract.DirectReferences))
 	for _, ref := range contract.DirectReferences {
-		// An unresolvable pin stays operational: this interface cannot tell a
-		// revision Git lacks from a Git failure. Upgrade trigger: a lookup that
-		// reports absence distinctly.
-		revision, err := repo.ResolveCommit(ref.EffectiveRevision(contract.SourceRevision))
+		pin := ref.EffectiveRevision(contract.SourceRevision)
+		revision, err := repo.ResolveCommit(pin)
 		if err != nil {
+			// Probed only on this error path: a pin naming no commit in the
+			// repository is the author's to fix; a failed probe, or a commit
+			// that would not resolve, stays a Git failure (D-235).
+			if objectType, present, probeErr := repo.ObjectType(pin); probeErr == nil {
+				switch {
+				case !present:
+					return nil, invalidCarrier(fmt.Errorf("direct reference %q: pinned revision %s does not exist in this repository; pin a commit that contains %q", ref.ID, pin, ref.Path))
+				case objectType != "commit":
+					return nil, invalidCarrier(fmt.Errorf("direct reference %q: pinned revision %s is a %s, not a commit; pin a commit that contains %q", ref.ID, pin, objectType, ref.Path))
+				}
+			}
 			return nil, err
 		}
 		content, err := repo.ReadBlob(revision, ref.Path)

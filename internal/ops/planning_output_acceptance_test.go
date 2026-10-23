@@ -339,26 +339,26 @@ func commitWorktreeFiles(t *testing.T, wt string, files map[string]string) strin
 func TestSubmitForReview_ReviewCarriers(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
-		files     func(base string) map[string]string
+		files     func(base, blob string) map[string]string
 		wantError string
 	}{
 		{
 			name: "malformed direct reference",
-			files: func(base string) map[string]string {
+			files: func(base, _ string) map[string]string {
 				return map[string]string{"specs/extra.md": reviewCarrier(base, "README.md")}
 			},
 			wantError: "reference target must contain a non-empty path and exact heading separated by '#'",
 		},
 		{
 			name: "missing heading at pin",
-			files: func(base string) map[string]string {
+			files: func(base, _ string) map[string]string {
 				return map[string]string{"specs/extra.md": reviewCarrier(base, "README.md#Nope")}
 			},
 			wantError: `eligible ATX heading "Nope" is missing`,
 		},
 		{
 			name: "pin predates referenced sibling",
-			files: func(base string) map[string]string {
+			files: func(base, _ string) map[string]string {
 				return map[string]string{
 					"specs/extra.md":   reviewCarrier(base, "specs/sibling.md#Sibling"),
 					"specs/sibling.md": "# Sibling\n\nAdded in the same submission.\n",
@@ -366,12 +366,29 @@ func TestSubmitForReview_ReviewCarriers(t *testing.T) {
 			},
 			wantError: "not present at its pinned revision",
 		},
+		{
+			// D-235: a well-formed OID that names no object in the repository.
+			name: "pin names no object",
+			files: func(_, _ string) map[string]string {
+				return map[string]string{"specs/extra.md": reviewCarrier(strings.Repeat("d", 40), "README.md#Test")}
+			},
+			wantError: `direct reference "src": pinned revision ` + strings.Repeat("d", 40) + " does not exist in this repository",
+		},
+		{
+			// D-235: a pin that names an object, but a blob.
+			name: "pin names a blob",
+			files: func(_, blob string) map[string]string {
+				return map[string]string{"specs/extra.md": reviewCarrier(blob, "README.md#Test")}
+			},
+			wantError: "is a blob, not a commit",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// GIVEN a candidate that commits a strict carrier the reviewer could not build
 			root, taskID, _, agentID, bb := setupPlanningAcceptanceSubmission(t, "", false)
 			base := testhelpers.MustGit(t, root, "rev-parse", "integration")
-			commit := commitWorktreeFiles(t, git.New(root).GetWorktreePath(taskID), tc.files(base))
+			blob := testhelpers.MustGit(t, root, "rev-parse", base+":README.md")
+			commit := commitWorktreeFiles(t, git.New(root).GetWorktreePath(taskID), tc.files(base, blob))
 			before, err := bb.Read()
 			if err != nil {
 				t.Fatal(err)
@@ -446,11 +463,15 @@ func TestSubmitForReview_ReviewCarriersAfterRebase(t *testing.T) {
 }
 
 // carrierRepository serves one carrier at "review" whose pin resolves through
-// resolveErr; diffErr fails the range enumeration itself.
+// resolveErr; diffErr fails the range enumeration itself. objectType, absent
+// and probeErr answer the object probe that follows a failed pin resolution.
 type carrierRepository struct {
 	carrier    string
 	diffErr    error
 	resolveErr error
+	objectType string
+	absent     bool
+	probeErr   error
 }
 
 func (r carrierRepository) DiffFiles(string, string, string) ([]string, error) {
@@ -467,19 +488,32 @@ func (r carrierRepository) BlobOID(string, string) (string, error) { return "oid
 
 func (r carrierRepository) ResolveCommit(ref string) (string, error) { return ref, r.resolveErr }
 
+func (r carrierRepository) ObjectType(string) (string, bool, error) {
+	return r.objectType, !r.absent, r.probeErr
+}
+
 // Only content the author can correct is refused as input; a Git failure must
-// not tell the author to edit a valid carrier.
+// not tell the author to edit a valid carrier, and must reach the agent with
+// its cause rather than as an anonymous retry (D-235).
 func TestValidateReviewCarriersClassifiesFailures(t *testing.T) {
+	t.Setenv("D235_FIXTURE_TOKEN", "d235-fixture-secret")
 	valid := reviewCarrier(strings.Repeat("a", 40), "README.md#Test")
 	gitFailure := errors.New("git: cannot open repository")
+	longFailure := errors.New("git: cannot open repository d235-fixture-secret " + strings.Repeat("x", 2*submitReviewCauseLimit))
 	for _, tc := range []struct {
 		name        string
 		repo        carrierRepository
+		cause       error
 		correctable bool
 	}{
+		{name: "valid carrier", repo: carrierRepository{carrier: reviewCarrier(strings.Repeat("a", 40), "specs/extra.md#Extra")}},
 		{name: "malformed carrier", repo: carrierRepository{carrier: reviewCarrier(strings.Repeat("a", 40), "README.md")}, correctable: true},
-		{name: "range enumeration failure", repo: carrierRepository{carrier: valid, diffErr: gitFailure}},
-		{name: "pin lookup failure", repo: carrierRepository{carrier: valid, resolveErr: gitFailure}},
+		{name: "absent pin", repo: carrierRepository{carrier: valid, resolveErr: gitFailure, absent: true}, correctable: true},
+		{name: "non-commit pin", repo: carrierRepository{carrier: valid, resolveErr: gitFailure, objectType: "blob"}, correctable: true},
+		{name: "range enumeration failure", repo: carrierRepository{carrier: valid, diffErr: gitFailure}, cause: gitFailure},
+		{name: "pin lookup failure", repo: carrierRepository{carrier: valid, resolveErr: gitFailure, objectType: "commit"}, cause: gitFailure},
+		{name: "pin probe failure", repo: carrierRepository{carrier: valid, resolveErr: gitFailure, probeErr: errors.New("git: probe failed")}, cause: gitFailure},
+		{name: "long masked cause", repo: carrierRepository{carrier: valid, diffErr: longFailure}, cause: longFailure},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateReviewCarriers(tc.repo, "root", "task-1", "base", "review", "head")
@@ -492,8 +526,33 @@ func TestValidateReviewCarriersClassifiesFailures(t *testing.T) {
 				}
 				return
 			}
-			if errors.As(err, &precondition) || !errors.As(err, &operational) || !errors.Is(err, gitFailure) {
+			if tc.cause == nil {
+				if err != nil {
+					t.Fatalf("error = %v, want nil", err)
+				}
+				return
+			}
+			if errors.As(err, &precondition) || !errors.As(err, &operational) || !errors.Is(err, tc.cause) {
 				t.Fatalf("error = %#v, want *OperationalError wrapping the Git failure", err)
+			}
+
+			// The agent receives the envelope submit-for-review builds around it.
+			envelope := WrapLifecycleError(integrationOperationSubmitForReview, nil, err, models.LifecycleStateChanged, "requery", "none")
+			var lifecycle *LifecycleError
+			if !errors.As(envelope, &lifecycle) {
+				t.Fatalf("envelope = %T, want *LifecycleError", envelope)
+			}
+			details := lifecycle.SafeDetails()
+			cause, _ := details["cause"].(string)
+			wantPrefix := "git: cannot open repository"
+			if !strings.Contains(cause, wantPrefix) || details["phase"] != "review-carriers" || details["safe_action"] != "requery" {
+				t.Fatalf("envelope details: cause names failure=%t phase=%v safe_action=%v", strings.Contains(cause, wantPrefix), details["phase"], details["safe_action"])
+			}
+			if strings.Contains(cause, "d235-fixture-secret") || len(cause) > submitReviewCauseLimit+len("... [truncated]") {
+				t.Fatalf("cause is not masked and bounded: masked=%t length=%d", !strings.Contains(cause, "d235-fixture-secret"), len(cause))
+			}
+			if strings.Contains(lifecycle.Error(), wantPrefix) {
+				t.Fatal("envelope message carries the raw error chain")
 			}
 		})
 	}

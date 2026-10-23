@@ -79,9 +79,12 @@ func validateReviewCarriers(repo referencecontract.ReviewRepository, root, taskI
 		Phase:   "review-carriers",
 		Message: "failed to build the reviewed carriers",
 		Details: map[string]any{
-			"operation":     integrationOperationSubmitForReview,
-			"task_id":       taskID,
-			"recovery_hint": "Inspect the repository objects for the reviewed range, then retry submit-for-review.",
+			"operation": integrationOperationSubmitForReview,
+			"task_id":   taskID,
+			// Without its cause a deterministic failure reads as a retry (D-235);
+			// it goes through Details bounded and masked, as for a state write.
+			"cause":         boundedMaskedErrorString(err, submitReviewCauseLimit),
+			"recovery_hint": "Read cause, inspect the repository objects it names, then retry submit-for-review.",
 		},
 		Err: err,
 	}

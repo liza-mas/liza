@@ -1141,6 +1141,15 @@ func (r *countingReferenceRepository) ResolveCommit(ref string) (string, error) 
 	return resolved, nil
 }
 
+// ObjectType treats every revision the fixture resolves as a commit and any
+// other as absent.
+func (r *countingReferenceRepository) ObjectType(oid string) (string, bool, error) {
+	if _, ok := r.resolved[oid]; ok {
+		return "commit", true, nil
+	}
+	return "", false, nil
+}
+
 func (r *countingReferenceRepository) ReadBlob(revision, path string) (string, error) {
 	content, ok := r.blobs[revision+":"+path]
 	if !ok {

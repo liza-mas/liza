@@ -87,7 +87,7 @@ func TestMasterReferenceContextHiddenReferenceValidation(t *testing.T) {
 			switch mutation {
 			case "missing pin":
 				writeReferenceFixture(t, repo, "specs/story-0.md", strictCarrier(strings.Repeat("0", 40), "CHILD", "specs/source.md", "Child 0", "# Story\n"))
-				expectedError = "resolve commit"
+				expectedError = "pinned revision " + strings.Repeat("0", 40) + " does not exist in this repository"
 			case "missing heading":
 				writeReferenceFixture(t, repo, "specs/story-0.md", strictCarrier(sourceRevision, "CHILD", "specs/source.md", "Missing Section", "# Story\n"))
 				expectedError = "Missing Section"

@@ -109,6 +109,25 @@ func (g *Git) ResolveCommit(ref string) (string, error) {
 	return commit, nil
 }
 
+// ObjectType returns the type of the object oid names. present is false only
+// when Git reports the name missing, so a caller can tell a revision the
+// repository lacks from a lookup that failed; any other unresolved answer is
+// an error.
+func (g *Git) ObjectType(oid string) (objectType string, present bool, err error) {
+	objects, err := g.catFileBatch([]string{oid}, false)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to inspect object %q: %w", oid, err)
+	}
+	object := objects[0]
+	if object.Missing {
+		if object.Status == "missing" {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to inspect object %q: object %s", oid, object.Status)
+	}
+	return object.Type, true, nil
+}
+
 // ReadBlob returns the exact bytes of path at revision without consulting the
 // working tree. It deliberately bypasses exec, whose text-oriented contract
 // trims leading and trailing whitespace.

@@ -231,6 +231,36 @@ func TestResolveCommits_MatchesResolveCommit(t *testing.T) {
 	}
 }
 
+// ObjectType reports a missing object as absent rather than as an error, so a
+// caller can tell a pin the repository lacks from a failed lookup (D-235).
+func TestObjectType_ReportsAbsenceDistinctly(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	g := New(repoDir)
+	writeAndCommit(t, repoDir, "a.txt", "a\n")
+	for _, tc := range []struct {
+		name        string
+		oid         string
+		wantType    string
+		wantPresent bool
+	}{
+		{name: "commit", oid: testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD"), wantType: "commit", wantPresent: true},
+		{name: "blob", oid: testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD:a.txt"), wantType: "blob", wantPresent: true},
+		{name: "absent", oid: strings.Repeat("d", 40)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			objectType, present, err := g.ObjectType(tc.oid)
+			if err != nil || objectType != tc.wantType || present != tc.wantPresent {
+				t.Fatalf("ObjectType(%s) = %q, %t, %v; want %q, %t, nil", tc.oid, objectType, present, err, tc.wantType, tc.wantPresent)
+			}
+		})
+	}
+
+	// A lookup that cannot run is an error, never an absence.
+	if _, present, err := New(t.TempDir()).ObjectType(strings.Repeat("d", 40)); err == nil || present {
+		t.Fatalf("ObjectType outside a repository = present %t, err %v; want an error", present, err)
+	}
+}
+
 func TestCatFileBatch_ErrorCarriesGitStderr(t *testing.T) {
 	_, err := New(t.TempDir()).catFileBatch([]string{"HEAD"}, false)
 	if err == nil {
