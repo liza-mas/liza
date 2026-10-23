@@ -3,9 +3,22 @@ package archguard
 // areaA7 is the guard data of area A7 (Presentation): written only by this area's
 // scopes (ADR-0218). Ratchet entries may only be removed or lowered.
 var areaA7 = Area{
-	ID:        "A7",
-	Layers:    []LayerEntry{},
-	Allowlist: []AllowEntry{},
+	ID: "A7",
+	Layers: []LayerEntry{
+		{Package: "cmd/liza", Layer: layerPresentation},
+		{Package: "internal/commands", Layer: layerPresentation},
+		{Package: "internal/interactive", Layer: layerPresentation},
+		{Package: "internal/jsonout", Layer: layerPresentation},
+		{Package: "internal/tui", Layer: layerPresentation},
+	},
+	Allowlist: []AllowEntry{
+		{
+			Importer:  "internal/jsonout",
+			Imported:  "internal/ops",
+			Owner:     "Scope 17",
+			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 17 per SI-5",
+		},
+	},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "cmd/liza/cmd_launch.go"}, Ceiling: 1159},
 		{Key: Key{File: "cmd/liza/cmd_system.go"}, Ceiling: 827},
