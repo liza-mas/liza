@@ -1,0 +1,60 @@
+[
+  {
+    "desc": "A2 artifact byte-identity oracle: test-only package internal/oracle/a2/artifact with drivers, adapters, fixtures and write-new goldens for rows A-1..A-8",
+    "done_when": "Under env -i at integration HEAD, race-enabled TestOracleA2EmbeddedRenderDefault, TestOracleA2EmbeddedRenderFixtureBrand, TestOracleA2GlobalInstall, TestOracleA2ProjectArtifacts, TestOracleA2HomeAndWorktreeHooks, TestOracleA2IndexActivation, TestOracleA2IndexActivationCollision and TestOracleA2WorktreeExclude pass live against goldens created by the entry point's write-new from 96c9ad69a; regen -mode check -pkg ./internal/oracle/a2/artifact/... exits 0; the diff only adds files under internal/oracle/a2/artifact/; make lint, env -i make test and make test-e2e pass.",
+    "scope": "internal/oracle/a2/artifact/ (linux-constrained _test.go drivers and adapters, testdata/fixtures, testdata/golden/artifact, testdata/acceptance-artifact.json). Out: internal/oracle/a2/cli (Scope 2), A7 install set and state.yaml, PROVENANCE, harness files, oraclestart twins, Makefile, .pre-commit-config.yaml, production code, existing tests.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-182300-arm-1-ar-2.md#Scope 1: A2 artifact byte-identity oracle",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-194056-arm-1-ar-2-cp-0.md#Task 1: A2 artifact byte-identity oracle package",
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]}
+      ]
+    },
+    "validation": [
+      "make sync-embedded",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a2/artifact/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a2/artifact/..."
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "make sync-embedded",
+        "executables": ["make", "go"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a2/artifact/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "make lint",
+        "executables": ["make", "go", "gofmt"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a2/artifact/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      }
+    ]
+  }
+]
