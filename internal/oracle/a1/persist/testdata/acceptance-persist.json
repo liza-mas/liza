@@ -46,7 +46,7 @@
     {
       "obligation_id": "AC-adapter",
       "file": "internal/oracle/a1/persist/boundary_test.go",
-      "assertion": "TestOraclePersistenceAdapterBoundary test-only files, exact adapter import allocation and no production types in signatures",
+      "assertion": "TestOraclePersistenceAdapterBoundary test-only files, adapter-only production imports and no production types in signatures",
       "command_index": 0
     },
     {

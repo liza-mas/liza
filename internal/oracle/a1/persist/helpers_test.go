@@ -81,7 +81,8 @@ func rawStateCheck(t *testing.T, name string, before, after []byte) {
 	got := append([]byte("# before\n"), before...)
 	got = append(got, []byte("\n# after\n")...)
 	got = append(got, after...)
-	got = append(got, '\n')
+	// The observation owns its final newline; adding one would both mask a
+	// missing terminator and create an EOF-hook conflict for normal writes.
 	path := filepath.Join("testdata", "golden", "state", name)
 	if os.Getenv(oracle.WriteEnv) == "1" {
 		writeBytes(t, path, got)

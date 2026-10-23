@@ -1,0 +1,15 @@
+# before
+[
+  {
+    "Path": "alerts.log",
+    "Directory": true,
+    "Content": ""
+  }
+]
+
+# after
+{
+  "Operation": "alert directory plain",
+  "Refused": true,
+  "Inventory": "[\n  {\n    \"Path\": \"alerts.log\",\n    \"Directory\": true,\n    \"Content\": \"\"\n  }\n]\n"
+}
