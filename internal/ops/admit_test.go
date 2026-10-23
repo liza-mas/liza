@@ -15,24 +15,12 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 var (
 	heavyAdmissionLimit = models.AdmissionLimit{Class: "heavy", MaxConcurrent: 1, Match: []string{"heavy"}}
 	suiteClassLimit     = models.AdmissionLimit{Class: "suite", MaxConcurrent: 1, Match: []string{"suite"}}
 )
-
-func setupAdmitProject(t *testing.T, limits ...models.AdmissionLimit) string {
-	t.Helper()
-	shortAdmissionSlotPoll(t)
-	root := t.TempDir()
-	statePath, _ := testhelpers.SetupLizaDir(t, root)
-	state := testhelpers.CreateValidState()
-	state.Config.AdmissionLimits = limits
-	testhelpers.WriteInitialState(t, statePath, state)
-	return root
-}
 
 // admitShell runs script under sh with words as its $0.. arguments, so the
 // command text carries them for class matching.

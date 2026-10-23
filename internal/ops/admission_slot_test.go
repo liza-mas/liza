@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 func shortAdmissionSlotPoll(t *testing.T) {
@@ -24,6 +25,17 @@ func shortAdmissionSlotPoll(t *testing.T) {
 	previous := admissionSlotPollInterval
 	admissionSlotPollInterval = 10 * time.Millisecond
 	t.Cleanup(func() { admissionSlotPollInterval = previous })
+}
+
+func setupAdmitProject(t *testing.T, limits ...models.AdmissionLimit) string {
+	t.Helper()
+	shortAdmissionSlotPoll(t)
+	root := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	state := testhelpers.CreateValidState()
+	state.Config.AdmissionLimits = limits
+	testhelpers.WriteInitialState(t, statePath, state)
+	return root
 }
 
 func testAdmissionLimit(class string, max int) models.AdmissionLimit {
