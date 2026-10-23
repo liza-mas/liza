@@ -489,7 +489,10 @@ comes first. The next report lists these rulings under `Auto-approved:`, most ex
 - **Inject a new requirement via the source spec, not the merged phase output** — editing a merged phase's
   output JSON does **not** change already-created tasks (only re-derived/superseded ones re-read it);
   edit the goal spec + the `spec_ref`/`arch_ref` doc agents read, verify at the next checkpoint, and
-  `§BRAND_BINARY_NAME§ add-tasks` (your own `done_when`) as the reliable fallback.
+  `§BRAND_BINARY_NAME§ add-tasks` (your own `done_when`) as the reliable fallback. First search live carriers'
+  Direct References (arch plans, task worktrees) for the section: reviewed carriers pin section text,
+  and changing a pinned section stalls their review. Then record the ruling in the decision record,
+  adding entries without changing any pinned section's span.
 
 # When to escalate to the human (only these)
 - **Irreversible/destructive moves** (Operating Constraint 4) — *especially anything touching a live DB or
