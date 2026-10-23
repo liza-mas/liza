@@ -56,7 +56,7 @@ repos:
       - id: jscpd  # a useful one to counter the tendency of coding agents to duplicate code
         name: jscpd (duplicate code detection)
         # write cache to a universally-writable location
-        entry: bash -c 'unset npm_config_package NPM_CONFIG_PACKAGE; NPM_CONFIG_CACHE=/tmp/.npm-cache npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --ignore "**/tests/**,**/*_test.go,**/.venv/**,**/_archive/**,**/.idea/**,**/internal/embedded/**,**/.liza/**,**/.git/**,**/.worktrees/**,**/.claude/**,**/specs/plans/**,claude-settings.json"'
+        entry: bash -c 'unset npm_config_package NPM_CONFIG_PACKAGE; NPM_CONFIG_CACHE=/tmp/.npm-cache npx jscpd . --min-lines 10 --min-tokens 50 --threshold 5 --ignore "**/tests/**,**/*_test.go,**/.venv/**,**/_archive/**,**/.idea/**,**/internal/embedded/**,**/.liza/**,**/.git/**,**/.worktrees/**,**/.claude/**,**/specs/plans/**,claude-settings.json,**/testdata/**"'
         language: system
         files: \.(py|go)$  # trigger when Python or Go files are staged
         pass_filenames: false  # but scan full directory (dupes are cross-file)

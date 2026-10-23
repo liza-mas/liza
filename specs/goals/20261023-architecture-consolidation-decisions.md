@@ -394,6 +394,19 @@ render path; the plan has children, so a reviewed amendment cannot edit its inve
 - Kind: check-only (marker selection). Revert: restore the original entries and accept the two
   cases as unsatisfiable, or replan A8.
 
+### D27 — Duplicate-code check excludes oracle test data (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T22:35Z. `arm-1-ar-3-cp-0-code-1` and `arm-1-ar-3-cp-1-code-0`
+blocked on pre-commit's `jscpd` hook (whole-repo scan, threshold 5%): their committed goldens under
+`internal/oracle/**/testdata/` raise duplication to 6.17%; the integration head alone measures
+3.58%, and with `**/testdata/**` ignored the blocked worktree measures 1.70%.
+- Ruling: add `**/testdata/**` to the hook's `--ignore` list (`.pre-commit-config.yaml`). Production
+  Go stays fully checked; `*_test.go` was already ignored.
+- Intent relied on: the hook's own comment, "counter the tendency of coding agents to duplicate
+  code"; goldens are expected outputs, duplicated by design (goal Test Policy, oracle goldens).
+- Rejected: raising the threshold (weakens the check on production code); per-task scope exceptions
+  editing the same line (conflicting writers); deduplicating goldens (changes the oracle).
+- Kind: check-only (scope of the duplicate check). Revert: drop the ignore entry.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
