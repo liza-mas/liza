@@ -1,0 +1,220 @@
+[
+  {
+    "desc": "[Must] Establish the A7 installation and state oracle package.",
+    "done_when": "All five Scope 2 TestOracle families cover every specified run; committed starting-tree goldens reproduce under filtered regen check; the live package passes and integration make test covers it; only package files are added.",
+    "scope": "Add internal/oracle/a7/install/** tests, fixtures, goldens and acceptance manifest. Out: production, existing tests, harness/entry point, PROVENANCE, Makefile, a7/present, subdirectory init and wizard.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-224438-arm-1-ar-7-cp-1.md#Task 1: A7 installation and state oracle package",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make sync-embedded",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a7/install/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a7/install/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen --mode check --pkg ./internal/oracle/a7/install/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make sync-embedded",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a7/install/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a7/install/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen --mode check --pkg ./internal/oracle/a7/install/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-0",
+          "outputs": [
+            0
+          ]
+        },
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  }
+]
