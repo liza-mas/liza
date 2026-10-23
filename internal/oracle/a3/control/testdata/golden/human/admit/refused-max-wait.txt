@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: validation failed: admit wait must be between 0 and 14400 seconds

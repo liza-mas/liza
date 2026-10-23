@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: start: modification function failed: validation failed: system is already RUNNING

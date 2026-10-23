@@ -1,0 +1,16 @@
+{
+  "exit": 1,
+  "stderr": [],
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "conflict": "existing_value",
+        "key": "config.max_instances"
+      },
+      "message": "config.max_instances is already set to 3; use --replace with --reason to replace it"
+    },
+    "ok": false,
+    "result": null
+  }
+}

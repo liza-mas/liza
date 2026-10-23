@@ -1,0 +1,170 @@
+# before
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle control fixture
+    spec_ref: specs/vision.md
+    created: <at 2020.01.01 00.00.00>Z
+    status: IN_PROGRESS
+    alignment_history: []
+tasks: []
+agents:
+    coder-1:
+        role: coder
+        provider: codex
+        status: IDLE
+        generation: gen-1
+        lease_expires: <at 2099.01.01 00.00.00>Z
+        heartbeat: <at 2020.01.01 00.00.00>Z
+        registered_at: <at 2020.01.01 00.00.00>Z
+        terminal: terminal-1
+        iterations_total: 0
+        context_percent: 0
+        pid: <live-pid>
+    coder-2:
+        role: coder
+        provider: codex
+        status: IDLE
+        generation: gen-2
+        lease_expires: <at 2020.01.01 00.30.00>Z
+        heartbeat: <at 2020.01.01 00.00.00>Z
+        registered_at: <at 2020.01.01 00.00.00>Z
+        terminal: terminal-1
+        iterations_total: 0
+        context_percent: 0
+        pid: 99999999
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <at 2020.01.01 00.00.00>Z
+        deadline: <at 0001.01.01 00.00.00>Z
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <at 0001.01.01 00.00.00>Z
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    integration_branch: integration
+    mode: PAUSED
+# after
+version: 1
+mutation_sequence: 1
+goal:
+    id: goal-oracle
+    description: Oracle control fixture
+    spec_ref: specs/vision.md
+    created: <at 2020.01.01 00.00.00>Z
+    status: IN_PROGRESS
+    alignment_history: []
+tasks: []
+agents:
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: gen-1
+        lease_expires: <at 2099.01.01 00.00.00>Z
+        heartbeat: <at 2020.01.01 00.00.00>Z
+        registered_at: <at 2020.01.01 00.00.00>Z
+        terminal: terminal-1
+        provider: codex
+        iterations_total: 0
+        context_percent: 0
+        pid: <live-pid>
+    coder-2:
+        role: coder
+        status: IDLE
+        generation: gen-2
+        lease_expires: <at 2020.01.01 00.30.00>Z
+        heartbeat: <at 2020.01.01 00.00.00>Z
+        registered_at: <at 2020.01.01 00.00.00>Z
+        terminal: terminal-1
+        provider: codex
+        iterations_total: 0
+        context_percent: 0
+        pid: 99999999
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <at 2020.01.01 00.00.00>Z
+        deadline: <at 0001.01.01 00.00.00>Z
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <at 0001.01.01 00.00.00>Z
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING
+    mode_changed_at: <now+0m>+02:00
+    mode_changed_by: human
+# lifecycle-outcomes

@@ -1,0 +1,7 @@
+exit 0
+[stdout]
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: human
+Agents will exit cleanly at their next check.
+[stderr]

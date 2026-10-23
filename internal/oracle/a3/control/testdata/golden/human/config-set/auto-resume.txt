@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+[stderr]
+config.auto_resume: true (set)

@@ -1,0 +1,9 @@
+exit 0
+[stdout]
+System started
+Mode: STOPPED → RUNNING
+Changed by: human
+The system mode is now RUNNING. Restart agents to resume work:
+LIZA_AGENT_ID=coder-1 liza agent coder &
+LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &
+[stderr]

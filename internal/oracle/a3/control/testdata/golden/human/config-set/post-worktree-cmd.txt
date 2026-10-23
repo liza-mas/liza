@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+[stderr]
+config.post_worktree_cmd: set

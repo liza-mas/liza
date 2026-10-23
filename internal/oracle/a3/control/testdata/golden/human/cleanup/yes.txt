@@ -1,0 +1,11 @@
+exit 0
+[stdout]
+Workspace cleanup complete.
+[stderr]
+Existing workspace data will be permanently deleted:
+directory: <PROJECT>/.liza
+directory: <PROJECT>/.worktrees
+worktree: <PROJECT>/.worktrees/task-1
+branch: task/task-1
+This discards runtime state, task worktree files, uncommitted changes, and the listed task branches.
+Delete these targets? (y/n): yes

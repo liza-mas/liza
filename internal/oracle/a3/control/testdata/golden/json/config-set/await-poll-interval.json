@@ -1,0 +1,11 @@
+{
+  "exit": 0,
+  "stderr": [],
+  "stdout": {
+    "ok": true,
+    "result": {
+      "key": "config.await_poll_interval",
+      "outcome": "set"
+    }
+  }
+}

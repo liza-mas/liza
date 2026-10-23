@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: set config.max_instances: modification function failed: validation failed: config.max_instances is already set to 3; use --replace with --reason to replace it

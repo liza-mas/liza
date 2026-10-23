@@ -1,0 +1,11 @@
+{
+  "exit": 0,
+  "stderr": [],
+  "stdout": {
+    "ok": true,
+    "result": {
+      "key": "config.doer_max_wait",
+      "outcome": "set"
+    }
+  }
+}

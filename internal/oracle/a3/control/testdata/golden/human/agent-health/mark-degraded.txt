@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+Marked agent coder-2 degraded: provider-unavailable
+[stderr]

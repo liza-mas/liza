@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: set config.admission_limits.db-suite: modification function failed: validation failed: config.admission_limits.db-suite is already set differently; use --replace with --reason to replace it

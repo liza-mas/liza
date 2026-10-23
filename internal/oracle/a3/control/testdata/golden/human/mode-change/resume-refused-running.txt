@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: resume: failed to resume system: modification function failed: validation failed: system is not PAUSED, circuit breaker not tripped, and sprint is not at CHECKPOINT or COMPLETED (current mode: RUNNING, sprint status: IN_PROGRESS)
