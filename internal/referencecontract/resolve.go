@@ -140,8 +140,9 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 // and compares the referenced section with integration HEAD (blob identity is
 // the fast path; an unrelated edit elsewhere in the file is not drift). When
 // localBase/localReview are non-empty, a path absent at both HEAD and
-// localBase was introduced in the reviewed range and matches at localReview
-// instead; a path present at localBase but absent at HEAD was deleted.
+// localBase matches at localReview when the reviewed range introduced it and
+// is refused when localReview lacks it too; a path present at localBase but
+// absent at HEAD was deleted.
 //
 // Drift refuses when refuses(referenceID) holds. Otherwise the reference is
 // kept with its drift disclosed (ADR-0133): the current section when it still
@@ -200,6 +201,13 @@ func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview
 			}
 			if presentAtBase {
 				return nil, invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))
+			}
+			_, presentAtReview, reviewErr := repo.TreePathMode(localReview, ref.Path)
+			if reviewErr != nil {
+				return nil, reviewErr
+			}
+			if !presentAtReview {
+				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is absent at integration HEAD, the range base and the review commit (pin %s); cite a file integration HEAD carries, or commit this one in the submission and re-pin the reference to that commit", ref.ID, ref.Path, revision))
 			}
 			freshRevision, where = localReview, "review commit"
 		}
