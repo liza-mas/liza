@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync vet check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -287,6 +287,12 @@ lint-nosync:
 		exit 1; \
 	fi
 	@$(MAKE) vet
+	@$(MAKE) lint-archguard
+
+# Architecture guards (size, import direction): one test-only package, so a
+# new guard file needs no Makefile edit. Also run by "make test" via ./...
+lint-archguard:
+	@go test -count=1 ./internal/testguard/archguard/
 
 # Vet every supported OS from any host, so build-tag splits (!windows,
 # unix, linux) break here rather than on that OS's CI runner. Cross-compiled
