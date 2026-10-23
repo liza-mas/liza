@@ -23,11 +23,54 @@ type SprintCheckpointResult struct {
 	Trigger      string    `json:"trigger,omitempty"`
 }
 
+// ErrNoPassedPlanCheckpoint reports that the locked state admits no automatic
+// passed-plan checkpoint; nothing was written.
+var ErrNoPassedPlanCheckpoint = errors.New("no passed plan awaits a checkpoint")
+
+// sprintCheckpointBeforeModifyTestHook runs between the preliminary read and
+// the locked write, so tests can commit a competing write there.
+var sprintCheckpointBeforeModifyTestHook func()
+
+// CheckpointPassedPlans creates the PLANNING_COMPLETE checkpoint for plans an
+// orchestrator turn left passed and unattempted, whichever trigger woke it
+// (D-219). Being automatic, it is admitted only for a RUNNING system and an
+// IN_PROGRESS sprint holding such a plan, judged again under the lock that
+// writes the checkpoint: a concurrent hard checkpoint, terminal sprint, pause,
+// hold or attempt wins. It returns the plans the checkpoint was made for.
+func CheckpointPassedPlans(projectRoot string) ([]string, error) {
+	domain, err := LoadPlanHandoffDomain(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	admit := func(s *models.State) error {
+		ids = nil
+		if s.Sprint.Status != models.SprintStatusInProgress ||
+			s.Config.Mode != "" && s.Config.Mode != models.SystemModeRunning {
+			return ErrNoPassedPlanCheckpoint
+		}
+		if ids = PassedPlansAwaitingCheckpoint(s, domain); len(ids) == 0 {
+			return ErrNoPassedPlanCheckpoint
+		}
+		return nil
+	}
+	if _, err := sprintCheckpoint(projectRoot, models.CheckpointTriggerPlanningComplete, admit); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // SprintCheckpoint transitions sprint status to CHECKPOINT and writes a sprint summary report.
 // The trigger parameter records why the checkpoint was created (e.g. "PLANNING_COMPLETE",
 // "MANY_TO_ONE_READY", "SPRINT_COMPLETE", or "" for manual). Transition checkpoints gate
 // downstream transition creation; hard checkpoints pause all agents. No terminal I/O.
 func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResult, error) {
+	return sprintCheckpoint(projectRoot, trigger, nil)
+}
+
+// sprintCheckpoint is SprintCheckpoint with an optional admission, checked on
+// the preliminary read and again under the lock before anything is written.
+func sprintCheckpoint(projectRoot string, trigger string, admit func(*models.State) error) (*SprintCheckpointResult, error) {
 	lizaPaths := paths.New(projectRoot)
 	statePath := lizaPaths.StatePath()
 	reportPath := lizaPaths.SprintSummaryPath()
@@ -46,6 +89,11 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		return nil, &PreconditionError{Reason: "cannot checkpoint: sprint is COMPLETED"}
 	case models.SprintStatusAborted:
 		return nil, &PreconditionError{Reason: "cannot checkpoint: sprint is ABORTED"}
+	}
+	if admit != nil {
+		if err := admit(state); err != nil {
+			return nil, err
+		}
 	}
 
 	// Auto-detect transition checkpoints when trigger is empty.
@@ -99,6 +147,11 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 		}
 
 		return blackboard.Modify(func(s *models.State) error {
+			if admit != nil {
+				if err := admit(s); err != nil {
+					return err
+				}
+			}
 			if completionAuthorization != nil {
 				if err := completionAuthorization.validateState(s, true); err != nil {
 					return err
@@ -117,6 +170,9 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 			s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Trigger: trigger, Since: since}
 			return nil
 		})
+	}
+	if sprintCheckpointBeforeModifyTestHook != nil {
+		sprintCheckpointBeforeModifyTestHook()
 	}
 	if trigger == models.CheckpointTriggerSprintComplete {
 		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "sprint checkpoint", true, checkpoint)

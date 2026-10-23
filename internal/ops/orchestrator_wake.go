@@ -211,6 +211,19 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 	return false
 }
 
+// PassedPlansAwaitingCheckpoint returns, in planned order, the plans classified
+// passed whose hand-off was not attempted since their merge or plan-check. A
+// checkpoint is all they still need, whichever turn passed them (D-219).
+func PassedPlansAwaitingCheckpoint(state *models.State, handoff PlanHandoffDomain) []string {
+	var ids []string
+	for _, id := range state.Sprint.Scope.Planned {
+		if class, _ := handoff.Classify(state, state.FindTask(id)); class == PlanHandoffPassed && awaitsPlanningTransition(state, id, handoff) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // BlockedMaterialIdentity identifies the blocker state of every BLOCKED task:
 // its current blocker triple, awaited set, dependency and descendant outcomes,
 // structure and targeted human notes, through the assessment fingerprint. The

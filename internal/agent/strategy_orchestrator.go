@@ -339,11 +339,30 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 		}
 	}
 
+	// D-219: a plan passed in any turn hands off now, not at the next
+	// PLANNING_COMPLETE wake, which higher-ranked triggers can postpone.
+	checkpointPassedPlans(config.ProjectRoot, result.Trigger)
+
 	if result.Trigger == WakeTriggerBlocked {
 		s.observeBlockedTurn(bb, config.ProjectRoot, stateBefore)
 	}
 
 	return nil
+}
+
+// checkpointPassedPlans creates the checkpoint for plans the turn left passed
+// and unattempted. Its admission is judged under the checkpoint's lock; a
+// refusal or failure leaves the PLANNING_COMPLETE wake as the fallback.
+func checkpointPassedPlans(projectRoot string, trigger OrchestratorWakeTrigger) {
+	ids, err := ops.CheckpointPassedPlans(projectRoot)
+	var precondition *ops.PreconditionError
+	switch {
+	case err == nil:
+		GetLogger().Info("Checkpointed passed plans after orchestrator turn", "trigger", trigger, "plans", ids)
+	case errors.Is(err, ops.ErrNoPassedPlanCheckpoint), errors.Is(err, ops.ErrSprintAlreadyCheckpoint), errors.As(err, &precondition):
+	default:
+		GetLogger().Warn("Passed-plan checkpoint failed", "trigger", trigger, "error", err)
+	}
 }
 
 // observeBlockedTurn alerts once when consecutive BLOCKED_TASKS turns leave the

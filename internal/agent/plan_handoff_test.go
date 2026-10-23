@@ -222,6 +222,112 @@ func TestPassedPlanWithoutCheckpointRecoversAfterRestart(t *testing.T) {
 	}
 }
 
+// blockedTurnWithPassedPlan persists a BLOCKED_TASKS wake (never-assessed
+// BLOCKED x beside the undispositioned plan a), then passes a as the turn's
+// plan-check --pass would. It returns the wake-time state (D-219).
+func blockedTurnWithPassedPlan(t *testing.T, autoResume bool) (string, *db.Blackboard, *models.State) {
+	t.Helper()
+	root := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, root)
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# README\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	blocked := testhelpers.BuildTaskByStatus("x", models.TaskStatusBlocked, time.Now().UTC())
+	reason := "waits for an unrelated human decision"
+	blocked.BlockedReason = &reason
+	state := handoffState(handoffPlanTask("a"), blocked)
+	state.Config.AutoResume = autoResume
+	bb := testhelpers.WriteInitialState(t, statePath, state)
+	if result := persistedWake(t, root, bb); result.Trigger != WakeTriggerBlocked {
+		t.Fatalf("precondition: wake = %s, want BLOCKED_TASKS", result.Trigger)
+	}
+	before, err := bb.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bb.Modify(func(s *models.State) error {
+		plan := s.FindTask("a")
+		now := time.Now().UTC()
+		agent, note := "orchestrator-1", "passed"
+		plan.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckPassed, By: agent, At: now}
+		plan.History = append(plan.History, models.TaskHistoryEntry{Time: now, Event: models.TaskEventPlanCheck, Agent: &agent, Note: &note})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return root, bb, before
+}
+
+func endOrchestratorTurn(t *testing.T, root string, bb *db.Blackboard, before *models.State) {
+	t.Helper()
+	strategy, err := NewRoleStrategy("orchestrator", testResolver(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration}
+	if err := strategy.PostExecution(bb, SupervisorConfig{AgentID: authority.ID, Authority: authority, ProjectRoot: root}, "", "", before); err != nil {
+		t.Fatalf("PostExecution: %v", err)
+	}
+}
+
+// D-219: a plan passed during a BLOCKED_TASKS turn is checkpointed when that
+// turn ends, so its hand-off does not wait for a PLANNING_COMPLETE wake that
+// higher-ranked triggers keep postponing.
+func TestPassedPlanCheckpointsAfterBlockedTurn(t *testing.T) {
+	// GIVEN auto-resume and a plan passed during a BLOCKED_TASKS turn
+	root, bb, before := blockedTurnWithPassedPlan(t, true)
+
+	// WHEN the turn ends
+	endOrchestratorTurn(t, root, bb, before)
+
+	// THEN the PLANNING_COMPLETE checkpoint exists and auto-resume expands a
+	checkpoint, _ := bb.Read()
+	if checkpoint.Sprint.Status != models.SprintStatusCheckpoint || checkpoint.Sprint.CheckpointTrigger != models.CheckpointTriggerPlanningComplete {
+		t.Fatalf("sprint %s trigger %q after the turn; want a PLANNING_COMPLETE checkpoint", checkpoint.Sprint.Status, checkpoint.Sprint.CheckpointTrigger)
+	}
+	autoResumeCheckpoint(t, root, bb)
+	after, _ := bb.Read()
+	if !after.FindTask("a").TransitionsExecuted["code-plan-to-coding"] || len(after.Tasks) != 3 {
+		t.Fatalf("plan a not expanded: transitions %v, %d tasks", after.FindTask("a").TransitionsExecuted, len(after.Tasks))
+	}
+}
+
+// D-219: without auto-resume the checkpoint stays the human's gate: no child
+// exists until the operator resumes.
+func TestPassedPlanCheckpointKeepsHumanGate(t *testing.T) {
+	// GIVEN no auto-resume and a plan passed during a BLOCKED_TASKS turn
+	root, bb, before := blockedTurnWithPassedPlan(t, false)
+
+	// WHEN the turn ends and the orchestrator's next PreWork runs
+	endOrchestratorTurn(t, root, bb, before)
+	strategy, err := NewRoleStrategy("orchestrator", testResolver(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration}
+	config := SupervisorConfig{AgentID: authority.ID, Authority: authority, ProjectRoot: root}
+	if _, err := strategy.PreWork(context.Background(), bb, config); err != nil {
+		t.Fatal(err)
+	}
+
+	// THEN the checkpoint waits for the human, then the resume expands a
+	gated, _ := bb.Read()
+	if gated.Sprint.Status != models.SprintStatusCheckpoint || len(gated.FindTask("a").TransitionsExecuted) != 0 || len(gated.Tasks) != 2 {
+		t.Fatalf("sprint %s, transitions %v, %d tasks; want a checkpoint and no child before resume",
+			gated.Sprint.Status, gated.FindTask("a").TransitionsExecuted, len(gated.Tasks))
+	}
+	if _, err := ops.Resume(root, "operator"); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if _, err := strategy.PreWork(context.Background(), bb, config); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := bb.Read()
+	if !after.FindTask("a").TransitionsExecuted["code-plan-to-coding"] || len(after.Tasks) != 3 {
+		t.Fatalf("plan a not expanded after resume: transitions %v, %d tasks", after.FindTask("a").TransitionsExecuted, len(after.Tasks))
+	}
+}
+
 // R4/R5: a passed plan whose upstream was replanned renders for
 // reconciliation, never as checkpoint-only, and a held plan does not wake.
 func TestReconciliationAndHeldPlansRouting(t *testing.T) {
