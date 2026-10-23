@@ -5,7 +5,7 @@
     "scope": "internal/testhelpers/oracle/ (library .go files, _test.go files, testdata incl. acceptance-harness.json), internal/oracle/sample/ (sample_test.go, adapter_test.go, testdata/golden). Out: PROVENANCE, cmd/regen, ADR, area oracle content, Makefile, production Go.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 3: Oracle harness and regeneration entry point",
-    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md#Task 1: Oracle harness library and sample goldens",
     "validation": [
       "go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/oracle/...",
       "make lint",
@@ -13,10 +13,80 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
-      {"command": "go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/oracle/...", "executables": ["go"], "probes": [["go", "version"]]},
-      {"command": "make lint", "executables": ["make", "go", "gofmt"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]}
+      {
+        "command": "go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/oracle/...",
+        "executables": [
+          "go"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
     ]
   },
   {
@@ -25,8 +95,10 @@
     "scope": "internal/testhelpers/oracle/cmd/regen/ (main package, _test.go files, testdata/acceptance-regen.json), internal/oracle/PROVENANCE, specs/architecture/ADR/0219-<slug>.md and its README index row. Out: harness library files (Task 1), area oracle content, Makefile, production Go.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 3: Oracle harness and regeneration entry point",
-    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md",
-    "depends_on": ["0"],
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md#Task 2: Provenance ledger, D24 chain and regeneration entry point",
+    "depends_on": [
+      "0"
+    ],
     "validation": [
       "go test -race -count=1 ./internal/testhelpers/oracle/...",
       "make lint",
@@ -35,11 +107,108 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen"
     ],
     "validation_prerequisites": [
-      {"command": "go test -race -count=1 ./internal/testhelpers/oracle/...", "executables": ["go", "git"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "make lint", "executables": ["make", "go", "gofmt"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+      {
+        "command": "go test -race -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "go",
+          "git"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
     ]
   }
 ]
