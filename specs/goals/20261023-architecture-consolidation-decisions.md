@@ -356,6 +356,22 @@ reproduction at each change point:
   adds work to Scopes 16, 18 and 21–24 that the goal does not ask for.
 - E5's text is not edited (reviewed carriers pin "Proof Environment"); this entry is the authority.
 
+### D25 — Hand-off context for Oracle A6 and A8 code plans (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T19:17Z. The A6 and A8 architecture Scopes require their same-file
+"Surface Inventory" (A6, A8) and "Determinism Rules" (A8) sections but declare no same-file Direct
+References, so ADR-0179's narrowed code-planner presentation shows them only as pinned pointers.
+The orchestrator found the reviewed-amendment route closed: both plans already have children, and a
+contract-only amendment cannot edit Direct References (`internal/ops/contract_amendment.go:125`).
+- Ruling: no amendment and no replan. An operator note on `arm-1-ar-6-cp-0` and `arm-1-ar-8-cp-0`
+  (rendered as OPERATOR INPUT in their prompts, `internal/prompts/templates/blocks/task_corrective_context.tmpl`)
+  names the sections the code plan must cover. Scope, outputs and acceptance are unchanged; the
+  code-plan reviewer still checks full inventory coverage.
+- Intent relied on: ADR-0179 "Narrow presentation must preserve complete validation and navigation
+  to inherited authority"; goal S4 (every oracle-covered surface proven).
+- Rejected: contract-only amendments copying each inventory into its CONTRACT (two reviewed rounds,
+  duplicated tables); supersession (replan cost for a presentation gap).
+- Kind: check-only (context routing). Revert: withdraw the notes; route a contract-only amendment.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
