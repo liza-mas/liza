@@ -41,7 +41,7 @@
   {
     "desc": "Consolidate A3 kernel vocabulary and resume concerns, leaving the area ready for its boundary check",
     "done_when": "Resume meets S1 and A3 ratchet is empty; full A3 K7 inventory is implemented or classified dynamic; layer data is valid, shims absent, ADR/references current; make test, make lint, make test-e2e and touched-package race pass with all oracle values preserved.",
-    "scope": "Remaining A3 files plus K7 across the full A3 list and new concern files; X2 caller/type conformance, tests, additive oracles, acceptance manifests, A3 data and serialized docs/ADR. No model wire retyping, C1-C6 behavior, mutation migration, Makefile or overview edits.",
+    "scope": "Plan K7 from frozen A1 contract and current source; coding reconciles delivered symbols and all A3 occurrences after inherited waits. Remaining A3 files, X2 conformance, tests/oracles, manifests, A3 data and docs/ADR. No model wire retyping, C1-C6 behavior, mutation migration, Makefile or overview edits.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 5: Kernel vocabulary and run control",
     "depends_on": ["3"],
