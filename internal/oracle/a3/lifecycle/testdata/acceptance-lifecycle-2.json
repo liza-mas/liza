@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-L8",
+      "file": "internal/oracle/a3/lifecycle/assess_blocked_test.go",
+      "assertion": "TestOracleAssessBlocked: blocked success and executing refusal, orchestrator caller; JSON/human/state goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L9",
+      "file": "internal/oracle/a3/lifecycle/assess_hypothesis_exhausted_test.go",
+      "assertion": "TestOracleAssessHypothesisExhausted: two failed_by entries succeed, one entry refuses; JSON/human/state goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L10",
+      "file": "internal/oracle/a3/lifecycle/unblock_task_test.go",
+      "assertion": "TestOracleUnblockTask: operator unblocks blocked task; executing refusal; JSON/human/state goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L11",
+      "file": "internal/oracle/a3/lifecycle/release_blocked_chain_test.go",
+      "assertion": "TestOracleReleaseBlockedChain: operator releases two-recovery lineage; zero-recovery refusal; JSON/human/state goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L12",
+      "file": "internal/oracle/a3/lifecycle/recover_task_test.go",
+      "assertion": "TestOracleRecoverTask: dead assignee recovery and live assignee refusal; JSON/human/state goldens and Git effects",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L13",
+      "file": "internal/oracle/a3/lifecycle/recover_agent_test.go",
+      "assertion": "TestOracleRecoverAgent: dead agent recovery and live agent refusal; JSON/human/state goldens and Git effects",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L14",
+      "file": "internal/oracle/a3/lifecycle/provision_test.go",
+      "assertion": "TestOracleProvision: declared tok succeeds with fresh envelope and HOME; undeclared nope refuses; JSON/human/state goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L15",
+      "file": "internal/oracle/a3/lifecycle/repair_doer_ownership_test.go",
+      "assertion": "TestOracleRepairDoerOwnership: dead-PID doer repaired by validate --repair --json; state-only golden records exit",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-validate-fixtures-2",
+      "file": "internal/oracle/a3/lifecycle/fixture_test.go",
+      "assertion": "buildFixture validates every Task 2 fixture with validate --json, asserting valid true and byte-unchanged state, against starting-commit binary in regeneration",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-reproduce-2",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "Check mode filtered to ./internal/oracle/a3/lifecycle/... reproduces every committed golden from the starting commit with ok H1",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-live-2",
+      "file": "internal/oracle/a3/lifecycle/case_test.go",
+      "assertion": "runCases/runCase compare all L8-L15 live command surfaces under make test; human final states equal JSON final states",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-additive-2",
+      "approved_reference_id": "a3-scope1"
+    }
+  ]
+}
