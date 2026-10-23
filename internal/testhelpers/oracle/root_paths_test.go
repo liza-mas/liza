@@ -15,7 +15,7 @@ func TestRootOnlyBytes(t *testing.T) {
 	const unchanged = "\t2026-10-23T18:40:00+02:00 2026-10-23 18:40:00.5 -0500\r\n" +
 		"123e4567-e89b-12d3-a456-426614174000\n" +
 		"0123456789abcdef0123456789abcdef01234567\n" +
-		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567\n" +
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n" +
 		"/tmp/other-case/a  /var/tmp/other-case/b\x1b[31mred\x1b[0m\xff\xfe"
 	for _, ending := range []string{"", "\n", "\r\n"} {
 		in := "root=" + root + "/project\nagain=(" + root + ")\nbackslash=" + root + `\project\file.txt` + unchanged + ending
