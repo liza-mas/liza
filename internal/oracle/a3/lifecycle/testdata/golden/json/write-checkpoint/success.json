@@ -1,0 +1,12 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": null
+      }
+    }
+  ]
+}

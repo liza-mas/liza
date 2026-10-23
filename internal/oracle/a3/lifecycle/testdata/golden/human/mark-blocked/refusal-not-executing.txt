@@ -1,0 +1,11 @@
+exit 1
+stdout:
+stderr:
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: BLOCKED
+effects: none
+task_id: task-1
+transition_id: <id-1>
+current_assignee: coder-1
+Error: mark blocked: mark-blocked: ALREADY_TRANSITIONED (safe_action=stop): failed to mark task as blocked: modification function failed: mark-blocked: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task must be in an executing status to be marked blocked, current status: BLOCKED

@@ -36,7 +36,9 @@ type lifecycleCase struct {
 	invocations           [][]string
 	modes                 modes
 	mutating              bool
-	setupFiles            []setupFile
+	// L15 invokes JSON mode but freezes only its A3-owned state surface.
+	stateOnly  bool
+	setupFiles []setupFile
 }
 
 func runCases(t *testing.T, command string, cases ...lifecycleCase) {
@@ -101,7 +103,7 @@ func runCase(t *testing.T, bin, command string, c lifecycleCase) {
 				return m
 			}
 			name := command + "/" + c.name
-			if mode == jsonMode {
+			if mode == jsonMode && !c.stateOnly {
 				var runs []any
 				for _, res := range results {
 					var doc any
@@ -122,7 +124,7 @@ func runCase(t *testing.T, bin, command string, c lifecycleCase) {
 					t.Fatal("marshal masked run:", err)
 				}
 				oracle.Check(t, oracle.JSON, name+".json", data)
-			} else {
+			} else if mode == humanMode && !c.stateOnly {
 				var text strings.Builder
 				for _, res := range results {
 					fmt.Fprintf(&text, "exit %d\nstdout:\n%sstderr:\n%s", res.exit, terminated(res.stdout), terminated(res.stderr))

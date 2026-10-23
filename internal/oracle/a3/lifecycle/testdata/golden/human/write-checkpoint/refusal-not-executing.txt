@@ -1,0 +1,4 @@
+exit 1
+stdout:
+stderr:
+Error: write checkpoint: modification function failed: validation failed: task task-1 is not in an executing state (current status: BLOCKED)

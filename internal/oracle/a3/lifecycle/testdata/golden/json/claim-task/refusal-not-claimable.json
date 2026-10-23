@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "claim-task",
+            "outcome": "INVALID_INPUT",
+            "safe_action": "correct_input",
+            "task_id": "task-1",
+            "task_status": "IMPLEMENTING_CODE",
+            "transition_id": "<id-1>"
+          },
+          "message": "claim-task: INVALID_INPUT (safe_action=correct_input): validation failed: task task-1 is IMPLEMENTING_CODE (not claimable by coder)"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "claim-task",
+          "outcome": "INVALID_INPUT",
+          "safe_action": "correct_input",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

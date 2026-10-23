@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "release-claim",
+            "outcome": "INVALID_INPUT",
+            "safe_action": "correct_input",
+            "task_id": "task-1",
+            "task_status": "IMPLEMENTING_CODE",
+            "transition_id": "<id-1>"
+          },
+          "message": "release-claim: INVALID_INPUT (safe_action=correct_input): failed to release claim: modification function failed: validation failed: doer lease still valid until <at 20990101T000000 Z>, use --force to clear"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "release-claim",
+          "outcome": "INVALID_INPUT",
+          "safe_action": "correct_input",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}
