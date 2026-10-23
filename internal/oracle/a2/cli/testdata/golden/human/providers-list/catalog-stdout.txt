@@ -1,0 +1,17 @@
+claude Claude cli false
+codex Codex cli false
+codex-acp Codex ACP acpx false
+copilot GitHub Copilot CLI cli false
+cursor Cursor cli false
+cursor-acp Cursor ACP acpx false
+devin Devin cli false
+devin-acp Devin ACP acpx false
+gemini Gemini cli true
+kimi Kimi cli false
+mistral Mistral cli true
+opencode OpenCode cli false
+opencode-acp OpenCode ACP acpx false
+oracle-provider Oracle Fixture cli false
+pi Pi cli false
+qwen Qwen cli false
+qwen-acp Qwen ACP acpx false

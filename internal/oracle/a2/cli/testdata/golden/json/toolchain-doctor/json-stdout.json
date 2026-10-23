@@ -1,0 +1,121 @@
+{
+  "ok": true,
+  "result": {
+    "checks": [
+      {
+        "message": "ast-grep not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "ast-grep"
+      },
+      {
+        "message": "gh not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "gh"
+      },
+      {
+        "message": "jq not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "jq"
+      },
+      {
+        "message": "mdq not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "mdq"
+      },
+      {
+        "message": "mdtoc not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "mdtoc"
+      },
+      {
+        "message": "pre-commit not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "pre-commit"
+      },
+      {
+        "message": "rg not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "rg"
+      },
+      {
+        "output": {
+          "exit_code": 0,
+          "stdout": "oracle fixture 1.0"
+        },
+        "path": "<BIN>/rtk",
+        "status": "ok",
+        "tool_id": "rtk"
+      },
+      {
+        "message": "scip-go not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "scip-go"
+      },
+      {
+        "message": "scip-python not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "scip-python"
+      },
+      {
+        "message": "scip-search not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "scip-search"
+      },
+      {
+        "message": "scip-typescript not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "scip-typescript"
+      },
+      {
+        "message": "stacklit not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "stacklit"
+      },
+      {
+        "message": "yq not found on PATH",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "missing",
+        "tool_id": "yq"
+      }
+    ],
+    "profile": "lean"
+  }
+}

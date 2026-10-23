@@ -1,0 +1,25 @@
+{
+  "profile": "lean",
+  "selected_tools": [
+    "ast-grep",
+    "gh",
+    "jq",
+    "mdq",
+    "mdtoc",
+    "pre-commit",
+    "rg",
+    "rtk",
+    "scip-go",
+    "scip-python",
+    "scip-search",
+    "scip-typescript",
+    "stacklit",
+    "yq"
+  ],
+  "activation_env": [
+    "LIZA_ENABLE_SCIP_SEARCH=1",
+    "LIZA_ENABLE_STACKLIT=1"
+  ],
+  "generated_at": "<TIME>",
+  "install_dir": "<INSTALL>"
+}

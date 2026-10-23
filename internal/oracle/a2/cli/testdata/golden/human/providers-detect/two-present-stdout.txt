@@ -1,0 +1,11 @@
+claude Claude installed <BIN>/claude
+codex Codex installed <BIN>/codex
+copilot GitHub Copilot CLI missing
+cursor Cursor missing
+devin Devin missing
+gemini Gemini missing
+kimi Kimi missing
+mistral Mistral missing
+opencode OpenCode missing
+pi Pi missing
+qwen Qwen missing

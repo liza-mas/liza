@@ -1,0 +1,25 @@
+rtk compression lean,balanced,full Compresses shell command output before it reaches agent context.
+stacklit indexing lean,balanced,full Generates compact repository module and dependency maps.
+scip-search indexing lean,balanced,full Queries SCIP indexes for precise symbol, reference, and graph navigation.
+scip-go indexing lean,balanced,full Generates SCIP indexes for Go projects.
+scip-typescript indexing lean,balanced,full Generates SCIP indexes for TypeScript and JavaScript projects.
+scip-python indexing lean,balanced,full Generates SCIP indexes for Python projects.
+semble navigation balanced,full Provides local semantic repository discovery.
+rg navigation lean,balanced,full Fast exact text search and file discovery.
+ast-grep navigation lean,balanced,full AST-aware structural search and rewrite.
+mdtoc navigation lean,balanced,full Prints Markdown section ranges and mdq selectors.
+mdq navigation lean,balanced,full Queries Markdown documents by structure.
+jq structured-data lean,balanced,full Queries JSON without reading entire files into context.
+yq structured-data lean,balanced,full Queries YAML, TOML, XML, CSV, and related structured files.
+gh repository lean,balanced,full Uses authenticated GitHub workflows from shell commands.
+pre-commit quality lean,balanced,full Runs repository quality gates before delivery.
+functional-clusters indexing full Builds advisory capability clusters from SCIP graph and Stacklit exports.
+bash-policy quality balanced,full Installs provider-aware bash command policy hooks for Claude and Codex.
+filesystem-mcp mcp optional Batch local filesystem reads through provider MCP configuration.
+context7 mcp optional Structured current library documentation lookup through MCP.
+ref mcp optional Broad documentation and guide lookup through MCP.
+fetch-mcp mcp optional Exact web page retrieval through MCP.
+perplexity mcp optional Current-info web search with synthesis through MCP.
+deepwiki mcp optional Repository architecture lookup through MCP.
+morph-mcp mcp optional Semantic code search and fast-apply editing through MCP.
+postgres-mcp mcp optional Read-only SQL exploration through MCP.

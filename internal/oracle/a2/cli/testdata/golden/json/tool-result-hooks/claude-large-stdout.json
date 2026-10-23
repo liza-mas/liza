@@ -1,0 +1,15 @@
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "updatedToolOutput": {
+      "file": {
+        "content": "{\"tool\":\"Read\",\"command\":\"{\\\"file_path\\\":\\\"fixture.txt\\\"}\",\"exit_code\":null,\"original_bytes\":6308,\"stored_bytes\":6308,\"truncated\":true,\"source_truncated\":false,\"duplicate\":false,\"artifact_id\":\"<ID>\",\"artifact_path\":\"<STORE>/<ID>.txt\",\"content_hash\":\"<ID>\",\"excerpt\":\"{\\\"file\\\":{\\\"content\\\":\\\"fixture line 001: complete retained evidence for the oracle.\\\\nfixture line 002: complete retained evidence for the oracle.\\\\nfixture line 003: complete retained evidence for the oracle.\\\\nfixture line 004: complete retained evidence for the oracle.\\\\nfixture line 005: complete retained evidence for the oracl\"}\n",
+        "filePath": "fixture.txt",
+        "numLines": 1,
+        "startLine": 1,
+        "totalLines": 100
+      },
+      "type": "text"
+    }
+  }
+}

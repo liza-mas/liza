@@ -1,0 +1,2 @@
+store/<ID>.txt
+store/events/<EVENT-1>.json

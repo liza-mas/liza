@@ -1,0 +1,405 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "balanced_default": true,
+      "binary": "rtk",
+      "category": "compression",
+      "full_default": true,
+      "id": "rtk",
+      "install_dir_env": [
+        "RTK_INSTALL_DIR"
+      ],
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh",
+      "lean_default": true,
+      "name": "RTK",
+      "purpose": "Compresses shell command output before it reaches agent context.",
+      "version_args": [
+        "--version"
+      ],
+      "windows_archive_url": "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-x86_64-pc-windows-msvc.zip"
+    },
+    {
+      "activation_env": [
+        "LIZA_ENABLE_STACKLIT=1"
+      ],
+      "balanced_default": true,
+      "binary": "stacklit",
+      "category": "indexing",
+      "full_default": true,
+      "id": "stacklit",
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh",
+      "lean_default": true,
+      "name": "Stacklit",
+      "purpose": "Generates compact repository module and dependency maps.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "activation_env": [
+        "LIZA_ENABLE_SCIP_SEARCH=1"
+      ],
+      "balanced_default": true,
+      "binary": "scip-search",
+      "category": "indexing",
+      "full_default": true,
+      "id": "scip-search",
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/liza-mas/scip-search/main/install.sh",
+      "lean_default": true,
+      "name": "SCIP Search",
+      "purpose": "Queries SCIP indexes for precise symbol, reference, and graph navigation.",
+      "required_commands": [
+        "reroot"
+      ],
+      "source_package": "./cmd/scip-search",
+      "source_repo": "https://github.com/liza-mas/scip-search",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "scip-go",
+      "category": "indexing",
+      "full_default": true,
+      "go_package": "github.com/scip-code/scip-go/cmd/scip-go@latest",
+      "id": "scip-go",
+      "install_kind": "go",
+      "lean_default": true,
+      "name": "SCIP Go indexer",
+      "purpose": "Generates SCIP indexes for Go projects.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "scip-typescript",
+      "category": "indexing",
+      "full_default": true,
+      "id": "scip-typescript",
+      "install_kind": "npm",
+      "lean_default": true,
+      "name": "SCIP TypeScript indexer",
+      "npm_package": "@sourcegraph/scip-typescript",
+      "purpose": "Generates SCIP indexes for TypeScript and JavaScript projects.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "scip-python",
+      "category": "indexing",
+      "full_default": true,
+      "id": "scip-python",
+      "install_kind": "npm",
+      "lean_default": true,
+      "name": "SCIP Python indexer",
+      "npm_package": "@sourcegraph/scip-python",
+      "purpose": "Generates SCIP indexes for Python projects.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "activation_env": [
+        "LIZA_ENABLE_SEMBLE=1"
+      ],
+      "balanced_default": true,
+      "binary": "semble",
+      "category": "navigation",
+      "full_default": true,
+      "id": "semble",
+      "install_kind": "uv-tool",
+      "lean_default": false,
+      "name": "Semble",
+      "purpose": "Provides local semantic repository discovery.",
+      "uv_package": "semble==0.6.2",
+      "version_args": [
+        "--help"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "rg",
+      "category": "navigation",
+      "full_default": true,
+      "id": "rg",
+      "install_kind": "package",
+      "lean_default": true,
+      "name": "ripgrep",
+      "package_name": "ripgrep",
+      "package_names_by_manager": {
+        "choco": "ripgrep",
+        "scoop": "ripgrep",
+        "winget": "BurntSushi.ripgrep.MSVC"
+      },
+      "purpose": "Fast exact text search and file discovery.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "ast-grep",
+      "category": "navigation",
+      "full_default": true,
+      "id": "ast-grep",
+      "install_kind": "package",
+      "lean_default": true,
+      "name": "ast-grep",
+      "package_name": "ast-grep",
+      "package_names_by_manager": {
+        "choco": "ast-grep",
+        "scoop": "ast-grep",
+        "winget": "ast-grep.ast-grep"
+      },
+      "purpose": "AST-aware structural search and rewrite.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "mdtoc",
+      "category": "navigation",
+      "full_default": true,
+      "id": "mdtoc",
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/liza-mas/mdtoc/main/install.sh",
+      "lean_default": true,
+      "name": "mdtoc",
+      "purpose": "Prints Markdown section ranges and mdq selectors.",
+      "source_package": "./cmd/mdtoc",
+      "source_repo": "https://github.com/liza-mas/mdtoc",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "mdq",
+      "category": "navigation",
+      "full_default": true,
+      "id": "mdq",
+      "install_kind": "package",
+      "lean_default": true,
+      "manual_install_note": "install with: cargo install mdq",
+      "name": "mdq",
+      "package_name": "mdq",
+      "purpose": "Queries Markdown documents by structure.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "jq",
+      "category": "structured-data",
+      "full_default": true,
+      "id": "jq",
+      "install_kind": "package",
+      "lean_default": true,
+      "name": "jq",
+      "package_name": "jq",
+      "package_names_by_manager": {
+        "choco": "jq",
+        "scoop": "jq",
+        "winget": "jqlang.jq"
+      },
+      "purpose": "Queries JSON without reading entire files into context.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "yq",
+      "category": "structured-data",
+      "full_default": true,
+      "id": "yq",
+      "install_kind": "package",
+      "lean_default": true,
+      "name": "yq",
+      "package_name": "yq",
+      "package_names_by_manager": {
+        "choco": "yq",
+        "scoop": "yq",
+        "winget": "MikeFarah.yq"
+      },
+      "purpose": "Queries YAML, TOML, XML, CSV, and related structured files.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "gh",
+      "category": "repository",
+      "full_default": true,
+      "id": "gh",
+      "install_kind": "package",
+      "lean_default": true,
+      "name": "GitHub CLI",
+      "package_name": "gh",
+      "package_names_by_manager": {
+        "choco": "gh",
+        "scoop": "gh",
+        "winget": "GitHub.cli"
+      },
+      "purpose": "Uses authenticated GitHub workflows from shell commands.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": true,
+      "binary": "pre-commit",
+      "category": "quality",
+      "full_default": true,
+      "id": "pre-commit",
+      "install_kind": "package",
+      "lean_default": true,
+      "manual_install_note": "install with: uv tool install pre-commit",
+      "name": "pre-commit",
+      "package_name": "pre-commit",
+      "purpose": "Runs repository quality gates before delivery.",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "activation_env": [
+        "LIZA_ENABLE_FUNCTIONAL_CLUSTERS=1"
+      ],
+      "balanced_default": false,
+      "binary": "functional-clusters",
+      "category": "indexing",
+      "full_default": true,
+      "id": "functional-clusters",
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/liza-mas/functional-clusters/main/install.sh",
+      "lean_default": false,
+      "name": "Functional Clusters",
+      "purpose": "Builds advisory capability clusters from SCIP graph and Stacklit exports.",
+      "source_package": "./cmd/functional-clusters",
+      "source_repo": "https://github.com/liza-mas/functional-clusters",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "activation_env": [
+        "LIZA_ENABLE_BASH_POLICY=1"
+      ],
+      "balanced_default": true,
+      "binary": "bash-policy",
+      "category": "quality",
+      "full_default": true,
+      "id": "bash-policy",
+      "install_kind": "script",
+      "install_url": "https://raw.githubusercontent.com/liza-mas/bash-policy/main/install.sh",
+      "lean_default": false,
+      "name": "Bash Policy",
+      "purpose": "Installs provider-aware bash command policy hooks for Claude and Codex.",
+      "source_package": "./cmd/bash-policy",
+      "source_repo": "https://github.com/liza-mas/bash-policy",
+      "version_args": [
+        "--version"
+      ]
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "filesystem-mcp",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "filesystem MCP",
+      "purpose": "Batch local filesystem reads through provider MCP configuration."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "context7",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "context7 MCP",
+      "purpose": "Structured current library documentation lookup through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "ref",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "Ref MCP",
+      "purpose": "Broad documentation and guide lookup through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "fetch-mcp",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "fetch MCP",
+      "purpose": "Exact web page retrieval through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "perplexity",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "Perplexity MCP",
+      "purpose": "Current-info web search with synthesis through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "deepwiki",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "DeepWiki MCP",
+      "purpose": "Repository architecture lookup through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "morph-mcp",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "Morph MCP",
+      "purpose": "Semantic code search and fast-apply editing through MCP."
+    },
+    {
+      "balanced_default": false,
+      "category": "mcp",
+      "full_default": false,
+      "id": "postgres-mcp",
+      "install_kind": "manual-only",
+      "lean_default": false,
+      "manual_note": "configure this capability in the active provider or MCP host; Liza does not install credentials or provider-specific connectors",
+      "name": "postgres MCP",
+      "purpose": "Read-only SQL exploration through MCP."
+    }
+  ]
+}

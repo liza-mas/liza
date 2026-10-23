@@ -1,0 +1,4 @@
+Wrote <GLOBAL>/toolchain/profile.json
+Wrote <GLOBAL>/toolchain/env.sh
+Run: source '<GLOBAL>/toolchain/env.sh'
+Checked <GLOBAL>/AGENT_TOOLS.md

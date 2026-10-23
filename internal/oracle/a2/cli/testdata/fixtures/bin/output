@@ -1,0 +1,5 @@
+#!/bin/sh
+case "$1" in
+  small|large) exec /bin/cat "$2" ;;
+  *) exit 92 ;;
+esac

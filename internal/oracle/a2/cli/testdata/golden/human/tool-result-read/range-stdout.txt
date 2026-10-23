@@ -1,0 +1,2 @@
+line 001: complete retained evidence for the oracle.
+fixture lin
