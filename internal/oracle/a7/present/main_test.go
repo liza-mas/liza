@@ -100,14 +100,18 @@ var a7Masks = struct {
 	labels  *regexp.Regexp
 	columns map[string]bool
 	goal    *regexp.Regexp
+	stall   *regexp.Regexp
+	scalar  *regexp.Regexp
 }{
 	keys: map[string]bool{
 		"age": true, "time_in_status": true, "elapsed": true, "lease_expires": true,
 		"time_on_task": true, "time_since_heartbeat": true, "last_progress_age": true,
 	},
-	labels:  regexp.MustCompile(`(?im)^(\s*(?:age|time_in_status|elapsed|lease_expires|time_on_task|time_since_heartbeat|last_progress_age|Age|Time in Status|Time on Task|Last Heartbeat|Lease Expires):\s*).*$`),
+	labels:  regexp.MustCompile(`(?im)^([ \t]*(?:age|time_in_status|elapsed|lease_expires|time_on_task|time_since_heartbeat|timesinceheartbeat|last_progress_age|Time in Status|Time on Task|Last Heartbeat|Lease Expires):[ \t]*).*$`),
 	columns: map[string]bool{"AGE": true, "TIME_IN_STATUS": true, "TIME_ON_TASK": true, "HEARTBEAT": true, "LEASE": true},
 	goal:    regexp.MustCompile(`goal-[0-9]+`),
+	stall:   regexp.MustCompile(`(no task progress for )[0-9]+( minutes)`),
+	scalar:  regexp.MustCompile(`(?m)^-?[0-9]+[dhms](?: [0-9]+[dhms])*$`),
 }
 
 func maskJSON(v any) any {
@@ -128,33 +132,40 @@ func maskJSON(v any) any {
 	return v
 }
 
-var columnSeparator = regexp.MustCompile(`\s{2,}|\t+`)
+var headerCell = regexp.MustCompile(`\S+`)
 
 func maskHuman(text string) string {
 	text = a7Masks.goal.ReplaceAllString(text, "goal-<ID>")
 	text = a7Masks.labels.ReplaceAllString(text, "${1}<REL>")
+	text = a7Masks.stall.ReplaceAllString(text, "${1}<REL>${2}")
 	lines := strings.Split(text, "\n")
-	var columns []int
+	var headers []string
+	var offsets [][]int
 	for i, line := range lines {
-		cells := columnSeparator.Split(strings.TrimSpace(line), -1)
-		if len(cells) > 1 && cells[0] == "ID" {
-			columns = nil
-			for j, cell := range cells {
-				if a7Masks.columns[strings.ToUpper(cell)] {
-					columns = append(columns, j)
-				}
-			}
+		fields := strings.Fields(line)
+		if len(fields) > 1 && (fields[0] == "ID" || fields[0] == "AGE") {
+			headers, offsets = fields, headerCell.FindAllStringIndex(line, -1)
 			continue
 		}
 		if strings.TrimSpace(line) == "" {
-			columns = nil
+			headers, offsets = nil, nil
 		}
-		for _, j := range columns {
-			if j < len(cells) {
-				cells[j] = "<REL>"
+		// FormatTable pads in bytes. Header offsets preserve empty cells and
+		// multiword values (including the PID's Unicode process marker).
+		var cells []string
+		masked := false
+		for j, header := range headers {
+			start, end := min(offsets[j][0], len(line)), len(line)
+			if j+1 < len(offsets) {
+				end = min(offsets[j+1][0], len(line))
 			}
+			cell := strings.TrimSpace(line[start:end])
+			if a7Masks.columns[strings.ToUpper(header)] && cell != "" && cell != "-" {
+				cell, masked = "<REL>", true
+			}
+			cells = append(cells, cell)
 		}
-		if len(columns) > 0 && len(cells) > 1 {
+		if masked {
 			lines[i] = strings.Join(cells, "  ")
 		}
 	}
@@ -178,14 +189,42 @@ func checkResult(t *testing.T, e *environment, kind oracle.Kind, name string, re
 		if err := decoder.Decode(&out); err != nil {
 			out = string(result.stdout)
 		}
+		status := strings.HasPrefix(name, "status/")
+		if status {
+			sortStatusAgentsJSON(out)
+		}
+		stderr := maskHuman(string(result.stderr))
+		// --format json is printed on stderr by the starting CLI. Keep that
+		// stream as a string, but normalize its JSON keys and D28 agent order.
+		if status && json.Valid(result.stderr) {
+			decoder := json.NewDecoder(bytes.NewReader(result.stderr))
+			decoder.UseNumber()
+			var value any
+			if err := decoder.Decode(&value); err != nil {
+				t.Fatalf("decode status stderr for %s", name)
+			}
+			sortStatusAgentsJSON(value)
+			data, err := json.MarshalIndent(maskJSON(value), "", "  ")
+			if err != nil {
+				t.Fatalf("encode status stderr for %s", name)
+			}
+			stderr = string(data) + "\n"
+		}
 		var err error
-		record, err = json.Marshal(map[string]any{"exit": result.exit, "stdout": maskJSON(out), "stderr": string(result.stderr)})
+		record, err = json.Marshal(map[string]any{"exit": result.exit, "stdout": maskJSON(out), "stderr": stderr})
 		if err != nil {
 			t.Fatalf("encode golden record %s", name)
 		}
 		record = a7Masks.goal.ReplaceAll(record, []byte("goal-<ID>"))
 	} else {
-		record = []byte(maskHuman(fmt.Sprintf("exit %d\n--- stdout\n%s\n--- stderr\n%s", result.exit, result.stdout, result.stderr)))
+		text := fmt.Sprintf("exit %d\n--- stdout\n%s\n--- stderr\n%s", result.exit, result.stdout, result.stderr)
+		if strings.HasPrefix(name, "status/") {
+			text = sortStatusAgentsHuman(text)
+		}
+		if name == "get/sprint-elapsed.txt" {
+			text = a7Masks.scalar.ReplaceAllString(text, "<REL>")
+		}
+		record = []byte(maskHuman(text))
 	}
 	e.norm.Check(t, kind, name, record)
 }
@@ -203,6 +242,23 @@ func checkInvocations(t *testing.T, surface string, cases []invocation) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			checkResult(t, e, tc.kind, surface+"/"+tc.name, runCLI(t, e, project, nil, tc.args...))
+		})
+	}
+}
+
+func TestA7ClockMasks(t *testing.T) {
+	skipUnlessLinux(t)
+	cases := []struct{ name, input, want string }{
+		{"empty task cell", "ID           Task    Heartbeat     Process\narchitect-1          10d 20h 30m   stopped\n", "ID           Task    Heartbeat     Process\narchitect-1    <REL>  stopped\n"},
+		{"anomaly age", "AGE          TYPE     TASK\n10d 20h 30m  blocked  task-blocked\n", "AGE          TYPE     TASK\n<REL>  blocked  task-blocked\n"},
+		{"yaml heartbeat", "    timesinceheartbeat: -10d 20h 30m\n    currenttask: task-review\n", "    timesinceheartbeat: <REL>\n    currenttask: task-review\n"},
+		{"watch stall", "STALLED: no task progress for 1234 minutes — 2 tasks waiting", "STALLED: no task progress for <REL> minutes — 2 tasks waiting"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := maskHuman(tc.input); got != tc.want {
+				t.Fatalf("clock normalization differs:\ngot  %q\nwant %q", got, tc.want)
+			}
 		})
 	}
 }

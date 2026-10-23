@@ -91,17 +91,6 @@
       },
       "agents": [
         {
-          "current_task": "task-review",
-          "id": "code-reviewer-1",
-          "pid": 5000002,
-          "process_status": "stopped",
-          "process_status_detail": "process does not exist",
-          "process_status_source": "signal(0)",
-          "role": "code-reviewer",
-          "status": "REVIEWING",
-          "time_since_heartbeat": "<REL>"
-        },
-        {
           "current_task": "",
           "id": "architect-1",
           "pid": 5000003,
@@ -110,6 +99,17 @@
           "process_status_source": "signal(0)",
           "role": "architect",
           "status": "IDLE",
+          "time_since_heartbeat": "<REL>"
+        },
+        {
+          "current_task": "task-review",
+          "id": "code-reviewer-1",
+          "pid": 5000002,
+          "process_status": "stopped",
+          "process_status_detail": "process does not exist",
+          "process_status_source": "signal(0)",
+          "role": "code-reviewer",
+          "status": "REVIEWING",
           "time_since_heartbeat": "<REL>"
         },
         {

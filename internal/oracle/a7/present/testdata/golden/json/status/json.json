@@ -91,14 +91,14 @@
       },
       "agents": [
         {
-          "current_task": "task-executing",
-          "id": "coder-1",
-          "pid": 5000001,
+          "current_task": "",
+          "id": "architect-1",
+          "pid": 5000003,
           "process_status": "stopped",
           "process_status_detail": "process does not exist",
           "process_status_source": "signal(0)",
-          "role": "coder",
-          "status": "WORKING",
+          "role": "architect",
+          "status": "IDLE",
           "time_since_heartbeat": "<REL>"
         },
         {
@@ -113,14 +113,14 @@
           "time_since_heartbeat": "<REL>"
         },
         {
-          "current_task": "",
-          "id": "architect-1",
-          "pid": 5000003,
+          "current_task": "task-executing",
+          "id": "coder-1",
+          "pid": 5000001,
           "process_status": "stopped",
           "process_status_detail": "process does not exist",
           "process_status_source": "signal(0)",
-          "role": "architect",
-          "status": "IDLE",
+          "role": "coder",
+          "status": "WORKING",
           "time_since_heartbeat": "<REL>"
         }
       ],

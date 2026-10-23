@@ -42,9 +42,9 @@ Legacy code-reviewer reviewable: 0 tasks
 Blocked: 1 tasks
 === AGENTS ===
 ID Role Status Health PID Task Heartbeat Process
-architect-1 architect IDLE - 5000003 9426d 21h 14m <REL>
-coder-1 coder WORKING - 5000001 task-executing <REL> stopped
+architect-1 architect IDLE - 5000003 <REL> stopped
 code-reviewer-1 code-reviewer REVIEWING - 5000002 task-review <REL> stopped
+coder-1 coder WORKING - 5000001 task-executing <REL> stopped
 === AGENT CAPACITY ===
 Live: 2, Free: 0, Degraded: 0
 Role Live Free Degraded

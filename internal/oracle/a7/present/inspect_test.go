@@ -41,9 +41,8 @@ func TestOracleInspect(t *testing.T) {
 	t.Run("sprint-elapsed", func(t *testing.T) {
 		e := newEnvironment(t)
 		result := runCLI(t, e, materialiseFixture(t, e), nil, "get", "sprint.elapsed")
-		// This query's value is a relative clock without a printed label. Only
-		// its stdout is registered; exit and stderr remain asserted in full.
-		e.norm.Literal(string(result.stdout), "<REL>\n")
+		// The declared scalar clock mask accepts only duration lines for this
+		// query; exit codes, messages and non-duration values stay asserted.
 		checkResult(t, e, oracle.Human, "get/sprint-elapsed.txt", result)
 	})
 }

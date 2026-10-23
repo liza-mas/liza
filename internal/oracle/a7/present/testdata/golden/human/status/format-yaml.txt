@@ -70,19 +70,7 @@ healthreason: ""
 recoverhint: ""
 pid: 5000003
 currenttask: ""
-timesinceheartbeat: 9426d 21h 14m
-processstatus: stopped
-processstatussource: signal(0)
-processstatusdetail: process does not exist
-- id: coder-1
-role: coder
-status: WORKING
-health: ""
-healthreason: ""
-recoverhint: ""
-pid: 5000001
-currenttask: task-executing
-timesinceheartbeat: -26367d 2h 45m
+timesinceheartbeat: <REL>
 processstatus: stopped
 processstatussource: signal(0)
 processstatusdetail: process does not exist
@@ -94,7 +82,19 @@ healthreason: ""
 recoverhint: ""
 pid: 5000002
 currenttask: task-review
-timesinceheartbeat: -26367d 2h 45m
+timesinceheartbeat: <REL>
+processstatus: stopped
+processstatussource: signal(0)
+processstatusdetail: process does not exist
+- id: coder-1
+role: coder
+status: WORKING
+health: ""
+healthreason: ""
+recoverhint: ""
+pid: 5000001
+currenttask: task-executing
+timesinceheartbeat: <REL>
 processstatus: stopped
 processstatussource: signal(0)
 processstatusdetail: process does not exist

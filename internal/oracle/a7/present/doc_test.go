@@ -28,6 +28,17 @@
 // The environment and relative-clock mask table live in main_test.go; fixture
 // timestamps are in 2001 or 2099 and PIDs exceed Linux pid_max. Runtime lock
 // files, log.yaml, alerts.log and the home cache are never golden inputs.
+// Relative clocks include YAML's timesinceheartbeat, table columns addressed
+// by byte offsets (so empty task cells survive), watch's labelled stall duration,
+// and duration-only lines of the sprint.elapsed field query. Status --format
+// json writes JSON on stderr at the start; that stream remains a string in its
+// record, with the same key-based clock masks as stdout JSON.
+//
+// Decision D28 (specs/goals/20261023-architecture-consolidation-decisions.md,
+// commit 2a44da6f9) declares the map-derived status agent order unspecified.
+// Only that human table and JSON/YAML agent collection are sorted by agent ID
+// before comparison. All row contents, column order, other collections and
+// watch alert order stay asserted. Production code is never sorted by this suite.
 //
 // Determinism exclusions inherited from the surface inventory: watch's loop
 // header and timing, the host process scan of get agents --zombies, and codex
@@ -41,6 +52,8 @@
 // its extra argument reaches field-query arity validation. The stop-guard's
 // no-agent case contains a running job, the no-live case contains a completed
 // job, the live case contains a running non-await job, and unreadable input is
-// invalid JSON under an agent identity. These independent fixtures prevent an
+// invalid JSON under an agent identity. The unreadable fixture stores those
+// raw stdin bytes inside a JSON string, decoded by the driver, so the .json
+// file itself passes check-json. These independent fixtures prevent an
 // unrelated missing project or identity from satisfying the refusal proofs.
 package present
