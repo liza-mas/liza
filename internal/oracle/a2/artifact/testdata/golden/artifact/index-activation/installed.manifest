@@ -1,0 +1,7 @@
+0755 hooks/liza-index-hook.sh
+0755 hooks/liza-index.sh
+0777 hooks/post-checkout
+0777 hooks/post-commit
+0777 hooks/post-merge
+0777 hooks/post-rewrite
+0644 info/exclude

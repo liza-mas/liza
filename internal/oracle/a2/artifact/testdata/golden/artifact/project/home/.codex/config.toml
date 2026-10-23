@@ -1,0 +1,22 @@
+approval_policy = "never"
+approvals_reviewer = "auto_review"
+
+sandbox_mode = "workspace-write"
+
+[permissions.workspace.network]
+enabled = true
+
+[sandbox_workspace_write]
+network_access = true
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
+writable_roots = [
+  "<PROJECT>",
+  "<PROJECT>/.git",
+  "<HOME>/.codex",
+  "<HOME>/.liza",
+  "<HOME>/.npm",
+  "<HOME>/.pyenv/shims",
+  "<HOME>/.cache",
+  "/tmp",
+]
