@@ -350,6 +350,24 @@ func (t *crashRestartTracker) Increment(taskID string, currentSignature string) 
 	return prev.Count
 }
 
+// Crash restarts back off per supervisor, not per task: a persistent failure
+// the classifiers miss (an unrecognised provider limit) fails every task the
+// same way, and each restart pays a full claim cycle.
+const (
+	crashRestartBaseDelay = 5 * time.Second
+	crashRestartMaxDelay  = 5 * time.Minute
+)
+
+// crashRestartDelay is the wait before the next claim after the supervisor's
+// consecutiveCrashes-th crash in a row.
+func crashRestartDelay(consecutiveCrashes int) time.Duration {
+	delay := crashRestartBaseDelay
+	for i := 1; i < consecutiveCrashes && delay < crashRestartMaxDelay; i++ {
+		delay *= 2
+	}
+	return min(delay, crashRestartMaxDelay)
+}
+
 // --- Spinning (same-task re-execution) tracker ---
 
 type spinningState struct {
@@ -750,6 +768,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 	exit42Tracker := newExit42RestartTracker()
 	crashTracker := newCrashRestartTracker()
+	consecutiveCrashes := 0 // across tasks; any exit 0 or 42 resets it
 	spinTracker := newSpinningTracker()
 	runtimeFailureTracker, backgroundTaskTracker := newRuntimeFailureTracker(), newRuntimeFailureTracker()
 
@@ -1032,6 +1051,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				}
 				exit42Tracker.reset(taskID)
 				crashTracker.reset(effectiveTask)
+				consecutiveCrashes = 0
 				continue
 			}
 		}
@@ -1064,7 +1084,9 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			}
 			exit42Tracker.reset(taskID)
 			crashTracker.reset(effectiveTask)
+			consecutiveCrashes = 0
 		case 42:
+			consecutiveCrashes = 0
 			restartTaskID := claimedTaskID
 			if restartTaskID == "" {
 				restartTaskID = taskID
@@ -1105,6 +1127,8 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			if handleClassifiedProviderCrash(config, currentOutput) {
 				return nil
 			}
+			consecutiveCrashes++
+			delay := crashRestartDelay(consecutiveCrashes)
 
 			// Track crash restarts per task.
 			if effectiveTask != "" {
@@ -1131,12 +1155,20 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 						GetLogger().Warn("Failed to block task from supervisor", "error", blockErr, "task_id", effectiveTask)
 					}
 					crashTracker.reset(effectiveTask)
+					// Blocking the task does not clear a failure shared by
+					// every task; pace the next claim as any other crash.
+					if err := waitForSupervisorDelay(delay); err != nil {
+						return err
+					}
 					continue
 				}
 			}
 
-			GetLogger().Error("Agent crashed, restarting", "exit_code", exitCode, "delay_seconds", 5)
-			if err := waitForSupervisorDelay(5 * time.Second); err != nil {
+			GetLogger().Error("Agent crashed, restarting",
+				"exit_code", exitCode,
+				"consecutive_crashes", consecutiveCrashes,
+				"delay_seconds", int(delay/time.Second))
+			if err := waitForSupervisorDelay(delay); err != nil {
 				return err
 			}
 		}

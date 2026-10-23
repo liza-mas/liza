@@ -572,7 +572,7 @@ The delay is configurable via `config.coder_poll_interval` (default 30s) — lon
 | Scenario | Delay | Rationale |
 |----------|-------|-----------|
 | Exit 42 (graceful abort) | 2s | Brief pause before restart |
-| Crash (any exit code except 0, 42) | 5s | Recovery delay for unexpected failures |
+| Crash (any exit code except 0, 42) | 5s, doubling per consecutive crash on the supervisor (across tasks), capped at 5 min; any exit 0 or 42 resets it | A failure no classifier recognises (an unknown provider limit) fails every task alike; each restart pays a full claim cycle |
 | Exit 0 with DRAFT tasks | `coder_poll_interval` (30s) | Wait for Orchestrator to finalize, then re-check |
 
 **v1 Implementation (`f15cd61`):** Per-task `exit42RestartTracker` applies capped exponential backoff (2s, 4s, 8s, ... up to `exit42_max_backoff_seconds`, default 60s). Progress detection via task-state signature comparison resets the counter when meaningful state changes occur between restarts. After `exit42_restart_threshold` (default 5) consecutive restarts without progress, the task transitions to BLOCKED with diagnostic reason and questions. Configurable via `config.exit42_restart_threshold` and `config.exit42_max_backoff_seconds`.
