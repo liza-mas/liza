@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: config.max_instances is operator-only; agent coder-1 cannot set it

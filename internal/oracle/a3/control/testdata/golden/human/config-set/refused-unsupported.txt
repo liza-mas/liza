@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: unsupported config key; supported keys: config.post_worktree_cmd, config.auto_resume, config.max_instances, config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval, config.runtime_input_registry, config.agent_env_deny

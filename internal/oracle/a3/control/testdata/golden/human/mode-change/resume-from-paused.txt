@@ -1,0 +1,7 @@
+exit 0
+[stdout]
+System resumed
+Resumed from: PAUSED mode
+Changed by: human
+Agents will resume at their next check.
+[stderr]

@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+Cleared degraded health for agent coder-1
+[stderr]

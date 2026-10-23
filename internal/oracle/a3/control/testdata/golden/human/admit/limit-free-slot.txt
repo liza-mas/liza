@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+oracle stub exit 0
+[stderr]

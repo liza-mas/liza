@@ -1,0 +1,12 @@
+{
+  "exit": 1,
+  "stderr": [],
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "config.max_instances is operator-only; agent coder-1 cannot set it"
+    },
+    "ok": false,
+    "result": null
+  }
+}

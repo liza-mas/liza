@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+Marked agent nobody degraded: provider-unavailable
+[stderr]

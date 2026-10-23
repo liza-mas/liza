@@ -1,0 +1,9 @@
+specs d 0755 -
+specs/vision.md f 0644 3f2993f9e412b902d8091edccda378bad472f53f24767b731ad494e151a1d811
+# git
+
+HEAD <commit:fixture>
+branch refs/heads/main
+refs/heads/integration <commit:fixture>
+refs/heads/main <commit:fixture>
+worktree <PROJECT>
