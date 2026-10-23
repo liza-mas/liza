@@ -1,0 +1,6 @@
+[
+  {"At":"2026-10-01T10:30:00.123Z","Level":"warning","Category":"WATCH","Message":"fixed warning"},
+  {"At":"2026-10-01T12:31:00.456+02:00","Level":"critical","Category":"BLOCKED","Message":"task-1 — fixed dependency","KeyKind":"blocked","Task":"task-1","Episode":"2026-10-01T12:30:00.123+02:00"},
+  {"At":"2026-10-01T05:32:00.789-05:00","Level":"critical","Category":"AWAITING HUMAN","Message":"task-2 — fixed ask","KeyKind":"human","Task":"task-2","Index":4,"Episode":"2026-10-01T05:30:00.456-05:00","Ask":"approve fixture"},
+  {"At":"2026-10-01T12:31:00.456+02:00","Level":"critical","Category":"BLOCKED","Message":"task-1 — fixed dependency","KeyKind":"blocked","Task":"task-1","Episode":"2026-10-01T12:30:00.123+02:00"}
+]
