@@ -1,0 +1,98 @@
+exit_code: 0
+# stdout
+
+# stderr
+window:
+since: 2026-10-01T00:00:00Z
+until: 2026-10-02T00:00:00Z
+asof: 2026-10-02T00:00:00Z
+outcomes:
+- outcome: blocked
+role: coder
+tasks: 1
+records: 1
+freshtokens:
+total: 80
+median: 80
+p95: 80
+cachereadtokens:
+total: 20
+median: 20
+p95: 20
+outputtokens:
+total: 10
+median: 10
+p95: 10
+- outcome: active
+role: coder
+tasks: 1
+records: 1
+freshtokens:
+total: 1200
+median: 1200
+p95: 1200
+cachereadtokens:
+total: 300
+median: 300
+p95: 300
+outputtokens:
+total: 150
+median: 150
+p95: 150
+outcometotals:
+- outcome: blocked
+tasks: 1
+freshtokens: 80
+cachereadtokens: 20
+outputtokens: 10
+- outcome: active
+tasks: 1
+freshtokens: 1200
+cachereadtokens: 300
+outputtokens: 150
+percompletedtask:
+mergedtasks: 0
+cachereadtokenspermergedtask: null
+cachehitpercent: 20
+posttransition:
+- role: coder
+category: retry_tail
+tokens: 1760
+records: 2
+tasks:
+- taskid: task-1
+tokens: 1650
+records: 1
+lastuseful:
+evidence:
+event: created
+time: 2026-09-28T09:00:00+02:00
+revision: 0
+taskid: task-1
+- taskid: task-2
+tokens: 110
+records: 1
+lastuseful:
+evidence:
+event: blocked
+time: 2026-10-01T12:30:00.123+02:00
+revision: 0
+taskid: task-2
+tasksomitted: 0
+provenance:
+terminalauthoritative: 2
+partial: 1
+unknown: 0
+conflicting: 0
+duplicatescollapsed: 0
+malformedlines: 0
+conflictingrecords: 0
+suppressedcalls:
+available: false
+observedsince: null
+warning: ""
+rows: []
+baseline: null
+deltas: []
+warnings:
+- lifecycle counters unavailable

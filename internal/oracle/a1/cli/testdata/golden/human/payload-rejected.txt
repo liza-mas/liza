@@ -1,0 +1,5 @@
+exit_code: 1
+# stdout
+
+# stderr
+Error: validate-payload: INVALID_INPUT (safe_action=correct_input): payload rejected by the set-task-output schema, version 1

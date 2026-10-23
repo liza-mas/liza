@@ -1,0 +1,63 @@
+exit_code: 0
+# stdout
+# Circuit Breaker Report
+**Analyzed:** <TIME>
+**Pattern:** retry_cluster
+**Severity:** ARCHITECTURE_FLAW
+**Evidence class:**
+**Response:** HALT
+**Explanation:**
+## Evidence
+3 retry_loop anomalies with similar error patterns
+## Response Action
+Circuit breaker triggered and execution halted. Review the explanation. Run `liza resume` after remediation.
+## Anomalies (trimmed)
+1. `retry_loop` at `2026-10-01T12:30:00.123+02:00`
+- task: `task-1`
+- reporter: `coder-1`
+- message_excerpt: `Fixed failure one`
+2. `retry_loop` at `2026-10-01T12:31:00.456+02:00`
+- task: `task-2`
+- reporter: `coder-2`
+- message_excerpt: `Fixed failure two`
+3. `retry_loop` at `2026-10-01T12:32:00.789+02:00`
+- task: `task-3`
+- reporter: `coder-3`
+- message_excerpt: `Fixed failure three`
+## Anomalies (raw)
+```yaml
+- timestamp: 2026-10-01T12:30:00.123+02:00
+task: task-1
+reporter: coder-1
+type: retry_loop
+details:
+count: 3
+error_pattern: fixed-compile-error
+message: Fixed failure one
+id: anomaly-1
+- timestamp: 2026-10-01T12:31:00.456+02:00
+task: task-2
+reporter: coder-2
+type: retry_loop
+details:
+count: 4
+error_pattern: fixed-compile-error
+message: Fixed failure two
+id: anomaly-2
+- timestamp: 2026-10-01T12:32:00.789+02:00
+task: task-3
+reporter: coder-3
+type: retry_loop
+details:
+count: 5
+error_pattern: fixed-compile-error
+message: Fixed failure three
+id: anomaly-3
+```
+## Human Decision Required
+- [ ] Acknowledge report
+- [ ] Confirm severity assessment
+- [ ] Determine remediation
+- [ ] Release checkpoint with decision logged
+# stderr
+

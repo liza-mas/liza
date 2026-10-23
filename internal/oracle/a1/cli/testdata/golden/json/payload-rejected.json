@@ -1,0 +1,73 @@
+{
+  "exit_code": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "diagnostics": [
+          {
+            "constraint": "is required: state the observable completion criteria",
+            "field": "/output/0/done_when",
+            "safe_action": "correct_input",
+            "schema_version": 1,
+            "value_class": "missing"
+          },
+          {
+            "constraint": "is required: bound what the child may touch",
+            "field": "/output/0/scope",
+            "safe_action": "correct_input",
+            "schema_version": 1,
+            "value_class": "missing"
+          },
+          {
+            "constraint": "is required: name the spec section the child implements",
+            "field": "/output/0/spec_ref",
+            "safe_action": "correct_input",
+            "schema_version": 1,
+            "value_class": "missing"
+          }
+        ],
+        "effects": "none",
+        "operation": "validate-payload",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "validate-payload: INVALID_INPUT (safe_action=correct_input): payload rejected by the set-task-output schema, version 1"
+    },
+    "ok": false,
+    "result": {
+      "diagnostics": [
+        {
+          "constraint": "is required: state the observable completion criteria",
+          "field": "/output/0/done_when",
+          "safe_action": "correct_input",
+          "schema_version": 1,
+          "value_class": "missing"
+        },
+        {
+          "constraint": "is required: bound what the child may touch",
+          "field": "/output/0/scope",
+          "safe_action": "correct_input",
+          "schema_version": 1,
+          "value_class": "missing"
+        },
+        {
+          "constraint": "is required: name the spec section the child implements",
+          "field": "/output/0/spec_ref",
+          "safe_action": "correct_input",
+          "schema_version": 1,
+          "value_class": "missing"
+        }
+      ],
+      "effects": "none",
+      "operation": "validate-payload",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

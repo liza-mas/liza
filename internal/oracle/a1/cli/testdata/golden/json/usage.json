@@ -1,0 +1,126 @@
+{
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "outcome_totals": [
+        {
+          "cache_read_tokens": 20,
+          "fresh_tokens": 80,
+          "outcome": "blocked",
+          "output_tokens": 10,
+          "tasks": 1
+        },
+        {
+          "cache_read_tokens": 300,
+          "fresh_tokens": 1200,
+          "outcome": "active",
+          "output_tokens": 150,
+          "tasks": 1
+        }
+      ],
+      "outcomes": [
+        {
+          "cache_read_tokens": {
+            "median": 20,
+            "p95": 20,
+            "total": 20
+          },
+          "fresh_tokens": {
+            "median": 80,
+            "p95": 80,
+            "total": 80
+          },
+          "outcome": "blocked",
+          "output_tokens": {
+            "median": 10,
+            "p95": 10,
+            "total": 10
+          },
+          "records": 1,
+          "role": "coder",
+          "tasks": 1
+        },
+        {
+          "cache_read_tokens": {
+            "median": 300,
+            "p95": 300,
+            "total": 300
+          },
+          "fresh_tokens": {
+            "median": 1200,
+            "p95": 1200,
+            "total": 1200
+          },
+          "outcome": "active",
+          "output_tokens": {
+            "median": 150,
+            "p95": 150,
+            "total": 150
+          },
+          "records": 1,
+          "role": "coder",
+          "tasks": 1
+        }
+      ],
+      "per_completed_task": {
+        "cache_hit_percent": 20,
+        "cache_read_tokens_per_merged_task": null,
+        "merged_tasks": 0
+      },
+      "post_transition": [
+        {
+          "category": "retry_tail",
+          "records": 2,
+          "role": "coder",
+          "tasks": [
+            {
+              "last_useful": {
+                "event": "created",
+                "revision": 0,
+                "task_id": "task-1",
+                "time": "2026-09-28T09:00:00+02:00"
+              },
+              "records": 1,
+              "task_id": "task-1",
+              "tokens": 1650
+            },
+            {
+              "last_useful": {
+                "event": "blocked",
+                "revision": 0,
+                "task_id": "task-2",
+                "time": "2026-10-01T12:30:00.123+02:00"
+              },
+              "records": 1,
+              "task_id": "task-2",
+              "tokens": 110
+            }
+          ],
+          "tokens": 1760
+        }
+      ],
+      "provenance": {
+        "conflicting": 0,
+        "conflicting_records": 0,
+        "duplicates_collapsed": 0,
+        "malformed_lines": 0,
+        "partial": 1,
+        "terminal_authoritative": 2,
+        "unknown": 0
+      },
+      "suppressed_calls": {
+        "available": false
+      },
+      "warnings": [
+        "lifecycle counters unavailable"
+      ],
+      "window": {
+        "as_of": "2026-10-02T00:00:00Z",
+        "since": "2026-10-01T00:00:00Z",
+        "until": "2026-10-02T00:00:00Z"
+      }
+    }
+  }
+}
