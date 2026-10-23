@@ -1,0 +1,98 @@
+Liza is a multi-agent task execution system that uses a YAML-based
+"blackboard" pattern with file locking for state management, git worktrees
+for task isolation, and agent supervisors with restart logic.
+Usage:
+liza [command]
+Available Commands:
+add-human-note Record bounded operator input for an existing task or all tasks
+add-task Add a new task to the state
+add-tasks Add multiple tasks in batch from a JSON file
+admission-limit Cap how many heavy canonical commands run at once
+admit Run a local command inside the admission-limit slots it matches
+agent Run agent supervisor loop
+amend-plan Review a bounded correction without retiring a merged plan's provider identity
+analyze Run circuit breaker response analysis
+apply-dependency-repair Apply one stored dependency repair atomically
+archive-acceptance-receipts Move terminal tasks' acceptance receipts out of live state into the archive
+archive-terminal-tasks Enable immutable terminal task archival and drain the backlog
+assess-blocked Record orchestrator assessment of a BLOCKED task
+assess-hypothesis-exhausted Record orchestrator assessment of a hypothesis-exhausted task
+await-resubmission Block until a doer resubmits after a rejection
+await-verdict Block until a review verdict arrives for a submitted task
+cancel-task Cancel a task (transition to ABANDONED)
+check-commit-allowed Decide whether a commit is allowed in a task worktree (pre-commit hook backend)
+claim-task Claim a task for a doer agent
+cleanup Remove Liza runtime state and task worktrees
+clear-agent-degraded Clear degraded health for an agent
+clear-stale-review-claims Clear expired review leases
+completion Generate the autocompletion script for the specified shell
+config Read and update supported runtime configuration
+defer-provider-dependency Move an unstarted plan's writer-order wait to the outputs it generates
+deferred-validation Operate the deferred-validation batch and its operator rulings
+delete Delete agents or tasks from the state database
+get Query and get state data
+get-tasks Query tasks with optional field projection
+handoff Initiate context-exhaustion handoff for a claimed task
+help Help about any command
+init Initialize a new Liza workspace or enable pairing
+launch Launch grouped Liza workflows
+mark-agent-degraded Mark an agent as degraded for role-capacity health
+mark-blocked Mark a task as BLOCKED due to unresolvable blocker
+migrate Normalize legacy state.yaml fields
+narrow-inherited-dependencies Narrow generated children to selected upstream outputs
+pause Pause the Liza system
+plan-check Record the orchestrator's disposition of a merged plan before its children exist
+proceed Execute a manual inter-pair transition on a task
+providers Inspect the provider catalog
+provision Record an operator-produced runtime input instance
+reaffirm-proof Record an authorized decision that an approved proof still holds against changed content
+reconcile-merged Mark an externally merged integration failure as merged
+reconcile-verdict Record an authorized orchestrator's decision on quarantined verdict evidence
+record-rejection-rca Record a classified rejection RCA on a task held by the rejection-RCA gate
+recover-agent Recover a crashed agent (release claims, remove worktree, delete agent)
+recover-integration Retire a premature empty-cohort integration analysis with preserved evidence
+recover-task Recover a task while preserving recoverable work by default
+release-blocked-chain Permit one more replacement of a BLOCKED task at the blocked-recovery cap, without pausing the run
+release-claim Manually release claims on a task
+repair-acceptance-commits Restore acceptance evidence orphaned by an integration-branch rewrite
+repair-agent-pool Start agents for claimable work not covered by idle agents
+repair-arch-ref Set the empty arch_ref of a task nobody has started
+repair-superseded-dependencies Repair illegal dependencies on one superseded task
+replace-task Atomically replace a task and retarget its consumers
+replan Re-invoke planner after amending a plan file
+reserve-provider Hold an unstarted writer until every child a provider generates merges
+resume Resume the Liza system or acknowledge an active HALT response
+resume-rejection-rca Close a recorded rejection-RCA gate with an authorized recovery disposition
+retarget-dependency Retarget one non-terminal task dependency edge
+run-live Run a local live command with the task's reusable runtime inputs
+set-discovery-disposition Set the disposition of a discovered item
+set-task-output Set output entries for downstream task generation
+setup One-time global setup of Liza contracts, skills, and support docs
+sprint-checkpoint Create a checkpoint for the sprint
+start Start the Liza system from STOPPED mode
+status Show system and task status at a glance
+stop Stop the Liza system
+submit-for-review Submit a task for review
+submit-verdict Submit a review verdict
+supersede-task Mark a task as SUPERSEDED, optionally by replacement tasks
+tool-result Budget tool results and retrieve sanitized artifacts
+toolchain Install and configure optional Liza support tools
+tui Interactive TUI dashboard for monitoring Liza
+unblock-task Restore a repaired BLOCKED task to its initial or executing state
+update-review-commit Update review boundary to current worktree HEAD after external rebase
+update-sprint-metrics Recompute sprint metrics from current state
+usage Report provider token usage by task outcome
+validate Validate state.yaml against schema rules
+validate-payload Check a command's payload structurally before invoking it
+version Print version information
+write-checkpoint Write pre-execution checkpoint before submitting for review
+wt-create Create a worktree for a claimed task
+wt-delete Delete a worktree for a completed/abandoned task
+wt-merge Merge an approved task into the integration branch
+Flags:
+--check-update check for a Liza update before running
+-h, --help help for liza
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza [command] --help" for more information about a command.
