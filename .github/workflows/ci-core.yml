@@ -155,12 +155,6 @@ jobs:
       - name: Run linters
         run: make lint-nosync
 
-      # Vet the Windows build here rather than on the 2-vCPU Windows runner.
-      # Cross-compiled packages use CGO_ENABLED=0, matching the Windows job,
-      # which has no C toolchain in use.
-      - name: Vet for Windows
-        run: GOOS=windows go vet ./...
-
       - name: Build
         run: make build-nosync
 

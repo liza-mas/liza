@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync vet check-testhelpers check-embedded release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -286,7 +286,15 @@ lint-nosync:
 		echo "$$unformatted"; \
 		exit 1; \
 	fi
-	go vet ./...
+	@$(MAKE) vet
+
+# Vet every supported OS from any host, so build-tag splits (!windows,
+# unix, linux) break here rather than on that OS's CI runner. Cross-compiled
+# vets run with cgo off, as the Windows CI job does.
+vet:
+	GOOS=linux go vet ./...
+	GOOS=windows go vet ./...
+	GOOS=darwin go vet ./...
 
 # Tidy dependencies
 tidy:
@@ -363,6 +371,7 @@ help:
 	@echo "  install            - Install $(BINARY_NAME) binary"
 	@echo "  lint               - Run linters (includes testhelpers check)"
 	@echo "  lint-nosync        - Run nonmutating format and vet checks without syncing"
+	@echo "  vet                - Run go vet for linux, windows and darwin"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  tidy               - Tidy dependencies"

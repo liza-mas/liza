@@ -82,7 +82,7 @@ repos:
 
       - id: go-vet
         name: go vet (static analysis)
-        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH" && make sync-embedded && go vet ./...'
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH" && make sync-embedded && make vet'
         language: system
         files: \.go$
         pass_filenames: false
