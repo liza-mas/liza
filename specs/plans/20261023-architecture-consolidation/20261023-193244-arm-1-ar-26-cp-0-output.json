@@ -1,7 +1,7 @@
 [
   {
     "desc": "Whole-module coverage basis on make coverage: add -coverpkg=./... to the coverage recipe's go test line and state the whole-module basis in docs/TESTING.md",
-    "done_when": "make -n coverage prints go test -coverpkg=./... -coverprofile=...; env -i HOME PATH TMPDIR=/tmp BROWSER=true make coverage exits 0; the Makefile diff is the single go test line of the coverage recipe; docs/TESTING.md Quick Reference row and Coverage subsection state the whole-module -coverpkg=./... basis and no longer say package-local; make lint and make test pass; pre-commit passes on the touched files.",
+    "done_when": "make -n coverage prints go test -coverpkg=./... -coverprofile=...; env -i HOME PATH TMPDIR=/tmp BROWSER=true make coverage exits 0; the Makefile diff is the single go test line of the coverage recipe; docs/TESTING.md Quick Reference row and Coverage subsection state the whole-module -coverpkg=./... basis and no longer say package-local; make lint and make test pass; make test-e2e is allocated as a deferred regression command; pre-commit passes on the touched files.",
     "scope": "Makefile coverage recipe (its go test line only), docs/TESTING.md (Quick Reference row, Coverage subsection), specs/architecture/consolidation-run/acceptance-coverage-basis.json (new acceptance manifest). Out: every other Makefile target or line, CI workflows, thresholds, profile retention or summaries, lessons/*, specs/architecture/architectural-issues.md, other docs, Go source and tests.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-190435-arm-1-ar-26.md#Scope 1: Coverage basis on make coverage",
@@ -11,40 +11,132 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp BROWSER=true make coverage",
       "make lint",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-      "pre-commit run --files Makefile docs/TESTING.md specs/architecture/consolidation-run/acceptance-coverage-basis.json"
+      "pre-commit run --files Makefile docs/TESTING.md specs/architecture/consolidation-run/acceptance-coverage-basis.json",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
       {
         "command": "make -n coverage",
-        "executables": ["make"],
-        "probes": [["make", "--version"]]
+        "executables": [
+          "make"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ]
+        ]
       },
       {
         "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp BROWSER=true make coverage",
-        "executables": ["env", "make", "go", "true"],
-        "env": ["HOME", "PATH"],
-        "probes": [["make", "--version"], ["go", "version"]]
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "true"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
       },
       {
         "command": "make lint",
-        "executables": ["make", "go", "gofmt"],
-        "probes": [["make", "--version"], ["go", "version"]]
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
       },
       {
         "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-        "executables": ["env", "make", "go", "git"],
-        "env": ["HOME", "PATH"],
-        "probes": [["make", "--version"], ["go", "version"]]
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
       },
       {
         "command": "pre-commit run --files Makefile docs/TESTING.md specs/architecture/consolidation-run/acceptance-coverage-basis.json",
-        "executables": ["pre-commit"],
-        "probes": [["pre-commit", "--version"]]
+        "executables": [
+          "pre-commit"
+        ],
+        "probes": [
+          [
+            "pre-commit",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
       }
     ],
     "inherit_inputs": {
       "mode": "selected",
-      "selections": [{"upstream_task": "arm-1-ar-0-cp-0", "outputs": [0]}]
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-0",
+          "outputs": [
+            0
+          ]
+        }
+      ]
     }
   }
 ]
