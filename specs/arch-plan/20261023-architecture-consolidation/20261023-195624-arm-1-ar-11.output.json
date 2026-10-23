@@ -1,0 +1,54 @@
+[
+  {
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 1: A1 area-boundary checkpoint",
+    "desc": "A1 area-boundary checkpoint: verify and record G1-G8 for area A1 before any A2 coding",
+    "done_when": "specs/architecture/consolidation-run/boundary-a1.md commits passing G1-G7 evidence for A1 (empty ratchet or S2-only, rationale-carrying allowlist, empty Shim Register, make test/lint/test-e2e and go test -race on A1 packages green, G5 dispositions, G6 closures) and the maintainer's green G8 Linux/Windows CI result.",
+    "rca_required": false,
+    "scope": "In: G1-G8 checks for area A1, the boundary record, G6 closures in architectural-issues.md. Out: any production, test, guard-data or oracle change; repairing A1 (a failed G1-G4 marks BLOCKED naming the check and A1).",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
+  },
+  {
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 2: A2 distribution artifacts by concern",
+    "depends_on": [
+      "0"
+    ],
+    "desc": "Split internal/embedded/embedded.go by artifact family inside its package, with no exported API, embed path or written-byte change",
+    "done_when": "S1 guard passes with no ratchet entry for internal/embedded/embedded.go; the A2 artifact oracle and every other oracle pass live with goldens unchanged; make test, make lint, make test-e2e and go test -race ./internal/embedded/ pass; no exported identifier changed.",
+    "rca_required": false,
+    "scope": "In: embedded.go split per the concern map (top-level files in package embedded), its white-box tests, its A2 ratchet entry, lessons/agents/settings-master-not-derived.md code references. Out: exported API change, vocabulary and named values (Scope 5), brandrender, codexconfig, other offenders, oracle files, .gitignore.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
+  },
+  {
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 3: A2 repository-intelligence adapters by concern",
+    "depends_on": [
+      "1"
+    ],
+    "desc": "Split pairingindex/hooks.go, scipsearch.go and semble.go by concern inside their packages, with no exported API or rendered-byte change",
+    "done_when": "S1 guard passes with no ratchet entry for pairingindex/hooks.go, scipsearch/scipsearch.go, semble/semble.go; every oracle passes live with goldens unchanged; make test, make lint, make test-e2e and go test -race on pairingindex, scipsearch, semble pass; no exported identifier changed.",
+    "rca_required": false,
+    "scope": "In: the three offender files split per the concern map, their white-box tests, their A2 ratchet entries. Out: exported API change, vocabulary and envgate truthiness (Scope 5), stacklit, functionalclusters, oracle files.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
+  },
+  {
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 4: A2 provider catalog, update and tool-result offenders by concern",
+    "depends_on": [
+      "2"
+    ],
+    "desc": "Split providers/catalog.go and updater.go by concern, decompose ClaudePostToolResult, S2-list toolchain.Catalog as a table",
+    "done_when": "S1 guard passes with no A2 ratchet entry left and exactly one A2 S2 entry (internal/toolchain/catalog.go Catalog, category table); every oracle passes live with goldens unchanged; make test, make lint, make test-e2e and go test -race on providers, updater, toolchain, toolresult pass; no exported identifier changed.",
+    "rca_required": false,
+    "scope": "In: providers/catalog.go and updater/updater.go splits, ClaudePostToolResult decomposition, toolchain Catalog ratchet-to-S2 move, their white-box tests and A2 guard data. Out: exported API change, vocabulary and named values (Scope 5), C2 logic, network or installer execution, oracle files.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
+  },
+  {
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "depends_on": [
+      "3"
+    ],
+    "desc": "Introduce A2 typed vocabulary W1-W12 with callers converted, name A2 magic values, route truthiness through envgate",
+    "done_when": "W1-W11 use owning types and constants; W12 reuses existing types and constants; listed carriers use them and no W-set control-flow literal remains outside declarations. A2 truthy parsers are removed; oracles pass unchanged; make test, make lint, make test-e2e pass; ADR and index row exist.",
+    "rca_required": false,
+    "scope": "In: W1-W12 types and carriers, A2 literal replacement, named magic values, envgate truthiness, call-site conversions and conformance updates elsewhere and in oracle adapters, one ADR with index row. Out: retyping non-A2 APIs or persisted A1 carriers, A9 adoption of W2/W3, configuration fields.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md"
+  }
+]
