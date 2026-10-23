@@ -321,6 +321,17 @@ Same reviewer, round 3 (2026-10-23), on the document after D21: blockers 0→0, 
 - **Phase 4 closed.** Every finding resolved, refuted-and-accepted, or accepted with rationale; no
   escalation open; no unclaimed marker open.
 
+### D23 — Integration branch and sync-clean start (run, 2026-10-23)
+Raised by the arm-1 architecture plan (OQ-001, OQ-003, "E0 Integration-Branch Hold"), relayed by the
+operator. Human ruling 2026-10-23T16:46Z, applied by the operator:
+- **OQ-001:** E0 names `global-refactoring`, the branch the run was configured with. It already meets
+  E0's intent: dedicated, cut from `main` (`97ccf330c`) at run start, never pushed by agents. The
+  rejected alternative (reconfigure onto `refactor/architecture-consolidation`) would re-provision
+  in-flight worktrees for a name only.
+- **OQ-003:** the synced `internal/embedded/bash-policy.yaml` is committed on the integration branch so
+  `make sync-embedded` leaves the starting tree unchanged. The run's starting commit is the head after
+  this commit, recorded by Scope 0.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
