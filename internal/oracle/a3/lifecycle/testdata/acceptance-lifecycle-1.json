@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-tc1-linux",
+      "approved_reference_id": "a3-scope1"
+    },
+    {
+      "obligation_id": "AC-tc2-imports",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleImportsStdlibAndHarnessOnly",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc3-env",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleEnvironment: exact operator/agent name sets, empty disposable directories and git-only PATH",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc4-identity",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleIdentityAndForceGuard: dead PID bound and refusal of force on live targets",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc5-clock",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleClockMask: fractional and human instants, lease offset, 2020/2099 values and UTC/local zone differences",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc6-ids",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleIdentifierMask and TestLifecycleHarnessFixedPoint: equality, numbering, stable digits, named commits, PIDs and downstream preservation",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc7-streams",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleLogRemoval; runCase records exit, parsed JSON stdout and stderr lines, human streams",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc8-runtime-files",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleOutcomes: nonzero counts only, ignore runtime lock/owner files; case runner reads only state and lifecycle counters",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-tc9-provenance",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "Entry point check mode filtered to ./internal/oracle/a3/lifecycle/... reproduces all committed goldens from the start baseline; goldens created only by write-new",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-fixtures",
+      "file": "internal/oracle/a3/lifecycle/case_test.go",
+      "assertion": "runCase rebuilds each mode separately and asserts human/json final state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-state-golden",
+      "file": "internal/oracle/a3/lifecycle/conventions_test.go",
+      "assertion": "TestLifecycleGitEffects and TestLifecycleOutcomes; runCase composes before/after with Git effects and counts",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L1",
+      "file": "internal/oracle/a3/lifecycle/claim_task_test.go",
+      "assertion": "TestOracleClaimTask: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L2",
+      "file": "internal/oracle/a3/lifecycle/release_claim_test.go",
+      "assertion": "TestOracleReleaseClaim: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L3",
+      "file": "internal/oracle/a3/lifecycle/handoff_test.go",
+      "assertion": "TestOracleHandoff: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L4",
+      "file": "internal/oracle/a3/lifecycle/write_checkpoint_test.go",
+      "assertion": "TestOracleWriteCheckpoint: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L5",
+      "file": "internal/oracle/a3/lifecycle/check_commit_allowed_test.go",
+      "assertion": "TestOracleCheckCommitAllowed: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L6",
+      "file": "internal/oracle/a3/lifecycle/mark_blocked_test.go",
+      "assertion": "TestOracleMarkBlocked: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L7",
+      "file": "internal/oracle/a3/lifecycle/lifecycle_receipts_test.go",
+      "assertion": "TestOracleLifecycleReceipts: CONTRACT success and principal refusal cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-validate-fixtures-1",
+      "file": "internal/oracle/a3/lifecycle/fixture_test.go",
+      "assertion": "buildFixture runs validate --json before each case and asserts valid true with state byte-unchanged, using starting-commit binary during regeneration",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-reproduce-1",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "Entry point check mode filtered to ./internal/oracle/a3/lifecycle/... reproduces all committed goldens from the start baseline; goldens created only by write-new",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-live-1",
+      "file": "internal/oracle/a3/lifecycle/case_test.go",
+      "assertion": "runCases/runCase compare all L1-L7 golden streams and state live through make test",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-additive-1",
+      "approved_reference_id": "a3-scope1"
+    }
+  ]
+}
