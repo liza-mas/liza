@@ -883,19 +883,34 @@ func TestAddTask_DerivesTypeFromRolePair(t *testing.T) {
 
 	stateFile, logFile := setupPipelineProject(t)
 
-	input := &AddTaskInput{
-		ID:          "us-story-task",
-		Description: "Write user stories",
-		SpecRef:     "specs/feature.md",
-		DoneWhen:    "Stories are reviewable",
-		Scope:       "specs/stories",
-		Priority:    1,
-		RolePair:    "us-writing-pair",
-	}
-
-	_, err := AddTask(stateFile, logFile, input, "orchestrator-1")
+	// An added story moves on only through its many-to-one transition, so it is
+	// commissioned with the code-planning task that delivers it (D-33).
+	result, err := AddTasks(stateFile, logFile, &AddTasksInput{OrchestratorID: "orchestrator-1", Tasks: []AddTaskInput{
+		{
+			ID:          "us-story-task",
+			Description: "Write user stories",
+			SpecRef:     "specs/feature.md",
+			DoneWhen:    "Stories are reviewable",
+			Scope:       "specs/stories",
+			Priority:    1,
+			RolePair:    "us-writing-pair",
+		},
+		{
+			ID:          "us-story-plan",
+			Description: "Plan the stories",
+			SpecRef:     "specs/feature.md",
+			DoneWhen:    "Plan is reviewable",
+			Scope:       "specs/plans",
+			Priority:    1,
+			RolePair:    "code-planning-pair",
+			DependsOn:   []string{"us-story-task"},
+		},
+	}})
 	if err != nil {
-		t.Fatalf("AddTask() error: %v", err)
+		t.Fatalf("AddTasks() error: %v", err)
+	}
+	if !result.Results[0].Success {
+		t.Fatalf("story not added: %s", result.Results[0].Error)
 	}
 
 	bb := db.New(stateFile)

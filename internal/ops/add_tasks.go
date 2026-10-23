@@ -71,52 +71,20 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
 	}
 
-	// Structural preflight precedes pipeline reads and the state lock.
-	_, diagnostics, err := payloadschema.Validate("add-task", input)
-	if err != nil {
-		return nil, err
-	}
-	if len(diagnostics) > 0 {
-		return nil, NewLifecycleInvalidInputError("add-task", nil, diagnostics, &PreconditionError{Reason: diagnostics[0].Constraint})
-	}
-
 	// Derive the project root from the runtime state path.
 	projectRoot := filepath.Dir(filepath.Dir(statePath))
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
-	}
-
-	newTask, err := buildReplacementTask(input, resolver)
+	newTask, resolver, err := prepareAddTask(statePath, projectRoot, input)
 	if err != nil {
 		return nil, err
 	}
 
 	bb := db.For(statePath)
-
-	if diagnostics := runtimeInputsNeedStrictCarrier(&newTask); diagnostics != nil {
-		return nil, runtimeInputAdmissionError("add-task", nil, diagnostics, nil)
-	}
-	// An ad-hoc task has no parent, so a snapshot supplies only configuration;
-	// the Git reads stay outside the state lock, as at claim.
-	if acceptanceCreationApplies(&newTask) || len(newTask.ValidationPrerequisites) > 0 {
-		snapshot, err := bb.ReadSnapshot()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read state for the acceptance check: %w", err)
-		}
-		if acceptanceCreationApplies(&newTask) {
-			if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
-				return nil, err
-			}
-		}
-		diagnostics, err := checkRuntimeInputDeclarations(projectRoot, snapshot, []string{newTask.ID}, []runtimeInputCarrier{{inputs: newTask.RuntimeInputs, prerequisites: newTask.ValidationPrerequisites}})
-		if err := runtimeInputAdmissionError("add-task", nil, diagnostics, err); err != nil {
-			return nil, err
-		}
-	}
-
 	var postValidationErr error
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
+		// add-task cannot carry the delivery task a dead-end stage needs (D-33).
+		if req := deliveryRequirementFor(resolver, newTask.RolePair, state.Config.NoFollowUp); req != nil {
+			return req.refusal(newTask.ID, newTask.RolePair)
+		}
 		if err := insertTaskInState(state, projectRoot, newTask, input, resolver); err != nil {
 			return err
 		}
@@ -139,6 +107,57 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 		return nil, fmt.Errorf("failed to add task: %w", err)
 	}
 
+	return addedTaskResult(logPath, orchestratorID, newTask, input, postValidationErr), nil
+}
+
+// prepareAddTask runs the creation checks that precede the state lock:
+// structural preflight, pipeline resolution, task construction and the
+// acceptance and runtime-input admission checks.
+func prepareAddTask(statePath, projectRoot string, input *AddTaskInput) (models.Task, *pipeline.Resolver, error) {
+	// Structural preflight precedes pipeline reads and the state lock.
+	_, diagnostics, err := payloadschema.Validate("add-task", input)
+	if err != nil {
+		return models.Task{}, nil, err
+	}
+	if len(diagnostics) > 0 {
+		return models.Task{}, nil, NewLifecycleInvalidInputError("add-task", nil, diagnostics, &PreconditionError{Reason: diagnostics[0].Constraint})
+	}
+
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return models.Task{}, nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+
+	newTask, err := buildReplacementTask(input, resolver)
+	if err != nil {
+		return models.Task{}, nil, err
+	}
+
+	if diagnostics := runtimeInputsNeedStrictCarrier(&newTask); diagnostics != nil {
+		return models.Task{}, nil, runtimeInputAdmissionError("add-task", nil, diagnostics, nil)
+	}
+	// An ad-hoc task has no parent, so a snapshot supplies only configuration;
+	// the Git reads stay outside the state lock, as at claim.
+	if acceptanceCreationApplies(&newTask) || len(newTask.ValidationPrerequisites) > 0 {
+		snapshot, err := db.For(statePath).ReadSnapshot()
+		if err != nil {
+			return models.Task{}, nil, fmt.Errorf("failed to read state for the acceptance check: %w", err)
+		}
+		if acceptanceCreationApplies(&newTask) {
+			if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
+				return models.Task{}, nil, err
+			}
+		}
+		diagnostics, err := checkRuntimeInputDeclarations(projectRoot, snapshot, []string{newTask.ID}, []runtimeInputCarrier{{inputs: newTask.RuntimeInputs, prerequisites: newTask.ValidationPrerequisites}})
+		if err := runtimeInputAdmissionError("add-task", nil, diagnostics, err); err != nil {
+			return models.Task{}, nil, err
+		}
+	}
+	return newTask, resolver, nil
+}
+
+// addedTaskResult reports a committed task and appends its activity-log entry.
+func addedTaskResult(logPath, orchestratorID string, task models.Task, input *AddTaskInput, postValidationErr error) *AddTaskResult {
 	result := &AddTaskResult{TaskID: input.ID}
 	if postValidationErr != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("state remains degraded after add-task; full validation failed: %v", postValidationErr))
@@ -146,7 +165,7 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 
 	logger := log.New(logPath)
 	logEntry := log.Entry{
-		Timestamp: newTask.Created,
+		Timestamp: task.Created,
 		Agent:     orchestratorID,
 		Action:    "task_added",
 		Task:      &input.ID,
@@ -157,7 +176,7 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
 	}
 
-	return result, nil
+	return result
 }
 
 // validateAddTaskInput checks the creation fields that need no pipeline config.
@@ -445,27 +464,347 @@ func addTasksWithOptionalAuthority(statePath, logPath string, input *AddTasksInp
 			}
 		}
 	}
-	result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
-	for i := range input.Tasks {
-		var r *AddTaskResult
-		var err error
-		if authority == nil {
-			r, err = AddTask(statePath, logPath, &input.Tasks[i], orchestratorID)
-		} else {
-			r, err = AddTaskWithAuthority(statePath, logPath, &input.Tasks[i], *authority)
-			if IsAgentAuthorityError(err) {
+	units := planDeliveryUnits(statePath, input.Tasks)
+	if units == nil {
+		result := &AddTasksResult{Results: make([]AddTaskItemResult, 0, len(input.Tasks))}
+		for i := range input.Tasks {
+			item, err := addOneOfTasks(statePath, logPath, &input.Tasks[i], orchestratorID, authority)
+			if err != nil {
 				return nil, err
 			}
+			result.Results = append(result.Results, item)
 		}
-		item := AddTaskItemResult{TaskID: input.Tasks[i].ID}
-		if err != nil {
-			item.Error = err.Error()
-		} else {
-			item.Success = true
-			item.TaskID = r.TaskID
-			item.Warnings = r.Warnings
-		}
-		result.Results = append(result.Results, item)
+		return result, nil
 	}
-	return result, nil
+
+	// Results stay positional whatever order the units commit in.
+	results := make([]AddTaskItemResult, len(input.Tasks))
+	for _, unit := range units {
+		if len(unit) == 1 {
+			item, err := addOneOfTasks(statePath, logPath, &input.Tasks[unit[0]], orchestratorID, authority)
+			if err != nil {
+				return nil, err
+			}
+			results[unit[0]] = item
+			continue
+		}
+		items, err := addDeliveryGroup(statePath, logPath, input.Tasks, unit, orchestratorID, authority)
+		if err != nil {
+			return nil, err
+		}
+		for k, idx := range unit {
+			results[idx] = items[k]
+		}
+	}
+	return &AddTasksResult{Results: results}, nil
+}
+
+// addOneOfTasks adds one batch item on its own. Only an authority loss is
+// returned as an error: it stops the batch.
+func addOneOfTasks(statePath, logPath string, input *AddTaskInput, orchestratorID string, authority *models.AgentAuthority) (AddTaskItemResult, error) {
+	var r *AddTaskResult
+	var err error
+	if authority == nil {
+		r, err = AddTask(statePath, logPath, input, orchestratorID)
+	} else {
+		r, err = AddTaskWithAuthority(statePath, logPath, input, *authority)
+		if IsAgentAuthorityError(err) {
+			return AddTaskItemResult{}, err
+		}
+	}
+	item := AddTaskItemResult{TaskID: input.ID}
+	if err != nil {
+		item.Error = err.Error()
+	} else {
+		item.Success = true
+		item.TaskID = r.TaskID
+		item.Warnings = r.Warnings
+	}
+	return item, nil
+}
+
+// deliveryRequirement describes a dead-end stage (D-33): every transition out
+// of the role-pair is many-to-one, keyed on a cohort parent that an added task
+// never has, so the task can move on only through a delivery task that depends
+// on it and was commissioned with it.
+type deliveryRequirement struct {
+	transitions []string
+	targets     []string
+}
+
+// deliveryRequirementFor returns the requirement for an added task of rolePair,
+// or nil when the stage can move on alone: it has a per-subtask or one-to-one
+// transition, or none at all (a terminal stage, or one whose pipeline
+// transitions config.no_follow_up suppresses).
+func deliveryRequirementFor(resolver *pipeline.Resolver, rolePair string, noFollowUp bool) *deliveryRequirement {
+	req := &deliveryRequirement{}
+	for _, td := range resolver.AllTransitions() {
+		if noFollowUp && resolver.IsPipelineTransition(td.Name) {
+			continue
+		}
+		if source, err := resolver.TransitionSourceRolePair(td.Name); err != nil || source != rolePair {
+			continue
+		}
+		if td.Cardinality != "many-to-one" {
+			return nil
+		}
+		req.transitions = append(req.transitions, td.Name)
+		if target, err := resolver.TransitionTargetRolePair(td.Name); err == nil && !slices.Contains(req.targets, target) {
+			req.targets = append(req.targets, target)
+		}
+	}
+	if len(req.transitions) == 0 {
+		return nil
+	}
+	return req
+}
+
+func (r *deliveryRequirement) refusal(taskID, rolePair string) error {
+	return &PreconditionError{Reason: fmt.Sprintf(
+		"task %s (role_pair %s) cannot be delivered on its own: its only onward transition (%s) is many-to-one and needs a cohort parent that an added task does not have; commission it with %s in one request together with a %s task that depends on it",
+		taskID, rolePair, strings.Join(r.transitions, ", "), brand.Command("add-tasks"), strings.Join(r.targets, " or "),
+	)}
+}
+
+// deliveredBy reports whether candidate delivers source: it belongs to a
+// delivery target role-pair and depends on source.
+func (r *deliveryRequirement) deliveredBy(source string, candidate *AddTaskInput) bool {
+	if !slices.Contains(r.targets, candidate.RolePair) {
+		return false
+	}
+	return slices.ContainsFunc(candidate.DependsOn, func(dep string) bool { return strings.TrimSpace(dep) == source })
+}
+
+// planDeliveryUnits returns the commit order of a batch holding a dead-end
+// task, or nil when it holds none and the plain item loop applies unchanged.
+// Each unit lists request indices: a single item commits alone; several commit
+// in one transaction. A dead-end task and its delivery companions form a
+// group; units whose in-request dependencies form a cycle through a group
+// merge into one unit, so grouping never orders a member before a
+// prerequisite. Units then commit in a stable dependency order: the ready unit
+// with the lowest request index first.
+func planDeliveryUnits(statePath string, tasks []AddTaskInput) [][]int {
+	resolver, _, err := loadResolver(filepath.Dir(filepath.Dir(statePath)))
+	if err != nil {
+		return nil
+	}
+	snapshot, err := db.For(statePath).ReadSnapshot()
+	if err != nil {
+		return nil
+	}
+	noFollowUp := snapshot.Config.NoFollowUp
+
+	unit := make([]int, len(tasks)) // union-find parent over request indices
+	for i := range unit {
+		unit[i] = i
+	}
+	var find func(int) int
+	find = func(i int) int {
+		if unit[i] != i {
+			unit[i] = find(unit[i])
+		}
+		return unit[i]
+	}
+	union := func(a, b int) { unit[find(a)] = find(b) }
+
+	grouped := map[int]bool{}
+	for s := range tasks {
+		req := deliveryRequirementFor(resolver, tasks[s].RolePair, noFollowUp)
+		if req == nil {
+			continue
+		}
+		for c := range tasks {
+			if c != s && req.deliveredBy(tasks[s].ID, &tasks[c]) {
+				union(s, c)
+				grouped[s], grouped[c] = true, true
+			}
+		}
+	}
+	if len(grouped) == 0 {
+		// A dead-end task without a companion is refused by its own add-task.
+		return nil
+	}
+
+	index := map[string]int{}
+	for i, task := range tasks {
+		if _, seen := index[task.ID]; !seen {
+			index[task.ID] = i
+		}
+	}
+	dependsOn := func(i int) []int {
+		var prereqs []int
+		for _, dep := range tasks[i].DependsOn {
+			if j, ok := index[strings.TrimSpace(dep)]; ok && j != i {
+				prereqs = append(prereqs, j)
+			}
+		}
+		return prereqs
+	}
+
+	// Merge every cycle of units that runs through a group.
+	edges := make([][]int, len(tasks))
+	for i := range tasks {
+		for _, j := range dependsOn(i) {
+			if find(i) != find(j) {
+				edges[find(i)] = append(edges[find(i)], find(j))
+			}
+		}
+	}
+	var roots []int
+	groupRoot := map[int]bool{}
+	for i := range tasks {
+		if find(i) == i {
+			roots = append(roots, i)
+		}
+		if grouped[i] {
+			groupRoot[find(i)] = true
+		}
+	}
+	for _, scc := range findSCCs(roots, edges) {
+		if len(scc) > 1 && slices.ContainsFunc(scc, func(r int) bool { return groupRoot[r] }) {
+			for _, r := range scc[1:] {
+				union(r, scc[0])
+			}
+		}
+	}
+
+	members := map[int][]int{}
+	for i := range tasks {
+		members[find(i)] = append(members[find(i)], i)
+	}
+	var order [][]int
+	for _, unitIdx := range stableDependencyOrder(len(tasks), func(i int) bool { return find(i) == i }, func(r int) []int {
+		var prereqs []int
+		for _, m := range members[r] {
+			for _, j := range dependsOn(m) {
+				if find(j) != r {
+					prereqs = append(prereqs, find(j))
+				}
+			}
+		}
+		return prereqs
+	}, func(r int) int { return members[r][0] }) {
+		ms := members[unitIdx]
+		if len(ms) > 1 {
+			// Inside a unit, members insert after their in-unit prerequisites.
+			inUnit := map[int]bool{}
+			for _, m := range ms {
+				inUnit[m] = true
+			}
+			ms = stableDependencyOrder(len(tasks), func(i int) bool { return inUnit[i] }, func(m int) []int {
+				var prereqs []int
+				for _, j := range dependsOn(m) {
+					if inUnit[j] {
+						prereqs = append(prereqs, j)
+					}
+				}
+				return prereqs
+			}, func(m int) int { return m })
+		}
+		order = append(order, ms)
+	}
+	return order
+}
+
+// stableDependencyOrder orders the nodes in [0,n) that include accepts:
+// repeatedly the ready node (every prerequisite already placed) with the
+// lowest anchor, or, when a cycle leaves none ready, the lowest anchor.
+func stableDependencyOrder(n int, include func(int) bool, prereqs func(int) []int, anchor func(int) int) []int {
+	var pending, order []int
+	for i := 0; i < n; i++ {
+		if include(i) {
+			pending = append(pending, i)
+		}
+	}
+	slices.SortStableFunc(pending, func(a, b int) int { return anchor(a) - anchor(b) })
+	placed := map[int]bool{}
+	for len(pending) > 0 {
+		pick := 0
+		for k, node := range pending {
+			if !slices.ContainsFunc(prereqs(node), func(p int) bool { return !placed[p] }) {
+				pick = k
+				break
+			}
+		}
+		placed[pending[pick]] = true
+		order = append(order, pending[pick])
+		pending = slices.Delete(pending, pick, pick+1)
+	}
+	return order
+}
+
+// addDeliveryGroup commits the batch items at indices in one transaction
+// (D-33): every member persists, or none does and each reports the group
+// error. Only an authority loss is returned as an error.
+func addDeliveryGroup(statePath, logPath string, tasks []AddTaskInput, indices []int, orchestratorID string, authority *models.AgentAuthority) ([]AddTaskItemResult, error) {
+	ids := make([]string, len(indices))
+	for k, idx := range indices {
+		ids[k] = tasks[idx].ID
+	}
+	fail := func(memberID string, err error) []AddTaskItemResult {
+		results := make([]AddTaskItemResult, len(indices))
+		for k := range indices {
+			results[k] = AddTaskItemResult{TaskID: ids[k], Error: fmt.Sprintf("delivery group [%s]: %s: %v", strings.Join(ids, ", "), memberID, err)}
+		}
+		return results
+	}
+
+	projectRoot := filepath.Dir(filepath.Dir(statePath))
+	built := make([]models.Task, len(indices))
+	var resolver *pipeline.Resolver
+	for k, idx := range indices {
+		task, r, err := prepareAddTask(statePath, projectRoot, &tasks[idx])
+		if err != nil {
+			return fail(ids[k], err), nil
+		}
+		built[k], resolver = task, r
+	}
+
+	bb := db.For(statePath)
+	var postValidationErr error
+	var failedMember string
+	err := lifecycleMutation(bb, authority)(func(state *models.State) error {
+		for k, idx := range indices {
+			req := deliveryRequirementFor(resolver, built[k].RolePair, state.Config.NoFollowUp)
+			if req != nil && !slices.ContainsFunc(indices, func(c int) bool { return c != idx && req.deliveredBy(ids[k], &tasks[c]) }) {
+				failedMember = ids[k]
+				return req.refusal(ids[k], built[k].RolePair)
+			}
+		}
+		for k, idx := range indices {
+			failedMember = ids[k]
+			if err := insertTaskInState(state, projectRoot, built[k], &tasks[idx], resolver); err != nil {
+				return err
+			}
+			if err := reserveSuccessorsInState(state, resolver, &built[k], tasks[idx].ReserveSuccessors, orchestratorID); err != nil {
+				return err
+			}
+		}
+		failedMember = ""
+		if models.HasProviderDependencies(state) {
+			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
+				return &PreconditionError{Reason: fmt.Sprintf("add-task provider dependencies: %v", err)}
+			}
+		}
+		if err := statevalidate.ValidateState(state, projectRoot, false, io.Discard); err != nil {
+			postValidationErr = err
+		}
+		return nil
+	})
+	if err != nil {
+		if authority != nil && IsAgentAuthorityError(err) {
+			return nil, err
+		}
+		if failedMember == "" {
+			failedMember = strings.Join(ids, ", ")
+		}
+		return fail(failedMember, fmt.Errorf("failed to add task: %w", err)), nil
+	}
+
+	results := make([]AddTaskItemResult, len(indices))
+	for k, idx := range indices {
+		r := addedTaskResult(logPath, orchestratorID, built[k], &tasks[idx], postValidationErr)
+		results[k] = AddTaskItemResult{TaskID: r.TaskID, Success: true, Warnings: r.Warnings}
+	}
+	return results, nil
 }

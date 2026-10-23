@@ -68,6 +68,12 @@ A wait that orders the generated plan's writers rather than the plan goes in
 receives the wait as an ordinary declaration, so its writers keep their order
 ([ADR-0193](../architecture/ADR/0193-descendant-provider-dependencies.md)).
 
+An added task has no parent, so a stage whose every outgoing transition is
+many-to-one (default: a story) cannot move it on. It is commissioned in one
+`add-tasks` request with a task of the transition's target role-pair that
+depends on it, committed atomically; `add-task` refuses it alone
+([ADR-0217](../architecture/ADR/0217-dead-end-stages-commissioned-with-their-delivery-task.md)).
+
 A writer inserted ahead of an existing one is placed with `provider_reservations`
 (single-item `add-tasks` with `reserve_successors`, or `reserve-provider`): the
 reserved writer stays unclaimable until every child the provider generates at
