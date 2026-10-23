@@ -517,6 +517,20 @@ the behaviour binds, not the line numbers.
 - Debt: Git inside `Modify` at the sites above. Payback trigger: a run whose goal admits a
   synchronization redesign. Revert: the human widens scope, or overrides this ruling.
 
+### D34 — Byte-rewriting pre-commit hooks skip oracle goldens (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:12Z. `arm-1-ar-2-cp-1-code-0` blocked because `end-of-file-fixer` appended a
+newline to baseline-produced artifact goldens. The approved comparator requires them byte-exact, and the
+task scope forbids editing the shared hook file. This is the fourth repository-hook collision with oracle
+goldens (D27 jscpd; check-yaml for A3 and A6, D32).
+- Ruling: `.pre-commit-config.yaml` excludes `^internal/oracle/(?:[^/]+/)+testdata/golden/` from the
+  hooks that rewrite or reject golden bytes: `end-of-file-fixer`, `trailing-whitespace`, `forbid-crlf`,
+  `remove-crlf`. Golden bytes are owned by the oracle comparator and the starting-tree producer.
+  Fixtures, drivers and all other files keep every hook. `check-useless-excludes` passes (goldens
+  exist on the branch), and the change merges cleanly with the D32 check-yaml lines.
+- Rejected: per-task scope exceptions (a fifth collision is predictable); normalising the goldens
+  (breaks byte-exactness against the starting tree). Kind: delivery-neutral (tooling classification).
+  Revert: drop the four exclude lines.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go

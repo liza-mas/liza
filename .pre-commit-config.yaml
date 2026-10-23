@@ -20,8 +20,12 @@ repos:
       - id: debug-statements
       - id: end-of-file-fixer
         stages: [pre-commit]
+        # Oracle goldens are byte-exact; their bytes are owned by the oracle comparator.
+        exclude: ^internal/oracle/(?:[^/]+/)+testdata/golden/
       - id: trailing-whitespace
         stages: [pre-commit]
+        # Oracle goldens are byte-exact; their bytes are owned by the oracle comparator.
+        exclude: ^internal/oracle/(?:[^/]+/)+testdata/golden/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.7
@@ -34,7 +38,11 @@ repos:
     rev: v1.5.5
     hooks:
       - id: forbid-crlf
+        # Oracle goldens are byte-exact; their bytes are owned by the oracle comparator.
+        exclude: ^internal/oracle/(?:[^/]+/)+testdata/golden/
       - id: remove-crlf
+        # Oracle goldens are byte-exact; their bytes are owned by the oracle comparator.
+        exclude: ^internal/oracle/(?:[^/]+/)+testdata/golden/
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.10.0
