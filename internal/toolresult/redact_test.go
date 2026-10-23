@@ -450,6 +450,7 @@ func TestSanitizeMasksParenthesizedValues(t *testing.T) {
 		`token = f(a); next`,
 		`api_key = loadApiKey(cfg)`,
 		`secret = computeSecret(salt, pw)`,
+		"api_key=getToken(user)\nnext line",
 	} {
 		if got := newSanitizer(nil)(input); got != input {
 			t.Errorf("real call changed: %q -> %q", input, got)
