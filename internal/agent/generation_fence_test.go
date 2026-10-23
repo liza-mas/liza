@@ -359,7 +359,8 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 	// shape instead of the locked fence.
 	fences := map[string][]string{
 		"heartbeat.go":             {"CheckAgentAuthoritySnapshot", "db.WriteLivenessRecord"},
-		"supervisor.go":            {"ModifyWithAgentAuthority"},
+		"supervisor.go":            {}, // still barred from direct .Modify(
+		"supervisor_restart.go":    {"ModifyWithAgentAuthority"},
 		"claiming.go":              {"ModifyWithAgentAuthority"},
 		"strategy_orchestrator.go": {"ModifyWithAgentAuthority"},
 		"provider_audit.go":        {"ModifyWithAgentAuthority"},
