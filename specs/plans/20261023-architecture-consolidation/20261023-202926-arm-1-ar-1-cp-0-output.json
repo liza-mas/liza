@@ -1,0 +1,109 @@
+[
+  {
+    "desc": "Must: add the binary-driven A1 CLI oracle package for V, VP, PR, U and AR.",
+    "done_when": "Commands 0–2 pass over all 21 inventory goldens; each golden independently fails live and baseline comparison when altered, naming its path; the branch diff touches only internal/oracle/a1/cli/**. Commands 3–5 remain deferred shared regression gates.",
+    "scope": "New test-only Go, committed fixtures, 21 goldens and acceptance-cli.json under internal/oracle/a1/cli/**. Out: production Go, existing tests, harness, PROVENANCE, adapters and other surfaces.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-202926-arm-1-ar-1-cp-0.md#Task 1: A1 CLI oracle package",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/cli/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/cli/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_CLI_TAMPER=1 go test -count=1 -timeout 60m -run '^TestOracleCLITamper$' ./internal/oracle/a1/cli/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/cli/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/cli/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_CLI_TAMPER=1 go test -count=1 -timeout 60m -run '^TestOracleCLITamper$' ./internal/oracle/a1/cli/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "make",
+          "go",
+          "env"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "make",
+          "go",
+          "env"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-0",
+          "outputs": [
+            0
+          ]
+        },
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  }
+]
