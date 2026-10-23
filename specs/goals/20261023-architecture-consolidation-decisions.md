@@ -407,6 +407,52 @@ blocked on pre-commit's `jscpd` hook (whole-repo scan, threshold 5%): their comm
   editing the same line (conflicting writers); deduplicating goldens (changes the oracle).
 - Kind: check-only (scope of the duplicate check). Revert: drop the ignore entry.
 
+### D28 — Agent row order in `status` is unspecified at the start (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T22:38Z. `arm-1-ar-7-cp-0-code-0` blocked: A7 Scope 1 needs a multi-role agent
+fixture and the goal freezes human-output row order, but at the starting commit
+`buildAgentStatuses` (`internal/commands/status.go:482-514` at 96c9ad69a) ranges over the agent map
+and returns the slice unsorted, so the race-run golden differs by agent order.
+- Ruling: the order of agent rows (human table and `--json` agents array) is not a frozen property —
+  the starting behaviour has none. The A7 oracle compares agent rows order-insensitively; each row's
+  content and every other row and column order stay asserted. Production code is not changed to
+  sort them (that would be a behaviour change outside C1–C6).
+- Intent relied on: goal Frozen Surfaces freeze observable behaviour; a map-iteration order is not
+  observable as a stable value.
+- Rejected: single-role fixtures (loses multi-role coverage); sorting in production (unlisted
+  behaviour change). Kind: check-only. Revert: assert order and drop the multi-role fixture.
+
+### D29 — Runtime state is not part of A7's installed-tree digest manifest (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T22:38Z. `arm-1-ar-7-cp-1` blocked: A7 Scope 2's installed-tree manifest takes a
+content SHA-256 of every file under the project root except the AC6 runtime exclusions and `.git`,
+which includes the project runtime `state.yaml`; init writes current timestamps and generated goal
+IDs into it, so its digest is not reproducible, while the scope already records the normalised state
+separately.
+- Ruling: the runtime `state.yaml` stays listed in the manifest by path (presence asserted) but its
+  content is asserted only by the scope's normalised state golden, not by a raw digest; every other
+  installed file keeps its content digest.
+- Intent relied on: goal "`state.yaml` schema and semantics" frozen and proven by state goldens
+  (Oracle proof scope); artifact byte-identity covers generated and installed artifacts, not runtime
+  state.
+- Rejected: normalising the whole manifest with the general text normaliser (erases artifact
+  digests); dropping the file from the manifest (loses its presence check). Kind: check-only.
+  Revert: digest the raw file and accept non-reproducibility.
+
+### D30 — Scope 13 (Refactor A4) keeps planning-order edges between its code plans (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T22:38Z. `arm-1-ar-13` blocked on accepted review finding R1: its sibling code
+plans' coding writers should wait on each other without serialising planning, but
+`descendant_dependencies` must name an existing provider task (ADR-0193,
+`statevalidate.validateProviderOwner`), and the sibling code-plan providers do not exist yet.
+- Ruling: R1 is waived for this scope. The architecture keeps its five planning-order edges (sibling
+  code plans run in order), preserving the A3 boundary, the A4 shared-writer order, upstream default
+  inheritance and the G8 hold. No engine capability is commissioned.
+- Intent relied on: master Run Sequencing — refactor coding is strictly sequential and Scope 13's
+  coding cannot start before Scope 12's coding merges; at ruling time no refactor coding had started
+  (Scopes 10–12 in code planning), so serialised A4 planning is off the critical path.
+- Rejected: commissioning a new declaration capability in the engine under refactor (outside this
+  run's scope); a revised allocation merging the five writers (replan cost). Overrides the
+  reviewer's R1 recommendation for this scope only. Kind: delivery-neutral (ordering).
+  Revert: route a reviewed rescope if planning becomes critical.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
