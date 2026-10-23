@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -46,6 +47,10 @@ func TestChildEnvNames(t *testing.T) {
 		p := newProject(t, "base", agent, false, true)
 		cmd, cancel := p.command(filepath.Join(p.bin, "oracle-stub"), "0")
 		defer cancel()
+		// Keep this independent of ChildEnv, which also supplies expected names.
+		if slices.Contains(envNames(cmd.Env), "ORACLE_HOST_ONLY") {
+			t.Fatal("host-only variable ORACLE_HOST_ONLY reached child environment")
+		}
 		base, err := oracle.ChildEnv(oracle.EnvBase{Home: p.home, Path: p.bin, Tmp: p.tmp})
 		if err != nil {
 			t.Fatal(err)
