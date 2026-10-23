@@ -1,0 +1,554 @@
+[
+  {
+    "desc": "Must: SI-3 root-only prompt substitution for A8",
+    "done_when": "TestRootOnlyBytes, TestRootOnlyAbsentAndEmpty and TestRootOnlyGoldenComparison pass at HEAD and start via TestProviderCorrectionA8Start; harness race and existing oracle/sample regeneration checks pass. No existing golden changes.",
+    "scope": "New internal/testhelpers/oracle/{root_paths.go,root_paths_test.go,correction_start_test.go,root-paths.md,testdata/correction-root/**,testdata/acceptance-correction-root.json}. Out: production, consumers, existing tests/goldens, regen semantics, ledger.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-222338-arm-1-ar-0-cp-2-provider-correction-1.md#Task 1: Root-only prompt substitution",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "lint"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test-e2e"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "desc": "Must: SI-3 execution in a caller-prepared disposable project for A5",
+    "done_when": "TestPreparedProjectSequence/Isolation/Environment/InvalidDirectories prove shared ordered state and explicit ChildEnv; TestProviderCorrectionA5Start executes those proofs at start. Existing Run tests, harness race and oracle/sample regeneration checks pass.",
+    "scope": "internal/testhelpers/oracle/cli.go; new prepared_project_test.go, testdata/preparedprobe/main.go, testdata/correction-project/**, prepared-project.md, testdata/acceptance-correction-project.json. Out: production, consumers, existing tests/goldens, regen and ledger.",
+    "depends_on": [
+      "0"
+    ],
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-222338-arm-1-ar-0-cp-2-provider-correction-1.md#Task 2: Prepared disposable project execution",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "lint"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test-e2e"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "desc": "Must: SI-3 fixed-recipe SHA preservation for A9 comparisons",
+    "done_when": "TestFixedSHAPreservation/Kinds/GoldenComparison retain registered SHAs verbatim in state/json/human and detect altered SHAs while volatile IDs normalize; TestProviderCorrectionA9Start runs them at start. Harness race and oracle/sample regeneration checks pass.",
+    "scope": "internal/testhelpers/oracle/normalise.go; new fixed_sha_test.go, testdata/correction-sha/**, fixed-shas.md, testdata/acceptance-correction-sha.json. Out: production, consumers, existing tests/goldens, kind.go, golden.go, regen and ledger.",
+    "depends_on": [
+      "0"
+    ],
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-222338-arm-1-ar-0-cp-2-provider-correction-1.md#Task 3: Fixed-recipe SHA preservation",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/sample/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "lint"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "-n",
+            "test-e2e"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-0-cp-2",
+          "outputs": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  }
+]
