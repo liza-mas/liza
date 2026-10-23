@@ -1,0 +1,5 @@
+{
+  "url": "http://127.0.0.1:<PORT>/catalog.yaml",
+  "etag": "\"oracle-catalog\"",
+  "fetched_at": "<TIME>"
+}
