@@ -142,7 +142,7 @@ func checkS1(measured, snapshot map[Key]int, areas []*Area) []violation {
 	}
 	for k, ls := range listed {
 		if len(ls) > 1 {
-			add(vDuplicate, k, "%s is listed %d times: %s; keep one entry", k, len(ls), joinListings(ls))
+			add(vDuplicate, k, "%s (%s) is listed %d times: %s; keep one entry", k, measuredNote(k, measured), len(ls), joinListings(ls))
 		}
 	}
 
@@ -184,9 +184,9 @@ func checkRatchetEntry(a *Area, r RatchetEntry, measured, snapshot map[Key]int, 
 	snap, inSnap := snapshot[k]
 	switch {
 	case !inSnap:
-		add(vNotInSnapshot, k, "ratchet entry %s in %s is not in the start snapshot: a new, moved or renamed offender cannot be ratchet-listed; reduce it, or add an S2 entry", k, file)
+		add(vNotInSnapshot, k, "ratchet entry %s in %s (%s) is not in the start snapshot: a new, moved or renamed offender cannot be ratchet-listed; reduce it, or add an S2 entry", k, file, measuredNote(k, measured))
 	case r.Ceiling > snap:
-		add(vAboveSnapshot, k, "ratchet entry %s in %s has ceiling %d above its start-snapshot value %d; lower it", k, file, r.Ceiling, snap)
+		add(vAboveSnapshot, k, "ratchet entry %s in %s (%s) has ceiling %d above its start-snapshot value %d; lower it", k, file, measuredNote(k, measured), r.Ceiling, snap)
 	}
 	m, over := measured[k]
 	switch {
@@ -200,21 +200,31 @@ func checkRatchetEntry(a *Area, r RatchetEntry, measured, snapshot map[Key]int, 
 func checkS2Entry(a *Area, e S2Entry, measured map[Key]int, add func(string, Key, string, ...any)) {
 	file := areaFile(a.ID)
 	k := e.Key
+	note := measuredNote(k, measured)
 	switch e.Category {
 	case S2Table, S2Registration, S2Generated:
 	case S2HumanRuling:
 		if strings.TrimSpace(e.Ruling) == "" {
-			add(vInvalidS2Entry, k, "S2 entry %s in %s has category %q but no ruling reference", k, file, e.Category)
+			add(vInvalidS2Entry, k, "S2 entry %s in %s (%s) has category %q but no ruling reference", k, file, note, e.Category)
 		}
 	default:
-		add(vInvalidS2Entry, k, "S2 entry %s in %s has unknown category %q", k, file, e.Category)
+		add(vInvalidS2Entry, k, "S2 entry %s in %s (%s) has unknown category %q", k, file, note, e.Category)
 	}
 	if strings.TrimSpace(e.Rationale) == "" {
-		add(vInvalidS2Entry, k, "S2 entry %s in %s has no rationale", k, file)
+		add(vInvalidS2Entry, k, "S2 entry %s in %s (%s) has no rationale", k, file, note)
 	}
 	if _, over := measured[k]; !over {
 		add(vStale, k, "stale S2 entry %s in %s: no longer above the %d-line limit; remove it", k, file, threshold(k))
 	}
+}
+
+// measuredNote states a key's measurement and S1 limit for a message. An
+// absent measurement is reported as such, never as a count.
+func measuredNote(k Key, measured map[Key]int) string {
+	if n, ok := measured[k]; ok {
+		return fmt.Sprintf("measured %d lines, limit %d", n, threshold(k))
+	}
+	return fmt.Sprintf("not measured above its %d-line limit", threshold(k))
 }
 
 func joinListings(ls []listing) string {

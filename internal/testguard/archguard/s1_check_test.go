@@ -251,3 +251,104 @@ func TestCheckS1DuplicateMessageNamesEveryAreaFile(t *testing.T) {
 		}
 	}
 }
+
+// Every violation names the key, the measurement (or its absence), the limit
+// and the area file: expected values are explicit per violation kind.
+func TestCheckS1MeasurementAndLimitInEveryMessage(t *testing.T) {
+	t.Parallel()
+	a1, a2 := areaFile("A1"), areaFile("A2")
+	tests := []struct {
+		name     string
+		measured map[Key]int
+		snapshot map[Key]int
+		areas    []*Area
+		id       string   // "kind key" of the violation under test
+		want     []string // substrings of its message
+	}{
+		{
+			name:     "duplicate names measurement, limit and both area files",
+			measured: map[Key]int{kFunc: 120},
+			snapshot: map[Key]int{kFunc: 130},
+			areas:    []*Area{ratchetArea("A1", rat(kFunc, 125)), ratchetArea("A2", rat(kFunc, 125))},
+			id:       "duplicate " + kFunc.String(),
+			want:     []string{kFunc.String(), "measured 120 lines, limit 100", a1, a2},
+		},
+		{
+			name:     "duplicate on a file key uses the file limit",
+			measured: map[Key]int{kFile: 900},
+			snapshot: map[Key]int{kFile: 900},
+			areas:    []*Area{ratchetArea("A1", rat(kFile, 900), rat(kFile, 900))},
+			id:       "duplicate " + kFile.String(),
+			want:     []string{"measured 900 lines, limit 800", a1},
+		},
+		{
+			name:     "not-in-snapshot names measurement, limit and area file",
+			measured: map[Key]int{kNew: 120},
+			snapshot: map[Key]int{},
+			areas:    []*Area{ratchetArea("A2", rat(kNew, 120))},
+			id:       "not-in-snapshot " + kNew.String(),
+			want:     []string{kNew.String(), "measured 120 lines, limit 100", a2},
+		},
+		{
+			name:     "above-snapshot names measurement, limit, ceiling, snapshot value and area file",
+			measured: map[Key]int{kFunc: 120},
+			snapshot: map[Key]int{kFunc: 130},
+			areas:    []*Area{ratchetArea("A1", rat(kFunc, 131))},
+			id:       "above-snapshot " + kFunc.String(),
+			want:     []string{kFunc.String(), "measured 120 lines, limit 100", "ceiling 131", "value 130", a1},
+		},
+		{
+			name:     "invalid S2 unknown category",
+			measured: map[Key]int{kFunc: 400},
+			areas:    []*Area{s2Area("A2", S2Entry{Key: kFunc, Category: "whatever", Rationale: "r"})},
+			id:       "invalid-s2-entry " + kFunc.String(),
+			want:     []string{kFunc.String(), "measured 400 lines, limit 100", a2, `"whatever"`},
+		},
+		{
+			name:     "invalid S2 missing rationale",
+			measured: map[Key]int{kFile: 900},
+			areas:    []*Area{s2Area("A1", S2Entry{Key: kFile, Category: S2Table})},
+			id:       "invalid-s2-entry " + kFile.String(),
+			want:     []string{kFile.String(), "measured 900 lines, limit 800", a1, "no rationale"},
+		},
+		{
+			name:     "invalid S2 human ruling without reference",
+			measured: map[Key]int{kFunc: 400},
+			areas:    []*Area{s2Area("A1", S2Entry{Key: kFunc, Category: S2HumanRuling, Rationale: "r"})},
+			id:       "invalid-s2-entry " + kFunc.String(),
+			want:     []string{kFunc.String(), "measured 400 lines, limit 100", a1, "no ruling reference"},
+		},
+		{
+			name:     "absent measurement is stated, not counted",
+			measured: map[Key]int{},
+			areas:    []*Area{s2Area("A1", S2Entry{Key: kFunc, Category: "whatever", Rationale: "r"})},
+			id:       "invalid-s2-entry " + kFunc.String(),
+			want:     []string{kFunc.String(), "not measured above its 100-line limit", a1},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			vs := checkS1(tc.measured, tc.snapshot, tc.areas)
+			var msg string
+			var found bool
+			for _, v := range vs {
+				if v.Kind+" "+v.Key.String() == tc.id {
+					msg, found = v.Msg, true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("no violation %q in %v", tc.id, kinds(vs))
+			}
+			for _, s := range tc.want {
+				if !strings.Contains(msg, s) {
+					t.Errorf("message %q missing %q", msg, s)
+				}
+			}
+			if strings.Contains(msg, "measured 0 lines") {
+				t.Errorf("message %q fabricates a measurement", msg)
+			}
+		})
+	}
+}

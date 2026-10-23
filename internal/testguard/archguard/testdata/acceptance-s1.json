@@ -13,7 +13,7 @@
     {"obligation_id": "AC-lint-target", "file": "Makefile", "assertion": "lint-archguard runs go test -count=1 on the package from lint-nosync; make lint exits 0", "command_index": 1},
     {"obligation_id": "AC-adr", "approved_reference_id": "arch-scope1"},
     {"obligation_id": "AC-stdlib-only", "approved_reference_id": "goal-structure"},
-    {"obligation_id": "AC-env-safe-messages", "file": "internal/testguard/archguard/s1_check_test.go", "assertion": "TestCheckS1MessagesNameLimitAndAreaFile asserts messages carry no absolute path; TestParseProductionParsesAndNamesRelativePathOnError", "command_index": 0},
+    {"obligation_id": "AC-env-safe-messages", "file": "internal/testguard/archguard/s1_check_test.go", "assertion": "TestCheckS1MessagesNameLimitAndAreaFile asserts messages carry no absolute path; TestCheckS1MeasurementAndLimitInEveryMessage asserts key, measurement or its absence, limit and area file per violation kind; TestParseProductionParsesAndNamesRelativePathOnError", "command_index": 0},
     {"obligation_id": "AC-e1-proof", "file": "Makefile", "assertion": "make test under env -i runs the package through ./...", "command_index": 2}
   ]
 }
