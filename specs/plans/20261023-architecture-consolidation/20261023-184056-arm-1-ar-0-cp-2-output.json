@@ -1,0 +1,224 @@
+[
+  {
+    "desc": "Oracle harness library (SI-3 H2-H4): stdlib-only normalisers, per-kind golden form and compare, write mode, child-environment policy and CLI build/run helper, and the two sample goldens under internal/oracle/sample",
+    "done_when": "Race-enabled tests of internal/testhelpers/oracle and internal/oracle pass under env -i: normaliser, per-kind, golden I/O (missing golden fails and is not created live; write mode writes), ChildEnv exact name sets per platform (Windows incl. USERPROFILE, TMP, TEMP, SYSTEMROOT), explicit-env CLI helper and TestHarnessImportsStdlibOnly tests; TestOracleSampleHelp (human) and TestOracleSampleErrorEnvelope (json, adapter-driven) pass live against goldens generated on a start-equal production tree; make lint and env -i make test / make test-e2e pass.",
+    "scope": "internal/testhelpers/oracle/ (library .go files, _test.go files, testdata incl. acceptance-harness.json), internal/oracle/sample/ (sample_test.go, adapter_test.go, testdata/golden). Out: PROVENANCE, cmd/regen, ADR, area oracle content, Makefile, production Go.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 3: Oracle harness and regeneration entry point",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md#Task 1: Oracle harness library and sample goldens",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/oracle/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "desc": "Regeneration entry point (SI-3 H1, D24): provenance ledger, change-point chain and comparison rule in internal/testhelpers/oracle/cmd/regen, with the harness ADR",
+    "done_when": "go run ./internal/testhelpers/oracle/cmd/regen at HEAD materialises 96c9ad69a, reports both sample goldens ok H1 and exits 0; TestRegenNamesAlteredSampleGolden exits 1 naming the altered golden; disposable-repo tests (records committed with changes, --no-ff merges, one rebased branch) pass unchanged, one- and two-change C chains and C-then-determinism, and fail unrecorded change (committed/uncommitted), record without change, unreproduced change point and pre-change blob; ledger rejects SHAs in changed records; every regen child runs with exactly ChildEnv names; ADR 0219 indexed.",
+    "scope": "internal/testhelpers/oracle/cmd/regen/ (main package, _test.go files, testdata/acceptance-regen.json), internal/oracle/PROVENANCE, specs/architecture/ADR/0219-<slug>.md and its README index row. Out: harness library files (Task 1), area oracle content, Makefile, production Go.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 3: Oracle harness and regeneration entry point",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-184056-arm-1-ar-0-cp-2.md#Task 2: Provenance ledger, D24 chain and regeneration entry point",
+    "depends_on": [
+      "0"
+    ],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ]
+      },
+      {
+        "command": "make lint",
+        "executables": [
+          "make",
+          "go",
+          "gofmt"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ]
+  }
+]
