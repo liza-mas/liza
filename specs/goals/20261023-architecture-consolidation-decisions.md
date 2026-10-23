@@ -473,6 +473,25 @@ therefore fails before reaching the surface it tests.
   A1 scope); in-process invocation bypassing root resolution (would not test the CLI surface).
   Kind: oracle-contract (test setup). Revert: a reviewed A1 carrier correction.
 
+### D32 — check-yaml skips oracle StateForm goldens (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:08Z. `arm-1-ar-6-cp-0-code-0` blocked on `check-yaml`: the approved Scope 0
+harness StateForm (`internal/testhelpers/oracle/kind.go`) writes `# before`/state/`# after`/state as one
+text transcript in `.yaml` golden paths, and the A6 carrier mandates that form. The hook parses it as one
+document with duplicate keys. The orchestrator already authorised the same exclusion for
+`arm-1-ar-3-cp-1-code-0` (2026-10-23T22:23Z), but it lands only when that task merges.
+- Ruling (scope exception): any oracle-area coding task whose diff adds StateForm `.yaml` goldens may
+  add to `.pre-commit-config.yaml` check-yaml, byte for byte, the two lines
+  `# StateForm goldens are before/after text transcripts, not YAML documents.` and
+  `exclude: ^internal/oracle/(?:[^/]+/)+testdata/golden/state/.*\.ya?ml$`. These are the lines
+  already in `arm-1-ar-3-cp-1-code-0`, so identical additions merge cleanly. A task whose branch
+  already carries them after a rebase adds nothing. Fixture and ordinary YAML, every other hook,
+  all oracle assertions and the harness form are unchanged. Same family as D27 (D-13).
+- Not committed centrally because `check-useless-excludes` rejects an exclude that matches no file,
+  and no state golden is on the integration branch yet. The hook is kept, not skipped.
+- Rejected: changing the harness StateForm (would rewrite merged goldens and approved contracts);
+  making A6 wait on A3's merge (serialises unrelated areas).
+  Kind: delivery-neutral (tooling classification). Revert: drop the exclude line.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
