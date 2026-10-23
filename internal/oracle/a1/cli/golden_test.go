@@ -55,46 +55,24 @@ func layout(s string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// fmt's value report is an unlabelled struct. Parse its ten top-level fields,
-// retaining every delimiter and byte outside the three allocated pointer slots.
+type valueSpan struct{ start, end int }
+
+// D36 positions come from the starting usage.Report, PostTransitionRow and
+// PostTransitionTask types (internal/usage/report.go), not from scanning hex.
+// fmt prints nested pointer fields as addresses without expanding their pointees,
+// so PerCompletedTask's ratios and SuppressedCalls.ObservedSince are not reached.
 func usagePointers(s string) (string, error) {
 	trimmed := strings.TrimSpace(s)
-	if !strings.HasPrefix(trimmed, "{") || !strings.HasSuffix(trimmed, "}") {
-		return "", fmt.Errorf("unexpected usage-value report shape")
+	start := strings.Index(s, trimmed)
+	fields, err := valueFields(s, valueSpan{start, start + len(trimmed)}, '{', '}', 10)
+	if err != nil {
+		return "", err
 	}
-	start := strings.Index(s, "{")
-	end := start + len(trimmed) - 1
-	type span struct{ start, end int }
-	var fields []span
-	depth, begin := 0, -1
-	for i := start + 1; i < end; i++ {
-		c := s[i]
-		if depth == 0 && (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-			if begin >= 0 {
-				fields = append(fields, span{begin, i})
-				begin = -1
-			}
-			continue
-		}
-		if begin < 0 {
-			begin = i
-		}
-		switch c {
-		case '{', '[':
-			depth++
-		case '}', ']':
-			depth--
-		}
-		if depth < 0 {
-			return "", fmt.Errorf("unexpected usage-value report shape")
-		}
+	type slot struct {
+		valueSpan
+		name string
 	}
-	if begin >= 0 {
-		fields = append(fields, span{begin, end})
-	}
-	if depth != 0 || len(fields) != 10 {
-		return "", fmt.Errorf("unexpected usage-value report shape")
-	}
+	var slots []slot
 	for i, f := range fields {
 		value := s[f.start:f.end]
 		switch i {
@@ -106,27 +84,90 @@ func usagePointers(s string) (string, error) {
 			if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
 				return "", fmt.Errorf("unexpected usage-value sequence shape")
 			}
-		case 3, 5, 6:
-			if value != "<nil>" && !pointer.MatchString(value) && value != pointerMarker(i) {
-				return "", fmt.Errorf("unexpected usage-value pointer shape")
-			}
-		case 7:
-			if value != "<nil>" {
-				return "", fmt.Errorf("unexpected usage-value baseline shape")
-			}
+		case 3, 5, 6, 7:
+			slots = append(slots, slot{f, pointerMarker(i)})
 		}
 	}
-	for _, i := range []int{6, 5, 3} {
-		f := fields[i]
+	rows, err := valueFields(s, fields[4], '[', ']', -1)
+	if err != nil {
+		return "", err
+	}
+	for _, row := range rows {
+		rowFields, err := valueFields(s, row, '{', '}', 6)
+		if err != nil {
+			return "", err
+		}
+		tasks, err := valueFields(s, rowFields[4], '[', ']', -1)
+		if err != nil {
+			return "", err
+		}
+		for _, task := range tasks {
+			taskFields, err := valueFields(s, task, '{', '}', 4)
+			if err != nil {
+				return "", err
+			}
+			slots = append(slots, slot{taskFields[3], "<LastUseful:pointer>"})
+		}
+	}
+	// Validate every allocated slot before replacing, then work from the end so
+	// all spans continue to refer to the original byte positions.
+	for _, f := range slots {
+		value := s[f.start:f.end]
+		if value != "<nil>" && !pointer.MatchString(value) && value != f.name {
+			return "", fmt.Errorf("unexpected usage-value pointer shape at %s", f.name)
+		}
+	}
+	sort.Slice(slots, func(i, j int) bool { return slots[i].start > slots[j].start })
+	for _, f := range slots {
 		if pointer.MatchString(s[f.start:f.end]) {
-			s = s[:f.start] + pointerMarker(i) + s[f.end:]
+			s = s[:f.start] + f.name + s[f.end:]
 		}
 	}
 	return s, nil
 }
 
+// Split only at this group's depth. Spans retain whitespace and delimiters;
+// mismatched brackets or a changed struct arity must fail rather than mask more.
+func valueFields(s string, group valueSpan, open, close byte, count int) ([]valueSpan, error) {
+	if group.end-group.start < 2 || s[group.start] != open || s[group.end-1] != close {
+		return nil, fmt.Errorf("unexpected usage-value group shape")
+	}
+	var fields []valueSpan
+	var stack []byte
+	begin := -1
+	for i := group.start + 1; i < group.end-1; i++ {
+		c := s[i]
+		if len(stack) == 0 && (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+			if begin >= 0 {
+				fields = append(fields, valueSpan{begin, i})
+				begin = -1
+			}
+			continue
+		}
+		if begin < 0 {
+			begin = i
+		}
+		switch c {
+		case '{', '[':
+			stack = append(stack, c)
+		case '}', ']':
+			if len(stack) == 0 || (c == '}' && stack[len(stack)-1] != '{') || (c == ']' && stack[len(stack)-1] != '[') {
+				return nil, fmt.Errorf("unexpected usage-value brackets")
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+	if begin >= 0 {
+		fields = append(fields, valueSpan{begin, group.end - 1})
+	}
+	if len(stack) != 0 || (count >= 0 && len(fields) != count) {
+		return nil, fmt.Errorf("unexpected usage-value field count or brackets")
+	}
+	return fields, nil
+}
+
 func pointerMarker(i int) string {
-	return map[int]string{3: "<PerCompletedTask:pointer>", 5: "<Provenance:pointer>", 6: "<SuppressedCalls:pointer>"}[i]
+	return map[int]string{3: "<PerCompletedTask:pointer>", 5: "<Provenance:pointer>", 6: "<SuppressedCalls:pointer>", 7: "<Baseline:pointer>"}[i]
 }
 
 func (n selective) normalize(path string, got observation) ([]byte, error) {
@@ -368,6 +409,55 @@ func TestOracleCLIJSONPaths(t *testing.T) {
 		want, _ := canonicalJSON(map[string]any{"exit_code": 0, "stdout": map[string]any{"nested": []any{"<PROJECT>/fixture.md"}}, "stderr": ""})
 		if !bytes.Equal(got, want) {
 			t.Fatal("JSON must be decoded before path/separator normalization")
+		}
+	}
+}
+
+func TestOracleCLIUsagePointers(t *testing.T) {
+	t.Parallel()
+	// D36: Report's four pointer fields and every PostTransitionTask.LastUseful
+	// print addresses. Pointees are not expanded by fmt's nested value rendering.
+	value := " \t{{2026-10-01 00:00:00 +0000 UTC} [] [] 0x111 [{coder retry_tail 12 2 [{task-1 7 1 0x444} {task-2 5 1 <nil>}] 0} {reviewer other 3 1 [{task-3 3 1 0x555}] 0}] 0x222 0x333 0x666 [] [fixture 0xabcdef0123456789]}\n"
+	want := strings.NewReplacer(
+		"0x111", "<PerCompletedTask:pointer>", "0x222", "<Provenance:pointer>",
+		"0x333", "<SuppressedCalls:pointer>", "0x666", "<Baseline:pointer>",
+		"0x444", "<LastUseful:pointer>", "0x555", "<LastUseful:pointer>",
+	).Replace(value)
+	got, err := usagePointers(value)
+	if err != nil || got != want {
+		t.Fatalf("type-position masks must preserve every other byte: %v", err)
+	}
+	for _, address := range []string{"0x111", "0x222", "0x333", "0x444", "0x555", "0x666"} {
+		t.Run(address, func(t *testing.T) {
+			other, err := usagePointers(strings.Replace(value, address, "0xabc", 1))
+			if err != nil || other != want {
+				t.Fatalf("heap address variation must compare equal: %v", err)
+			}
+			other, err = usagePointers(strings.Replace(value, address, "<nil>", 1))
+			if err != nil || other == want {
+				t.Fatal("pointer and nil must remain distinct")
+			}
+		})
+	}
+	for _, token := range []string{"2026-10-01", "task-1", "retry_tail", "12", "0xabcdef0123456789"} {
+		other, err := usagePointers(strings.Replace(value, token, token+"changed", 1))
+		if err != nil || other == want {
+			t.Fatalf("non-pointer token %s must remain asserted: %v", token, err)
+		}
+	}
+	again, err := usagePointers(got)
+	if err != nil || again != got {
+		t.Fatal("nested pointer normalization must be idempotent")
+	}
+	for _, bad := range []string{
+		strings.Replace(value, "task-1 7 1 0x444", "task-1 7 0x444 1", 1),
+		strings.Replace(value, "task-1 7 1 0x444", "task-1 7 0x444", 1),
+		strings.Replace(value, "}] 0}", "}]}", 1),
+		strings.Replace(value, "0x666", "baseline", 1),
+		strings.Replace(value, "task-1 7 1 0x444}", "task-1 7 1 0x444]", 1),
+	} {
+		if _, err := usagePointers(bad); err == nil {
+			t.Fatal("unexpected nested report shape must fail")
 		}
 	}
 }
