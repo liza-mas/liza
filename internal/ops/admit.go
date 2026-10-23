@@ -55,7 +55,8 @@ var admitReapSupported = runtime.GOOS != "windows"
 
 // RunAdmitted runs input.Argv without a shell. When its text, joined with
 // spaces, matches a configured class, it first waits behind every canonical
-// waiter of the class for a slot, then runs in its own process group holding
+// and deferred waiter of the class for a slot other than the class's last
+// (unless the class has only one), then runs in its own process group holding
 // the slots, and releases them once the group is gone. A command matching no
 // class runs at once. It returns the command's exit code; on an error no
 // command ran, except with AdmitSurvivorError.
@@ -71,7 +72,7 @@ func RunAdmitted(projectRoot string, input AdmitInput) (int, error) {
 		return -1, fmt.Errorf("admit cannot read admission limits: %w", err)
 	}
 	limits := models.AdmissionLimitsFor(models.Config{AdmissionLimits: state.Config.AdmissionLimits}, []string{strings.Join(input.Argv, " ")})
-	slots := &admissionSlots{deadline: time.Now().Add(input.MaxWait), local: true}
+	slots := newLocalAdmissionSlots(input.MaxWait)
 	if len(limits) > 0 {
 		if err := acquireUntilSignal(projectRoot, slots, limits, input.Signals); err != nil {
 			return -1, err

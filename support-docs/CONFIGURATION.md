@@ -541,7 +541,9 @@ of them run at once instead of raising budgets or lowering `max_instances`
 A canonical command belongs to a class when its text contains any `--match`
 substring. Canonical admission (`submit-for-review`, `update-review-commit`,
 the orphaned-base heal) and every deferred-validation probe take a slot of each
-matching class first; waiters are served in arrival order. The wait never counts
+matching class first. Each class serves canonical waiters first, then
+deferred-validation probes, then local `admit` runs, each group in arrival
+order; a running command is never preempted. The wait never counts
 against `timeout_seconds`. A submit waits up to the 14400 s acceptance cap
 minus that budget, but at least 2 h, so a batch budgeted at the cap still
 queues; `update-review-commit` and the heal keep wait plus budget within the
@@ -558,7 +560,11 @@ command exits; a command that daemonized keeps it until it exits (find it with
 held only while its owner lives.
 
 Local runs of a matching command join the same pool through `admit`, behind
-every canonical waiter of the class; agents' task prompts name the substrings:
+every canonical waiter and deferred probe of the class. A local run never takes
+a class's last slot, so at most `max_concurrent - 1` local runs hold it at once
+and canonical work always keeps a slot; a class of one slot keeps no
+reservation, so there a running local command can delay canonical work until it
+exits. Agents' task prompts name the substrings:
 
 ```bash
 §BRAND_BINARY_NAME§ admit -- pytest tests/model --decision-model-db

@@ -86,13 +86,34 @@ func admissionSlotRefusal(taskID string, err error) error {
 	return err
 }
 
+// admissionTier ranks a class's waiters. Its value leads the ticket name, so
+// name order serves canonical waiters, then deferred probes, then local runs
+// (D-218).
+type admissionTier int
+
+const (
+	admissionTierCanonical admissionTier = iota // submit, update-review-commit, the heal
+	admissionTierDeferred                       // deferred-validation probes
+	admissionTierLocal                          // admit
+)
+
+// usableSlots is how many of a class's maxConcurrent slots a waiter of tier
+// may take: a local run never takes the last slot of a class that has more
+// than one, so canonical and deferred work always keeps a slot (D-218).
+func (tier admissionTier) usableSlots(maxConcurrent int) int {
+	if tier == admissionTierLocal && maxConcurrent > 1 {
+		return maxConcurrent - 1
+	}
+	return maxConcurrent
+}
+
 // admissionSlots is the set of slots one execution holds, at most one per
 // class, and the single deadline every acquisition for it shares; a zero
-// deadline waits until a slot frees or the context ends. A local execution
-// (admit) queues behind every canonical waiter of a class.
+// deadline waits until a slot frees or the context ends. The zero tier is
+// canonical.
 type admissionSlots struct {
 	deadline time.Time
-	local    bool
+	tier     admissionTier
 	classes  []string
 	held     []*filelock.Held
 	// progress, when a submit owns the slots, hears their queue wait and the
@@ -112,9 +133,16 @@ func newSubmitAdmissionSlots(budgetSeconds int) *admissionSlots {
 }
 
 // newQueuedAdmissionSlots waits with no deadline: for an execution no
-// in-flight grace bounds, the deferred runner's probes (D-223).
+// in-flight grace bounds, the deferred runner's probes (D-223). They queue
+// behind every canonical waiter (D-218).
 func newQueuedAdmissionSlots() *admissionSlots {
-	return &admissionSlots{}
+	return &admissionSlots{tier: admissionTierDeferred}
+}
+
+// newLocalAdmissionSlots waits up to maxWait for a local run (admit), behind
+// every canonical and deferred waiter.
+func newLocalAdmissionSlots(maxWait time.Duration) *admissionSlots {
+	return &admissionSlots{deadline: time.Now().Add(maxWait), tier: admissionTierLocal}
 }
 
 // acquire takes a slot of every class in limits not already held, in class
@@ -130,7 +158,7 @@ func (s *admissionSlots) acquire(ctx context.Context, projectRoot string, limits
 			s.progress.set(fmt.Sprintf("queued for admission class %s, %d waiter(s) ahead; the batch budget has not started", limit.Class, ahead), s.deadline)
 		}
 		current := func() (int, bool) { return currentAdmissionMax(statePath, limit.Class) }
-		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.local, queued, current)
+		held, err := acquireAdmissionSlot(ctx, filepath.Join(paths.New(projectRoot).AdmissionSlotsDir(), limit.Class), limit, s.deadline, s.tier, queued, current)
 		if err != nil {
 			s.release()
 			return err
@@ -193,16 +221,16 @@ func currentAdmissionMax(statePath, class string) (int, bool) {
 }
 
 // acquireAdmissionSlot queues a ticket in dir and, once the ticket is the
-// earliest live one, takes the first free of limit.MaxConcurrent slots.
+// earliest live one, takes the first free of the slots its tier may use.
 // Tickets and slots are flocks, so a dead waiter or holder releases its own.
-// Ticket names lead with a priority digit, canonical 0 and local 1, so name
-// order serves canonical waiters first. An older binary's names (zero-padded
-// time, no priority) sort between the two. queued, when set, hears how many
-// tickets are ahead before each wait. current, when set, re-reads the class's
+// Ticket names lead with the tier digit, so name order serves canonical (0),
+// deferred (1), then local (2) waiters. An older binary's names (zero-padded
+// time, no tier) sort between canonical and deferred. queued, when set, hears
+// how many tickets are ahead before each wait. current, when set, re-reads the class's
 // max_concurrent: once the head waiter has found every slot held, on its next
 // poll and then at most every admissionLimitRefreshInterval, keeping the last
 // known value when it reports none (D-180). A zero deadline never expires.
-func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, local bool, queued func(ahead int), current func() (int, bool)) (*filelock.Held, error) {
+func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, tier admissionTier, queued func(ahead int), current func() (int, bool)) (*filelock.Held, error) {
 	started := time.Now()
 	queue := filepath.Join(dir, "queue")
 	if err := os.MkdirAll(queue, 0o755); err != nil {
@@ -215,11 +243,7 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	priority := 0
-	if local {
-		priority = 1
-	}
-	ticketPath := filepath.Join(queue, fmt.Sprintf("%d-%020d-%s", priority, time.Now().UnixNano(), hex.EncodeToString(nonce)))
+	ticketPath := filepath.Join(queue, fmt.Sprintf("%d-%020d-%s", tier, time.Now().UnixNano(), hex.EncodeToString(nonce)))
 	var ticket *filelock.Held
 	err := queueLock.WithLockOperation("admission-slot-queue", func() error {
 		held, acquired, err := filelock.New(ticketPath).TryHold("admission-slot-wait")
@@ -251,7 +275,7 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 				}
 			}
 			full = true
-			for i := range limit.MaxConcurrent {
+			for i := range tier.usableSlots(limit.MaxConcurrent) {
 				held, acquired, err := filelock.New(filepath.Join(dir, fmt.Sprintf("slot-%d", i))).TryHold("admission-slot")
 				if err != nil {
 					return nil, err
@@ -277,7 +301,11 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 			if !deadline.IsZero() {
 				until = "at most until " + deadline.UTC().Format(time.RFC3339)
 			}
-			log.Printf("waiting for an admission slot of class %s (max %d at once), %s", limit.Class, limit.MaxConcurrent, until)
+			usable := ""
+			if n := tier.usableSlots(limit.MaxConcurrent); n < limit.MaxConcurrent {
+				usable = fmt.Sprintf(", local runs use at most %d", n)
+			}
+			log.Printf("waiting for an admission slot of class %s (max %d at once%s), %s", limit.Class, limit.MaxConcurrent, usable, until)
 			logged = true
 		}
 		if queued != nil {

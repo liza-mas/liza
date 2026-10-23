@@ -1208,8 +1208,9 @@ func (r *deferredValidationRunner) checkClean(ctx context.Context, worktree, rev
 // keepOutput, a failure's full masked output is stored and referenced; bisect
 // steps keep only their status, so they store nothing. The command first takes
 // the admission slots of config's limits it matches, from the pool canonical
-// admission shares. No grace bounds the runner, so it waits until they free
-// (D-223); an ended batch, or a halt observed meanwhile, stops the wait.
+// admission shares, queued behind its waiters and ahead of admit (D-218). No
+// grace bounds the runner, so it waits until they free (D-223); an ended
+// batch, or a halt observed meanwhile, stops the wait.
 func (r *deferredValidationRunner) probe(ctx context.Context, config models.Config, worktree, rev string, command models.DeferredValidationCommand, keepOutput bool) (models.DeferredValidationResult, bool) {
 	result := models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, ExitCode: -1}
 	slots := newQueuedAdmissionSlots()

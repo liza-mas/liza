@@ -360,17 +360,27 @@ func TestAdmissionSlotsServeWaitersInArrivalOrder(t *testing.T) {
 	close(release["late"])
 }
 
-func TestAdmissionSlotsServeCanonicalWaitersBeforeLocalOnes(t *testing.T) {
+func TestAdmissionSlotsServeCanonicalThenDeferredThenLocalWaiters(t *testing.T) {
 	shortAdmissionSlotPoll(t)
 	root := t.TempDir()
 	limit := testAdmissionLimit("priority", 1)
 	first := holdAdmissionSlots(t, root, limit)
+	// The deferred waiter has no deadline; the context ends it if it is never served.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	order := make(chan string, 2)
-	release := map[string]chan struct{}{"local": make(chan struct{}), "canonical": make(chan struct{})}
-	waiter := func(name string, local bool) {
-		slots := &admissionSlots{deadline: time.Now().Add(10 * time.Second), local: local}
-		if err := slots.acquire(context.Background(), root, []models.AdmissionLimit{limit}); err != nil {
+	waiters := []struct {
+		name  string
+		slots *admissionSlots
+	}{
+		{"local", newLocalAdmissionSlots(10 * time.Second)},
+		{"deferred", newQueuedAdmissionSlots()},
+		{"canonical", &admissionSlots{deadline: time.Now().Add(10 * time.Second)}},
+	}
+	order := make(chan string, len(waiters))
+	release := map[string]chan struct{}{}
+	waiter := func(name string, slots *admissionSlots) {
+		if err := slots.acquire(ctx, root, []models.AdmissionLimit{limit}); err != nil {
 			t.Error(err)
 			return
 		}
@@ -378,27 +388,88 @@ func TestAdmissionSlotsServeCanonicalWaitersBeforeLocalOnes(t *testing.T) {
 		<-release[name]
 		slots.release()
 	}
-	// GIVEN a local waiter queued before a canonical one
-	go waiter("local", true)
-	waitForTickets(t, root, "priority", 1)
-	go waiter("canonical", false)
-	waitForTickets(t, root, "priority", 2)
+	// GIVEN a local, then a deferred, then a canonical waiter queued in turn
+	for i, w := range waiters {
+		release[w.name] = make(chan struct{})
+		go waiter(w.name, w.slots)
+		waitForTickets(t, root, "priority", i+1)
+	}
 
-	// WHEN the slot frees, THEN the later canonical waiter takes it first
+	// WHEN the slot frees and each holder releases in turn, THEN the
+	// canonical waiter is served first, the deferred probe next, admit last
 	first.release()
-	if got := <-order; got != "canonical" {
-		t.Fatalf("freed slot went to the %s waiter ahead of the canonical one", got)
+	for _, want := range []string{"canonical", "deferred", "local"} {
+		if got := <-order; got != want {
+			t.Fatalf("freed slot went to the %s waiter, want %s", got, want)
+		}
+		select {
+		case got := <-order:
+			t.Fatalf("%s acquired while the only slot was held", got)
+		case <-time.After(100 * time.Millisecond):
+		}
+		close(release[want])
 	}
-	select {
-	case got := <-order:
-		t.Fatalf("%s acquired while the only slot was held", got)
-	case <-time.After(100 * time.Millisecond):
+}
+
+func TestLocalAdmissionLeavesTheLastSlotToCanonicalWaiters(t *testing.T) {
+	shortAdmissionSlotPoll(t)
+	root := t.TempDir()
+	limit := testAdmissionLimit("reserve", 2)
+	// GIVEN a local run holding one of the class's two slots
+	holder := newLocalAdmissionSlots(time.Second)
+	if err := holder.acquire(context.Background(), root, []models.AdmissionLimit{limit}); err != nil {
+		t.Fatalf("first local run: %v", err)
 	}
-	close(release["canonical"])
-	if got := <-order; got != "local" {
-		t.Fatalf("second slot holder = %s", got)
+	t.Cleanup(holder.release)
+	// AND a second local waiter queued at the head with time to wait
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	capped := newLocalAdmissionSlots(10 * time.Second)
+	results := make(chan error, 1)
+	go func() { results <- capped.acquire(ctx, root, []models.AdmissionLimit{limit}) }()
+	waitForTickets(t, root, "reserve", 1)
+
+	// THEN it does not take the last slot
+	requireStillQueued(t, results, 300*time.Millisecond, "second local waiter with only the last slot free")
+	if !slotFree(t, root, "reserve", 1) {
+		t.Fatal("a local run took the class's last slot")
 	}
-	close(release["local"])
+	// AND a later canonical waiter takes that slot past the queued local one
+	canonical := &admissionSlots{deadline: time.Now().Add(2 * time.Second)}
+	if err := canonical.acquire(context.Background(), root, []models.AdmissionLimit{limit}); err != nil {
+		t.Fatalf("canonical waiter behind a capped local head: %v", err)
+	}
+	canonical.release()
+	// AND so does a later deferred probe
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer probeCancel()
+	probe := newQueuedAdmissionSlots()
+	if err := probe.acquire(probeCtx, root, []models.AdmissionLimit{limit}); err != nil {
+		t.Fatalf("deferred probe behind a capped local head: %v", err)
+	}
+	probe.release()
+	requireStillQueued(t, results, 100*time.Millisecond, "capped local waiter after the reserved slot freed")
+
+	// WHEN the local waiter is cancelled, THEN it holds nothing and leaves no ticket
+	cancel()
+	var wait *AdmissionSlotWaitError
+	if err := <-results; !errors.As(err, &wait) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled local waiter = %v", err)
+	}
+	if got := queuedTickets(t, root, "reserve"); got != 0 {
+		t.Fatalf("cancelled local waiter left %d tickets", got)
+	}
+	if !slotFree(t, root, "reserve", 1) {
+		t.Fatal("the cancelled local waiter holds the last slot")
+	}
+
+	// A class of one slot keeps no reservation: a local run may take it.
+	single := testAdmissionLimit("single", 1)
+	only := newLocalAdmissionSlots(0)
+	if err := only.acquire(context.Background(), root, []models.AdmissionLimit{single}); err != nil {
+		t.Fatalf("local run on a free one-slot class: %v", err)
+	}
+	only.release()
 }
 
 func TestAdmissionSlotQueueRanksAnOlderBinarysWaiterBetweenPriorities(t *testing.T) {
@@ -418,10 +489,16 @@ func TestAdmissionSlotQueueRanksAnOlderBinarysWaiterBetweenPriorities(t *testing
 	t.Cleanup(func() { _ = old.Release() })
 
 	// WHEN a local waiter arrives later, THEN it stays behind the old waiter
-	local := &admissionSlots{deadline: time.Now().Add(100 * time.Millisecond), local: true}
+	local := newLocalAdmissionSlots(100 * time.Millisecond)
 	var wait *AdmissionSlotWaitError
 	if err := local.acquire(context.Background(), root, []models.AdmissionLimit{limit}); !errors.As(err, &wait) {
 		t.Fatalf("local waiter behind a live older-binary ticket: err = %v", err)
+	}
+	// WHEN a deferred probe arrives later, THEN it stays behind the old waiter too
+	probeCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := newQueuedAdmissionSlots().acquire(probeCtx, root, []models.AdmissionLimit{limit}); !errors.As(err, &wait) {
+		t.Fatalf("deferred probe behind a live older-binary ticket: err = %v", err)
 	}
 	// WHEN a canonical waiter arrives later, THEN it goes ahead of the old one
 	canonical := &admissionSlots{deadline: time.Now().Add(100 * time.Millisecond)}

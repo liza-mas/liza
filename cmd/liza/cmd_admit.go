@@ -21,7 +21,8 @@ var admitCmd = &cobra.Command{
 config.admission_limits, it first waits for a slot of that class from the pool
 canonical admission and the deferred runner use, so local runs of heavy
 commands stay inside the operator's cap. A local waiter queues behind every
-canonical waiter of the class; a running command is never preempted. A
+canonical waiter and deferred probe of the class, and never takes the class's
+last slot when it has more than one; a running command is never preempted. A
 command matching no class runs at once.
 
 Wrap shell syntax as sh -c '...'. With runtime inputs, put admit outside:

@@ -156,3 +156,36 @@ removed class, an invalid entry or an unreadable state keeps the last known
 limit, so removal still leaves current waiters waiting for the slots they
 knew. A waiter keeps the class it matched, deadlines and queue order are
 unchanged, and lowering still converges as current holders finish.
+
+## Amendment (2026-10-22, D-218)
+
+The upgrade trigger in the 2026-10-15 amendment fired. Local `admit` runs
+(2h45 and about 2 h) held db-suite slots while a deferred batch waited, and
+since nothing is preempted the batch could not start until they ended. Deferred
+probes also shared the canonical priority, so a long probe queued ahead of a
+submit delayed it, even though the submit has a bounded wait and the probe has
+none.
+
+- **Three tiers.** The ticket's leading digit is now its tier: `0` canonical
+  (submit, `update-review-commit`, the heal), `1` deferred probe, `2` local.
+  Each class serves them in that order, FIFO within a tier, and priority stays
+  per class.
+- **Local cap.** A local run never takes `slot-<max_concurrent − 1>`, so at
+  most `max_concurrent − 1` local runs hold a class at once and canonical and
+  deferred work always keeps a slot. A local waiter at the head with only that
+  slot free does not block anyone: a later canonical or deferred ticket sorts
+  ahead of it and takes the slot. The cap follows a limit re-read under D-180.
+- **Ceiling (human decision).** A class with `max_concurrent = 1` keeps no
+  reservation, so `admit` can still run there. Making `admit` refuse such a
+  class was rejected because agents would run the command unslotted. On such
+  a class a running local command can still delay canonical work until it
+  exits.
+- **Mixed binaries.** A pre-D-191 ticket (no digit) now sorts after canonical
+  and ahead of deferred. A binary from D-191 until this amendment writes its
+  probes as `0`, so they rank as canonical, and its `admit` as `1`, which ties
+  with new probes in time order. Older binaries try every slot, so the local cap holds only once older
+  admission-capable processes, including a detached deferred runner, have
+  drained or been upgraded. There is no compatibility code.
+- **Not changed:** non-preemption; probes may still hold every slot of a class
+  and delay a submit until one finishes. Upgrade trigger: submits refused
+  `RETRYABLE` while probes held the class.
