@@ -267,6 +267,11 @@ Mode-specific guides:
 - **Multi-Agent (Liza)**: [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md), then try the [Demo](docs/DEMO.md)
 - **Reference**: [Configuration](support-docs/CONFIGURATION.md) · [Recipes](docs/RECIPES.md) · [Troubleshooting](support-docs/TROUBLESHOOTING.md)
 
+⚠️ **Read [Getting Started](GETTING_STARTED.md#before-your-first-multi-agent-run) and
+[Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md) before your first multi-agent run.**
+Liza is a complex system, and much of what a run needs is **not discoverable by trial**:
+for example, the TUI must stay open for the whole run, or work stalls at the first hand-off.
+
 ### Update Settings
 
 Update flags persist to `~/.liza/update.json`, so you only need to set them

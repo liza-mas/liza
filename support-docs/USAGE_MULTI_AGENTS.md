@@ -92,6 +92,13 @@ Use this section once the global setup is complete.
 > [Configuration Reference](CONFIGURATION.md) for setup, offline behavior,
 > `.sembleignore` scope, routing, and non-goals.
 
+**0. Prepare the Run**
+
+- **Produce the goal document.** See [How to Produce a Goal](how-to-produce-a-goal.md). In a Pairing session, the `goal-writing` skill coaches you through it so decisions are made before agents run.
+- **Confirm the entry point.** Run `check-§BRAND_NAME_LOWER§-input-readiness` on the document for the entry point you plan to pass to init (see [Pipeline & Entry Points](#pipeline--entry-points)).
+- **Fill in and commit `GUARDRAILS.md`** before launching agents: required validation commands, compatibility requirements, architectural boundaries. Project activation creates an empty template; see [Project Guardrails](#project-guardrails).
+- **Allow the tools your project needs.** Agents run non-interactively and cannot answer permission prompts. Check the selected provider's permissions; for Claude, add missing build/test tools to `.claude/settings.json`. Naming a tool in `AGENT_TOOLS.md` does not grant permission to execute it.
+
 **1. Initialize Project**
 
 > **Commit your spec file and `.pre-commit-config.yaml` before running `§BRAND_BINARY_NAME§ init`.** Worktrees are created from the configured integration branch, so uncommitted files won't be visible to agents unless you explicitly enable ignored root env-file copying with `--copy-worktree-env-files` or `§BRAND_ENV_PREFIX§_ENABLE_COPY_ENV_FILES=true`.
@@ -182,6 +189,8 @@ the wait. Press `s` in the TUI and select `orchestrator`, run
 the launcher presets below.
 
 The TUI (`§BRAND_BINARY_NAME§ tui`) is the primary way to spawn and monitor agents. Press `s` to spawn with the configured default CLI (role names autocomplete from the pipeline config), or `S` to pick a specific CLI.
+
+**Keep `§BRAND_BINARY_NAME§ tui` running for the whole run**, or `§BRAND_BINARY_NAME§ tui --headless` without a terminal UI (alerts go to stderr and `§BRAND_PROJECT_DIRNAME§/alerts.log`). It starts doers and reviewers as work becomes claimable and restores a missing orchestrator. Without it, agents that exit idle are never replaced, and work waits indefinitely at the next hand-off.
 
 Alternatively, spawn agents from the CLI: `§BRAND_BINARY_NAME§ agent <role>`. Agent identity defaults to the first `{role}-N` not already registered with a valid lease (e.g., `coder-1`, or `coder-2` if `coder-1` is active). Override with `--agent-id` or the `§BRAND_ENV_PREFIX§_AGENT_ID` environment variable. After resolution, `§BRAND_BINARY_NAME§ agent` exports that ID as `§BRAND_ENV_PREFIX§_AGENT_ID` to the spawned provider CLI, including `-i` interactive sessions, so hooks select Multi-Agent mode rather than Pairing mode.
 
@@ -301,6 +310,8 @@ Multiple agents of the same role can run in parallel (IDs auto-increment):
 
 `§BRAND_BINARY_NAME§ tui` shows live system state — agents, tasks, alerts, sprint metrics. Keyboard shortcuts: `s` spawn (default cli), `S` spawn (pick cli), `p` pause, `r` resume, `a` add task, `c` checkpoint, `y` yolo (toggle auto-resume), `Q` stop.
 
+**Tip:** watch host resources alongside the run (for example with `btop`) and adjust `config.max_instances` when CPU or memory saturates, or when the host sits idle while work waits: `§BRAND_BINARY_NAME§ config set config.max_instances <n> --replace --reason "<why>"`.
+
 **Recommended:** Alongside the TUI, open a separate Pairing-mode coding-agent
 session in the project directory and invoke `/§BRAND_BINARY_NAME§-operator`.
 The operator skill continuously watches the run, intervenes when progress or
@@ -331,11 +342,28 @@ cat §BRAND_PROJECT_DIRNAME§/log.yaml
 
 **Signal handling:** Agents cleanly exit on `Ctrl+C` (SIGINT) or `kill` (SIGTERM). On exit, the agent unregisters and atomically releases any active task claim — the task returns to its initial state (doer, e.g. DRAFT_CODE) or submitted state (reviewer, e.g. CODE_TO_REVIEW; legacy configs may use CODE_READY_FOR_REVIEW) — so no orphaned claims are left behind.
 
+**If you close a terminal:** from the project directory, reopen the dashboard with `§BRAND_BINARY_NAME§ tui`. It shows the run's current state; it does not restore the closed terminal's conversation. Saved output under `§BRAND_PROJECT_DIRNAME§/agent-outputs/` shows what happened before the terminal closed.
+
 **4. Review Results**
 ```bash
 # Integration branch
 git log integration --oneline
 ```
+
+Publishing commits and opening remote pull requests are operator-owned steps. Review the integration branch content before publishing, including planning documents agents committed alongside the code.
+
+### Run Skills and Reports
+
+Invoke these from a Pairing-mode session in the project directory.
+
+| Skill | When | Output |
+|-------|------|--------|
+| `goal-writing` | Before init: produce the input document | The goal document |
+| `check-§BRAND_NAME_LOWER§-input-readiness` | Before init: confirm the document fits the chosen entry point | Readiness verdict in the session |
+| `§BRAND_BINARY_NAME§-operator` | Throughout the run, beside the TUI | `§BRAND_PROJECT_DIRNAME§/operator-notes.md` |
+| `checkpoint-summary` | At each checkpoint, before resuming | Walks through each open decision and collects yours |
+| `§BRAND_BINARY_NAME§-logs` | After the first sprint, when progress stalls, at run end | `§BRAND_PROJECT_DIRNAME§/log-analysis.md` |
+| `context-engineering` | After `§BRAND_BINARY_NAME§-logs` | `§BRAND_PROJECT_DIRNAME§/context-engineering.md` |
 
 ### Running Multiple Sprints
 
@@ -561,6 +589,8 @@ what to do next.
 a prioritized digest of agent decisions, open points, and risks — what needs your input,
 what needs confirmation, and what's just informational. This is faster than reading every
 artifact yourself and surfaces unflagged decisions agents baked in without marking.
+
+Answer every open decision before `§BRAND_BINARY_NAME§ resume`: downstream agents proceed on whatever stays open. Keep manual checkpoints for your first run; enable [auto-resume](#auto-resume-yolo-mode) once you are comfortable with the review flow.
 
 | Action | Command | When                                                                                                 |
 |--------|---------|------------------------------------------------------------------------------------------------------|

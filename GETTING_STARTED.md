@@ -346,7 +346,9 @@ named. See also [How to Produce a Goal](support-docs/how-to-produce-a-goal.md).
 Choose an entry point that matches your input: `general-objective` starts with
 epics and user stories, `functional-spec` starts with architecture, and
 `technical-spec` starts with code planning. Pass `--entry-point <name>` to init,
-or omit it to let the orchestrator classify the document. See
+or omit it to let the orchestrator classify the document. Before init, run the
+[check-liza-input-readiness skill](skills/check-liza-input-readiness/SKILL.md)
+in a Pairing session to confirm the document is ready for that entry point. See
 [Pipeline & Entry Points](support-docs/USAGE_MULTI_AGENTS.md#pipeline--entry-points).
 
 After preparing the files above, initialize the run:
@@ -386,8 +388,8 @@ liza tui
 `liza tui` reads the project state that `liza init --spec` creates. Without it,
 the TUI fails with `failed to initialize TUI: no such file or directory`.
 
-After the TUI opens, press `s` and spawn `orchestrator` first. The orchestrator
-is the only role that is not auto-spawned.
+After the TUI opens, press `s` and spawn `orchestrator` first. Other roles are
+auto-spawned, and the TUI restarts a missing orchestrator after 60 seconds.
 
 Alongside the TUI, open a separate Pairing-mode coding-agent session in the
 project and invoke the [operator skill](skills/liza-operator/SKILL.md). Keep
@@ -408,7 +410,9 @@ running after starting the orchestrator. Use `liza status` to inspect progress.
 necessarily indicate a failure. Read the checkpoint reason and referenced
 planning artifacts. In your Pairing session, invoke
 [checkpoint-summary](skills/checkpoint-summary/SKILL.md) for a digest of agent
-decisions, open points, and risks. For a planning checkpoint, check:
+decisions, open points, and risks; it walks you through each open decision.
+Resume only once they are answered: agents proceed on whatever stays open.
+For a planning checkpoint, check:
 
 - Does the proposed work match your goal and exclusions?
 - Are requirements missing or assumptions still unresolved?
@@ -427,10 +431,8 @@ auto-resumed.
 
 **If you close a terminal.** From the project directory, reopen the dashboard
 with `liza tui`. This shows the run's current state; it does not restore the
-closed terminal's conversation. Check the orchestrator's status and whether its
-process is still running before starting another. If it exited, relaunch it
-with `liza agent orchestrator` or press `s` in the TUI and select `orchestrator`.
-If it remains alive, avoid launching a duplicate.
+closed terminal's conversation. Once reopened, the TUI restarts a missing
+orchestrator after 60 seconds; press `s` and select `orchestrator` to restart it sooner.
 
 When logging is enabled, saved agent output is under `.liza/agent-outputs/`:
 CLI-backed agents write stdout to `.txt` files and stderr to `.err` files.
@@ -491,6 +493,7 @@ liza status
 - [Pairing Usage](support-docs/USAGE_PAIRING.md)
 - [Adversarial Pairing](support-docs/ADVERSARIAL_PAIRING.md)
 - [Multi-Agent Usage](support-docs/USAGE_MULTI_AGENTS.md)
+- [Run Skills and Reports](support-docs/USAGE_MULTI_AGENTS.md#run-skills-and-reports)
 - [Configuration Reference](support-docs/CONFIGURATION.md)
 - [Troubleshooting](support-docs/TROUBLESHOOTING.md)
 - [Recipes](docs/RECIPES.md)
