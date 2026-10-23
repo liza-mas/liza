@@ -210,7 +210,7 @@ coverage: sync-embedded check-testhelpers
 	@set -eu; \
 		coverage_file="$$(mktemp "$${TMPDIR:-/tmp}/$(BINARY_NAME)-coverage.XXXXXX")"; \
 		trap 'rm -f "$$coverage_file"' EXIT HUP INT TERM; \
-		go test -coverprofile="$$coverage_file" ./...; \
+		go test -coverpkg=./... -coverprofile="$$coverage_file" ./...; \
 		go tool cover -html="$$coverage_file"
 
 # Clean build artifacts
