@@ -1,0 +1,95 @@
+[
+  {
+    "desc": "A3 lifecycle oracle conventions (TC1-TC9 layer, fixtures, case runner) and doer rows L1-L7 in internal/oracle/a3/lifecycle",
+    "done_when": "TestOracleClaimTask, TestOracleReleaseClaim, TestOracleHandoff, TestOracleWriteCheckpoint, TestOracleCheckCommitAllowed, TestOracleMarkBlocked and TestOracleLifecycleReceipts plus the convention unit tests pass under env -i go test -race -count=2 on the package and under make test; regen check with -pkg ./internal/oracle/a3/lifecycle/... exits 0 with every golden ok H1; every fixture passes setup validate; only files under the package are added.",
+    "scope": "internal/oracle/a3/lifecycle/: main_test.go, env_test.go, fixture_test.go, mask_test.go, case_test.go, conventions_test.go, the seven L1-L7 driver files, testdata/fixtures (pipeline.yaml, state/draft|executing|executing-dead|executing-second-doer|blocked|review.yaml), testdata/golden for L1-L7, testdata/acceptance-lifecycle-1.json. Out: L8-L15, production code, existing tests, harness and entry point, PROVENANCE, Makefile, internal/oracle/a3/control.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-183344-arm-1-ar-3.md#Scope 1: A3 task lifecycle oracle",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-192901-arm-1-ar-3-cp-0.md#Task 1: Lifecycle oracle conventions and doer rows L1–L7",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=2 ./internal/oracle/a3/lifecycle/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/lifecycle/..."
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=2 ./internal/oracle/a3/lifecycle/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "make lint",
+        "executables": ["make", "go", "gofmt"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/lifecycle/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      }
+    ]
+  },
+  {
+    "desc": "A3 lifecycle oracle rows L8-L15 (assess-blocked, hypothesis exhaustion, unblock, release-blocked-chain, recover-task, recover-agent, provision, doer-ownership repair) as new files in internal/oracle/a3/lifecycle",
+    "done_when": "TestOracleAssessBlocked, TestOracleAssessHypothesisExhausted, TestOracleUnblockTask, TestOracleReleaseBlockedChain, TestOracleRecoverTask, TestOracleRecoverAgent, TestOracleProvision and TestOracleRepairDoerOwnership pass under env -i go test -race -count=2 on the package and under make test; regen check with -pkg ./internal/oracle/a3/lifecycle/... exits 0 with every golden ok H1; every fixture passes setup validate; only new files under the package are added.",
+    "scope": "internal/oracle/a3/lifecycle/: the eight L8-L15 driver files, testdata/fixtures/state/blocked-failed-one|blocked-failed-two|blocked-capped|executing-runtime-input.yaml, testdata/golden for L8-L15, testdata/acceptance-lifecycle-2.json. Out: every Task 1 file, production code, existing tests, harness and entry point, PROVENANCE, Makefile, internal/oracle/a3/control, recorded gaps.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-183344-arm-1-ar-3.md#Scope 1: A3 task lifecycle oracle",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-192901-arm-1-ar-3-cp-0.md#Task 2: Lifecycle oracle assessment, recovery, provision and repair rows L8–L15",
+    "depends_on": ["0"],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=2 ./internal/oracle/a3/lifecycle/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/lifecycle/..."
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=2 ./internal/oracle/a3/lifecycle/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "make lint",
+        "executables": ["make", "go", "gofmt"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/lifecycle/...",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      }
+    ]
+  }
+]
