@@ -176,7 +176,7 @@ Agents need no credentials and no external services.
 
 | # | Rule |
 |---|---|
-| E0 | The run integrates into a dedicated branch, `global-refactoring`, cut from `main` at run start. Agents never push to a remote |
+| E0 | The run integrates into a dedicated branch, `refactor/architecture-consolidation`, cut from `main` at run start. Agents never push to a remote |
 | E1 | Per task, proof runs locally in agent worktrees through existing targets: `make test`, `make lint`, `make test-e2e`, and `go test -race` scoped to touched packages. At each area boundary, the maintainer opens a pull request from the integration branch to `main`; its CI (Linux, Windows) and the macOS job on the subsequent `main` push cover N2 |
 | E2 | Real Git only on disposable temporary repositories. No real provider CLIs. Opt-in native tests (`TOOL_RESULT_NATIVE_ENGINE`) are outside proof |
 | E3 | The installed binary orchestrating this run is never replaced by agents: no `make install`, update, or self-update. Only the maintainer replaces it |

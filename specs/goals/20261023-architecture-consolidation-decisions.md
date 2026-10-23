@@ -324,10 +324,13 @@ Same reviewer, round 3 (2026-10-23), on the document after D21: blockers 0→0, 
 ### D23 — Integration branch and sync-clean start (run, 2026-10-23)
 Raised by the arm-1 architecture plan (OQ-001, OQ-003, "E0 Integration-Branch Hold"), relayed by the
 operator. Human ruling 2026-10-23T16:46Z, applied by the operator:
-- **OQ-001:** E0 names `global-refactoring`, the branch the run was configured with. It already meets
-  E0's intent: dedicated, cut from `main` (`97ccf330c`) at run start, never pushed by agents. The
-  rejected alternative (reconfigure onto `refactor/architecture-consolidation`) would re-provision
-  in-flight worktrees for a name only.
+- **OQ-001:** the run's integration branch is `global-refactoring`, the branch the run was configured
+  with; this ruling supersedes the branch name in E0. It already meets E0's intent: dedicated, cut
+  from `main` (`97ccf330c`) at run start, never pushed by agents. The rejected alternative
+  (reconfigure onto `refactor/architecture-consolidation`) would re-provision in-flight worktrees for
+  a name only. E0's text is left unedited: reviewed carriers pin the goal's "Proof Environment"
+  section, and editing it (`b6f15def1`, restored by the operator 2026-10-23T17:05Z) made the arm-1
+  reference `goal-proof` stale and stalled its second review. The E0 hold is satisfied by this ruling.
 - **OQ-003:** the synced `internal/embedded/bash-policy.yaml` is committed on the integration branch so
   `make sync-embedded` leaves the starting tree unchanged. The run's starting commit is the head after
   this commit, recorded by Scope 0.
