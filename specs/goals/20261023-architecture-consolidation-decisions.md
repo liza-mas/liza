@@ -372,6 +372,28 @@ contract-only amendment cannot edit Direct References (`internal/ops/contract_am
   duplicated tables); supersession (replan cost for a presentation gap).
 - Kind: check-only (context routing). Revert: withdraw the notes; route a contract-only amendment.
 
+### D26 — Oracle A8 cases T02 and T06: reachable marker branches (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T19:27Z. `arm-1-ar-8-cp-0` blocked: the A8 Surface Inventory
+(`specs/arch-plan/20261023-architecture-consolidation/20261023-180843-arm-1-ar-8.md`) declares two
+"Reaches" branches that the starting commit never renders for the case's role, verified by the
+planner's probe at 96c9ad69a: T02 (epic-plan-reviewer) "validation plan from a checkpoint" —
+`internal/prompts/templates/blocks/review_instructions.tmpl` renders DOER VALIDATION PLAN only in the
+code-reviewer, code-plan-reviewer, us-reviewer and architecture-reviewer branches (lines 78, 167,
+317, 366); T06 (us-reviewer) "scope extensions" — that context section is declared only for
+code-reviewer in `internal/embedded/pipeline.yaml`. The CONTRACT forbids the unit from substituting a
+render path; the plan has children, so a reviewed amendment cannot edit its inventory.
+- Ruling: T02's Reaches entry becomes "master decomposition review" (=== MASTER DECOMPOSITION
+  REVIEW === renders for epic-plan-reviewer at start); T06's becomes "validation plan from a
+  checkpoint" (renders for us-reviewer at start); scope extensions stay covered by T16
+  (code-reviewer). All 30 cases, their byte-exact goldens and the marker rule are unchanged.
+- Intent relied on: goal "Rendered agent prompts | Byte-identical over a fixed fixture set" and S4;
+  markers only prove a fixture reaches its declared branch, and the oracle records starting
+  behaviour, which has no such branches.
+- Rejected: dropping the marker obligation for the two cases (weakens the reachability check);
+  dropping the cases (coverage loss); supersession of arm-1-ar-8 (replan cost).
+- Kind: check-only (marker selection). Revert: restore the original entries and accept the two
+  cases as unsatisfiable, or replan A8.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
