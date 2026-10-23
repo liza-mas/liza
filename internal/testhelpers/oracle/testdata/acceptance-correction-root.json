@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-root-only",
+      "file": "internal/testhelpers/oracle/root_paths_test.go",
+      "assertion": "TestRootOnlyBytes, TestRootOnlyAbsentAndEmpty and TestRootOnlyGoldenComparison: literal root substitution, unrelated bytes and glued-name exclusions, public Prompt write/live roundtrip and rejection of timestamp/SHA/whitespace/final-newline mutations without golden writes",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-start-root",
+      "file": "internal/testhelpers/oracle/correction_start_test.go",
+      "assertion": "TestProviderCorrectionA8Start: exports immutable start 96c9ad69aee983ce2b929dd681b6ba43bf920535, overlays only the current harness, requires all three named root tests to execute and pass under oraclestart and ChildEnv",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-normalisation-defaults",
+      "file": "internal/testhelpers/oracle/normalise_test.go",
+      "assertion": "Existing TestNormaliseTimestamps, TestNormaliseDirsLongestFirstAndNested, TestNormaliseDirWholePathOnly, TestReplaceDirRewritesWindowsSeparatorsInTail, TestNormaliseIdentifiersAndLiterals, TestSortLines and TestNormaliseIsIdempotent; existing kind_test.go TestPromptAndArtifactAreRawBytes, JSON/Human form tests and TestStateFormBeforeAfterLayout; existing golden_test.go tests retain their expectations",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-stdlib-harness",
+      "file": "internal/testhelpers/oracle/import_test.go",
+      "assertion": "TestHarnessImportsStdlibOnly scans every harness Go file, including the new API and shared starting-tree helper",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-sample-regeneration",
+      "file": "internal/oracle/sample/sample_test.go",
+      "assertion": "TestOracleSampleHelp and TestOracleSampleErrorEnvelope exercised by the existing regeneration entry point: both unchanged sample goldens reproduce from the starting baseline",
+      "command_index": 3
+    }
+  ]
+}
