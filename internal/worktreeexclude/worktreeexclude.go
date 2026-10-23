@@ -1,6 +1,7 @@
 package worktreeexclude
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -235,6 +236,12 @@ func appendMissingEntries(excludePath string, entries []string) error {
 		existing[entry] = struct{}{}
 	}
 
+	// Rewriting unchanged content truncates the file under unlocked readers,
+	// git among them, which then see no excludes.
+	// shortcut: a real append still truncates then writes; switch to temp file + rename if readers hit that window.
+	if err == nil && bytes.Equal(next, content) {
+		return nil
+	}
 	if err := os.WriteFile(excludePath, next, 0o644); err != nil {
 		return fmt.Errorf("write worktree private exclude: %w", err)
 	}

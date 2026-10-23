@@ -173,6 +173,44 @@ func TestEnsureRepoExcludeKeepsUserExcludesAndIsIdempotent(t *testing.T) {
 	gitRun(t, repo.root, "check-ignore", "-q", paths.ProjectDirName()+"/state.yaml")
 }
 
+// Readers such as git do not take the exclude lock; a no-op ensure must not
+// truncate the file under them.
+func TestEnsureRepoExcludeNoOpNeverHidesEntryFromReaders(t *testing.T) {
+	repo := newGitRepoWithWorktrees(t)
+	repoExclude := filepath.Join(repo.root, ".git", "info", "exclude")
+	pattern := "/" + paths.ProjectDirName() + "/scip/"
+	if err := EnsureRepoExclude(repo.root, pattern); err != nil {
+		t.Fatalf("EnsureRepoExclude() error = %v", err)
+	}
+
+	stop := make(chan struct{})
+	missing := make(chan int)
+	go func() {
+		count := 0
+		for {
+			select {
+			case <-stop:
+				missing <- count
+				return
+			default:
+			}
+			if content, err := os.ReadFile(repoExclude); err != nil || !strings.Contains(string(content), pattern) {
+				count++
+			}
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		if err := EnsureRepoExclude(repo.root, pattern); err != nil {
+			t.Fatalf("EnsureRepoExclude() iteration %d error = %v", i+1, err)
+		}
+	}
+	close(stop)
+	if count := <-missing; count != 0 {
+		t.Fatalf("concurrent reader saw the exclude without %q %d times during no-op ensures", pattern, count)
+	}
+	assertLineCount(t, readFileString(t, repoExclude), pattern, 1)
+}
+
 func TestEnsureRepoExcludeFromLinkedWorktreeWritesSharedExclude(t *testing.T) {
 	repo := newGitRepoWithWorktrees(t, "task-one")
 	worktree := repo.worktrees["task-one"]
