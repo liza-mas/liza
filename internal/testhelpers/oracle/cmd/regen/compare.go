@@ -36,6 +36,9 @@ func (e *engine) compare(ctx context.Context, l ledger, out io.Writer) (int, err
 	for p := range h.issues {
 		paths[p] = true
 	}
+	for p := range h.chains {
+		paths[p] = true
+	}
 	var sorted []string
 	for p := range paths {
 		sorted = append(sorted, p)

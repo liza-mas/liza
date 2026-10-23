@@ -217,6 +217,25 @@ func TestRegenRejectsUnexplained(t *testing.T) {
 	}
 }
 
+func TestRegenRejectsDeletedChainedGolden(t *testing.T) {
+	s := newScenario(t)
+	s.firstChange()
+	reg := func(ctx context.Context, dir, sha string, baseline bool, pkgs []string) (map[string][]byte, error) {
+		// An absent marker models a removed driver: it emits no goldens.
+		if _, err := os.Stat(filepath.Join(dir, "internal/oracle/demo/marker.txt")); errors.Is(err, os.ErrNotExist) {
+			return map[string][]byte{}, nil
+		}
+		return fakeRegen(ctx, dir, sha, baseline, pkgs)
+	}
+	s.run(reg, 0, nil, "ok "+sampleGolden+" chain pre ")
+	for _, name := range []string{sampleGolden, "internal/oracle/demo/marker.txt"} {
+		if err := os.Remove(filepath.Join(s.dir, filepath.FromSlash(name))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.run(reg, 1, nil, "missing "+sampleGolden)
+}
+
 func TestRegenMissingExtraAndWriteNew(t *testing.T) {
 	s := newScenario(t)
 	missing := "internal/oracle/demo/testdata/golden/json/new.json"
