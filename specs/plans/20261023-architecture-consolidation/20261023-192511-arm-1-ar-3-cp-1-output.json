@@ -1,0 +1,25 @@
+[
+  {
+    "desc": "A3 operator control oracle: test-only package internal/oracle/a3/control with fixtures and start-commit goldens for mode change, config set, admission limits, admit, agent health, delete agent and cleanup (CONTRACT rows C1-C7)",
+    "done_when": "internal/oracle/a3/control has TestOracleModeChange, TestOracleConfigSet, TestOracleAdmissionLimit, TestOracleAdmit, TestOracleAgentHealth, TestOracleDeleteAgent and TestOracleCleanup covering the plan's D-8 cases, plus TestDeterminismLayer, TestChildEnvNames and TestFixtureStatesValidate; the package passes live at integration HEAD under make test; go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/control/... reproduces every golden from the starting commit and exits 0 (its baseline run includes the starting commit's validate on every fixture state); the diff adds files under internal/oracle/a3/control/ only.",
+    "scope": "New test-only package internal/oracle/a3/control/ (test files, testdata/fixtures, testdata/golden, acceptance manifest). Out: production code, existing tests, harness and entry-point files, internal/oracle/PROVENANCE, Makefile, internal/oracle/a3/lifecycle/, the recorded gaps, surfaces outside the Scope 2 CONTRACT.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-183344-arm-1-ar-3.md#Scope 2: A3 operator control oracle",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-192511-arm-1-ar-3-cp-1.md#Task 1: A3 operator control oracle package",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a3/control/...",
+      "make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/control/..."
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a3/control/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "make lint", "executables": ["make", "go", "gofmt"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a3/control/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "rca_required": false
+  }
+]
