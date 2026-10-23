@@ -27,7 +27,7 @@ type SupervisorConfig struct {
 	ProfileName      string // Optional structured launch profile name
 	ProfileVars      map[string]string
 	Interactive      bool          // Print prompt location, don't execute
-	InitialTask      string        // Optional task ID to resume
+	InitialTask      string        // Optional task ID the first claim targets; a successful claim spends it
 	LLMAgent         LLMAgent      // Agent execution backend (CLI-based or future ACP-based)
 	Executor         CLIExecutor   // Legacy field name, preserved for backward compatibility. Deprecated: Use LLMAgent.
 	ExecutionTimeout time.Duration // Max time for agent execution before timeout
@@ -247,8 +247,14 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	consecutiveCrashes := 0 // across tasks; any exit 0 or 42 resets it
 	spinTracker := newSpinningTracker()
 	runtimeFailureTracker, backgroundTaskTracker := newRuntimeFailureTracker(), newRuntimeFailureTracker()
+	initialTaskSpent := false
 
 	for {
+		// A claim spends InitialTask whichever path ends the iteration, so a
+		// retry or a block cannot leave the next wait, claim or prompt on it.
+		if initialTaskSpent {
+			config.InitialTask = ""
+		}
 		if err := checkHeartbeat(); err != nil {
 			return err
 		}
@@ -361,6 +367,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			}
 			continue
 		}
+		initialTaskSpent = true
 
 		// Pre-execution (orchestrator: PLANNING status; others: no-op)
 		if err := strategy.PreExecution(bb, config); err != nil {
@@ -447,7 +454,6 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 			crashTracker.reset(effectiveTask)
 			exit42Tracker.reset(taskID)
 			runtimeFailureTracker.reset(effectiveTask)
-			config.InitialTask = ""
 			// Pace repeated claim/launch disagreement; a halt then parks at the gate.
 			if err := waitForSupervisorDelay(pollInterval); err != nil {
 				return err
@@ -602,9 +608,6 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 				return err
 			}
 		}
-
-		// Clear initial task after first run
-		config.InitialTask = ""
 	}
 }
 
