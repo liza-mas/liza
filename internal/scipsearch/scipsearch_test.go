@@ -192,7 +192,7 @@ func TestPairingCommandPlanningBuildsConcreteSingleRootPlans(t *testing.T) {
 				Args:       []string{"index", "--cwd", filepath.Join(target, "service"), "--output", outputPathPlaceholder, "--target-only=src"},
 				Dir:        target,
 				OutputPath: outputPathPlaceholder,
-				Root:       "service",
+				Root:       "service/src",
 			}},
 		},
 	}
@@ -1040,6 +1040,33 @@ func TestRuntimeCommandPlanningInfersPythonCwdAndTargetOnlyForSrcLayout(t *testi
 	if len(plans) != 1 || !reflect.DeepEqual(realizedFirstIndexArgs(plans[0]), wantArgs) {
 		t.Fatalf("PlanRuntimeCommands() = %#v, want Python args %#v", plans, wantArgs)
 	}
+	// scip-python records <cwd>/<target-only> as the index project root, and
+	// aggregate-index rejects any --root that does not match it.
+	if got, want := planRoots(plans[0].IndexPlans), []string{"apps/api/src"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("python aggregate roots = %v, want %v", got, want)
+	}
+}
+
+func TestPairingCommandPlanningPythonTargetOnlyOverrideAggregatesUnderTargetOnlyRoot(t *testing.T) {
+	target := t.TempDir()
+	overrides, err := ParsePairingCommandOverrides(target, []string{"python=apps/api,lib"})
+	if err != nil {
+		t.Fatalf("ParsePairingCommandOverrides() error = %v", err)
+	}
+
+	result, err := PlanPairingCommands(PairingPlanOptions{
+		ProjectRoot:      target,
+		CommandOverrides: overrides,
+		GitFiles: func(string) ([]string, error) {
+			return []string{"apps/api/pyproject.toml", "apps/api/lib/api/main.py"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanPairingCommands() error = %v", err)
+	}
+	if got, want := planRoots(result.Plans[0].IndexPlans), []string{"apps/api/lib"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("python aggregate roots = %v, want %v", got, want)
+	}
 }
 
 func TestRuntimeCommandPlanningPythonFlatProjectOmitsTargetOnly(t *testing.T) {
@@ -1123,7 +1150,7 @@ func TestRuntimeCommandPlanningPythonSiblingProjectsAggregateAllCandidates(t *te
 	if len(plans) != 1 || !reflect.DeepEqual(realizedFirstIndexArgs(plans[0]), wantArgs) {
 		t.Fatalf("plans = %#v, want first deterministic Python project args %#v", plans, wantArgs)
 	}
-	if got, want := planRoots(plans[0].IndexPlans), []string{"apps/api", "apps/worker"}; !reflect.DeepEqual(got, want) {
+	if got, want := planRoots(plans[0].IndexPlans), []string{"apps/api/src", "apps/worker/src"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("python aggregate roots = %v, want %v", got, want)
 	}
 }

@@ -690,7 +690,8 @@ func typeScriptIndexPlans(targetRoot string, inputs []typeScriptCommandInputs) [
 func pythonIndexPlans(targetRoot string, inputs []pythonCommandInputs) []RuntimeCommandPlan {
 	plans := make([]RuntimeCommandPlan, 0, len(inputs))
 	for _, input := range inputs {
-		aggregateRoot, ok := aggregateRootFor(targetRoot, input.Cwd)
+		// scip-python records <cwd>/<target-only> as the index project root.
+		aggregateRoot, ok := aggregateRootFor(targetRoot, filepath.Join(input.Cwd, input.TargetOnly))
 		if !ok {
 			continue
 		}

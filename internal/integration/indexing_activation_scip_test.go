@@ -64,7 +64,7 @@ func TestIndexingActivationScipPairingInitWritesAggregateCommands(t *testing.T) 
 				"index --cwd ${PROJECT}/service",
 				`--output "$tmp_python_scip/python-0.scip" --target-only=src`,
 				`set -- scip-search aggregate-index --project-root ${PROJECT}`,
-				`--root service --index "$tmp_python_scip/python-0.scip"`,
+				`--root service/src --index "$tmp_python_scip/python-0.scip"`,
 				`--out "$staging_dir/python.scip"`,
 				`mv -f "$staging_dir/python.scip" ${PROJECT}/python.scip`,
 			},
