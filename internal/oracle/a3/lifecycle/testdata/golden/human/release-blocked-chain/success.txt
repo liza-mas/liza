@@ -1,0 +1,4 @@
+exit 0
+stdout:
+blocked-recovery cap released for task-1 (episode <at 20200101T000000 Z>): one further replacement permitted
+stderr:

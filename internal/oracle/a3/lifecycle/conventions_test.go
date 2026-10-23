@@ -126,6 +126,69 @@ func TestLifecyclePathMask(t *testing.T) {
 	}
 }
 
+func TestLifecycleRuntimeIdentityMask(t *testing.T) {
+	base := strings.Repeat("e", 40)
+	stable := strings.Repeat("b", 64)
+	unknown := strings.Repeat("d", 64)
+	hexToken := func(value string) string {
+		var chunks []string
+		for i := 0; i < len(value); i += 8 {
+			chunks = append(chunks, value[i:min(i+8, len(value))])
+		}
+		return "<hex:" + strings.Join(chunks, ".") + ">"
+	}
+	for _, mode := range []string{"json", "human", "named-json-only"} {
+		t.Run(mode, func(t *testing.T) {
+			// Different runs have different keyed identities. Only JSON names
+			// instance_id; human mode must discover it from the state ledger.
+			id := strings.Repeat("a", 64)
+			if mode == "human" {
+				id = strings.Repeat("c", 64)
+			}
+			for _, indent := range []string{"  ", "    "} {
+				ledger := "runtime_inputs:\n" + indent + id + ":\n" + indent + "  key_id: 0123456789abcdef\n"
+				m := newMask(time.Now(), map[string]string{"base": base}, nil, 12345)
+				if mode != "named-json-only" {
+					m.discover(ledger)
+				}
+				if mode != "human" {
+					m.discover(`{"instance_id":"` + id + `"}`)
+				}
+				// Prefix first must allocate the same token as the full map key.
+				if got := m.text(id[:16] + " " + id + " " + id[:16]); got != "<id-1> <id-1> <id-1>" {
+					t.Fatal("runtime full identity and displayed prefix lost equality")
+				}
+				m.discover(ledger) // Also register the key_id for the state check.
+				want := "runtime_inputs:\n" + indent + "<id-1>:\n" + indent + "  key_id: <id-2>\n"
+				if m.text(ledger) != want {
+					t.Fatal("runtime ledger masking depends on output mode")
+				}
+				if m.text(base+" "+stable+" "+unknown+" "+unknown[:16]) != "<commit:base> "+hexToken(stable)+" "+hexToken(unknown)+" "+unknown[:16] {
+					t.Fatal("runtime masking changed a fixture commit, stable digest or undeclared identifier")
+				}
+				fullFirst := newMask(time.Now(), nil, nil, 12345)
+				fullFirst.discover(ledger)
+				if fullFirst.text(id+" "+id[:16]) != "<id-1> <id-1>" {
+					t.Fatal("runtime prefix allocated a second token after full identity")
+				}
+			}
+		})
+	}
+	// A hex-shaped key outside the root ledger, including task declarations,
+	// is not evidence of a volatile runtime instance.
+	for _, source := range []string{
+		"other:\n  " + unknown + ":\n    state: available\n",
+		"tasks:\n  - runtime_inputs:\n      " + unknown + ":\n        state: available\n",
+		"runtime_inputs:\n  " + strings.Repeat("a", 64) + ":\n    metadata:\n      " + unknown + ": value\nother:\n  " + stable + ":\n",
+	} {
+		m := newMask(time.Now(), nil, nil, 12345)
+		m.discover(source)
+		if m.text(unknown+" "+stable) != hexToken(unknown)+" "+hexToken(stable) {
+			t.Fatal("non-ledger key declared volatile")
+		}
+	}
+}
+
 func TestLifecycleHarnessFixedPoint(t *testing.T) {
 	n := oracle.NewNormaliser()
 	for _, value := range []string{"<now+30m Z>", "<now-1m +02:00>", "<at 20200101T000000 Z>", "<at 20990101T000000.123 +02:00>", "<commit:base>", "<id-1>", "<hex:01234567.89abcdef.01234567.89abcdef.01234567>", "<live-pid>", "<PROJECT>", "<HOME>", "<TMP>"} {

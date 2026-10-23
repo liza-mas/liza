@@ -1,0 +1,4 @@
+exit 0
+stdout:
+Runtime input tok (project.tok) recorded: instance <id-1> is available for task-1.
+stderr:

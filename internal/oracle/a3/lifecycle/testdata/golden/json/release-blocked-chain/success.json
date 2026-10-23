@@ -1,0 +1,24 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "blocked_at": "<at 20200101T000000 Z>",
+          "lineage": [
+            "task-a",
+            "task-b",
+            "task-1"
+          ],
+          "recoveries": [
+            "task-a",
+            "task-b"
+          ],
+          "task_id": "task-1"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "message": "task task-1 declares no runtime input nope"
+        },
+        "ok": false,
+        "result": null
+      }
+    }
+  ]
+}

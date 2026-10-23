@@ -1,0 +1,16 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "message": "task task-1 is not at the blocked-recovery cap (0 of 2 blocked recoveries in lineage task-1); agents can already replace it"
+        },
+        "ok": false,
+        "result": null
+      }
+    }
+  ]
+}
