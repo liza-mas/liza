@@ -453,6 +453,26 @@ plans' coding writers should wait on each other without serialising planning, bu
   reviewer's R1 recommendation for this scope only. Kind: delivery-neutral (ordering).
   Revert: route a reviewed rescope if planning becomes critical.
 
+### D31 — A1 CLI oracle cases run in a disposable Git project with a git-only PATH (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:01Z. `arm-1-ar-1-cp-0-code-0` blocked because the A1 carrier says no Git
+repository is needed, and its code plan forbids CLI cases initialising Git and sets an empty CLI
+`PATH`. The frozen CLI requires a Git project root: `cmd/liza/main.go` `requireExplicitProjectRoot`
+leads to `requireExplicitGitProjectRoot`, and `internal/paths/paths.go` `GetProjectRootFromDir` runs
+`git rev-parse`. Neither file has changed since the starting commit `96c9ad69a`. Every CLI case
+therefore fails before reaching the surface it tests.
+- Ruling: A1 CLI cases follow the merged A3 lifecycle oracle precedent
+  (`internal/oracle/a3/lifecycle/conventions_test.go`). Each case gets a disposable fixture project
+  initialised as a Git repository by the test. The CLI `PATH` contains only a `git` symlink (still
+  provider-free), and the environment pins `GIT_CONFIG_NOSYSTEM` and the `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*` names, emails and dates. Assertions, expected surfaces and normalisation of
+  goldens are unchanged. No production or harness change.
+- Intent relied on: goal Test Policy. Oracles pin the observable behaviour of the frozen starting
+  CLI, which includes its Git-root requirement. The carrier's "no Git repository is needed" wording
+  is a factual slip, not a contract choice.
+- Rejected: a production or harness change to accept non-Git roots (alters frozen behaviour, outside
+  A1 scope); in-process invocation bypassing root resolution (would not test the CLI surface).
+  Kind: oracle-contract (test setup). Revert: a reviewed A1 carrier correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
