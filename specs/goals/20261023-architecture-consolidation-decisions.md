@@ -551,6 +551,24 @@ cannot be valid; the operation exists to repair that defect.
   an owner correction for this case only. Kind: oracle-contract (fixture validity). Revert: a reviewed
   A4 correction.
 
+### D36 — A1 usage human output: every rendered heap address is volatile (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:38Z. `arm-1-ar-1-cp-0-code-0` blocked again (after D31). The starting CLI's
+human `usage` value output prints Go pointer addresses. The reviewed comparator masks pointer positions
+only for `PerCompletedTask`, `Provenance` and `SuppressedCalls`. The committed fixture also renders two
+`PostTransition.Tasks[].LastUseful` addresses (`*Transition`, `internal/usage/report.go`), so
+`TestOracleUsageReport/human/usage-value.txt` fails on a heap address.
+- Ruling: in A1 usage human output, the comparator masks the address at every position where the
+  starting CLI renders a pointer-typed field of the usage report value. Positions are identified from
+  the Go types, not by a hex regex: `PerCompletedTask`, `Provenance`, `SuppressedCalls`, `Baseline`
+  and `PostTransition.Tasks[].LastUseful`, plus any other pointer-typed field the same rendering
+  reaches. Every other token is preserved byte for byte. The fixture is unchanged.
+- Intent relied on: the comparator's existing masks already treat heap addresses as volatile, and
+  `LastUseful` is the same class. A memory address is never a behaviour to freeze.
+- Rejected: changing the fixture so `LastUseful` is nil (drops coverage of the post-transition rows);
+  a hex regex mask (would also hide real identifiers). Note for after the run: printing heap
+  addresses in human output is a pre-existing defect. It is frozen here and not fixed (not in C1–C6).
+  Kind: oracle-contract (volatility). Revert: a reviewed A1 carrier correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
