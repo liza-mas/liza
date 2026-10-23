@@ -1,0 +1,6 @@
+config:
+  deferred_validation:
+    rulings:
+      - command: "true"
+        ruling: oracle existing ruling
+        recorded_at: 2001-02-03T04:05:06Z

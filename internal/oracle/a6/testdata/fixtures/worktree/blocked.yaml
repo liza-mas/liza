@@ -1,0 +1,16 @@
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A6 blocked worktree task
+    done_when: Worktree deletion observed
+    scope: A6 worktree fixture
+    status: BLOCKED
+    priority: 1
+    spec_ref: README.md
+    created: 2020-01-01T00:00:00Z
+    blocked_reason: Fixture blocked for operator cleanup
+    blocked_questions: ['Is cleanup complete?']
+    base_commit: '@BASE@'
+    worktree: .worktrees/task-1
+    history: []

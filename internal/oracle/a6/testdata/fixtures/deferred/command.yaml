@@ -1,0 +1,13 @@
+goal:
+  integration:
+    deferred_validation:
+      deferrals:
+        - task_id: historical-coding
+          merge_commit: "@BASE@"
+          before_commit: "@BASE@"
+          recorded_at: 2001-02-03T04:05:06Z
+          commands:
+            - command: "true"
+              command_sha256: b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+              timeout_seconds: 30
+              authority: contract

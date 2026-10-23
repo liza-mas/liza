@@ -1,0 +1,15 @@
+tasks:
+  - id: epic
+    type: epic-planning
+    role_pair: epic-planning-pair
+    description: Plan remaining work
+    status: DRAFT_EPIC_PLAN
+    priority: 1
+    spec_ref: README.md
+    done_when: Plan reviewed
+    scope: planning
+    created: 2001-02-03T04:05:06Z
+    history: []
+sprint:
+  scope:
+    planned: [epic]
