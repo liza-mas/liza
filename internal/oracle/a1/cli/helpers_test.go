@@ -27,10 +27,17 @@ type project struct {
 	norm                  selective
 }
 
+// D31 pins Git's environment and permits only Git on the CLI PATH.
+var gitFixtureEnv = []string{
+	"GIT_CONFIG_NOSYSTEM=1",
+	"GIT_AUTHOR_NAME=Oracle", "GIT_AUTHOR_EMAIL=oracle@example.invalid", "GIT_AUTHOR_DATE=2020-01-01T00:00:00Z",
+	"GIT_COMMITTER_NAME=Oracle", "GIT_COMMITTER_EMAIL=oracle@example.invalid", "GIT_COMMITTER_DATE=2020-01-01T00:00:00Z",
+}
+
 func newProject(t *testing.T, overlays ...string) project {
 	t.Helper()
 	root := t.TempDir()
-	p := project{root: filepath.Join(root, "project"), home: filepath.Join(root, "home"), tmp: filepath.Join(root, "tmp"), path: filepath.Join(root, "empty-path")}
+	p := project{root: filepath.Join(root, "project"), home: filepath.Join(root, "home"), tmp: filepath.Join(root, "tmp"), path: filepath.Join(root, "git-only-path")}
 	for _, d := range []string{p.root, p.home, p.tmp, p.path} {
 		if err := os.Mkdir(d, 0755); err != nil {
 			t.Fatal(err)
@@ -43,8 +50,28 @@ func newProject(t *testing.T, overlays ...string) project {
 	for _, d := range []struct{ path, token string }{{p.root, "<PROJECT>"}, {p.home, "<HOME>"}, {p.tmp, "<TMP>"}} {
 		p.norm.dir(d.path, d.token)
 	}
-	if _, err := os.Stat(filepath.Join(p.root, ".git")); !os.IsNotExist(err) {
-		t.Fatal("fixture project must have no Git repository")
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal("Git executable unavailable")
+	}
+	gitName := "git"
+	if runtime.GOOS == "windows" {
+		gitName += ".exe"
+	}
+	if err := os.Symlink(git, filepath.Join(p.path, gitName)); err != nil {
+		t.Fatal("cannot create Git symlink")
+	}
+	env, err := oracle.ChildEnv(oracle.EnvBase{Home: p.home, Path: p.path, Tmp: p.tmp}, gitFixtureEnv...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEnvironment(t, env, false, false)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, git, "init", "--initial-branch=main", p.root)
+	cmd.Dir, cmd.Env = p.root, env
+	if err := cmd.Run(); err != nil {
+		t.Fatal("disposable Git initialization failed")
 	}
 	return p
 }
@@ -79,9 +106,9 @@ func copyFixture(t *testing.T, source, target string) {
 
 func (p project) run(t *testing.T, generation bool, args ...string) observation {
 	t.Helper()
-	var extra []string
+	extra := append([]string(nil), gitFixtureEnv...)
 	if generation {
-		extra = []string{"LIZA_AGENT_GENERATION=g1"}
+		extra = append(extra, "LIZA_AGENT_GENERATION=g1")
 	}
 	env, err := oracle.ChildEnv(oracle.EnvBase{Home: p.home, Path: p.path, Tmp: p.tmp}, extra...)
 	if err != nil {
@@ -89,17 +116,25 @@ func (p project) run(t *testing.T, generation bool, args ...string) observation 
 	}
 	assertEnvironment(t, env, generation, false)
 	expected := map[string]string{"HOME": p.home, "PATH": p.path, "TMPDIR": p.tmp}
+	for _, pair := range gitFixtureEnv {
+		name, value, _ := strings.Cut(pair, "=")
+		expected[name] = value
+	}
 	if runtime.GOOS == "windows" {
 		expected["USERPROFILE"], expected["TMP"], expected["TEMP"] = p.home, p.tmp, p.tmp
 	}
 	for _, kv := range env {
 		name, value, _ := strings.Cut(kv, "=")
 		if want, ok := expected[name]; ok && value != want {
-			t.Fatalf("environment variable %s does not target disposable directory", name)
+			t.Fatalf("environment variable %s differs from explicit fixture policy", name)
 		}
 	}
-	if entries, err := os.ReadDir(p.path); err != nil || len(entries) != 0 {
-		t.Fatal("CLI PATH must be an empty directory")
+	gitName := "git"
+	if runtime.GOOS == "windows" {
+		gitName += ".exe"
+	}
+	if entries, err := os.ReadDir(p.path); err != nil || len(entries) != 1 || entries[0].Name() != gitName {
+		t.Fatal("CLI PATH must contain only Git")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -136,6 +171,11 @@ func assertEnvironment(t *testing.T, env []string, generation, toolchain bool) {
 	if toolchain {
 		for _, k := range []string{"GOCACHE", "GOMODCACHE", "GOFLAGS"} {
 			allowed[k] = true
+		}
+	} else {
+		for _, pair := range gitFixtureEnv {
+			name, _, _ := strings.Cut(pair, "=")
+			allowed[name] = true
 		}
 	}
 	seen := map[string]bool{}

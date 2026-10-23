@@ -130,15 +130,16 @@ func pointerMarker(i int) string {
 }
 
 func (n selective) normalize(path string, got observation) ([]byte, error) {
-	got.Stdout, got.Stderr = n.text(got.Stdout), n.text(got.Stderr)
 	if strings.HasPrefix(path, "json/") {
+		// Decode first: normalizing JSON escape bytes corrupts Windows paths.
 		value, err := decodeJSON(got.Stdout)
 		if err != nil {
 			return nil, err
 		}
 		value = normalizeStrings(value, n)
-		return canonicalJSON(map[string]any{"exit_code": got.ExitCode, "stdout": value, "stderr": got.Stderr})
+		return canonicalJSON(map[string]any{"exit_code": got.ExitCode, "stdout": value, "stderr": n.text(got.Stderr)})
 	}
+	got.Stdout, got.Stderr = n.text(got.Stdout), n.text(got.Stderr)
 	if path == "human/analysis-report.txt" {
 		got.Stdout = analyzed.ReplaceAllString(got.Stdout, "**Analyzed:** <TIME>")
 	}
@@ -347,5 +348,26 @@ func TestOracleCLIComparison(t *testing.T) {
 	}
 	if err := compareGolden("human/synthetic.txt", []byte("a"), []byte("b")); err == nil || !strings.Contains(err.Error(), "human/synthetic.txt") {
 		t.Fatal("comparison failure must name golden")
+	}
+}
+
+func TestOracleCLIJSONPaths(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	n := selective{}
+	n.dir(root, "<PROJECT>")
+	for _, tail := range []string{"/fixture.md", `\fixture.md`} {
+		input, err := json.Marshal(map[string]any{"nested": []any{root + tail}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := n.normalize("json/synthetic.json", observation{Stdout: string(input)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, _ := canonicalJSON(map[string]any{"exit_code": 0, "stdout": map[string]any{"nested": []any{"<PROJECT>/fixture.md"}}, "stderr": ""})
+		if !bytes.Equal(got, want) {
+			t.Fatal("JSON must be decoded before path/separator normalization")
+		}
 	}
 }
