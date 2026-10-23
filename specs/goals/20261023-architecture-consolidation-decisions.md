@@ -531,6 +531,26 @@ goldens (D27 jscpd; check-yaml for A3 and A6, D32).
   (breaks byte-exactness against the starting tree). Kind: delivery-neutral (tooling classification).
   Revert: drop the four exclude lines.
 
+### D35 — The A4 D4 success fixture carries exactly the defect its operation repairs (run, 2026-10-23)
+Operator, auto-approved, 2026-10-23T23:23Z. `arm-1-ar-4-cp-0` blocked on review finding R1: A4 Scope 1 Fixtures
+requires "committed `.liza` inputs valid at the starting commit". Inventory row D4
+(`repair-superseded-dependencies`, success) succeeds only on a SUPERSEDED task whose `depends_on` names
+a downstream role-pair task. `validate` rejects exactly that edge for every task status
+(`internal/statevalidate/validate_deps.go` `validateDependencyDirection`). The success fixture therefore
+cannot be valid; the operation exists to repair that defect.
+- Ruling: for `TestOracleRepairSupersededDependencies/success` only, the committed fixture is valid at
+  the starting commit except for one illegal downstream dependency edge on one SUPERSEDED task, the
+  defect the operation removes. The case pins that defect: on the fixture, before the operation,
+  `validate --json` at the starting commit reports exactly that one violation, and after the
+  operation `validate` reports none. Both results join the case's goldens. Every other A4 fixture,
+  including `/refused`, stays fully valid as Scope 1 states.
+- Intent relied on: Scope 1 wants fixtures to be real inputs the starting tree accepts, so goldens
+  pin genuine behaviour; the starting CLI accepts this state and completes the operation.
+- Rejected: descoping D4 success (leaves the frozen surface's only success path unpinned); an
+  architecture amendment of arm-1-ar-4 (this ruling is narrower and cheaper). Overrides R1's demand for
+  an owner correction for this case only. Kind: oracle-contract (fixture validity). Revert: a reviewed
+  A4 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
