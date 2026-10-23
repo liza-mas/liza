@@ -1,7 +1,7 @@
 [
   {
     "desc": "Run baseline record: measure the starting facts in a disposable clone at 96c9ad69a and commit them as specs/architecture/consolidation-run/baseline.md",
-    "done_when": "specs/architecture/consolidation-run/baseline.md records starting commit 96c9ad69aee983ce2b929dd681b6ba43bf920535, the D23 resolution with the observed IntegrationBranch, the sync-clean check commands and output, per-area S1 counts citing the merged Scope 1 start snapshot, the make test warm-up and timed wall time with protocol, host and Go version measured in a clone at the starting commit under env -i with GOFLAGS=-count=1, and each of the eleven Q11 benchmarks with its result or not captured and why; the diff touches only the record and its acceptance manifest; the pre-commit validation passes.",
+    "done_when": "The committed baseline record and acceptance manifest satisfy Task 1's Acceptance Contract (D-1 to D-8 of the plan) and pass the declared validation.",
     "scope": "In: specs/architecture/consolidation-run/baseline.md and specs/architecture/consolidation-run/acceptance-baseline.json; measurements in a disposable /tmp clone at the starting commit. Out: guard and harness code, Makefile, production Go, test files, any wait added for benchmarks, boundary records.",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-172626-arm-1-ar-0.md#Scope 4: Run baseline record",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261023-190524-arm-1-ar-0-cp-3.md#Task 1: Run baseline record",
