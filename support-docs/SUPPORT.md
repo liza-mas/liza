@@ -615,8 +615,9 @@ Submission also builds the reviewer's carrier context for its own range, both
 before publication and after the rebase: every strict carrier the submission
 changed must parse, and every direct reference must resolve at its pin and
 still match integration HEAD. A refusal names the carrier, and usually the
-line or reference; a pin naming no commit in the repository is refused the same
-way. The range includes superseded drafts the submission left in it. Fix the
+line or reference; a pin naming no commit in the repository, or a reference to
+a file integration HEAD lacks and the submission does not add, is refused the
+same way. The range includes superseded drafts the submission left in it. Fix the
 carrier and resubmit; the task stays with its author. A Git failure during the
 check is reported as operational instead, with its `cause` in the details: read
 it before retrying. Integration moving after submission can still block the

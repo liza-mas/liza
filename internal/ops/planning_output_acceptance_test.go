@@ -394,7 +394,7 @@ func TestSubmitForReview_ReviewCarriers(t *testing.T) {
 			files: func(pin, _ string) map[string]string {
 				return map[string]string{"specs/extra.md": reviewCarrier(pin, "specs/evidence.md#Evidence")}
 			},
-			wantError: `"specs/evidence.md" is absent at integration HEAD and at the review commit`,
+			wantError: `"specs/evidence.md" is absent at integration HEAD, the range base and the review commit`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

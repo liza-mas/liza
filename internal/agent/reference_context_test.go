@@ -403,7 +403,7 @@ func TestResolvedReferenceContextPinToUnintegratedPathNamesRemedy(t *testing.T) 
 	task := models.Task{ID: "review-1", BaseCommit: &base, ReviewCommit: &review}
 	state := referenceTestState(task)
 	_, err := buildResolvedReferenceContext(&state.Tasks[0], state, SupervisorConfig{ProjectRoot: repo}, "reviewer")
-	for _, want := range []string{`direct reference "source"`, `"specs/evidence.md"`, "pin " + evidenceRevision + " is not integrated"} {
+	for _, want := range []string{`direct reference "source"`, `"specs/evidence.md"`, "(pin " + evidenceRevision + ")"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("unintegrated pin error = %v, want it to contain %q", err, want)
 		}
