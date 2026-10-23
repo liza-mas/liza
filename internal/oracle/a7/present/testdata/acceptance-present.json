@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-fixture",
+      "file": "internal/oracle/a7/present/fixture_test.go",
+      "assertion": "TestFixtureStateValidates",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-status",
+      "file": "internal/oracle/a7/present/status_test.go",
+      "assertion": "TestOracleStatus",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-get",
+      "file": "internal/oracle/a7/present/inspect_test.go",
+      "assertion": "TestOracleInspect",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-get-tasks",
+      "file": "internal/oracle/a7/present/inspect_test.go",
+      "assertion": "TestOracleInspectGetTasks",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-version",
+      "file": "internal/oracle/a7/present/version_test.go",
+      "assertion": "TestOracleVersion",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-help",
+      "file": "internal/oracle/a7/present/help_test.go",
+      "assertion": "TestOracleHelp: every frozen command path",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-completion",
+      "file": "internal/oracle/a7/present/completion_test.go",
+      "assertion": "TestOracleCompletion: scripts and registered completers",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-watch-alerts",
+      "file": "internal/oracle/a7/present/watch_test.go",
+      "assertion": "TestOracleWatchAlerts: emitted alert order",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-stop-guard",
+      "file": "internal/oracle/a7/present/stopguard_test.go",
+      "assertion": "TestOracleStopGuard: identity, completed, running and unreadable cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-envelope-classification",
+      "file": "internal/oracle/a7/present/envelope_test.go",
+      "assertion": "TestOracleEnvelopeClassification: typed and string cases",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-envelope-cli",
+      "file": "internal/oracle/a7/present/envelope_test.go",
+      "assertion": "TestOracleEnvelopeCLI: project_root, not_found and validation",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-usage-errors",
+      "file": "internal/oracle/a7/present/usage_test.go",
+      "assertion": "TestOracleUsageErrors: command and flag refusals",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-provenance",
+      "file": "internal/oracle/a7/present/doc_test.go",
+      "assertion": "Filtered regeneration entry point reproduces every committed golden",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-live",
+      "file": "internal/oracle/a7/present/main_test.go",
+      "assertion": "TestMain and the eleven TestOracle tests run in make test",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-e1",
+      "file": "internal/oracle/a7/present/main_test.go",
+      "assertion": "Existing make test-e2e passes unchanged",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-conventions",
+      "approved_reference_id": "arch-scope1"
+    },
+    {
+      "obligation_id": "AC-adapter-rule",
+      "approved_reference_id": "arch-harness"
+    },
+    {
+      "obligation_id": "AC-additive",
+      "approved_reference_id": "arch-files"
+    }
+  ]
+}

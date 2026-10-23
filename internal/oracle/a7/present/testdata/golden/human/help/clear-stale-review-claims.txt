@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+Find and clear expired review leases on tasks in reviewing status.
+When a Code Reviewer crashes mid-review, reviewing_by and review_lease_expires
+remain set. This command clears expired claims so other reviewers can claim the task.
+Typically called by:
+- Code Reviewer supervisor on startup
+- Periodically by cron or monitoring
+- TUI dashboard (though tui shouldn't mutate state by default)
+Reports the number of claims cleared and logs each cleanup action.
+Usage:
+liza clear-stale-review-claims [flags]
+Flags:
+-h, --help help for clear-stale-review-claims
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

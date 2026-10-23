@@ -1,0 +1,26 @@
+exit 0
+--- stdout
+Atomically initiate handoff when a doer agent is nearing context exhaustion.
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in an executing status (resolved from pipeline config)
+- Task must be assigned to the submitting agent
+Updates:
+- task.handoff_pending = true
+- task history appends handoff_initiated event
+- handoff.<task-id> note is recorded with summary and next_action
+- agent status = HANDOFF
+Usage:
+liza handoff <task-id> <summary> <next-action> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for handoff
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

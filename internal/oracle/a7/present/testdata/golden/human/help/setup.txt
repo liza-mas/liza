@@ -1,0 +1,33 @@
+exit 0
+--- stdout
+Write Liza contracts, skills, and support docs to ~/.liza/ for global access.
+This is a one-time setup step that populates the global config directory.
+Contracts are written flat (e.g., ~/.liza/CORE.md) and skills are written
+to ~/.liza/skills/. Installable support docs are written to
+~/.liza/support-docs/.
+After running setup, use 'liza init' in each project to create the
+project-local blackboard and symlinks.
+Use --force to overwrite an existing global config.
+Use --agent-tools to install a custom AGENT_TOOLS.md instead of the embedded default.
+Usage:
+liza setup [flags]
+Flags:
+--agent-tools string path to custom AGENT_TOOLS.md (replaces embedded default)
+--claude create skill symlinks in ~/.claude/
+--codex create skill symlinks in ~/.codex/
+--copilot create skill symlinks in ~/.copilot/
+--cursor create Claude/Codex skill symlinks Cursor relies on
+--force overwrite existing global config
+--gemini create skill symlinks in ~/.gemini/
+-h, --help help for setup
+--mistral create skill symlinks in ~/.vibe/
+--opencode create skill symlinks in ~/.config/opencode/
+--pi create skill symlinks in ~/.pi/agent/ and install the pi init-gate extension
+--provider stringArray create setup links for provider catalog id (repeatable)
+--yes auto-confirm setup approval prompts
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

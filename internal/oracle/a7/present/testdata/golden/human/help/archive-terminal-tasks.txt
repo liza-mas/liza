@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Operator maintenance for complete terminal task records. Explicitly enables
+terminal_task_archival and drains bounded batches, releasing the state lock
+between them. Ordinary reads restore complete logical tasks from immutable
+objects. Upgrade and restart all run processes together before enabling this
+format; older binaries cannot read the physical terminal rows.
+For an older-binary rollback, stop every run process and use --restore-inline
+before downgrading. Restoration atomically disables archival and publishes the
+full logical state inline; this one transaction costs the original full YAML
+write. Immutable objects are retained for old snapshots.
+Usage:
+liza archive-terminal-tasks [flags]
+Flags:
+-h, --help help for archive-terminal-tasks
+--json output result as structured JSON
+--max-bytes int soft byte budget of archive objects per transaction (default 4194304)
+--max-tasks int maximum tasks archived per transaction (default 8)
+--restore-inline atomically restore all terminal tasks inline and disable archival before a stopped-run downgrade
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,36 @@
+exit 0
+--- stdout
+Recover a task while preserving recoverable work by default:
+- Release agent claims (doer and/or reviewer)
+- Preserve or reattach the task worktree/branch when coherent
+- Validate submitted review candidates before restoring review flow
+- Recover the claiming agent from state
+Normal mode (no --force): requires the task to exist in state. Refuses if the
+claiming agent's PID is still alive.
+Fresh mode (--fresh): explicitly discards the task branch/worktree and resets a
+non-terminal in-state task to its role-pair initial status with a fresh worktree
+from the integration branch. If a claiming agent PID is still alive, use
+--fresh --force.
+Fresh mode keeps BLOCKED tasks BLOCKED: it repairs the substrate and preserves
+blocked_reason / blocked_questions. Use unblock-task to restore claimability.
+Force mode (--force): bypasses live-PID checks for in-state tasks. It also cleans
+up git artifacts (worktree + branch) when the task is not in state. Use absent-
+state cleanup when state is already clean but orphaned git artifacts remain after
+a hard crash.
+Idempotent: safe to run multiple times.
+Usage:
+liza recover-task <task-id> [flags]
+Flags:
+--expected-transition string current task transition_id captured before the request; requires --request-id
+--force bypass live-PID checks; also clean git artifacts when task is not in state
+--fresh discard task branch/worktree and reset in-state task from integration
+-h, --help help for recover-task
+--json output result as structured JSON
+--reason string reason for recovering the task (default "task recovery")
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

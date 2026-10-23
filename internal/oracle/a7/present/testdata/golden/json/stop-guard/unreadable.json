@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "decision": "block",
+    "reason": "The Stop hook could not read the background job list, so a job you started may still be running. Ending the turn kills it. Check your background jobs and wait for any that is still running, as AGENT_TOOLS.md describes."
+  }
+}

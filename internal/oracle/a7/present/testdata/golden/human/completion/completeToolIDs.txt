@@ -1,0 +1,30 @@
+exit 0
+--- stdout
+ast-grep
+bash-policy
+context7
+deepwiki
+fetch-mcp
+filesystem-mcp
+functional-clusters
+gh
+jq
+mdq
+mdtoc
+morph-mcp
+perplexity
+postgres-mcp
+pre-commit
+ref
+rg
+rtk
+scip-go
+scip-python
+scip-search
+scip-typescript
+semble
+stacklit
+yq
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

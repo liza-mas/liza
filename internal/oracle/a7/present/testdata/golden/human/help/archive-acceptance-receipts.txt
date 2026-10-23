@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+Operator maintenance that shrinks live state. Each terminal task's acceptance
+receipt moves into an immutable, content-addressed archive object, and the task
+keeps a digest reference; inspection restores the receipt from the archive.
+Works in bounded batches, releasing the state lock between them, until no
+eligible receipt remains. Merges already archive after each new merge; use this
+to drain an existing backlog.
+Usage:
+liza archive-acceptance-receipts [flags]
+Flags:
+-h, --help help for archive-acceptance-receipts
+--json output result as structured JSON
+--max-bytes int soft byte budget of archive objects per state transaction (default 4194304)
+--max-tasks int maximum tasks archived per state transaction (default 8)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

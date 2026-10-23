@@ -1,0 +1,29 @@
+exit 0
+--- stdout
+Start the Liza system by setting config.mode to RUNNING in state.yaml.
+This command transitions from STOPPED back to RUNNING mode.
+After starting, you must manually restart agent processes to resume work.
+If an unresolved HALT response survived the stop, start is rejected; run
+liza resume to acknowledge the HALT while remaining STOPPED, then start normally.
+Difference from resume:
+- RESUME: For PAUSED or CHECKPOINT states (agents still running)
+- START: For STOPPED state (agents have exited)
+Use this for:
+- Beginning a new work session after stopping
+- Restarting the system after maintenance
+- Recovering from a graceful shutdown
+After running this command, restart agents manually:
+LIZA_AGENT_ID=coder-1 liza agent coder &
+LIZA_AGENT_ID=code-reviewer-1 liza agent code-reviewer &
+Usage:
+liza start [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for start
+--reason string optional reason for starting the system
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

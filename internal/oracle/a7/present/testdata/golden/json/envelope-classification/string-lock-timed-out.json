@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "lock_timeout",
+    "message": "lock acquisition timed out"
+  },
+  "ok": false,
+  "result": null
+}

@@ -1,0 +1,8 @@
+exit 0
+--- stdout
+--- stderr
+ID STATUS ATTEMPT PRIORITY ASSIGNED_TO REVIEWING_BY DEPS AGE TIME_IN_STATUS DESCRIPTION
+task-executing IMPLEMENTING_CODE 1.2 1 coder-1 - - <REL> <REL> Fixture task-executing
+task-review REVIEWING_CODE 1.0 1 - code-reviewer-1 - <REL> <REL> Fixture task-review
+task-blocked BLOCKED 1.0 1 - - 1 <REL> <REL> Fixture task-blocked
+task-approved ARCHITECTURE_APPROVED 1.0 1 - - - <REL> <REL> Fixture task-approved

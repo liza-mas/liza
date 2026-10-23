@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "race_condition",
+    "message": "state changed concurrently, requery current state"
+  },
+  "ok": false,
+  "result": null
+}

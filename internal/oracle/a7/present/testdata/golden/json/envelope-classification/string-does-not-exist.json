@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "not_found",
+    "message": "resource not found"
+  },
+  "ok": false,
+  "result": null
+}

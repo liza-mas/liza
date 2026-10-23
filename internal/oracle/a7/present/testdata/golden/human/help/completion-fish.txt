@@ -1,0 +1,19 @@
+exit 0
+--- stdout
+Generate the autocompletion script for the fish shell.
+To load completions in your current shell session:
+liza completion fish | source
+To load completions for every new session, execute once:
+liza completion fish > ~/.config/fish/completions/liza.fish
+You will need to start a new shell for this setup to take effect.
+Usage:
+liza completion fish [flags]
+Flags:
+-h, --help help for fish
+--no-descriptions disable completion descriptions
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

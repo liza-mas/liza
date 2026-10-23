@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+Install selected local Liza toolchain CLIs
+Usage:
+liza toolchain install [flags]
+Flags:
+--dry-run print planned install commands without executing them
+--exclude stringArray tool id to exclude (repeatable)
+-h, --help help for install
+--include stringArray tool id to include (repeatable)
+--install-dir string directory for managed binaries (default: ~/.local/bin)
+--json output result as structured JSON
+--profile string tool profile: balanced, lean, or full (default "balanced")
+--tool string install only this tool id (needs --yes or --dry-run)
+--yes run selected installs without interactive confirmation
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

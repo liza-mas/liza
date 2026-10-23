@@ -1,0 +1,47 @@
+exit 0
+--- stdout
+Record that the orchestrator has assessed a BLOCKED task.
+This prevents the orchestrator re-wake loop where blocked tasks that have
+already been triaged continue to trigger new orchestrator sessions.
+After assessing, the task remains BLOCKED but won't trigger further wakes
+unless new activity occurs (dependency changes, human notes, etc.).
+With --awaits, the task waits for all of the named existing, unfinished
+tasks: it wakes once they have all merged, or as soon as one fails, instead of
+on every generated task under its dependencies or each named task settling.
+Use it when the block waits on work a dependency edge cannot express. An
+assessment without --awaits keeps the current set, minus merged tasks;
+--clear-awaits drops it.
+With --human-action, the block is human-owned: an AWAITING HUMAN alert names
+the ask. An assessment without it keeps the current ask; --clear-human-action
+drops it.
+Requirements:
+- Agent ID must be provided (via --agent-id flag)
+- Task must be in BLOCKED status
+Usage:
+liza assess-blocked <task-id> [flags]
+Flags:
+--agent-id string orchestrator agent ID (auto-resolved if not provided)
+--awaits strings existing unfinished task IDs the block waits for, all of them (comma-separated or repeated); wakes when all merge or one fails
+--clear-awaits drop the awaited set instead of carrying it forward; not with --awaits
+--clear-human-action drop the human ask once agents own the repair; not with --human-action
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for assess-blocked
+--human-action string one-line action only a human can take to clear this block; sets or replaces the ask and raises AWAITING HUMAN
+--json output result as structured JSON
+--note string optional note about the assessment outcome
+--question stringArray current canonical blocked question (repeat 1-3 times with --reason)
+--reason string current canonical blocked reason; requires --question
+--repair-command string exact command the orchestrator should run or adapt
+--repair-evidence stringArray evidence gathered before requesting orchestrator repair
+--repair-operation string orchestrator-only repair operation requested for the current blocker
+--repair-request-file string path to a complete JSON repair request; mutually exclusive with --repair-* fields
+--repair-target string task or state object the requested repair should modify
+--repair-validation stringArray validation already run or required after orchestrator repair
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--state-lock-timeout explicitly adopt an infrastructure-only state-lock hold for automatic continuation
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

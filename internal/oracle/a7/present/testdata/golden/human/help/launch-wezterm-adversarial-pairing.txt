@@ -1,0 +1,22 @@
+exit 0
+--- stdout
+Launch adversarial-pairing doer/reviewer sessions in WezTerm panes
+Usage:
+liza launch wezterm adversarial-pairing <blackboard-path> [flags]
+Flags:
+--class string WezTerm window class (default depends on launch type)
+--cwd string working directory for launched panes (default: current Liza project for MAS, current directory for pairing)
+--doer-cli string coding CLI for the doer session (default "codex")
+--dry-run print the wezterm command without launching it
+--goal string create the blackboard with this goal when it does not exist
+-h, --help help for adversarial-pairing
+--prompt-delay duration delay before injecting adversarial-pairing prompts into WezTerm panes (default 2s)
+--reviewer stringArray reviewer CLI or id=cli; repeat for multiple reviewers (default: codex, codex-2=codex)
+--workspace string WezTerm workspace name (defaults to --class)
+--yolo pass yolo to the doer adversarial-pairing invocation
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

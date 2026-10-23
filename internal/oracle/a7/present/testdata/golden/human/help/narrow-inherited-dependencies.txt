@@ -1,0 +1,44 @@
+exit 0
+--- stdout
+Apply inherit_inputs to a MERGED planning task after its children were generated.
+ADR-0137 lets a plan output name the upstream outputs its child actually needs,
+but only at generation time. This orchestrator-only metadata repair authors
+that intent after the fact: it records inherit_inputs on the producer's
+output[] entries named in the selections file, then removes from each generated
+child still in its initial status the inherited phase-gate edges the selection
+does not keep. Sibling, task_depends_on, and manually retargeted edges are never
+removed. Terminal, claimed, executing, reviewing, and blocked children are left
+untouched and reported as skipped.
+The whole operation fails closed: an unresolvable or out-of-range selection
+writes nothing. The transition is auto-detected when the producer executed
+exactly one per-subtask transition; pass --transition otherwise.
+Selections file (YAML or JSON):
+outputs:
+- index: 0
+inherit_inputs:
+mode: selected
+selections:
+- upstream_task: records-plan
+outputs: [0, 2]
+- index: 3
+inherit_inputs:
+mode: all # restore the whole-phase barrier on this child
+Example:
+liza narrow-inherited-dependencies records-plan-cp-0 --selections narrow.yaml --reason "Docs child needs only the schema contract"
+Usage:
+liza narrow-inherited-dependencies <producer-task-id> --selections <file> --reason <reason> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for narrow-inherited-dependencies
+--json output result as structured JSON
+--reason string reason for narrowing these dependencies (required)
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--selections string YAML or JSON file naming output indexes and their inherit_inputs (required)
+--transition string per-subtask transition that generated the children (auto-detected when unambiguous)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

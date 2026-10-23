@@ -1,0 +1,22 @@
+exit 0
+--- stdout
+Review a bounded correction without retiring a merged plan's provider identity
+Usage:
+liza amend-plan <original-id> (--reason <text> | --apply <correction-id> | --replace-pending <correction-id> --reason <text> | --withdraw-pending <correction-id> --reason <text>) [flags]
+Flags:
+--agent-id string Orchestrator identity
+--apply string Adopt the exact independently reviewed MERGED pending correction
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--contract Review CONTRACT prose in referenced architecture Scopes with the complete output manifest unchanged, including expanded originals
+-h, --help help for amend-plan
+--json output result as structured JSON
+--reason string Reason for the bounded reviewed correction
+--replace-pending string Replace an unapplied MERGED or canceled pending correction
+--trigger string Explicit correction trigger for daily planning metrics
+--withdraw-pending string Operator: release the fence of a canceled pending correction when nothing since the last applied correction reached integration
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

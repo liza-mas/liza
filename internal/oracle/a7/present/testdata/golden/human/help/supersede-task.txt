@@ -1,0 +1,38 @@
+exit 0
+--- stdout
+Mark a task as SUPERSEDED when it is replaced by new task(s) or completed externally.
+Used by orchestrator when rescoping blocked, rejected, or problematic tasks,
+or when a task's work was already completed outside the current sprint.
+Requirements:
+- Task must be in BLOCKED, rejected, or initial status
+- --reason is always required
+- --recoverability-command is required when no replacements are given
+- --changed is required when replacing a BLOCKED task: state what differs
+from the blocked attempt. Agents may replace a lineage's BLOCKED tasks at
+most 2 times; the next replacement is refused until a human releases
+that blocked episode (release-blocked-chain, or resolving the blocked_replacement_chain
+circuit-breaker halt)
+Replacement task IDs are optional and should be comma-separated.
+When no replacements are given, the task's branch is deleted immediately after
+recording pre-supersession branch/worktree evidence and the operator-provided
+recoverability audit command. Liza records that command but does not execute it.
+Examples:
+liza supersede-task task-3 task-4,task-5 --reason "Split into smaller tasks" --changed "Interface contract now fixed by task-2"
+liza supersede-task task-3 --reason "Work already merged in prior sprint" --recoverability-command "liza recover-task task-3"
+Usage:
+liza supersede-task <task-id> [replacement-task-ids] --reason <reason> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--changed string what differs from the blocked attempt (required when replacing a BLOCKED task)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for supersede-task
+--json output result as structured JSON
+--reason string reason for superseding (required)
+--recoverability-command string operator audit command recorded before superseding without replacements
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

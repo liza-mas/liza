@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "filesystem",
+    "message": "lock filesystem error"
+  },
+  "ok": false,
+  "result": null
+}

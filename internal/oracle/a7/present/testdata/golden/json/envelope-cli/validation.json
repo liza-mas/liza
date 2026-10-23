@@ -1,0 +1,12 @@
+{
+  "exit": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "a field or ID query accepts exactly one argument; use tasks <task-id> for a literal task ID"
+    },
+    "ok": false,
+    "result": null
+  }
+}

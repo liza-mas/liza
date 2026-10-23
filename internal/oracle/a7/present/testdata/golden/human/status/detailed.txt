@@ -1,0 +1,79 @@
+exit 0
+--- stdout
+--- stderr
+=== GOAL ===
+Description: Presentation oracle fixture
+Status: IN_PROGRESS
+Spec: spec.md
+=== SPRINT ===
+ID: sprint-1 (Sprint #1)
+Status: IN_PROGRESS
+Started: <TIME>
+Progress: 2/6 tasks complete
+=== SYSTEM ===
+Mode: running
+=== TASKS ===
+Total: 6 (4 active, 2 terminal)
+By Status:
+ABANDONED: 1
+ARCHITECTURE_APPROVED: 1
+BLOCKED: 1
+IMPLEMENTING_CODE: 1
+MERGED: 1
+REVIEWING_CODE: 1
+Claimable: 0 tasks
+Reviewable: 0 tasks
+Claimable by role:
+architect: 0
+code-planner: 0
+coder: 0
+epic-planner: 0
+integration-analyst: 0
+us-writer: 0
+Reviewable by role:
+architecture-reviewer: 0
+code-plan-reviewer: 0
+code-reviewer: 0
+epic-plan-reviewer: 0
+integration-reviewer: 0
+us-reviewer: 0
+Legacy coder claimable: 0 tasks
+Legacy code-reviewer reviewable: 0 tasks
+Blocked: 1 tasks
+=== AGENTS ===
+ID Role Status Health PID Task Heartbeat Process
+coder-1 coder WORKING - 5000001 task-executing <REL> stopped
+code-reviewer-1 code-reviewer REVIEWING - 5000002 task-review <REL> stopped
+architect-1 architect IDLE - 5000003 9426d 21h 14m <REL>
+=== AGENT CAPACITY ===
+Live: 2, Free: 0, Degraded: 0
+Role Live Free Degraded
+architect 0 0 0
+architecture-reviewer 0 0 0
+code-plan-reviewer 0 0 0
+code-planner 0 0 0
+code-reviewer 1 0 0
+coder 1 0 0
+epic-plan-reviewer 0 0 0
+epic-planner 0 0 0
+integration-analyst 0 0 0
+integration-reviewer 0 0 0
+orchestrator 0 0 0
+us-reviewer 0 0 0
+us-writer 0 0 0
+=== ORCHESTRATOR ===
+Wake Trigger: BLOCKED_TASKS (count: 1)
+Explanation: 1 task(s) are blocked and need attention
+=== INTEGRATION ===
+Status: waiting
+Reason: planning_unsettled
+Tasks: task-approved
+Guidance: listed tasks must finish and run their outgoing transitions; for a merged, outputless source that can never run its transition and whose downstream work merged, an operator runs liza plan-check TASK --retire --ruling DECISION
+=== WORK QUEUES ===
+Legacy role task readiness:
+Coder: 0 available - No claimable tasks; 1 blocked tasks; 2 in progress
+Reviewer: 0 available - No reviewable tasks; 1 actively being reviewed
+=== PENDING TRANSITIONS ===
+task-approved: liza proceed task-approved architecture-to-code-plan
+=== ANOMALIES ===
+⚠ [2001-01-01 00:00] spec_ambiguity by coder-1: task-blocked

@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+Create a git worktree for a task in executing status from the integration branch.
+The worktree is created in .worktrees/<task-id> and a new branch task/<task-id>
+is created from the integration branch. The task's base_commit is recorded for
+drift tracking.
+If the worktree already exists and --fresh is not specified, the command succeeds
+without error. With --fresh, any existing worktree is deleted before creating
+a new one (useful for task reassignment).
+Usage:
+liza wt-create <task-id> [flags]
+Flags:
+--fresh delete existing worktree before creating (for task reassignment)
+-h, --help help for wt-create
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

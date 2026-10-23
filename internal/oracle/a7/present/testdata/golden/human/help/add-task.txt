@@ -1,0 +1,61 @@
+exit 0
+--- stdout
+Add a new task to state.yaml with the specified properties.
+Task details can be provided via CLI flags or loaded from a YAML file using --file.
+When using --file, CLI flags can override specific fields from the file.
+provider_dependencies is a YAML-file field for selected provider outputs,
+including unborn children. It requires an existing provider and its configured
+per-subtask transition; claim waits for that provider and selected children
+MERGED plus the executed transition. Ordinary downstream depends_on stays invalid.
+Updates sprint.scope.planned, goal.alignment_history, and logs the action.
+Validates the added task and reports a warning if unrelated existing state
+corruption keeps full-state validation degraded after the add.
+For explicitly commissioned corrective planning work, supply planning_change
+with kind (correction or replan), trigger, and original_task_id. CLI overrides
+are --planning-change-kind, --trigger, and --planning-change-original.
+Example YAML file format:
+id: task-1
+description: Implement feature X
+spec_ref: specs/vision.md
+done_when: Feature X is implemented and tested
+validation:
+- make test
+destructive_db: false
+scope: Add feature X to the codebase
+role_pair: coding-pair
+priority: 1
+depends_on:
+- task-0
+provider_dependencies:
+- provider_task: provider-architecture
+transition: architecture-to-code-plan
+outputs: [0, 2]
+Usage:
+liza add-task [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--depends string comma-separated list of task IDs this task depends on (overrides file value)
+--desc string task description (required unless using --file)
+--destructive-db mark task validation as destructive to DB state; commands must start with LIZA_ALLOW_DESTRUCTIVE_DB=1
+--done string done-when criteria (required unless using --file)
+--file string path to YAML file containing task details
+-h, --help help for add-task
+--id string task ID (required unless using --file)
+--json output result as structured JSON
+--log string path to log.yaml (default: .liza/log.yaml)
+--planning-change-kind string corrective planning work kind: correction or replan
+--planning-change-original string existing original plan for corrective planning metrics
+--priority int task priority (default: 1, overrides file value)
+--role-pair string task role-pair used for pipeline state and default type (required unless provided by --file)
+--scope string task scope (required unless using --file)
+--spec string spec reference (required unless using --file)
+--state string path to state.yaml (default: .liza/state.yaml)
+--trigger string explicit cause of corrective planning work
+--type string optional task type override (default: derived from --role-pair or file role_pair)
+--validation stringArray canonical validation command; repeat for multiple commands (overrides file value)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

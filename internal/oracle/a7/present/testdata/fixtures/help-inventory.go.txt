@@ -1,0 +1,36 @@
+package main
+
+import (
+	"io"
+	"os"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/spf13/cobra"
+)
+
+// Used only through go test -overlay to freeze the starting tree's command
+// registry, including factory registrations and Cobra's injected commands.
+func TestA7HelpInventory(t *testing.T) {
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	rootCmd.SetArgs([]string{"--help"})
+	if _, err := rootCmd.ExecuteC(); err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	var walk func(*cobra.Command, string)
+	walk = func(parent *cobra.Command, prefix string) {
+		for _, cmd := range parent.Commands() {
+			path := strings.TrimSpace(prefix + " " + cmd.Name())
+			paths = append(paths, path)
+			walk(cmd, path)
+		}
+	}
+	walk(rootCmd, "")
+	sort.Strings(paths)
+	if err := os.WriteFile(os.Getenv("A7_HELP_INVENTORY_OUTPUT"), []byte(strings.Join(paths, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal("write help inventory")
+	}
+}

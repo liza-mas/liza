@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Launch an interactive TUI dashboard that monitors the Liza blackboard.
+The TUI provides:
+- Live dashboard with color-coded status indicators for agents and tasks
+- Keyboard commands to operate the system (spawn, pause, resume, add task, checkpoint, stop)
+- Inline anomaly monitoring with alerts in the activity feed
+- Reactive updates via fsnotify with 10s poll fallback
+Use --headless for non-interactive monitoring (alerts to stderr + alerts.log).
+This is suitable for CI, cron, or running in a secondary terminal.
+Press '?' in the TUI for a full keybinding reference.
+Usage:
+liza tui [flags]
+Aliases:
+tui, watch
+Flags:
+--headless run in headless mode (no TUI, alerts to stderr + alerts.log)
+-h, --help help for tui
+--interval int check interval in seconds (default 10)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+Validate the state.yaml file against all 43+ validation rules including:
+- Required fields and task state invariants
+- Dependency validation (existence, circularity, MERGED deps for executing tasks)
+- Agent validation (WORKING must have current_task)
+- Lease expiry checking with grace periods
+- Spec file reference validation
+Returns detailed error messages if validation fails.
+Usage:
+liza validate [state-file] [flags]
+Flags:
+-h, --help help for validate
+--json output result as structured JSON
+--repair repair invalid active ownership before validating
+--skip-process-checks skip live liza agent process checks for offline or archived state validation
+--skip-spec-check skip spec file existence check
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

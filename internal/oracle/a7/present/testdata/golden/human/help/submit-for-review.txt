@@ -1,0 +1,28 @@
+exit 0
+--- stdout
+Validate a task worktree commit and submit it for review.
+Used by doer agents to submit completed work for review.
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in an executing status (resolved from pipeline config)
+- Task must be assigned to the submitting agent
+- [commit-ref] resolves in the task worktree and must match current worktree HEAD before rebase
+- If [commit-ref] is omitted, HEAD is used
+Updates:
+- status = role-pair's submitted status (e.g. CODE_READY_FOR_REVIEW, CODING_PLAN_TO_REVIEW)
+- review_commit = post-rebase worktree HEAD
+- Adds history entry with event "submitted_for_review"
+Usage:
+liza submit-for-review <task-id> [commit-ref] [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for submit-for-review
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

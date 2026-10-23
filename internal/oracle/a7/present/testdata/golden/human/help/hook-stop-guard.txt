@@ -1,0 +1,13 @@
+exit 0
+--- stdout
+Keep an agent turn open while its background jobs run (Claude Code Stop hook backend)
+Usage:
+liza hook-stop-guard [flags]
+Flags:
+-h, --help help for hook-stop-guard
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

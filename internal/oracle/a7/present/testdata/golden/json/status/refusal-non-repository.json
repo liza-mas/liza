@@ -1,0 +1,17 @@
+{
+  "exit": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "project_root",
+      "details": {
+        "message": "--project-root \"<PROJECT>\" is not a git repository",
+        "operation": "liza",
+        "project_root": "<PROJECT>"
+      },
+      "message": "liza: --project-root \"<PROJECT>\" is not a git repository"
+    },
+    "ok": false,
+    "result": null
+  }
+}

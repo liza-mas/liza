@@ -1,0 +1,39 @@
+exit 0
+--- stdout
+Attribute provider token usage to the outcome each task reached.
+The report shows, per outcome class and role, the total, median and p95 fresh,
+cache-read and output tokens; cache-read tokens per merged task with the
+cache-hit percentage; tokens spent after each task's last useful transition,
+by role and failure category; provenance counts for unknown, partial and
+conflicting records; and the lifecycle counter rows that show suppressed
+duplicate and preflight-rejected calls. An unavailable store or counter file
+is reported as a warning, never as zero.
+The window defaults to the current sprint: from its start until it ended, or
+now. Time bounds accept RFC 3339 timestamps or YYYY-MM-DD dates (UTC).
+--as-of reads task outcomes as they stood at that point, so a reading can be
+reproduced after later reconciliation. A baseline window renders a second
+report over the same records and the deltas between the two.
+Examples:
+liza usage report --json
+liza usage report --since 2026-09-07 --until 2026-09-10 --role coder
+liza usage report --task task-1 --as-of <TIME> --format yaml
+liza usage report --baseline-since 2026-09-01 --baseline-until 2026-09-06 --json
+Usage:
+liza usage report [flags]
+Flags:
+--as-of string read task outcomes as of this time; defaults to --until
+--baseline-since string baseline window start for a before/after comparison
+--baseline-until string baseline window end for a before/after comparison
+--format string output format: json, yaml, table, or value (default "table")
+-h, --help help for report
+--json output result as structured JSON
+--role string only records of this role
+--since string window start (RFC 3339 or YYYY-MM-DD); defaults to the sprint start
+--task string only records of this task
+--until string window end (RFC 3339 or YYYY-MM-DD); defaults to the sprint end or now
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

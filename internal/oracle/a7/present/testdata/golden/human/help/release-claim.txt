@@ -1,0 +1,34 @@
+exit 0
+--- stdout
+Manually release claims on a task (doer, reviewer, or both).
+Used to release task claims manually when needed, such as when an agent
+crashes or a lease needs to be freed.
+Claim types:
+- reviewer: Release review claim (reviewing_by, review_lease_expires). Works for any reviewer role.
+- doer: Release doer claim (assigned_to, lease_expires) and reset to initial state. Works for any doer role.
+- both: Release both reviewer and doer claims
+Safety:
+- By default, refuses to release claims with valid (non-expired) leases
+- Use --force to override lease expiry checks
+- Warns if no claims exist to release
+Agent ID for audit trail:
+- Can be specified via --changed-by flag or LIZA_AGENT_ID env var
+- Defaults to "human" if not provided
+Usage:
+liza release-claim <task-id> [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--expected-transition string current task transition_id captured before the request; requires --request-id
+--force force release even if lease is still valid
+--full release both doer and reviewer claims (alias for --role both)
+-h, --help help for release-claim
+--json output result as structured JSON
+--reason string reason for releasing the claim (default "manual release")
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--role string claim type to release (doer, reviewer, both) (default "reviewer")
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

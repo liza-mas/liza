@@ -1,0 +1,52 @@
+exit 0
+--- stdout
+Restore a BLOCKED task after the orchestrator has verified that the blocker is gone.
+This is for repair completion, not normal task claiming. By default the restore
+is a continuation: the task returns to the initial status for its role_pair, and
+the next claim by any doer resumes its preserved work without consuming an
+iteration. Pending dependencies keep that task dependency-held and
+not immediately claimable. With --new-iteration, the resume consumes an
+iteration. With --assign-to,
+it directly restores the executing status and assigns the requested doer agent.
+With --rebase-on, it rebases a preserved task worktree before unblocking, updates
+base_commit, and leaves rebase conflicts BLOCKED with fresh repair metadata.
+With --scope-exception-file, a coding task also receives a bounded in-task
+scope exception: one strict JSON object {"files": [...], "change": "...",
+"unchanged": "..."} of 1-8 repository-relative files and at most 4096 bytes.
+Outside its original scope the task may then change only those files, only as
+stated; acceptance, provider dependencies, review boundary and lifecycle gates
+stay unchanged. Use it when the blocked task can close the gap itself in test
+support, fixtures or its own constants, with production code and merged
+contracts unchanged and no other unmerged writer of those files.
+With --budget-exception <seconds> and --budget-ruling <decision-id>, a coding
+task's canonical admission batch budget becomes the larger of its reviewed
+timeout_seconds and the largest recorded exception (at most 14400). Commands,
+order, manifest, proofs and deferrals stay as reviewed. Use it when admission
+timed out and a human ruling authorizes the larger budget; the ruling is
+recorded as given, not looked up.
+Without an agent identity (no LIZA_AGENT_ID, no --agent-id) it runs as the
+operator: no registration generation is needed, no role permission applies,
+and --changed-by (default "human") is the audit actor.
+Usage:
+liza unblock-task <task-id> [flags]
+Flags:
+--agent-id string orchestrator agent ID (overrides LIZA_AGENT_ID; without either, runs as operator)
+--allow-dirty allow tracked worktree changes during --rebase-on by using git rebase --autostash
+--assign-to string doer agent ID to resume the task directly; omitted restores initial status and may remain dependency-held
+--budget-exception int raise a coding task's canonical admission budget to this many seconds (requires --budget-ruling)
+--budget-ruling string human decision that authorizes --budget-exception
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for unblock-task
+--json output result as structured JSON
+--new-iteration make the resume consume an iteration; omitted, the next claim continues the current iteration
+--reason string reason the blocked task can resume (required)
+--rebase-on string branch or commit to rebase the task worktree onto before unblocking
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--scope-exception-file string JSON file granting a coding task a bounded in-task scope exception (files, change, unchanged)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

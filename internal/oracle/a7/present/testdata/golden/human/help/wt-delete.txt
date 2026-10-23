@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+Delete a git worktree and branch for a task.
+For safety, deletion is only allowed for tasks in the following states:
+- BLOCKED: Task is blocked and cannot proceed
+- ABANDONED: Task has been abandoned
+- SUPERSEDED: Task has been superseded by another task
+- MERGED: Task is complete (worktree should already be cleaned)
+This prevents accidental destruction of in-progress work. If the task is in
+an executing or submitted status, deletion is not allowed as the coder may be
+actively working in the worktree.
+The worktree directory and branch are removed, and task.worktree is set to null.
+Usage:
+liza wt-delete <task-id> [flags]
+Flags:
+-h, --help help for wt-delete
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,80 @@
+exit 0
+--- stdout
+Query and retrieve Liza state data with flexible formatting.
+For runtime setup configuration, also use liza config get config.post_worktree_cmd
+or liza config set config.post_worktree_cmd "<command>".
+Query Types:
+Field queries:
+config.mode - Get a specific field value
+sprint.status - Direct field access
+sprint.metrics.tasks_done - Nested field access
+sprint.elapsed - Computed field (time since started)
+tasks.<task-id>.history - Task history
+<task-id>.rejection_reason - Task rejection text (null when absent)
+Entity queries:
+tasks - List active work and unfinished handoffs (--all for history)
+tasks <task-id> - Show specific task
+tasks.<task-id> - Same task using dotted syntax
+agents - List all agents
+agents <agent-id> - Show specific agent
+metrics - Show sprint metrics
+anomalies - List all anomalies
+human_notes - Read operator notes and their targets
+quarantined_verdicts - List fenced review evidence and reconciliation history
+ID shorthand:
+<task-id> - Show specific task (any ID format, e.g., task-1, fix-auth-bug)
+<agent-id> - Show specific agent (e.g., coder-1, code-reviewer-1, orchestrator-1)
+Formats:
+--format json - JSON output
+--format yaml - YAML output
+--format table - Table format (for lists)
+--format value - Key-value pairs (default for fields)
+Examples:
+liza get config.mode
+liza get sprint.elapsed
+liza get tasks --format table
+liza get tasks --all --format json
+liza get tasks --active --summary --json
+liza get tasks task-1 --output-summary --json
+liza get tasks task-1 --format json
+liza get tasks --field id,rejection_reason,rejection_rca --json
+liza get tasks.task-1.history --json
+liza get task-1 # Shorthand for tasks task-1
+liza get fix-auth-bug # Shorthand for tasks fix-auth-bug (any task ID)
+liza get coder-1 # Shorthand for agents coder-1
+liza get code-reviewer-1 # Shorthand for agents code-reviewer-1
+liza get agents --zombies # Show live liza agent processes missing from state
+liza get agents --format yaml
+liza get metrics
+liza get human_notes --json
+liza get anomalies
+Inspection reads a complete published snapshot without acquiring the state lock.
+Repeat --field or separate fields with commas to project task fields; projections
+support JSON, YAML and value formats, but not table/summary/output-summary.
+Reserved state/computed queries take precedence. Within task queries, exact IDs
+precede the longest matching ID prefix. Use tasks <literal-id> for dotted IDs.
+Unknown fields, array/map traversal and surplus positional arguments are errors.
+JSON/YAML task and --summary views add computed waiting_on to a non-terminal
+task its dependencies hold: the claim predicate's unmet dependencies (depends_on
+and provider prerequisites) and the chain heads they lead to (id, status,
+role-level claimable, reason). Heads are diagnosis, not await targets. Absence
+means no dependency hold, not claimability; without a workspace pipeline it is
+omitted as unavailable.
+Usage:
+liza get <query> [flags]
+Flags:
+--active return active work and unfinished handoffs
+--all include terminal task history (task listings default to active work)
+--field stringArray project task fields (repeat or comma-separate; e.g. id,rejection_reason,rejection_rca)
+--format string output format: json, yaml, table, value (default varies by query type)
+-h, --help help for get
+--json output result as structured JSON
+--output-summary return compact task output summaries
+--summary return compact task summaries
+--zombies return live liza agent processes for this goal that are missing from state
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,17 @@
+exit 0
+--- stdout
+Withdraw the ruling for an exact command. Submitted receipts that deferred it
+under the ruling no longer satisfy reviewer assignment and need fresh admission;
+receipts that executed it are unaffected.
+Usage:
+liza deferred-validation unrule [flags]
+Flags:
+--command string exact canonical command
+-h, --help help for unrule
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,57 @@
+exit 0
+--- stdout
+Start an agent supervisor for a specific role.
+The supervisor:
+- Registers the agent with collision detection
+- Polls for role-specific work (all doer, reviewer, and orchestrator roles)
+- Claims tasks (doer/reviewer roles only)
+- Builds and executes prompts with the specified CLI
+- Manages heartbeats to keep lease alive
+- Handles restarts on exit code 42
+- Loops until work is exhausted or ABORT signal
+Roles:
+orchestrator - Creates and manages task breakdown
+Specification phase:
+epic-planner - Decomposes vision into epics
+epic-plan-reviewer - Reviews epic decomposition
+us-writer - Writes user stories from epics
+us-reviewer - Reviews user stories
+Coding phase:
+code-planner - Claims and produces coding plans
+code-plan-reviewer - Reviews coding plans and submits verdicts
+coder - Claims and implements coding tasks
+code-reviewer - Reviews coding tasks and submits verdicts
+Agent ID defaults to the first <role>-N not already registered with a valid lease
+(e.g. coder-1, or coder-2 if coder-1 is active). Override with --agent-id or
+LIZA_AGENT_ID. The resolved ID is exported as LIZA_AGENT_ID and the legacy env alias to spawned
+provider CLIs so hooks select Multi-Agent mode.
+Example:
+# Auto-assigned agent ID (simplest)
+liza agent coder
+liza agent code-reviewer --cli codex
+liza agent orchestrator --interactive
+# Explicit agent ID
+liza agent coder --agent-id coder-1
+liza agent code-reviewer --agent-id code-reviewer-2 --cli gemini
+# Disable saving agent output to .liza/agent-outputs/
+liza agent coder --no-log
+# Using LIZA_AGENT_ID environment variable
+LIZA_AGENT_ID=coder-1 liza agent coder
+Usage:
+liza agent <role> [initial-task-id] [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--cli string CLI to use; defaults by models.yaml, then role-specific then global config/env (built-in and catalog-backed providers; see 'liza providers list')
+--explain-launch resolve and print provider launch configuration without running an agent
+--goal-id string goal identifier marker for process diagnostics (must match state goal.id when supplied)
+-h, --help help for agent
+-i, --interactive Print prompt location, don't execute CLI
+--model string model to launch the CLI with (claude, codex); defaults by models.yaml
+--no-log Disable saving agent output to .liza/agent-outputs/
+--profile string structured launch profile from config.agent_profiles
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

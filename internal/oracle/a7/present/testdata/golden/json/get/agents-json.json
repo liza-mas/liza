@@ -1,0 +1,57 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "context_percent": 17,
+        "id": "architect-1",
+        "iterations_total": 2,
+        "pid": 5000003,
+        "process_status": "stopped",
+        "process_status_detail": "process does not exist",
+        "process_status_source": "signal(0)",
+        "provider": "codex",
+        "role": "architect",
+        "status": "IDLE",
+        "terminal": "terminal-1",
+        "time_since_heartbeat": "<REL>"
+      },
+      {
+        "context_percent": 17,
+        "current_task": "task-review",
+        "id": "code-reviewer-1",
+        "iterations_total": 2,
+        "lease_expires": "<REL>",
+        "pid": 5000002,
+        "process_status": "stopped",
+        "process_status_detail": "process does not exist",
+        "process_status_source": "signal(0)",
+        "provider": "codex",
+        "role": "code-reviewer",
+        "status": "REVIEWING",
+        "terminal": "terminal-1",
+        "time_on_task": "<REL>",
+        "time_since_heartbeat": "<REL>"
+      },
+      {
+        "context_percent": 17,
+        "current_task": "task-executing",
+        "id": "coder-1",
+        "iterations_total": 2,
+        "lease_expires": "<REL>",
+        "pid": 5000001,
+        "process_status": "stopped",
+        "process_status_detail": "process does not exist",
+        "process_status_source": "signal(0)",
+        "provider": "codex",
+        "role": "coder",
+        "status": "WORKING",
+        "terminal": "terminal-1",
+        "time_on_task": "<REL>",
+        "time_since_heartbeat": "<REL>"
+      }
+    ]
+  }
+}

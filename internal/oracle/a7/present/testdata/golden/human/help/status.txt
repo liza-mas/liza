@@ -1,0 +1,32 @@
+exit 0
+--- stdout
+Display a comprehensive overview of the Liza system state including:
+- Goal and sprint progress
+- System mode (running, paused, stopped)
+- Task distribution and availability
+- Active agents and their health
+- Orchestrator wake triggers
+- Work queue status for each role
+Formats:
+--format json - JSON output
+--format yaml - YAML output
+(default) - Dashboard format
+Use --detailed to include anomalies and circuit breaker status.
+Examples:
+liza status
+liza status --format json
+liza status --format yaml
+liza status --detailed
+Usage:
+liza status [flags]
+Flags:
+--detailed include anomalies and circuit breaker status
+--format string output format: json, yaml, or dashboard (default)
+-h, --help help for status
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

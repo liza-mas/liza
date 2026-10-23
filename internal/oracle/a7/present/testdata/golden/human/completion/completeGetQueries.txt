@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+agents
+anomalies
+architect-1
+code-reviewer-1
+coder-1
+config.mode
+config.post_worktree_cmd
+metrics
+sprint.elapsed
+sprint.metrics.tasks_done
+sprint.status
+task-abandoned
+task-approved
+task-blocked
+task-executing
+task-merged
+task-review
+tasks
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

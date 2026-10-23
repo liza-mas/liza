@@ -1,0 +1,16 @@
+exit 0
+--- stdout
+arch-decompose
+architecture-main-to-coding
+architecture-to-code-plan
+architecture-to-coding
+code-plan-decompose
+code-plan-to-coding
+epic-decompose
+epic-to-us
+integration-to-fix
+slice-integration-to-fix
+us-to-coding
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

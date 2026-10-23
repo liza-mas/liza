@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Record the recovery disposition that closes a task's rejection-RCA gate.
+The --disposition-file content is exactly the request object: schema_version,
+recovery_path (implementation_correction, capability_reroute, lifecycle_repair,
+rescope, human_override) and rationale, required for human_override. The restore
+mode, actor, lifecycle version and decision time are derived, not sent.
+The task stays BLOCKED: unblock-task then restores it in the form the derived
+restore mode allows. Requires a recorded RCA and a registered orchestrator with
+the resume-rejection-rca capability.
+Usage:
+liza resume-rejection-rca <task-id> --disposition-file <file> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--disposition-file string path to the JSON recovery disposition request
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for resume-rejection-rca
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "lock_stale",
+    "message": "lock owner metadata is stale"
+  },
+  "ok": false,
+  "result": null
+}
