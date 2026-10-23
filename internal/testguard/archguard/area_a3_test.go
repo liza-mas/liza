@@ -1,0 +1,27 @@
+package archguard
+
+// areaA3 is the guard data of area A3 (Ops kernel and execution lifecycle): written only by this area's
+// scopes (ADR-0218). Ratchet entries may only be removed or lowered.
+var areaA3 = Area{
+	ID:        "A3",
+	Layers:    []LayerEntry{},
+	Allowlist: []AllowEntry{},
+	Ratchet: []RatchetEntry{
+		{Key: Key{File: "internal/ops/assess_blocked.go", Func: "assessBlockedWithOptionalAuthority"}, Ceiling: 266},
+		{Key: Key{File: "internal/ops/assess_hypothesis_exhausted.go", Func: "assessHypothesisExhaustedWithOptionalAuthority"}, Ceiling: 105},
+		{Key: Key{File: "internal/ops/claim_task.go"}, Ceiling: 1120},
+		{Key: Key{File: "internal/ops/claim_task.go", Func: "claimTask"}, Ceiling: 243},
+		{Key: Key{File: "internal/ops/claim_task.go", Func: "completeClaimTaskAfterValidation"}, Ceiling: 402},
+		{Key: Key{File: "internal/ops/claim_task_strategy.go", Func: "preservedInitialClaimStrategy.handleWorktree"}, Ceiling: 108},
+		{Key: Key{File: "internal/ops/handoff.go", Func: "Handoff"}, Ceiling: 141},
+		{Key: Key{File: "internal/ops/mark_blocked.go", Func: "markBlockedWithOptionalAuthority"}, Ceiling: 185},
+		{Key: Key{File: "internal/ops/mode_change.go", Func: "resume"}, Ceiling: 148},
+		{Key: Key{File: "internal/ops/recover_agent.go", Func: "recoverAgentLifecycle"}, Ceiling: 240},
+		{Key: Key{File: "internal/ops/recover_task.go"}, Ceiling: 822},
+		{Key: Key{File: "internal/ops/recover_task.go", Func: "recoverTaskWithOptions"}, Ceiling: 181},
+		{Key: Key{File: "internal/ops/release_claim.go", Func: "releaseClaimLocked"}, Ceiling: 123},
+		{Key: Key{File: "internal/ops/transition_attempt.go", Func: "transitionToNewAttemptLocked"}, Ceiling: 162},
+		{Key: Key{File: "internal/ops/unblock_task.go", Func: "unblockTaskLifecycle"}, Ceiling: 303},
+	},
+	S2: []S2Entry{},
+}
