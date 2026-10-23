@@ -265,13 +265,13 @@ func ExpectedEmbeddedFiles(repoRoot string, values brand.Values) ([]RenderedFile
 		return nil, err
 	}
 	var out []RenderedFile
-	if err := appendTopLevelMarkdown(&out, repoRoot, values, "contracts", "contracts"); err != nil {
+	if err := appendTopLevelMarkdown(&out, repoRoot, values, "contracts", "contracts", maintainerOnlyContracts); err != nil {
 		return nil, err
 	}
 	if err := appendTree(&out, repoRoot, values, "skills", "skills"); err != nil {
 		return nil, err
 	}
-	if err := appendTopLevelMarkdown(&out, repoRoot, values, "support-docs", "support-docs"); err != nil {
+	if err := appendTopLevelMarkdown(&out, repoRoot, values, "support-docs", "support-docs", nil); err != nil {
 		return nil, err
 	}
 	if err := appendBashPolicyFile(&out, repoRoot, values); err != nil {
@@ -303,13 +303,20 @@ func normalizeOptions(opts SyncOptions) (string, brand.Values, error) {
 	return absRoot, brand.Normalize(values), nil
 }
 
-func appendTopLevelMarkdown(out *[]RenderedFile, repoRoot string, values brand.Values, srcRel, dstRel string) error {
+// maintainerOnlyContracts are contracts/ files that no agent loads at runtime,
+// so they are kept out of the embedded corpus and the global install.
+var maintainerOnlyContracts = map[string]bool{
+	"README.md":                    true,
+	"CONTRACT_FAILURE_MODE_MAP.md": true,
+}
+
+func appendTopLevelMarkdown(out *[]RenderedFile, repoRoot string, values brand.Values, srcRel, dstRel string, skip map[string]bool) error {
 	entries, err := os.ReadDir(filepath.Join(repoRoot, srcRel))
 	if err != nil {
 		return fmt.Errorf("read %s: %w", srcRel, err)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") || skip[entry.Name()] {
 			continue
 		}
 		src := filepath.Join(repoRoot, srcRel, entry.Name())

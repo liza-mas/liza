@@ -226,7 +226,7 @@ If process felt disproportionate, propose Relief Valve adjustment for similar fu
 
 ## Contract Maintenance
 
-**Failure Mode Map:** `CONTRACT_FAILURE_MODE_MAP.md` maps every contract clause to documented failure modes from research.
+**Failure Mode Map:** `contracts/CONTRACT_FAILURE_MODE_MAP.md` maps every contract clause to documented failure modes from research.
 
 **Before proposing contract changes:**
 1. Check which failure modes the affected clause covers, and which tier it sits in

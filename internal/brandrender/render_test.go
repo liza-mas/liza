@@ -407,6 +407,26 @@ func TestExpectedEmbeddedFilesUseNonDefaultBrand(t *testing.T) {
 	}
 }
 
+func TestExpectedEmbeddedFilesExcludeNonRuntimeContracts(t *testing.T) {
+	files, err := ExpectedEmbeddedFiles(findRepoRoot(t), brand.RuntimeValues())
+	if err != nil {
+		t.Fatalf("ExpectedEmbeddedFiles: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, file := range files {
+		got[file.RelPath] = true
+	}
+	if !got["contracts/CORE.md"] {
+		t.Fatalf("expected contracts/CORE.md to be embedded")
+	}
+	for _, rel := range []string{"contracts/README.md", "contracts/CONTRACT_FAILURE_MODE_MAP.md"} {
+		if got[rel] {
+			t.Fatalf("%s is maintainer documentation and must not be deployed", rel)
+		}
+	}
+}
+
 func TestRenderedRepairAgentPoolDocsDescribeClaimEligibleReviewerCapacity(t *testing.T) {
 	files, err := ExpectedEmbeddedFiles(findRepoRoot(t), nonDefaultBrandValues())
 	if err != nil {
