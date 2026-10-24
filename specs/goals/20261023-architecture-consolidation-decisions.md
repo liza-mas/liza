@@ -896,6 +896,35 @@ also triggers on `workflow_dispatch`, and `ci-core.yml:172` runs macOS for every
   areas); deferring CI to the end of the run (platform breaks would compound across areas).
 - Kind: proof mechanism (E1 form; N2 coverage kept and widened, since macOS now runs at every boundary). Revert: return to per-boundary PRs.
 
+### D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)
+Human decision (option B), 2026-10-24T15:43Z. Early D52 CI run 40105658735 at `1e3b803b7` failed on all three platforms:
+(1) Windows checkout fails on 4 A2 golden paths containing `<ID>`/`<EVENT-1>` (`<`/`>` are invalid on Windows; the effect
+inventory keys golden files by the normalised path, `internal/oracle/a2/cli/helpers_test.go:181`, `TokenID`
+`internal/testhelpers/oracle/normalise.go:24`); (2) Linux and macOS tests that export the starting tree fail with
+"invalid reference: 96c9ad69a…", because every `actions/checkout` in `ci-core.yml` (lines 34, 110, 179) and `ci.yml` (93, 236)
+uses the default `fetch-depth` (1); (3) macOS: A9 goldens freeze Linux-only wording ("raw state mismatched from procfs" vs
+"unknown from signal(0)"); A9 stub record, authority-lost deadline; A4 `repair-superseded-dependencies/success` JSON
+differs (extra element).
+- Ruling, generic fixes (required on every platform):
+  - Golden files are stored under filesystem-safe names on every OS. The harness maps tokens in path components when it stores and
+    reads goldens. Golden contents and assertions are unchanged. A guard test rejects tracked paths that are invalid on Windows.
+  - Every CI checkout that runs tests fetches the history that the starting commit needs (for example `fetch-depth: 0`).
+  - A cross-platform golden difference that is not caused by a Linux process facility is investigated and fixed as a defect or a determinism issue
+    (the A4 JSON difference first).
+- Ruling, Linux scope: an oracle scenario whose frozen behaviour depends on Linux process facilities (procfs, signal
+  semantics, reaping, process supervision; A9 at least) is scoped to Linux with a `//go:build linux` test constraint. The reason is
+  stated per file, and the boundary record and oracle docs name the scope. White-box suites keep running on all three
+  platforms. Scoping a scenario for any other reason needs a new ruling.
+- These are portability edits under the oracle-immutability exceptions: no asserted value or fixture changes, and goldens change only by file name.
+- Order: the corrections land before the A1 boundary's G8. The boundary task is then rebased, reruns G1–G7 at the new integration
+  SHA, and holds for a D52 dispatched run at that SHA. G8 is green only when Linux, Windows and macOS all pass in one run.
+  The pending timing follow-up (`deferred-validation-19-timing-followup-plan`) also lands before that rerun; because the boundary reruns
+  its proofs, it does not need the bounded-resubmission rule of D51.
+- Rejected: A (port every oracle scenario to Windows and macOS before A2: unbounded Windows work the goal did not ask for); C (no
+  oracle tests off Linux: loses the portable signal).
+- Kind: proof scope (N2 kept: CI green on all three platforms; the behaviour-preservation proof for process supervision is Linux-only).
+  Revert: drop the build constraints and port the scenarios.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
