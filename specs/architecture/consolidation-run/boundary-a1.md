@@ -212,13 +212,13 @@ Completed Fixes / Fixed (Traceability) entry).
 ## G7 — record completeness
 
 This file holds the commands or source reads, the integration SHA (`265a14b3ae563d01175eb68d8a98c3501d905f71`,
-for G1–G6 alike) and excerpts for G1–G6 above, and the pending G8 below. Manifest:
+for G1–G6 alike) and excerpts for G1–G6 above, and the G8 result below. Manifest:
 `specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-11-cp-0-boundary.json` (G4 mapped to
 the `Makefile` test target with `command_index` 1; every other obligation maps to its approved reference).
 
 ## G8 — dispatched CI result (D52): Linux, Windows and macOS
 
-Status: **pending**. Under D52 (replacing the per-boundary pull request; `1e3b803b7`, with D53 `6ef124d3e`), the
+Status: **green** (result appended below; the pre-result text of this section is kept as written). Under D52 (replacing the per-boundary pull request; `1e3b803b7`, with D53 `6ef124d3e`), the
 operator dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) on the pushed `global-refactoring` branch at
 the integration revision `265a14b3ae563d01175eb68d8a98c3501d905f71`, and the maintainer confirms that the
 Linux, Windows and macOS jobs of that one run are all green. No pull request to `main` is opened or claimed.
@@ -228,3 +228,36 @@ Windows rest-1, Linux ops `TestSubmitProgressRepeatsWhileQueuedAndRunning`), and
 `https://github.com/liza-mas/liza/actions/runs/40132329230` (at `265a14b3a`, in progress when this record was
 written, not dispatched as G8 evidence). To be appended on resume: run URL, tested full SHA (must equal the
 revision above), each job's name and conclusion, UTC observation. Red CI keeps the next area held.
+
+### Result (appended 2026-10-24T21:40Z)
+
+Maintainer confirmation under the standing auto-approve delegation (operator note, 2026-10-24T21:33Z, D52):
+**green**. The run is a D52 dispatch whose tested revision equals this record's integration revision; the
+earlier remark that it was only a verification run is superseded, because it is exactly the D52 run for this SHA
+and no duplicate dispatch is needed. No pull request to `main` was opened or is claimed.
+
+- Run URL: `https://github.com/liza-mas/liza/actions/runs/40132329230`
+- Event and branch: `workflow_dispatch` of `.github/workflows/ci.yml` on `global-refactoring`.
+- Tested SHA: `265a14b3ae563d01175eb68d8a98c3501d905f71`, equal to the integration revision of G1–G6.
+  `global-refactoring` and `origin/global-refactoring` both pointed there when the maintainer checked
+  (2026-10-24T21:33Z), and `git log HEAD..global-refactoring` prints nothing in the task worktree at
+  record time.
+- Run conclusion: `success`. Created 2026-10-24T21:00:49Z; completed 2026-10-24T21:13:06Z.
+
+| Job | Conclusion | Completed (UTC) |
+|---|---|---|
+| Shared CI / Linux tests | success | 21:13:05Z |
+| Shared CI / Linux lint and build | success | 21:03:31Z |
+| Shared CI / macOS compatibility | success | 21:11:19Z |
+| Test (windows) | success | 21:09:00Z |
+| Windows shard ops-1 | success | 21:05:30Z |
+| Windows shard ops-2 | success | 21:03:40Z |
+| Windows shard ops-3 | success | 21:03:38Z |
+| Windows shard ops-4 | success | 21:06:18Z |
+| Windows shard rest-1 | success | 21:08:08Z |
+| Windows shard rest-2 | success | 21:07:00Z |
+| Windows shard rest-3 | success | 21:08:37Z |
+| Release verified tag | skipped (tag-only job) | — |
+
+Linux, Windows and macOS all passed in this one run (D52 replaces the separate `main`-push macOS check).
+The result is the maintainer's relayed observation, recorded here as supplied; this task made no provider CLI call.
