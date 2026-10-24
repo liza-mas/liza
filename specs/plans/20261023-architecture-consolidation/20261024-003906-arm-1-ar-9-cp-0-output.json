@@ -1,0 +1,166 @@
+[
+  {
+    "desc": "A9 oracle kit (runner, stub provider, A9 normaliser, fixture recipe, inventory doc) with supervisor lifecycle rows I-01, I-02, I-04-I-07, I-16",
+    "done_when": "TestOracleA9Kit, TestOracleA9Stub, TestOracleA9Normaliser and the I-01, I-02, I-04, I-05, I-06, I-07, I-16 tests named in the plan pass in go test -v ./internal/oracle/a9/... under env -i with fixed recipe SHAs kept via KeepSHA; regen check filtered to ./internal/oracle/a9/... reproduces every committed A9 golden from 96c9ad69a and exits 0; acceptance-lifecycle.json maps every allocated obligation; the diff adds files only under internal/oracle/a9/.",
+    "scope": "New internal/oracle/a9/ test-only files owned by Task 1: TestMain, doc, kit, stub, normaliser, lifecycle row tests, common and i01/i02/i04-i07/i16 fixtures, their goldens, testdata/acceptance-lifecycle.json. Out: production, harness, ledger, existing tests, other areas, TUI, Makefile, ADR index.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-181325-arm-1-ar-9.md#Scope 1: A9 oracle suite",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-003906-arm-1-ar-9-cp-0.md#Task 1: A9 oracle kit and supervisor lifecycle rows",
+    "rca_required": false,
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]},
+        {"upstream_task": "arm-1-ar-0-cp-2-provider-correction-1", "outputs": [2]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["gcc", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "lint"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test-e2e"]]}
+    ]
+  },
+  {
+    "desc": "A9 oracle provider-output signal rows I-17-I-21: audit degradation, clean-task cleanup, quota raise, provider-unavailable raise, signal match",
+    "done_when": "TestOracleA9AuditAndCleanup, TestOracleA9QuotaRaise, TestOracleA9UnavailableRaise and TestOracleA9SignalMatch pass every success and refusal cell of I-17 to I-21 in go test -v ./internal/oracle/a9/... under env -i; regen check filtered to ./internal/oracle/a9/... reproduces every committed A9 golden from 96c9ad69a and exits 0; acceptance-signals.json maps every allocated obligation; the diff adds only Task 2 files under internal/oracle/a9/ and edits no Task 1 file.",
+    "scope": "New internal/oracle/a9/signals_test.go, i17-i21 fixtures and goldens, testdata/acceptance-signals.json. Out: Task 1 kit files, other row groups, production, harness, ledger, existing tests, other areas, TUI, Makefile, ADR index.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-181325-arm-1-ar-9.md#Scope 1: A9 oracle suite",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-003906-arm-1-ar-9-cp-0.md#Task 2: Provider-output signal rows",
+    "rca_required": false,
+    "depends_on": ["0"],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]},
+        {"upstream_task": "arm-1-ar-0-cp-2-provider-correction-1", "outputs": [2]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["gcc", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "lint"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test-e2e"]]}
+    ]
+  },
+  {
+    "desc": "A9 oracle reviewer and heartbeat rows I-03, I-08-I-11 with the derived CODE_TO_REVIEW fixture and the heartbeat-refusal adapter",
+    "done_when": "TestOracleA9Heartbeat, TestOracleA9HeartbeatRefused, TestOracleA9ReviewerClaim, TestOracleA9ReviewerClaimRefused, TestOracleA9ReviewerWorktree and TestOracleA9PendingMergeStall pass every cell of I-03 and I-08 to I-11 in go test -v ./internal/oracle/a9/... under env -i; the derived fixture's recipe reproduces its recorded review_commit; regen check filtered to ./internal/oracle/a9/... reproduces every committed A9 golden from 96c9ad69a and exits 0; acceptance-review.json maps every allocated obligation; only Task 3 files are added.",
+    "scope": "New internal/oracle/a9/review_test.go, adapter_heartbeat_test.go, i03/i08-i11 and derived-code-to-review fixtures, their goldens, testdata/acceptance-review.json. Out: Task 1 kit files, other row groups, production, harness, ledger, existing tests, other areas, TUI, Makefile, ADR index.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-181325-arm-1-ar-9.md#Scope 1: A9 oracle suite",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-003906-arm-1-ar-9-cp-0.md#Task 3: Reviewer and heartbeat rows",
+    "rca_required": false,
+    "depends_on": ["0"],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]},
+        {"upstream_task": "arm-1-ar-0-cp-2-provider-correction-1", "outputs": [2]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["gcc", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "lint"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test-e2e"]]}
+    ]
+  },
+  {
+    "desc": "A9 oracle orchestrator rows I-12-I-15: turn status and notes seen, checkpoint-trigger clear, undecided-plan record, checkpoint summary",
+    "done_when": "TestOracleA9OrchestratorTurn, TestOracleA9OrchestratorPlans and TestOracleA9CheckpointSummary pass every success and refusal cell of I-12 to I-15 in go test -v ./internal/oracle/a9/... under env -i; regen check filtered to ./internal/oracle/a9/... reproduces every committed A9 golden from 96c9ad69a and exits 0; acceptance-orchestrator.json maps every allocated obligation; only Task 4 files are added under internal/oracle/a9/.",
+    "scope": "New internal/oracle/a9/orchestrator_test.go, i12-i15 fixtures and goldens, testdata/acceptance-orchestrator.json. Out: Task 1 kit files, other row groups, production, harness, ledger, existing tests, other areas, TUI, Makefile, ADR index.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-181325-arm-1-ar-9.md#Scope 1: A9 oracle suite",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-003906-arm-1-ar-9-cp-0.md#Task 4: Orchestrator rows",
+    "rca_required": false,
+    "depends_on": ["0"],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]},
+        {"upstream_task": "arm-1-ar-0-cp-2-provider-correction-1", "outputs": [2]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["gcc", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "lint"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test-e2e"]]}
+    ]
+  },
+  {
+    "desc": "A9 oracle launch and spawn-gate rows I-22-I-25: spawn gate adapter, per-tool launch lines and --explain-launch for 16 catalog tools, ACP runner refusal",
+    "done_when": "TestOracleA9SpawnGate, TestOracleA9LaunchLines and TestOracleA9ExplainLaunch (one subtest per each of the 16 catalog tools) and TestOracleA9LaunchRefused pass in go test -v ./internal/oracle/a9/... under env -i, recording no prompt content; regen check filtered to ./internal/oracle/a9/... reproduces every committed A9 golden from 96c9ad69a and exits 0; acceptance-launch.json maps every allocated obligation; only Task 5 files are added under internal/oracle/a9/.",
+    "scope": "New internal/oracle/a9/launch_test.go, adapter_spawn_test.go, i22-i25 fixtures and goldens, testdata/acceptance-launch.json. Out: Task 1 kit files, other row groups, prompt content (A8), production, harness, ledger, existing tests, other areas, TUI, Makefile, ADR index.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-181325-arm-1-ar-9.md#Scope 1: A9 oracle suite",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-003906-arm-1-ar-9-cp-0.md#Task 5: Launch and spawn-gate rows",
+    "rca_required": false,
+    "depends_on": ["0"],
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]},
+        {"upstream_task": "arm-1-ar-0-cp-2-provider-correction-1", "outputs": [2]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["gcc", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -pkg ./internal/oracle/a9/...", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "lint"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "sh", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "-n", "test-e2e"]]}
+    ]
+  }
+]
