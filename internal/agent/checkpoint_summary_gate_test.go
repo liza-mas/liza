@@ -227,38 +227,53 @@ func TestMaybeEmitCheckpointSummary_RespectsOptOut(t *testing.T) {
 // wake triggers, so that wait runs to timeout and the supervisor exits — the
 // gate is never reached. Driving the strategy's real WaitForWork proves the
 // checkpoint is observed there, with no restart, resume or other work trigger.
+// The wait is bounded by maxWait, not by a context deadline, so a load-delayed
+// entry ("late entry") cannot find the context already expired.
 func TestOrchestratorWaitForWork_EmitsForACheckpointCreatedWhileIdle(t *testing.T) {
-	at := time.Now().UTC()
-	projectRoot := checkpointStateAt(t, &at, models.CheckpointTriggerSprintComplete, false)
-	statePath := paths.New(projectRoot).StatePath()
+	for _, tc := range []struct {
+		name       string
+		entryDelay time.Duration
+	}{
+		{"prompt entry", 0},
+		{"late entry", 400 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			at := time.Now().UTC()
+			projectRoot := checkpointStateAt(t, &at, models.CheckpointTriggerSprintComplete, false)
+			statePath := paths.New(projectRoot).StatePath()
 
-	called := false
-	withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
-		called = true
-		return nil
-	})
+			called := false
+			withFakeCheckpointSummaryRunner(t, func(context.Context, string, string, string, models.Config) error {
+				called = true
+				return nil
+			})
 
-	// No wake trigger: a checkpointed sprint yields none, which is exactly the
-	// condition that starves the gate.
-	prev := orchestratorWaitForWorkDetector
-	orchestratorWaitForWorkDetector = func(string, *models.State, []models.TaskStatus, map[string]bool, []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
-		return OrchestratorWakeResult{Trigger: WakeTriggerNone}
-	}
-	t.Cleanup(func() { orchestratorWaitForWorkDetector = prev })
+			// No wake trigger: a checkpointed sprint yields none, which is exactly the
+			// condition that starves the gate.
+			prev := orchestratorWaitForWorkDetector
+			orchestratorWaitForWorkDetector = func(string, *models.State, []models.TaskStatus, map[string]bool, []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
+				return OrchestratorWakeResult{Trigger: WakeTriggerNone}
+			}
+			t.Cleanup(func() { orchestratorWaitForWorkDetector = prev })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	s := &orchestratorStrategy{}
-	hasWork, _ := s.WaitForWork(ctx, db.New(statePath), SupervisorConfig{ProjectRoot: projectRoot},
-		50*time.Millisecond, 200*time.Millisecond)
-	waitForCheckpointSummary()
+			// Injected latency stands in for a load-delayed pre-check.
+			<-time.After(tc.entryDelay)
 
-	if hasWork {
-		t.Fatal("fixture produced work; the starved-wait condition was not reproduced")
-	}
-	if !called {
-		t.Error("a checkpoint created while the orchestrator waited produced no report")
+			s := &orchestratorStrategy{}
+			hasWork, _ := s.WaitForWork(ctx, db.New(statePath), SupervisorConfig{ProjectRoot: projectRoot},
+				50*time.Millisecond, 200*time.Millisecond)
+			waitForCheckpointSummary()
+
+			if hasWork {
+				t.Fatal("fixture produced work; the starved-wait condition was not reproduced")
+			}
+			if !called {
+				t.Error("a checkpoint created while the orchestrator waited produced no report")
+			}
+		})
 	}
 }
 
