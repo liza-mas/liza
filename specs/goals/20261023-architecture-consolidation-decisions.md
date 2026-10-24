@@ -806,6 +806,26 @@ the whole test binary, and A9 has `t.Parallel` tests.
 - Rejected: further observation-based tracking (racy by construction). Kind: test hygiene. Revert: a
   reviewed A9 correction.
 
+### D49 — D33 generalised: every Git or exec inside Modify inherited from the starting tree is a K1 exception (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T07:27Z. `arm-1-ar-12-amend-3` (AWAITING HUMAN) and `arm-1-ar-12-cp-3` blocked on A12 Scope 4:
+`internal/ops/recover_task.go` `recoverTaskFreshReset` (starting-tree lines 543–627) runs integration preflight
+(`GetCommitSHA`), destructive cleanup and creation inside one `Modify`. Cleanup failure leaves the state
+unchanged, creation failure publishes BLOCKED (ADR-0083), and success releases the snapshot's agents. Scope 3
+raised the same class earlier (`state_lock_holds.go` automatic hold gate and refusal publication), settled by
+`arm-1-ar-12-amend-2`. D33 named only the `CheckCurrent` sites, so each area re-raises the class.
+- Ruling: D33's non-regression rule covers every Git or `exec` call made inside a blackboard `Modify`
+  (including `ModifyWithAgentAuthority`) that exists at the starting commit `96c9ad69a`, not only
+  `CheckCurrent`. Each such call stays in the same transaction, with the same order, checks, failure
+  outcomes and publications (including ADR-0083 BLOCKED publication after cleanup or creation failure,
+  and agent release on success). A refactor may move it with its operation, never out of the
+  transaction, and never weakens it. Owning area architectures and plans list each site as a K1
+  inherited exception, and reviewers check that the list does not grow. Code plans and amendments
+  cite D49 rather than designing a lock, observation or synchronization policy. A synchronization
+  redesign stays out of scope (not in C1–C6; D33).
+- Applies now to A12 Scope 4 fresh-reset (preflight, cleanup, create) and A12 Scope 3 state-lock holds.
+  Debt (extends D33): inherited Git inside `Modify` at these sites. Payback trigger unchanged.
+- Kind: constraint interpretation. Revert: the human widens scope or overrides D33.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
