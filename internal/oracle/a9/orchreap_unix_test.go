@@ -8,7 +8,7 @@ import (
 )
 
 // orchDetach gives the supervisor its own process group, so its group can be
-// terminated without touching the test process or a parallel scenario.
+// terminated without touching the test process.
 func orchDetach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} }
 
 func orchKillGroup(leader int) { _ = syscall.Kill(-leader, syscall.SIGKILL) }

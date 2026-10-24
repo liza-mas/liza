@@ -1,53 +1,29 @@
 package a9
 
-import (
-	"sync"
-	"testing"
-)
+import "testing"
 
 // Decision D45: cancelling a supervisor leaves a provider it started in a detached
-// process group running after the project is removed. Every supervisor these
-// tests own is therefore tracked, and its descendants are signalled and reaped
-// when the test ends on any path. The helper is task-owned and small by D45;
+// process group running after the project is removed. These tests therefore end
+// by signalling, reaping and asserting the absence of every child of the test
+// process. That assertion is only sound when no other scenario owns a child, so
+// every orchestrator test is serial: Go runs a top-level test that does not call
+// t.Parallel while all parallel top-level tests are still paused, and its
+// subtests are serial too (the same reason as startNamed and AuthorityLost).
+// Do not add t.Parallel to a test that calls orchGuard.
+//
+// Linux makes this test process the reaper of orphans through a child subreaper
+// (orchreap_linux_test.go), so a descendant is found whatever its leader did and
+// whenever it exited. Other hosts have no subreaper: each supervisor's process
+// group is terminated best-effort (orchStart) and a provider detached into a
+// session of its own is not tracked. The helper is task-owned and small by D45;
 // consolidating it into the kit is recorded debt (payback: the first A9-area
-// refactor task). Linux makes this test process the reaper of orphans through a
-// child subreaper (orchreap_linux_test.go). Other Unix hosts have no subreaper:
-// cleanup is best-effort termination of each supervisor's process group
-// (orchreap_other_test.go) and detached providers are not tracked.
+// refactor task).
 
-// orchOwner is the process set one scenario owns.
-type orchOwner struct {
-	home string
-	mu   sync.Mutex
-	// leaders are the supervisor pids; their exec.Cmd owns their wait.
-	leaders []int
-	// seen maps every descendant observed so far to its start time, so a
-	// process that exits before it is adopted is still reaped by identity.
-	seen map[int]string
-}
-
-var orchOwners sync.Map // scenario HOME -> *orchOwner
-
-func (o *orchOwner) addLeader(pid int) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.leaders = append(o.leaders, pid)
-}
-
-// orchGuard makes this test process the reaper of the scenario's orphaned
-// descendants before its first supervisor starts, and registers their reaping for
-// the end of the test. It registers first so its cleanup runs after the
-// supervisor's own.
-func orchGuard(t *testing.T, p *scenario) *orchOwner {
+// orchGuard makes this test process the reaper of the test's orphaned descendants
+// before its first supervisor starts, and registers their reaping for the end of
+// the test. It registers first so its cleanup runs after the supervisor's own.
+func orchGuard(t *testing.T) {
 	t.Helper()
 	orchSubreaper(t)
-	value, loaded := orchOwners.LoadOrStore(p.home, &orchOwner{home: p.home, seen: map[int]string{}})
-	o := value.(*orchOwner)
-	if !loaded {
-		t.Cleanup(func() {
-			orchReap(t, o)
-			orchOwners.Delete(p.home)
-		})
-	}
-	return o
+	t.Cleanup(func() { orchReap(t) })
 }

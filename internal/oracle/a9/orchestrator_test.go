@@ -32,9 +32,7 @@ import (
 //     summary CLI is held on a wait file while resume and sprint-checkpoint raise
 //     a second obligation, which stays unclaimed until the first one ends.
 func TestOracleA9OrchestratorTurn(t *testing.T) {
-	t.Parallel()
 	t.Run("i12-success", func(t *testing.T) {
-		t.Parallel()
 		p, r, launch := orchRun(t, "i12-success")
 		after := p.state(t)
 		requireLeases(t, launch, 1, false)
@@ -52,7 +50,6 @@ func TestOracleA9OrchestratorTurn(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i12-refused", func(t *testing.T) {
-		t.Parallel()
 		p, r, launch := orchRun(t, "i12-refused")
 		requireLeases(t, launch, 1, false)
 		if !bytes.Contains(launch, []byte("status: PLANNING")) || bytes.Contains(p.state(t), []byte("orchestrator_seen_at")) {
@@ -66,9 +63,7 @@ func TestOracleA9OrchestratorTurn(t *testing.T) {
 }
 
 func TestOracleA9OrchestratorPlans(t *testing.T) {
-	t.Parallel()
 	t.Run("i13-cleared", func(t *testing.T) {
-		t.Parallel()
 		p, r, launch := orchRun(t, "i13-cleared")
 		if !bytes.Contains(p.before, []byte("checkpoint_trigger: PLANNING_COMPLETE")) ||
 			bytes.Contains(launch, []byte("checkpoint_trigger")) || bytes.Contains(p.state(t), []byte("checkpoint_trigger")) {
@@ -77,7 +72,6 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i13-kept", func(t *testing.T) {
-		t.Parallel()
 		p, r, launch := orchRun(t, "i13-kept")
 		for name, state := range map[string][]byte{"before": p.before, "launch": launch, "after": p.state(t)} {
 			if !bytes.Contains(state, []byte("checkpoint_trigger: SPRINT_COMPLETE")) {
@@ -87,7 +81,6 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i13-guard", func(t *testing.T) {
-		t.Parallel()
 		unixOnly(t)
 		outcomes, err := orchSameCheckpoint(filepath.Join("testdata", "fixtures", "i13-guard", "sprints.yaml"))
 		if err != nil {
@@ -106,7 +99,6 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 		oracle.NewNormaliser().Check(t, oracle.Human, "i13-guard/outcome.txt", []byte(got.String()))
 	})
 	t.Run("i14-undecided", func(t *testing.T) {
-		t.Parallel()
 		p, r, _ := orchRun(t, "i14-undecided")
 		after := p.state(t)
 		alerts := string(p.runtimeFiles(t)["alerts.log"])
@@ -116,7 +108,6 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i14-decided", func(t *testing.T) {
-		t.Parallel()
 		p, r, _ := orchRun(t, "i14-decided")
 		after := p.state(t)
 		alerts := string(p.runtimeFiles(t)["alerts.log"])
@@ -128,9 +119,7 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 }
 
 func TestOracleA9CheckpointSummary(t *testing.T) {
-	t.Parallel()
 	t.Run("i15-emitted", func(t *testing.T) {
-		t.Parallel()
 		p, r, launch := orchRun(t, "i15-emitted")
 		records := p.records(t)
 		if !bytes.Contains(p.before, []byte("pending_checkpoint_summary:")) || bytes.Contains(launch, []byte("pending_checkpoint_summary")) || bytes.Contains(p.state(t), []byte("pending_checkpoint_summary")) {
@@ -145,7 +134,6 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i15-failed", func(t *testing.T) {
-		t.Parallel()
 		p, r, _ := orchRun(t, "i15-failed")
 		if len(p.records(t)) != 1 || !strings.Contains(string(p.runtimeFiles(t)["alerts.log"]), "CHECKPOINT SUMMARY FAILED") || bytes.Contains(p.state(t), []byte("pending_checkpoint_summary")) {
 			t.Fatal("I-15 a failed summary must raise its alert and keep the obligation claimed")
@@ -153,7 +141,6 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i15-pending", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i15-pending")
 		a, polled := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
 		// The first summary CLI is held on a wait file. While it runs, resuming
@@ -182,7 +169,6 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i15-consumed", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i15-consumed")
 		a, polled := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
 		// The gate claims a pending summary before it logs its first wait, so
@@ -213,53 +199,41 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 }
 
 // TestOracleA9OrchestratorReap shows the D45 cleanup on a held-provider failure
-// path: the supervisor is cancelled while the summary stub is held, which orphans
-// the stub, and every child must be killed, reaped and gone. The second case
-// kills the orphan first, so the cleanup meets an adopted zombie whose
-// environment can no longer attribute it.
+// path. The supervisor is cancelled while the summary stub is held, which orphans
+// the stub; the cleanup must kill, reap and confirm the end of every child. The
+// second case kills the orphan first and waits until it is an adopted zombie that
+// nothing observed while it lived, which no environment or earlier record can
+// attribute.
 func TestOracleA9OrchestratorReap(t *testing.T) {
-	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("A9: the child subreaper (decision D45) is Linux-only")
 	}
 	for _, exitedFirst := range []bool{false, true} {
 		name := map[bool]string{false: "live-provider", true: "exited-before-reap"}[exitedFirst]
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			p := newScenario(t, "i15-pending")
 			a, _ := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
-			owner := orchGuard(t, p)
 			p.await(t, "first summary held", func() bool { return len(p.records(t)) == 1 })
-			orchSnapshot(owner)
 			a.cancel()
 			<-a.done
-			owner.mu.Lock()
-			held := map[int]string{}
-			for pid, start := range owner.seen {
-				held[pid] = start
-			}
-			owner.mu.Unlock()
-			if len(held) == 0 {
-				t.Fatal("A9 cleanup: the held provider was not recorded before its supervisor died")
-			}
+			var held []orchChild
+			p.await(t, "held provider adopted", func() bool { held = orchChildren(); return len(held) > 0 })
 			if exitedFirst {
-				for pid := range held {
-					orchKillPID(pid)
+				for _, child := range held {
+					orchKillPID(child.pid)
 				}
 				p.await(t, "provider exit", func() bool {
-					for pid, start := range held {
-						if !orchZombie(pid, start) {
+					for _, child := range orchChildren() {
+						if !child.zombie {
 							return false
 						}
 					}
 					return true
 				})
 			}
-			orchReap(t, owner)
-			for pid, start := range held {
-				if orchExists(pid, start) {
-					t.Fatal("A9 cleanup: a recorded provider still exists after the reap")
-				}
+			orchReap(t)
+			if left := orchChildren(); len(left) != 0 {
+				t.Fatalf("A9 cleanup: %d children remain after the reap", len(left))
 			}
 		})
 	}
@@ -315,7 +289,7 @@ func (b *orchBuffer) String() string {
 // the supervisor's log records go to stdout.
 func orchStart(t *testing.T, p *scenario, args ...string) (*runningAgent, *orchBuffer) {
 	t.Helper()
-	owner := orchGuard(t, p)
+	orchGuard(t)
 	a := &runningAgent{done: make(chan error, 1)}
 	seen := &orchBuffer{}
 	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
@@ -324,10 +298,8 @@ func orchStart(t *testing.T, p *scenario, args ...string) (*runningAgent, *orchB
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)
 	}
-	owner.addLeader(a.cmd.Process.Pid)
 	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	// The snapshot precedes the cancel: once the supervisor is gone its
-	// providers are orphans, and the reap needs them recorded.
-	t.Cleanup(func() { orchSnapshot(owner); a.cancel(); <-a.done })
+	leader := a.cmd.Process.Pid
+	t.Cleanup(func() { a.cancel(); <-a.done; orchKillGroup(leader) })
 	return a, seen
 }
