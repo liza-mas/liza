@@ -1,0 +1,10 @@
+exit 1
+stdout:
+stderr:
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: INTEGRATION_FAILED
+effects: unknown
+task_id: task-1
+transition_id: <id-1>
+Error: claim-task: STATE_CHANGED (safe_action=requery): worktree .worktrees/task-1 missing for INTEGRATION_FAILED task

@@ -1,0 +1,10 @@
+exit 1
+stdout:
+stderr:
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: DRAFT_CODE
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+Error: claim-task: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task task-1 exhausted limits, transitioned to attempt 2 — claimable on next cycle

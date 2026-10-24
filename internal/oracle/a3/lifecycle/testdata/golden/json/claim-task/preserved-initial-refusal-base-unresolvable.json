@@ -1,0 +1,33 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "effects": "unknown",
+            "operation": "claim-task",
+            "outcome": "STATE_CHANGED",
+            "safe_action": "requery",
+            "task_id": "task-1",
+            "task_status": "BLOCKED",
+            "transition_id": "<id-1>"
+          },
+          "message": "claim-task: STATE_CHANGED (safe_action=requery): validation failed: preserved base_commit <hex:11111111.11111111.11111111.11111111.11111111> does not resolve: git [rev-parse <hex:11111111.11111111.11111111.11111111.11111111>^{commit}] failed: exit status 128\nOutput: fatal: ambiguous argument '<hex:11111111.11111111.11111111.11111111.11111111>^{commit}': unknown revision or path not in the working tree.\nUse '--' to separate paths from revisions, like this:\n'git <command> [<revision>...] -- [<file>...]'\n<hex:11111111.11111111.11111111.11111111.11111111>^{commit}\n"
+        },
+        "ok": false,
+        "result": {
+          "effects": "unknown",
+          "operation": "claim-task",
+          "outcome": "STATE_CHANGED",
+          "safe_action": "requery",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}
