@@ -982,8 +982,11 @@ Operator, auto-approved, 2026-10-24T18:29Z. `d53-oracle-portability-followup-pla
 places a symlink named `git.exe` (`isolation_test.go:17-26`, `helpers_test.go:61`) in a git-only PATH, and the fixture requires it
 to be a symlink. Making it launch on Windows was not proven: the reviewer rejected a `git.cmd` shim, and Git for Windows' launcher
 locates its installation from its own path. The cause is plausible but unproven.
-- Ruling: under the D53 scoping principle (host-specific harness techniques are scoped, not ported), the `internal/oracle/a1/cli`
-  package gets a `//go:build !windows` constraint, giving the D31 isolation technique as the reason. It keeps running on Linux and
+- Ruling (amended 2026-10-24T18:35Z): under the D53 scoping principle (host-specific harness techniques are scoped, not ported), the
+  `internal/oracle/a1/cli` package does not run on Windows. The mechanism is a runtime guard in `main_test.go` `TestMain`: on
+  `runtime.GOOS == "windows"` it prints a one-line skip naming D57/D31 and calls `os.Exit(0)` before `oracle.RunMain`. A build constraint is
+  NOT used, because `TestOracleCLIBoundary` (`boundary_test.go:39-43`) rejects any `//go:build` line in the package (source conflict raised by the follow-up planner at 18:34Z,
+  verified; the first wording of D57 named a build constraint without checking that test, D-23). It keeps running on Linux and
   macOS, where it passes (macOS green in run 40115874515). Windows CLI behaviour stays covered by the white-box suites, which pass
   on the Windows shards. No assertion, fixture or golden changes.
 - The follow-up correction fixes the A5 path-separator expectations, the missing `state/VP2.state.yaml` and the ops
