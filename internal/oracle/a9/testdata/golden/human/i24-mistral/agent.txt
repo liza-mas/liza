@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: mistral
+source: flag
+backend: cli
+executable: vibe
+args: -p <prompt> --output streaming
+prompt_transport: arg
+contract_key: mistral
+[stderr]
+Warning: no Liza contract symlink found for mistral. Agents may not find the behavioral contract.
+Run 'liza init --mistral' to create one.

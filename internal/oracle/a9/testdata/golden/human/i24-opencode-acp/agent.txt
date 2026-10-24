@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: opencode-acp
+source: flag
+backend: acpx
+executable: acpx
+args:
+prompt_transport: stdin
+contract_key: opencode
+[stderr]
+Warning: no Liza contract symlink found for opencode-acp. Agents may not find the behavioral contract.
+Run 'liza init --opencode' to create one.

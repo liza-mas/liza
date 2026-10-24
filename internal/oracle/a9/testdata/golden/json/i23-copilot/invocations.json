@@ -1,0 +1,18 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--allow-all",
+        "-p",
+        "<PROMPT>",
+        "--output-format",
+        "json"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "copilot",
+      "prompt_equal": true,
+      "prompt_transport": "argument"
+    }
+  ],
+  "tool": "copilot"
+}

@@ -1,0 +1,17 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "-p",
+        "--output-format",
+        "stream-json"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "qwen",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "qwen"
+}

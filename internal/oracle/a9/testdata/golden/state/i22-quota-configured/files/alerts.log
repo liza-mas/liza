@@ -1,0 +1,5 @@
+# before
+[<T1:sZ>] ℹ️ NOTICE fixture marker — pre-existing alert
+# after
+[<T1:sZ>] ℹ️ NOTICE fixture marker — pre-existing alert
+[<T2:sZ>] 🚨 PROVIDER QUOTA SPAWN BLOCKED — claude: refused to spawn coder while quota signal is set until <T1:sZ>; it lifts automatically then, or delete .liza/provider-quota-exhausted-claude to lift it earlier

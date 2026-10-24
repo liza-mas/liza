@@ -1,0 +1,15 @@
+{
+  "executables": {
+    "kimi": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}

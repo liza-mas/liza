@@ -1,0 +1,15 @@
+{
+  "executables": {
+    "vibe": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--dangerously-bypass-hook-trust",
+        "-c",
+        "features.hooks=true",
+        "-c",
+        "hooks.PreToolUse=[{matcher=\"Bash\",hooks=[{type=\"command\",command=\"'<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' codex-hook\",timeout=30}]}]",
+        "-c",
+        "hooks.PostToolUse=[{matcher=\".*\",hooks=[{type=\"command\",command=\"'<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' codex-hook\",timeout=30}]}]",
+        "exec",
+        "--json",
+        "-"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "codex",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "codex"
+}

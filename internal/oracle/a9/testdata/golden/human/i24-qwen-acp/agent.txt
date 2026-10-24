@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: qwen-acp
+source: flag
+backend: acpx
+executable: acpx
+args:
+prompt_transport: stdin
+contract_key: qwen
+[stderr]
+Warning: no Liza contract symlink found for qwen-acp. Agents may not find the behavioral contract.
+Run 'liza init --provider qwen-acp' to create one.
