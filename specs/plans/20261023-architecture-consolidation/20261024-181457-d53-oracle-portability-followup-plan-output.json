@@ -1,12 +1,12 @@
 [
   {
-    "desc": "Must: run Git through the A1 CLI git-only PATH on Windows by replacing the Windows git.exe symlink with a single git.cmd forwarding shim to the absolute host Git, guarded by a fixture test (D53, D31)",
-    "done_when": "TestOracleCLIGitOnlyPath resolves git inside the git-only directory as the CLI does and runs the CLI's rev-parse --show-toplevel --git-common-dir query with the fixture env (exit 0, root equal after EvalSymlinks); on Windows the entry is one git.cmd forwarding to the absolute host Git, off Windows the symlink is unchanged; TestOracleUsageReport (7), TestOracleValidate (4), TestOracleAnalysisReport, TestOracleCLIIsolation, TestOraclePipelineRBAC and the package pass with no golden, fixture, env-policy or assertion change; regen check reports every A1 CLI golden H1; every undeferred Acceptance Contract command passes; Windows acceptance is the D52 rest-1 job.",
-    "scope": "IN: internal/oracle/a1/cli/helpers_test.go (Windows git-only entry, shared entry-name helper), new internal/oracle/a1/cli/git_path_test.go, manifest. OUT: other A1 files, fixtures, goldens, gitFixtureEnv, assertEnvironment, internal/testhelpers/oracle, production code, skips or build constraints.",
-    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)",
-    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-181457-d53-oracle-portability-followup-plan.md#Task 1: Run Git through the A1 CLI git-only PATH on Windows",
+    "desc": "Must: exclude the A1 CLI oracle package on Windows with a TestMain runtime guard that prints one D57/D31 line and exits 0 before oracle.RunMain, decided by a gate function tested on Linux (D57, D53)",
+    "done_when": "TestOracleCLIWindowsExclusion failed before the gate existed (recorded) and passes: windowsExclusion(\"windows\") returns one line naming D57 and D31, linux and darwin return \"\"; TestMain prints that line and calls os.Exit(0) before oracle.RunMain only on windows; TestOracleCLIBoundary passes (no build restriction, stdlib imports); TestOracleUsageReport (7), TestOracleValidate (4), TestOracleAnalysisReport, TestOracleCLIIsolation, TestOraclePipelineRBAC and the package pass on Linux with no golden, fixture, helpers_test.go, env-policy or assertion change; regen check reports all 21 A1 CLI goldens H1; every undeferred Acceptance Contract command passes; Windows acceptance is the D52 rest-1 job (package pass with the D57 line, no A1 test run).",
+    "scope": "IN: internal/oracle/a1/cli/main_test.go (gate function, its test, TestMain guard), manifest. OUT: every other A1 file incl. boundary_test.go and helpers_test.go, fixtures, goldens, internal/testhelpers/oracle, production code, build constraints, t.Skip, git.cmd or other Windows launch entries.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D57 — D53 extended: the A1 CLI oracle (D31 git-only PATH) is excluded on Windows (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-181457-d53-oracle-portability-followup-plan.md#Task 1: Exclude the A1 CLI oracle on Windows through a TestMain runtime guard",
     "validation": [
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIGitOnlyPath|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIWindowsExclusion|TestOracleCLIBoundary|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a1/cli/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/cli/...",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
@@ -14,7 +14,7 @@
     ],
     "validation_prerequisites": [
       {
-        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIGitOnlyPath|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIWindowsExclusion|TestOracleCLIBoundary|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
         "executables": ["env", "go", "git"],
         "env": ["HOME", "PATH"],
         "probes": [["go", "version"], ["git", "--version"]]

@@ -1,33 +1,34 @@
 # Code Plan: D53 Follow-up — Windows A1/A5 Oracle Portability and the Submit-Progress Quiet Check
 
 ## Source References
-Source revision: "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
+Source revision: "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
 
 ### Direct References
-- "d53": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d31": "specs/goals/20261023-architecture-consolidation-decisions.md#D31 — A1 CLI oracle cases run in a disposable Git project with a git-only PATH (run, 2026-10-23)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d41": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d46": "specs/goals/20261023-architecture-consolidation-decisions.md#D46 — Remove the time.Sleep calls merged by A9 oracle rows; the sleep budget stays (run, 2026-10-24)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d52": "specs/goals/20261023-architecture-consolidation-decisions.md#D52 — G8 boundary CI by `workflow_dispatch` on the pushed integration branch; one PR to `main` later (human, 2026-10-24)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d55": "specs/goals/20261023-architecture-consolidation-decisions.md#D55 — E1 revised for new code plans: no per-task `go test -race` (human, 2026-10-24)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "d24": "specs/goals/20261023-architecture-consolidation-decisions.md#D24 — Provenance of goldens changed by a C task (run, 2026-10-23)" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "goal-frozen": "specs/goals/20261023-architecture-consolidation.md#Frozen Surfaces" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "goal-tests": "specs/goals/20261023-architecture-consolidation.md#Test Policy and Sequencing" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "goal-nfr": "specs/goals/20261023-architecture-consolidation.md#Non-Functional Constraints" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "goal-proof": "specs/goals/20261023-architecture-consolidation.md#Proof Environment" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "env-safe": "GUARDRAILS.md#G1.4: Environment-safe tests and diagnostics" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
-- "boundary": "specs/arch-plan/20261023-architecture-consolidation/20261023-162147-arm-1.md#Area-Boundary Checkpoint Contract" @ "2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16"
+- "d53": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d57": "specs/goals/20261023-architecture-consolidation-decisions.md#D57 — D53 extended: the A1 CLI oracle (D31 git-only PATH) is excluded on Windows (run, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d31": "specs/goals/20261023-architecture-consolidation-decisions.md#D31 — A1 CLI oracle cases run in a disposable Git project with a git-only PATH (run, 2026-10-23)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d41": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d46": "specs/goals/20261023-architecture-consolidation-decisions.md#D46 — Remove the time.Sleep calls merged by A9 oracle rows; the sleep budget stays (run, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d52": "specs/goals/20261023-architecture-consolidation-decisions.md#D52 — G8 boundary CI by `workflow_dispatch` on the pushed integration branch; one PR to `main` later (human, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d55": "specs/goals/20261023-architecture-consolidation-decisions.md#D55 — E1 revised for new code plans: no per-task `go test -race` (human, 2026-10-24)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "d24": "specs/goals/20261023-architecture-consolidation-decisions.md#D24 — Provenance of goldens changed by a C task (run, 2026-10-23)" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "goal-frozen": "specs/goals/20261023-architecture-consolidation.md#Frozen Surfaces" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "goal-tests": "specs/goals/20261023-architecture-consolidation.md#Test Policy and Sequencing" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "goal-nfr": "specs/goals/20261023-architecture-consolidation.md#Non-Functional Constraints" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "goal-proof": "specs/goals/20261023-architecture-consolidation.md#Proof Environment" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "env-safe": "GUARDRAILS.md#G1.4: Environment-safe tests and diagnostics" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
+- "boundary": "specs/arch-plan/20261023-architecture-consolidation/20261023-162147-arm-1.md#Area-Boundary Checkpoint Contract" @ "59cfa7f3aeebaede64b9eabed1d19a7fff1632de"
 - "d53-rules": "specs/plans/20261023-architecture-consolidation/20261024-160626-d53-oracle-portability-plan.md#Common Rules" @ "26de41739a882a8d0ffe9732483193a9fe29361c"
 - "timing-rules": "specs/plans/20261023-architecture-consolidation/20261024-150848-deferred-validation-19-timing-followup-plan.md#Common Rules (both outputs)" @ "6b7e75b95c8a898f8bf13fd797653cee8eff803b"
 
 ### Obligation Coverage
-- "W1-entry" -> "d53", "d31"
-- "W1-guard" -> "d53", "d31", "env-safe"
-- "W1-cases" -> "d31", "goal-tests"
+- "W1-gate" -> "d57", "d53"
+- "W1-exclude" -> "d57", "d31"
+- "W1-cases" -> "d57", "d31", "goal-tests"
 - "W1-provenance" -> "d24", "goal-proof"
 - "W1-lint" -> "goal-proof", "goal-nfr"
-- "W1-preserve" -> "goal-tests", "d31", "d53-rules"
-- "W1-windows" -> "d52", "d53", "boundary"
+- "W1-preserve" -> "d57", "goal-tests", "d31", "d53-rules"
+- "W1-windows" -> "d57", "d52", "boundary"
 - "W5-coverage" -> "d53", "goal-tests"
 - "W5-vp2" -> "d53", "goal-tests"
 - "W5-signals" -> "d53", "goal-tests"
@@ -57,10 +58,16 @@ command header); reads at `2f8b7a7b0` of `internal/oracle/a1/cli/{helpers,golden
 `internal/ops/{submit_progress,submission_lifecycle,admission_slot}.go` (sections),
 `internal/ops/acceptance_evidence.go:945-980`, `internal/ops/submit_progress_test.go`,
 `internal/ops/wt_create_test.go:1084-1122`, sibling git-PATH fixtures (a2, a3, a7), D24/D31/D41/D46/D52–D56,
-the goal sections above, both provider plans, and the Reality Probes below.
+the goal sections above, both provider plans, and the Reality Probes below. Iteration 2 adds: the
+rejection of iteration 1 (the `git.cmd` shim cannot be launched by the direct `exec` caller), operator
+ruling D57 as amended at 18:35Z (`59cfa7f3a`), and reads at `59cfa7f3a` of
+`internal/oracle/a1/cli/{main,boundary}_test.go`, `internal/testhelpers/oracle/cli.go:29-39`,
+`internal/oracle/{a4,a7/present}/main_test.go`, `.github/workflows/ci.yml:178-199` and
+`scripts/ci/testshard/reconcile.go:75-200`.
 
 Success means three independent Must coding outputs, one per reported signature, each test-only:
-(1) the A1 CLI git-only PATH entry runs Git on Windows, (2) A5's coverage walk and failure-signal
+(1) the A1 CLI oracle package does not run on Windows, through the D57 runtime guard in `TestMain`, and
+keeps running unchanged on Linux and macOS, (2) A5's coverage walk and failure-signal
 expectations stop assuming `/`, (3) the submit-progress quiet check stops misreading pre-return
 stderr as late. Validate this plan by payload preflight, Acceptance Contract/output parity and
 independent plan review. Doc Impact: this plan, its output JSON and the three children's manifests;
@@ -70,14 +77,16 @@ hits only `ADR/0083…md:55`, "git-only cleanup" of recovered tasks, unrelated).
 
 | Task | Intent | Signature | Authority |
 |---|---|---|---|
-| 1 | Run Git through the A1 CLI git-only PATH on Windows | Windows rest-1 A1 `failed to detect project root` (14 leaf cases) | D53 generic fix; D31 fixture contract |
+| 1 | Exclude the A1 CLI oracle on Windows through a TestMain runtime guard | Windows rest-1 A1 `failed to detect project root` (14 leaf cases) | D57 (amended) proof-scope ruling; D31 fixture contract kept |
 | 2 | Make A5 golden-coverage and failure-signal path checks separator-independent | Windows rest-1 A5 `driver_test.go:105/110/374/380/390` incl. `state/VP2.state.yaml` | D53 generic fix |
 | 3 | Drain the submit-progress stderr capture before the quiet check | Linux `submit_progress_test.go:188` | D41 timing lineage |
 
 All three are **Must** (D53 orders them before the A1 boundary's G8; D41 lineage for Task 3). No
 Should/Could work. Provider Ask Inventory: N/A — no shared interface is frozen; every edit is in a
-`_test.go` file of the package it serves. No new ruling: the fixes are generic portability (D53) and
-test-only determinism (D41); none changes production, a fixture, a golden or an asserted value.
+`_test.go` file of the package it serves. No further ruling: Task 1 applies D57, which supersedes this
+task's "A1 resolves on Windows" criterion and its "no Windows skip" exclusion for the A1 package only;
+Tasks 2–3 are generic portability (D53) and test-only determinism (D41); none changes production, a
+fixture, a golden or an asserted value.
 
 ## Root Cause Analysis
 
@@ -105,10 +114,27 @@ test-only determinism (D41); none changes production, a fixture, a golden or an 
 - The same host Git, invoked by that absolute path with the identical env and directory, succeeded
   on Windows: `newProject` runs `git init` that way (`helpers_test.go:69-75`) and would `t.Fatal`
   "disposable Git initialization failed" otherwise; every failing case got past it to the CLI run.
-- Sibling Windows precedent: `internal/ops/wt_create_test.go:1091-1100` builds its isolated PATH on
-  Windows from a forwarding `git.cmd` shim instead of a symlink ("the isolated PATH would hold a git
-  that nothing can run"); the ops Windows shards are green in this run (operator note), but the
-  shim's Windows execution path is not traced (d).
+- Iteration 1 proposed a `git.cmd` forwarding entry. The review rejected it with primary evidence: the
+  CLI launches `git` through `exec.CommandContext` without a shell (`gitenv.go:139`), and Windows
+  `CreateProcess` does not run a batch file without `cmd.exe /c`. The `wt_create_test.go:1091-1100` shim
+  serves a hook shell, not a direct `exec`. That remedy is withdrawn.
+- **Attribution ruling (D57, amended 18:35Z, `59cfa7f3a`).** The operator recorded the cause as
+  "plausible but unproven", rejected a Windows launch-capture cycle and weakening the D31 symlink
+  assertion, and scoped the package off Windows: in `main_test.go` `TestMain`, on `runtime.GOOS ==
+  "windows"`, print one skip line naming D57/D31 and call `os.Exit(0)` before `oracle.RunMain`. A
+  build constraint is excluded because `TestOracleCLIBoundary` fails on any `//go:build` or
+  `// +build` line in the package (`boundary_test.go:39-43`, read). Its import rule allows any
+  standard-library path (`:57-60`: only a dotted first path element other than the oracle helper is
+  forbidden), so `fmt`, `os` and `runtime` pass.
+- Current `TestMain` is `func TestMain(m *testing.M) { oracle.RunMain(m) }` (`main_test.go:9`);
+  `RunMain` creates the run root, calls `m.Run` and exits with its code (`cli.go:29-39`). An exit
+  before `RunMain` runs no test and creates no temporary root. In-repo precedent for a `runtime.GOOS`
+  gate that is a pure function tested off the gated platform: `internal/oracle/a4/main_test.go:17`,
+  `:49` (`platformGate(runtime.GOOS, …)`).
+- Windows CI runs `go test -json -count=1 -timeout 30m <args>` per shard (`ci.yml:194-199`), and
+  `testshard reconcile` requires each listed rest-group package to have exactly one terminal package
+  result (`reconcile.go:157-200`). RP-10 shows that an exit 0 before `m.Run` emits the skip line as
+  package output, `ok`, and a package-level `"Action":"pass"`.
 
 **F2 — A5 path separators (log + source).**
 - Log lines 561–753: `TestA5GoldenCoverage` reports 98 `unexpected golden testdata/golden/…` and
@@ -146,12 +172,13 @@ test-only determinism (D41); none changes production, a fixture, a golden or an 
 
 ### b. Mechanism
 
-- **F1.** The CLI resolves `git` in the git-only directory to the `git.exe` symlink and runs it;
-  that process fails the `rev-parse` query on Windows, `GetProjectRoot` returns an error, and the
-  CLI exits 1 with the generic project-root error before reaching any tested surface. The host
-  binary run from its install path works with the same environment and directory. Which Windows
-  facility makes the linked copy fail (for example dependent DLL lookup relative to the link's
-  directory) is **not established** (d); the fix does not depend on it (e).
+- **F1 (symptom path; cause waived by D57).** The CLI resolves `git` in the git-only directory to
+  the `git.exe` symlink and runs it. That process fails the `rev-parse` query on Windows,
+  `GetProjectRoot` returns an error, and the CLI exits 1 with the generic project-root error before it
+  reaches any tested surface. The host binary run from its install path works with the same
+  environment and directory. Why the linked copy fails is **not established**, and D57 waives
+  establishing it. The ruling's remedy acts on the symptom path at its entry: the package's
+  `TestMain`, which every A1 test passes through.
 - **F2.** `TestA5GoldenCoverage` derives golden names by trimming a mixed-separator prefix that
   never matches a Windows walk path, so all 98 files look unexpected and all 91 inventory goldens
   missing — `state/VP2.state.yaml` is one instance, not a separate lookup or coverage defect. The
@@ -163,10 +190,11 @@ test-only determinism (D41); none changes production, a fixture, a golden or an 
 ### c. Reproduction
 
 - **F1.** Windows only: the Windows rest-1 job of a D52 dispatched run, or `go test -count=1
-  ./internal/oracle/a1/cli/` on a Windows host with Git for Windows. Task 1's
-  `TestOracleCLIGitOnlyPath` runs the CLI's exact query through the git-only PATH entry with the
-  fixture environment, so on Windows it fails on the symlink entry and passes on the shim. Not
-  reproducible on Linux (RP-2: Linux passes before the change).
+  ./internal/oracle/a1/cli/` on a Windows host with Git for Windows. Not reproducible on Linux (RP-2,
+  RP-11: Linux passes before the change). On Linux, Task 1's `TestOracleCLIWindowsExclusion` exercises
+  the guard's decision for `"windows"`, `"linux"` and `"darwin"`. It fails to compile before the gate
+  function exists. The Windows observation is the D52 rest-1 job: the package reports `ok` with the
+  D57 skip line and runs no A1 test.
 - **F2.** Windows only, same job. On Linux the walk paths and messages already use `/` (RP-1).
 - **F3.** RP-7: unchanged tree, `go test -race -cpu 1 -count=40 -run
   '^TestSubmitProgressRepeatsWhileQueuedAndRunning$' ./internal/ops/` → 2 of 40 fail with the CI
@@ -181,24 +209,27 @@ Checked: the log lines cited; every source line cited at `2f8b7a7b0`; that newPr
 --git-common-dir` and `ls-tree --full-tree -z integration -- :(literal)README.md` (RP-6); that the 98
 A5 files are tracked; Linux runs of every named test (RP-1..RP-4); the F3 reproduction, the drained
 counterfactual and a late-write control in a disposable clone (RP-7, RP-8).
+Iteration 2 also checked, at `59cfa7f3a`: that no Go, CI or Makefile file changed since `2f8b7a7b0`
+(RP-12), so RP-1..RP-9 still describe the tree; the A1 focused tests plus `TestOracleCLIBoundary`, A1
+regen check and `GOOS=windows go vet` of the package (RP-11); the `go test -json` result of an exit 0
+before `m.Run` on Linux (RP-10).
 Not checked (no Windows host or dispatch authority in this task): why the symlinked `git.exe` fails
-on Windows (unverified); that a `git.cmd` forwarding shim run by the CLI through `exec` works on
-Windows (unverified until the D52 run; the ops precedent's shim sits on the PATH that `git commit`
-passes to its hook shell, `wt_create_test.go:1128-1132`, and whether Windows ever runs it was not
-traced, so it is a house pattern, not proof); what A1 comparisons do on Windows once root detection passes
-(masked by F1, never observed); A5 behaviour on Windows beyond these three tests (`TestOracleA5` and
+on Windows (waived by D57); the Windows `go test -json` stream of the guarded package (RP-10 runs on
+Linux; Go's test runner produces the package result from the binary's exit status on every OS, so this is unverified
+but not platform-specific); what A1 comparisons would do on Windows (never observed, and D57 removes them); A5 behaviour on Windows beyond these three tests (`TestOracleA5` and
 `TestA5Isolation` skip on Windows, `oracle_test.go:98`, `driver_test.go:306`).
 
 ### e. Sufficiency
 
-- **F1.** The fix makes the PATH entry execute the host Git at the absolute path the Windows run
-  proved working, with the unchanged env, so it removes the only Windows-specific difference between
-  the failing and the working invocation without relying on the unverified facility. Residuals,
-  named for the boundary: (i) the shim's own Windows behaviour — `cmd.exe` re-parses `%*`, and an
-  argument with `^ & | < > % "` would be changed; RP-6 shows none in the A1 Git calls, and any
-  mangling would fail a byte-exact golden rather than pass silently; (ii) A1 differences hidden
-  behind root detection on Windows. Either surfaces as a new Windows signature in the D52 run and
-  keeps G8 red; this plan does not claim them.
+- **F1.** On Windows the guard exits 0 before `oracle.RunMain`, so no A1 test, CLI build or Git
+  fixture runs there, and the 14 reported failures cannot occur. This is the proof-scope remedy D57
+  chose; it is not a repair of the cause. It changes nothing on Linux or macOS: the guard is false,
+  `RunMain` runs as today, and the package and regen check pass unchanged (RP-11). What it leaves
+  open, owned by D57 ("Revert: port the D31 isolation to Windows and drop the constraint"): (i) the
+  cause of the Windows symlink failure, still not established; (ii) A1 CLI oracle evidence on Windows.
+  D57 relies on the Windows white-box suites for Windows CLI behaviour. (iii) If the Windows shard
+  ever reported the guarded package without a terminal result, `testshard reconcile` would flag it
+  as "never executed" and keep G8 red. RP-10 makes this unlikely; it is not hidden.
 - **F2.** Platform-relative names and platform-form expected substrings remove every reported A5
   failure; no other A5 check compares a walk path or harness message with a slash literal outside
   the opt-in, Windows-skipped `sensitivity_test.go` (f).
@@ -224,7 +255,8 @@ traced, so it is a house pattern, not proof); what A1 comparisons do on Windows 
 
 - **Oracle immutability (D53 portability exception, `d53-rules`).** No fixture, golden content,
   golden name or asserted value changes; no `PROVENANCE` edit; regen check is the provenance proof.
-  No skip, `//go:build` constraint or `runtime.GOOS` early return is added to any test.
+  No skip, `//go:build` constraint or `runtime.GOOS` early return is added to any test, except the
+  single D57 `TestMain` guard Task 1 owns.
 - **Test-only.** No file outside the owned `_test.go` files and each task's manifest. Production
   (`cmd/`, non-test `internal/`), the harness (`internal/testhelpers/oracle/`) and the D56 regen work
   are untouched.
@@ -247,7 +279,8 @@ traced, so it is a house pattern, not proof); what A1 comparisons do on Windows 
 |---|---|---|
 | A1 every CLI case: exit codes, stdout/stderr channel checks, goldens (`usage_test.go`, `validate_test.go`, `analysis_test.go`, `isolation_test.go`, `rbac_test.go`, `golden_test.go`) | unchanged | none |
 | A1 `assertEnvironment` allowed/required names (`helpers_test.go:160-197`) and explicit-value check (`:118-131`) | unchanged | none |
-| A1 "CLI PATH must contain only Git" (`helpers_test.go:136-138`) | same check, entry name from one platform helper (`git` / `git.cmd`) | Windows entry name only |
+| A1 "CLI PATH must contain only Git" and the symlink entry (`helpers_test.go:53-63`, `:132-138`) | unchanged | none |
+| A1 package on Windows (all of the above) | not run: `TestMain` exits 0 with the D57 line (`d57`) | proof scope on Windows only |
 | A5 `TestA5GoldenCoverage` exact-set rule, json-stderr exemption (`driver_test.go:79-112`) | unchanged rule; names derived by `filepath.Rel` + `ToSlash` | name derivation only |
 | A5 `TestA5FailureSignals` path + "is missing" / "differs at line 1" (`:373`, `:379`) | same substrings, path in `filepath.FromSlash` form | path form only |
 | A5 `TestA5JSONStderr` lost-stderr path + "differs at line"; appeared "is missing"; quiet "" (`:389-397`) | same, path in `filepath.FromSlash` form | path form only |
@@ -255,48 +288,45 @@ traced, so it is a house pattern, not proof); what A1 comparisons do on Windows 
 | ops `TestSubmitProgressWithoutAdmissionClass` (`:193-206`) | unchanged body; same helper | helper only |
 | ops `requireQuiet` failure text "progress written after the submit returned: %q" (`:165`) | unchanged text | none |
 
-## Task 1: Run Git through the A1 CLI git-only PATH on Windows
+## Task 1: Exclude the A1 CLI oracle on Windows through a TestMain runtime guard
 
-**Priority:** Must (`d53` generic fix; `d31`).
-**Direct references:** ["d53", "d31", "d24", "d52", "goal-tests", "goal-proof", "goal-nfr", "env-safe", "boundary", "d53-rules"]
+**Priority:** Must (`d57` applying `d53`'s scoping principle; `d31` contract kept).
+**Direct references:** ["d57", "d53", "d31", "d24", "d52", "goal-tests", "goal-proof", "goal-nfr", "boundary", "d53-rules"]
 
-**Owned files:** `internal/oracle/a1/cli/helpers_test.go`; new
-`internal/oracle/a1/cli/git_path_test.go`; manifest
-`specs/plans/20261023-architecture-consolidation/acceptance/d53-oracle-portability-followup-plan-a1-git-path.json`.
-**Not edited:** every other A1 file, fixtures, goldens, `gitFixtureEnv`, `assertEnvironment`,
-`internal/testhelpers/oracle/`, production.
+**Owned files:** `internal/oracle/a1/cli/main_test.go`; manifest
+`specs/plans/20261023-architecture-consolidation/acceptance/d53-oracle-portability-followup-plan-a1-windows-exclusion.json`.
+**Not edited:** every other A1 file (`boundary_test.go` and `helpers_test.go` included), fixtures,
+goldens, `internal/testhelpers/oracle/`, production. No `//go:build` or `// +build` line, no
+`t.Skip`, and no `git.cmd` or other Windows launch entry.
 
-1. **Guard first.** Add `TestOracleCLIGitOnlyPath` in `git_path_test.go`: build `newProject(t)`;
-   resolve `git` inside the git-only directory as the CLI does (`exec.LookPath` of
-   `filepath.Join(p.path, "git")`, which applies Windows executable extensions) and require the
-   result to lie in `p.path`; run `rev-parse --show-toplevel --git-common-dir` (the CLI's query,
-   `paths.go:271`) with `cmd.Dir = p.root` and the same `oracle.ChildEnv` + `gitFixtureEnv` env as
-   `run`; require exit 0, two lines, and the `filepath.EvalSymlinks` form of line 1 equal to that of
-   `p.root` (the comparison `cmd/liza/main.go:63-71` makes). Failure messages carry booleans and
-   names only. Record Linux green; on Windows it is the fixture-level reproduction of F1.
-2. **Entry.** Introduce one helper returning the git-only entry's file name (`git` off Windows,
-   `git.cmd` on Windows) and use it in `newProject` and in `run`'s single-entry check (replacing the
-   two `gitName` blocks, `:57-60`, `:132-135`). Off Windows the entry stays the symlink to the host
-   Git, unchanged. On Windows write `git.cmd` containing `@echo off`, CRLF, then the double-quoted
-   absolute host Git path followed by ` %*`, CRLF (precedent `internal/ops/wt_create_test.go:1095`);
-   fail with a names-only message if that path is not absolute or contains `%` or `"`. Add one
-   comment stating the ceiling: `cmd.exe` re-parses `%*`, so an argument containing `^ & | < > % "`
-   would be altered; the A1 Git calls carry none (RP-6) and a change would fail a golden.
-3. **Unchanged contract.** `newProject` still runs `git init` through the host path; the CLI env,
-   pinned Git variables and every assertion stay as they are; the git-only directory holds exactly
-   one entry and no provider.
+1. **Gate test first.** In `main_test.go`, add `TestOracleCLIWindowsExclusion`. It requires
+   `windowsExclusion("windows")` to return one non-empty line with no newline that names `D57` and
+   `D31`, and `windowsExclusion("linux")` and `windowsExclusion("darwin")` to return `""`. It fails to
+   compile before step 2. Record that red run in the checkpoint. This follows the a4 precedent
+   `platformGate(runtime.GOOS, …)` (`internal/oracle/a4/main_test.go:17`, `:49`).
+2. **Guard.** Add the pure `windowsExclusion(goos string) string`. Change `TestMain` to call
+   `windowsExclusion(runtime.GOOS)`; when the result is non-empty, print it with `fmt.Println` and
+   call `os.Exit(0)` before `oracle.RunMain(m)`. Otherwise call `oracle.RunMain(m)` as today. Imports
+   added: `fmt`, `os`, `runtime` (standard library, allowed by `boundary_test.go:57-60`). The line
+   states the D57 scope without asserting the unproven cause, for example "A1 CLI oracle not run on
+   Windows (D57): D31 git-only PATH isolation is unproven there". It carries no environment value or
+   host path (G1.4) and no default-brand literal (G1.3).
+3. **Unchanged contract.** On Linux and macOS every A1 test runs exactly as today. The git-only PATH,
+   the `git.exe`/`git` symlink entry, the pinned Git env, `assertEnvironment` and every assertion and
+   golden stay as they are.
 
-**Done when:** `TestOracleCLIGitOnlyPath` passes on Linux and drives the CLI's own Git query through
-the git-only PATH entry; on Windows the entry is a single `git.cmd` forwarding to the absolute host
-Git and off Windows the symlink is unchanged; `TestOracleUsageReport` (7), `TestOracleValidate` (4),
-`TestOracleAnalysisReport`, `TestOracleCLIIsolation`, `TestOraclePipelineRBAC` and the whole package
-pass on Linux with no golden, fixture, env-policy or assertion change; regen check reports every A1
-CLI golden `ok … H1`; the D52 Windows rest-1 job is the Windows acceptance (W1-windows).
+**Done when:** `TestOracleCLIWindowsExclusion` failed before the gate existed (recorded) and passes;
+`TestOracleCLIBoundary` passes with the new imports and no build restriction; `TestOracleUsageReport`
+(7), `TestOracleValidate` (4), `TestOracleAnalysisReport`, `TestOracleCLIIsolation`,
+`TestOraclePipelineRBAC` and the whole package pass on Linux with no golden, fixture, env-policy or
+assertion change; regen check reports all 21 A1 CLI goldens `ok … H1`; `make lint` (vet for
+windows) passes. Windows acceptance (W1-windows) is the D52 rest-1 job, where
+`internal/oracle/a1/cli` reports a package pass with the D57 line and no A1 test runs.
 
-Mappings: W1-entry → `internal/oracle/a1/cli/helpers_test.go`, `TestOracleCLIGitOnlyPath` resolves
-the platform entry inside the git-only directory, index 0; W1-guard →
-`internal/oracle/a1/cli/git_path_test.go`, `TestOracleCLIGitOnlyPath` exit 0 and root equality,
-index 0; W1-cases → `internal/oracle/a1/cli/usage_test.go`, the five named tests, index 0;
+Mappings: W1-gate → `internal/oracle/a1/cli/main_test.go`, `TestOracleCLIWindowsExclusion`, index 0;
+W1-exclude → `internal/oracle/a1/cli/boundary_test.go`, `TestOracleCLIBoundary` accepts the guarded
+`main_test.go` (no build restriction, standard imports), index 0; W1-cases →
+`internal/oracle/a1/cli/usage_test.go`, the five named tests and the package, indexes 0 and 1;
 W1-provenance → `internal/testhelpers/oracle/cmd/regen/main.go`, check mode exits 0 with every A1 CLI
 golden H1, index 2; W1-lint → `Makefile`, `lint` (gofmt, vet for linux/windows/darwin), index 3;
 W1-preserve and W1-windows use their `approved_reference_id`.
@@ -306,10 +336,10 @@ W1-preserve and W1-windows use their `approved_reference_id`.
 ```json
 {
   "version": 1,
-  "manifest": "specs/plans/20261023-architecture-consolidation/acceptance/d53-oracle-portability-followup-plan-a1-git-path.json",
-  "obligations": ["W1-entry", "W1-guard", "W1-cases", "W1-provenance", "W1-lint", "W1-preserve", "W1-windows"],
+  "manifest": "specs/plans/20261023-architecture-consolidation/acceptance/d53-oracle-portability-followup-plan-a1-windows-exclusion.json",
+  "obligations": ["W1-gate", "W1-exclude", "W1-cases", "W1-provenance", "W1-lint", "W1-preserve", "W1-windows"],
   "validation": [
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIGitOnlyPath|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIWindowsExclusion|TestOracleCLIBoundary|TestOracleUsageReport|TestOracleValidate|TestOracleAnalysisReport|TestOracleCLIIsolation|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a1/cli/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/cli/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
@@ -318,8 +348,8 @@ W1-preserve and W1-windows use their `approved_reference_id`.
   "timeout_seconds": 1800,
   "deferred": [4],
   "approved_proofs": [
-    {"obligation_id": "W1-preserve", "reference_id": "goal-tests", "rationale": "Review the diff against the Assertion Traceability rows: only the Windows entry form, the shared entry-name helper and the new guard test change; no golden, fixture, gitFixtureEnv, assertEnvironment rule or CLI assertion changes; the git-only directory still holds exactly one provider-free entry and no skip or build constraint is added."},
-    {"obligation_id": "W1-windows", "reference_id": "d52", "rationale": "Linux cannot fail on F1, so a passing receipt cannot show the Windows correction; the checkpoint records Linux green before and after plus the CI job 120936918717 red evidence, and Windows acceptance is the rest-1 job of the D52 dispatched run that the boundary task awaits."}
+    {"obligation_id": "W1-preserve", "reference_id": "d57", "rationale": "Review the diff against the Assertion Traceability rows: only main_test.go changes (gate function, its test, the TestMain guard before oracle.RunMain); no golden, fixture, helpers_test.go, gitFixtureEnv, assertEnvironment rule or CLI assertion changes; no build restriction, t.Skip or Windows launch entry is added; off Windows TestMain still calls oracle.RunMain unchanged."},
+    {"obligation_id": "W1-windows", "reference_id": "d52", "rationale": "Linux and macOS never take the guard branch, so a passing receipt cannot show the Windows exclusion; TestOracleCLIWindowsExclusion proves the decision for windows on Linux, and Windows acceptance is the rest-1 job of the D52 dispatched run that the boundary task awaits, where internal/oracle/a1/cli reports a package pass with the D57 line and no A1 test."}
   ]
 }
 ```
@@ -459,16 +489,17 @@ Q-sleep → `internal/testguard/sleep_usage_test.go`, `TestSleepUsageBudget`, in
 
 | Output | Waits on | Earliest sufficient artifact | Priority |
 |---|---|---|---|
-| 0 (Task 1) | none | current integration `2f8b7a7b0` (D31 fixture, D53 children merged) | Must |
+| 0 (Task 1) | none | current integration `59cfa7f3a` (D31 fixture, D53 children and D57 merged) | Must |
 | 1 (Task 2) | none | current integration (D53 golden storage names merged) | Must |
 | 2 (Task 3) | none | current integration (D-188 reporter and its tests merged) | Must |
 
 No `depends_on`, `task_depends_on`, `provider_dependencies` or `inherit_inputs`: both provider plans
-and all their children are merged into `2f8b7a7b0` (RP-9), and no output needs another's result.
+and all their children are merged into `2f8b7a7b0` and so into `59cfa7f3a` (RP-9, RP-12), and no
+output needs another's result.
 
 | File or definition | Writers | Ordering |
 |---|---|---|
-| `internal/oracle/a1/cli/helpers_test.go`, new `git_path_test.go` | Task 1 only | Sole writer |
+| `internal/oracle/a1/cli/main_test.go` | Task 1 only | Sole writer |
 | `internal/oracle/a5/driver_test.go` | Task 2 only | Sole writer; `arm-1-ar-14-cp-0-code-1` adds a new `internal/oracle/a5/supplement` package (new files) — no common file |
 | `internal/ops/submit_progress_test.go` | Task 3; later `arm-1-ar-14-cp-0-code-2` (K-SUB white-box tests, DRAFT_CODE) | Commute: Task 3 edits only the helpers `requireQuiet`/`waitForProgress` and adds two test names; code-2's structural refactor of `submit_progress.go` claims none of these names and must keep what they assert (goal Test Policy); a moved file rebases onto Task 3 |
 | Acceptance manifests | one task each | Distinct paths |
@@ -481,24 +512,29 @@ run at that exact SHA with Linux, Windows and macOS green. Task 3 joins under th
 `d53` placed the timing follow-up before that rerun. Correction lineage: this plan (new; supersedes
 nothing).
 
-- **Predecessors:** none started. Every writer of the owned files is merged into `2f8b7a7b0`
-  (A1 CLI oracle, A5 oracle, D-188 progress, D53 children); RP-9 finds no IMPLEMENTING or REVIEWING
-  coding task. No wait is declared.
+- **Predecessors:** none started. Every writer of the owned files is merged into `59cfa7f3a`
+  (A1 CLI oracle, A5 oracle, D-188 progress, D53 children). RP-13 finds one started coding task,
+  `arm-1-ar-0-cp-2-d56-code-0` (REVIEWING_CODE). Its scope is `internal/testhelpers/oracle/cmd/regen`
+  and ADR-0219, and it excludes `internal/oracle/**`, so it writes no owned file. No wait is declared.
 - **Successors:** `arm-1-ar-11-cp-0-code-0` (BLOCKED A1 boundary). The orchestrator holds it on
   every child of this plan through its supported provider reservation; this plan adds no edge to or
   from it, so the correction never depends on its consumer. Neither the old G1–G7 evidence nor red
   run 40115874515 closes G8. Later unstarted writers (`arm-1-ar-14-cp-0-code-1`, `-code-2`) keep
   their admission default (table above).
-- **Independent:** `arm-1-ar-0-cp-2-d56` (D56 harness correction, REVIEWING_CODING_PLAN) owns
-  `internal/testhelpers/oracle/cmd/regen`; no file overlap and no edge either way. The merged D53
+- **Independent:** the D56 harness correction (`arm-1-ar-0-cp-2-d56`, plan merged; `-code-0`
+  REVIEWING_CODE) owns `internal/testhelpers/oracle/cmd/regen`. There is no file overlap and no edge in
+  either direction. Tasks 1–2 only run its check mode, which must still report H1 for scenarios that
+  no C task touched, whichever merges first. The merged D53
   and timing outputs are not repeated.
 - **Slot:** immediately, on current integration, before the boundary rerun.
 
 ## Reality Probes
 
-Run at `2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16` (worktree HEAD), 2026-10-24T17:51Z–18:14Z, under
-`env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp`; RP-7/RP-8 edits only in a disposable clone
-`/tmp/d53f-diag` (after `make sync-embedded`), since removed.
+RP-1..RP-9 ran at `2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16` (iteration 1 HEAD), 2026-10-24T17:51Z–18:14Z;
+RP-10..RP-13 ran at `59cfa7f3aeebaede64b9eabed1d19a7fff1632de` (iteration 2 base), 2026-10-24T18:39Z–18:50Z.
+Everything ran under `env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp`. RP-7/RP-8 edits were made only in
+a disposable clone `/tmp/d53f-diag` (after `make sync-embedded`), since removed. RP-10 used a
+disposable module `/tmp/d57probe`.
 
 | ID | Assertion / command | Observation |
 |---|---|---|
@@ -510,9 +546,13 @@ Run at `2f8b7a7b0df3dacfd57dc02cffa0af3a2d64ed16` (worktree HEAD), 2026-10-24T17
 | RP-6 | logging `git` wrapper first on the test PATH, then the ten A1 CLI tests | CLI Git calls: 21× `rev-parse --show-toplevel --git-common-dir`, 2× `ls-tree --full-tree -z integration -- :(literal)README.md`; the rest are the fixture's `git init` |
 | RP-7 | unchanged tree: `go test -race -cpu 1 -count=40 -run '^TestSubmitProgressRepeatsWhileQueuedAndRunning$' ./internal/ops/`; same with `-cpu 1 -count=100` and no race | race: 2/40 FAIL with the CI line verbatim (`…running canonical validation, batch budget 30s; 0s since…`); no race: 100/100 pass (diagnostic only; no canonical race command, D55) |
 | RP-8 | clone: drained `requireQuiet` prototype, `-race -cpu 1 -count=80` of the same test; plus an injected `time.AfterFunc(20ms)` write before `requireQuiet`, `-count=5`; burst probe (128 KiB + `requireQuiet`) on old helper `-count=50`, then on drained helper `-count=50` | 80/80 pass; injected write caught 5/5 with "late-injected"; burst old 41/50 FAIL, drained 50/50 pass |
+| RP-10 | disposable module: `TestMain` printing one line and calling `os.Exit(0)` before `m.Run`; `go test -json -count=1 ./...` and `go test -count=1 -v ./...` (go1.26.0 linux/amd64) | JSON: `output` event with the line, `output` `ok  probe`, then `{"Action":"pass","Package":"probe"}`, exit 0; `-v`: the line and `ok`, exit 0 |
+| RP-11 | `go test -count=1 -v -run '^(TestOracleCLIBoundary\|TestOracleUsageReport\|TestOracleValidate\|TestOracleAnalysisReport\|TestOracleCLIIsolation\|TestOraclePipelineRBAC)$' ./internal/oracle/a1/cli/`; `go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/cli/...`; `GOOS=windows go vet ./internal/oracle/a1/cli/` | 6 `--- PASS` (Boundary included), `ok` 1.1 s; 21 `ok`, no other line; vet rc 0 |
+| RP-12 | `git diff --stat 2f8b7a7b0 59cfa7f3a` | 9 files, all under `specs/` (D57 text plus four plan/output pairs); no Go, CI, Makefile or script change; no new plan names an owned file |
+| RP-13 | `omni-ee get tasks --active --summary --json` (unique non-DRAFT/MERGED), then `omni-ee get arm-1-ar-0-cp-2-d56-code-0 --json` scope | `arm-1-ar-0-cp-2-d56-code-0` REVIEWING_CODE (scope `cmd/regen`, ADR-0219; OUT `internal/oracle/**`), `arm-1-ar-11-cp-0-code-0` BLOCKED, this task |
 | RP-9 | `omni-ee get tasks --all --json` filtered (full read: writer audit across 91 unlisted DRAFT_CODE tasks) | non-merged: 91 DRAFT_CODE, 2 CODE_PLANNING, 1 REVIEWING_CODING_PLAN (`arm-1-ar-0-cp-2-d56`), 2 BLOCKED (`arm-1-ar-11-cp-0-code-0`, `arm-1-ar-25-cp-0`); none started; only `arm-1-ar-14-cp-0-code-1`/`-code-2` scopes reach an owned area |
 
-**Budget.** Task 1 ≈ focused 6 s + package 5 s + regen 9 s + lint 60 s ≈ 1.5 min; Task 2 ≈ 1 s + 8 s +
+**Budget.** Task 1 ≈ focused 2 s + package 5 s + regen 9 s + lint 60 s ≈ 1.5 min; Task 2 ≈ 1 s + 8 s +
 14 s + 60 s ≈ 1.5 min; Task 3 ≈ focused 50 × (≈0.9 s) ≈ 50 s + ops package 185 s + guard 1 s + lint
 60 s ≈ 5 min. Deferred commands are excluded. Budgets 1800 s, 1800 s and 3600 s leave more than ten
 times headroom for load.
@@ -523,9 +563,9 @@ times headroom for load.
 |---|-------------|--------|---------|--------|
 | 1 | All three reported signatures commissioned in ≤3 cohesive coding outputs | task done_when | Tasks 1–3 | Covered |
 | 2 | Each output has source-grounded RCA and falsifiable acceptance | task done_when; RCA rule | RCA F1–F3; Tasks 1–3 | Covered |
-| 3 | A1: D31 disposable Git project resolves on Windows | task done_when; `d53` generic fixes | Task 1 (W1-entry, W1-guard, W1-windows) | Covered |
-| 4 | A1: Git-only, provider-free PATH and pinned fixture env kept | `d31`; task done_when | Task 1 (W1-preserve) | Covered |
-| 5 | A1: CLI surface coverage and every assertion/golden unchanged | `d31`; `goal-tests` | Task 1 (W1-cases, W1-provenance, W1-preserve) | Covered |
+| 3 | A1 on Windows: superseded by D57. The package does not run there; a `TestMain` runtime guard prints one D57/D31 line and exits 0 before `oracle.RunMain`; no build constraint (`TestOracleCLIBoundary`) | task done_when as amended by `d57` | Task 1 (W1-gate, W1-exclude, W1-windows) | Covered |
+| 4 | A1: Git-only, provider-free PATH and pinned fixture env kept | `d31`; `d57`; task done_when | Task 1 (W1-preserve: `helpers_test.go` not edited) | Covered |
+| 5 | A1: CLI surface coverage and every assertion/golden unchanged on Linux/macOS | `d31`; `d57`; `goal-tests` | Task 1 (W1-cases, W1-provenance, W1-preserve) | Covered |
 | 6 | A5: both platform-specific diagnostic path comparisons fixed | task done_when; `d53` | Task 2 (W5-signals) | Covered |
 | 7 | A5: VP2 state-golden coverage/path lookup fixed | task done_when | Task 2 (W5-coverage, W5-vp2; RCA F2 shows the shared cause) | Covered |
 | 8 | A5: scenario coverage, fixtures, golden bytes, asserted values preserved; no skip/constraint | task done_when; `d53` | Task 2 (W5-preserve, W5-provenance) | Covered |
