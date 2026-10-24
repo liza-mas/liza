@@ -9,7 +9,8 @@
   "initial_task": "",
   "markers": [
     "WAKE TRIGGER: PLANNING_COMPLETE",
-    "Fixture planned output"
+    "PLANS TO REVIEW:",
+    "- plan: specs/rework.md"
   ],
   "commits": [
     "base",

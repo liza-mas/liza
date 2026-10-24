@@ -106,6 +106,9 @@ func renderFixture(t *testing.T, f fixture) string {
 		name, value, _ := strings.Cut(setting, "=")
 		t.Setenv(name, value)
 	}
+	// Semble's readiness probe owns a temporary fixture and corpus lock too.
+	// Keep both inside this case so cleanup includes those runtime files.
+	t.Setenv("TMPDIR", root)
 	for _, name := range []string{"LIZA_ENABLE_SCIP_SEARCH", "LIZA_ENABLE_STACKLIT", "LIZA_ENABLE_FUNCTIONAL_CLUSTERS", "LIZA_ENABLE_SEMBLE"} {
 		value := "0"
 		if f.Gates {

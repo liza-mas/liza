@@ -14,7 +14,7 @@
     {
       "id": "task",
       "role_pair": "slice-integration-pair",
-      "status": "REVIEWING_SLICE_INTEGRATION",
+      "status": "REVIEWING_SLICE_INTEGRATION_ANALYSIS",
       "description": "Fixture task",
       "done_when": "Fixture acceptance",
       "scope": "Fixture scope",

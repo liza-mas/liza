@@ -9,7 +9,8 @@
   "initial_task": "",
   "markers": [
     "WAKE TRIGGER: IMMEDIATE_DISCOVERY",
-    "Fixture immediate discovery"
+    "Urgent discoveries need immediate action:",
+    "Read discovered[] entries with urgency=immediate"
   ],
   "commits": [
     "base",

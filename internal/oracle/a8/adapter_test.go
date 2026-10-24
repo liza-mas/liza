@@ -25,6 +25,24 @@ func renderPrompt(project, template string, f fixture) (string, error) {
 	if err := os.WriteFile(filepath.Join(runtimeDir, "pipeline.yaml"), embedded.PipelineConfigContent(), 0o644); err != nil {
 		return "", err
 	}
+	// D39: only T01 configures the real mandatory-docs branch after the
+	// mandated freeze. Both documents belong to its committed fixture tree.
+	if f.ID == "T01" {
+		var configured pipeline.PipelineConfig
+		if err := yaml.Unmarshal(embedded.PipelineConfigContent(), &configured); err != nil {
+			return "", err
+		}
+		role := configured.Pipeline.Roles["epic-planner"]
+		role.MandatoryDocs = []string{"specs/goal.md", "specs/epic.md"}
+		configured.Pipeline.Roles["epic-planner"] = role
+		data, err := yaml.Marshal(&configured)
+		if err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(filepath.Join(runtimeDir, "pipeline.yaml"), data, 0o644); err != nil {
+			return "", err
+		}
+	}
 	cfg, err := pipeline.LoadFrozen(project)
 	if err != nil {
 		return "", err
