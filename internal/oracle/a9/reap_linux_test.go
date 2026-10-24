@@ -4,6 +4,8 @@ package a9
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,12 +18,58 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// launchAwaitsExit reports that launchAwaitExit can wait for the exit of a
+// scenario process.
+const launchAwaitsExit = true
+
 // launchSubreaper makes the test process the reaper of its orphaned descendants
 // (D45): a process whose parent exits is reparented to the test process instead
 // of init, so its exit becomes a status the test can collect. Setting it again is
 // harmless. It must run before the scenario's first process starts.
 func launchSubreaper() error {
 	return unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+}
+
+// launchAwaitExit waits for each of pids to exit and collects its status, giving
+// up at limit. It returns how many it collected. A pid that is not a child of the
+// test process (ECHILD) is not collected, so a caller that gets zero knows there
+// was nothing it could wait for or that the limit expired.
+//
+// It waits for the given pids only: a wait for any child would take the status
+// that a concurrent test's exec.Cmd.Wait is blocked on. A wait still pending at
+// the limit is abandoned and ends when its process does.
+func launchAwaitExit(pids []int, limit time.Duration) int {
+	collected := make(chan bool, len(pids))
+	for _, pid := range pids {
+		go func() { collected <- launchCollect(pid) }()
+	}
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	n := 0
+	for range pids {
+		select {
+		case ok := <-collected:
+			if ok {
+				n++
+			}
+		case <-timer.C:
+			return n
+		}
+	}
+	return n
+}
+
+// launchCollect blocks until the child pid exits and reports whether it
+// collected its status.
+func launchCollect(pid int) bool {
+	var status syscall.WaitStatus
+	for {
+		_, err := syscall.Wait4(pid, &status, 0, nil)
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		return err == nil
+	}
 }
 
 // launchReapChildren uses D48's isolation: supervisor tests are top-level,
@@ -69,7 +117,7 @@ func launchReapChildren(_ *launchOwner) (int, error) {
 		}
 		collected := make(chan error, len(children))
 		for _, child := range children {
-			go func() { collected <- launchCollect(child.pid) }()
+			go func() { collected <- launchReapPid(child.pid) }()
 		}
 		for range children {
 			select {
@@ -86,7 +134,7 @@ func launchReapChildren(_ *launchOwner) (int, error) {
 	}
 }
 
-func launchCollect(pid int) error {
+func launchReapPid(pid int) error {
 	var status syscall.WaitStatus
 	for {
 		_, err := syscall.Wait4(pid, &status, 0, nil)
@@ -119,11 +167,14 @@ func launchChildren() ([]launchChild, error) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "stat"))
-		if os.IsNotExist(err) {
-			continue // A process can exit between listing and reading its stat.
+		// A process can exit between listing and reading its stat: the open then
+		// fails with ENOENT, or the read fails with ESRCH once the task is gone.
+		// Any other errno is a real failure and is reported.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH) {
+			continue
 		}
 		if err != nil {
-			return nil, errors.New("child process stat unavailable")
+			return nil, fmt.Errorf("A9 cleanup: child process stat unavailable: %w", err)
 		}
 		// comm may contain spaces and parentheses. Fields after its closing
 		// parenthesis are state, ppid, pgrp, ...; zombies retain all three.

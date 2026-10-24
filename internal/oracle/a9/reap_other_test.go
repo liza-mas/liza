@@ -7,12 +7,21 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// launchAwaitsExit reports that launchAwaitExit cannot wait for the exit of a
+// scenario process on this platform.
+const launchAwaitsExit = false
 
 // launchSubreaper does nothing: only Linux lets a process adopt its orphaned
 // descendants (D45), so on other platforms a scenario process whose parent exits
 // leaves the test's reach and its exit cannot be waited for.
 func launchSubreaper() error { return nil }
+
+// launchAwaitExit waits for nothing: the exit of a reparented descendant cannot
+// be observed here without polling (see launchReapChildren).
+func launchAwaitExit([]int, time.Duration) int { return 0 }
 
 // D45 accepts best-effort group termination on non-Linux platforms. There is
 // no portable subreaper or way to wait for a reparented descendant here, so this
