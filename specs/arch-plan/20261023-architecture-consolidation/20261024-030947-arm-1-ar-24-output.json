@@ -1,0 +1,10 @@
+[
+  {
+    "desc": "C3: use C2 canonical keys for provider-unavailable raising and matching while preserving quota and display",
+    "done_when": "Real raise/stop paths prove codex to codex-acp and the reverse, custom shared keys and config overrides obey C2, all unavailable consumers agree, and quota plus CLI/TUI provider values and clearing remain unchanged; attributable golden changes carry D24 provenance.",
+    "scope": "Unavailable-signal policy and records in A9 providersignal, agent/process stop consumers, necessary CLI/TUI adapters, focused tests, goldens, provenance, acceptance manifest and affected docs. Exclude quota policy, canonical derivation, diversity, anomaly grouping and unrelated refactoring.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-030947-arm-1-ar-24.md#Scope 1: C3 canonical provider-unavailable signals",
+    "rca_required": false
+  }
+]
