@@ -57,6 +57,7 @@
           "env",
           "make",
           "go",
+          "gofmt",
           "git",
           "bash"
         ],
@@ -77,6 +78,7 @@
           "env",
           "make",
           "go",
+          "gcc",
           "git",
           "bash"
         ],
