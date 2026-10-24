@@ -937,6 +937,21 @@ race. The Linux CI job runs race on every D52 boundary run.
 - Unchanged: per-task scoped `go test -race` in acceptance contracts (E1), and race in CI at every area boundary.
 - Kind: proof scope (local full-suite race replaced by the CI boundary race). Revert: unrule nothing; let the next deferral re-add it.
 
+### D55 — E1 revised for new code plans: no per-task `go test -race` (human, 2026-10-24)
+Human decision ("revise E1 for new plans only"), 2026-10-24T15:59Z. Under load, `-race` slows wall-clock tests past their deadlines (D54
+evidence); no data race was found in this run; and CI runs race on every D52 boundary run. Removing race from the 87 open
+coding tasks (23 merged code plans) would need 23 plan amendments with consumer fences, or per-merge deferral churn, so the
+human limited the change to new plans.
+- Ruling: a code plan, or a plan amendment, whose authoring or review starts after this ruling does not list `go test -race`
+  or `make test-race` in its Acceptance Contracts or approved proofs. The other E1 proofs stay (`make test`, `make lint`,
+  `make test-e2e`, scoped as each plan requires). Race coverage is the CI Linux race job at every D52 boundary run. Reviewers do
+  not reject a plan for omitting race under D55.
+- Applies now to: `arm-1-ar-21-cp-0` (in planning), `arm-1-ar-22-cp-0` … `arm-1-ar-25-cp-0`, `d53-oracle-portability-plan`,
+  and later plans and amendments.
+- Unchanged: merged code plans and their coding tasks keep their race commands; `deferred-validation-19-timing-followup-plan`
+  (under review at this ruling, D-21) keeps its own. The goal text is not edited, to avoid content-pin drift (D52 precedent).
+- Kind: proof scope. Revert: plans resume listing scoped race commands.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
