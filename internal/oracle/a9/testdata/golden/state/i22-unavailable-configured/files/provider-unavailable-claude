@@ -1,0 +1,8 @@
+# before
+provider: claude
+detected: <T1:sZ>
+message: Failed to authenticate: fixture
+# after
+provider: claude
+detected: <T1:sZ>
+message: Failed to authenticate: fixture

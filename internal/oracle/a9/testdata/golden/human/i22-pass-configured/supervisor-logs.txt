@@ -1,0 +1,2 @@
+agent-outputs/supervisor-coder-<STAMP>.stderr.log
+agent-outputs/supervisor-coder-<STAMP>.stdout.log

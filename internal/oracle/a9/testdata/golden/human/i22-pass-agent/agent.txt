@@ -1,0 +1,6 @@
+exit_code: 0
+[stdout]
+started: true
+error: none
+exited: true
+[stderr]

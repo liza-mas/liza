@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: opencode
+source: flag
+backend: cli
+executable: opencode
+args: run --dangerously-skip-permissions --format json
+prompt_transport: stdin
+contract_key: opencode
+[stderr]
+Warning: no Liza contract symlink found for opencode. Agents may not find the behavioral contract.
+Run 'liza init --opencode' to create one.

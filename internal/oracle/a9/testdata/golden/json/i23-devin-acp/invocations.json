@@ -1,0 +1,58 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "--agent",
+        "'env' 'DEVIN_PERMISSION_MODE=bypass' '<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' acp-proxy --task-id 'task-1' --agent-id 'coder-1' --session-id 'liza-devin-coder-1-task-1' -- devin acp",
+        "sessions",
+        "show",
+        "--name",
+        "liza-devin-coder-1-task-1-tool-results-v1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "--agent",
+        "'env' 'DEVIN_PERMISSION_MODE=bypass' '<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' acp-proxy --task-id 'task-1' --agent-id 'coder-1' --session-id 'liza-devin-coder-1-task-1' -- devin acp",
+        "sessions",
+        "ensure",
+        "--name",
+        "liza-devin-coder-1-task-1-tool-results-v1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "--format",
+        "json",
+        "--approve-all",
+        "--agent",
+        "'env' 'DEVIN_PERMISSION_MODE=bypass' '<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' acp-proxy --task-id 'task-1' --agent-id 'coder-1' --session-id 'liza-devin-coder-1-task-1' -- devin acp",
+        "prompt",
+        "-s",
+        "liza-devin-coder-1-task-1-tool-results-v1",
+        "--file",
+        "-"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "devin-acp"
+}

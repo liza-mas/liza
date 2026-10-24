@@ -1,0 +1,55 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "opencode",
+        "sessions",
+        "show",
+        "--name",
+        "liza-coder-1-task-1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "opencode",
+        "sessions",
+        "ensure",
+        "--name",
+        "liza-coder-1-task-1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "--format",
+        "json",
+        "--approve-all",
+        "opencode",
+        "prompt",
+        "-s",
+        "liza-coder-1-task-1",
+        "--file",
+        "-"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "opencode-acp"
+}

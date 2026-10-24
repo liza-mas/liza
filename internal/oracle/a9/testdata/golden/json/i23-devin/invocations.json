@@ -1,0 +1,17 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--permission-mode",
+        "dangerous",
+        "-p",
+        "<PROMPT>"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "devin",
+      "prompt_equal": true,
+      "prompt_transport": "argument"
+    }
+  ],
+  "tool": "devin"
+}

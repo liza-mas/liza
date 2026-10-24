@@ -1,0 +1,13 @@
+exit_code: 0
+[stdout]
+tool: codex
+source: flag
+backend: cli
+executable: codex
+args: exec --json -
+prompt_transport: stdin
+env_files: codex.env
+contract_key: codex
+[stderr]
+Warning: no Liza contract symlink found for codex. Agents may not find the behavioral contract.
+Run 'liza init --codex' to create one.

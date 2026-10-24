@@ -1,0 +1,13 @@
+exit_code: 0
+[stdout]
+tool: claude
+source: flag
+backend: cli
+executable: claude
+args: -p --permission-mode auto --verbose --output-format stream-json
+prompt_transport: stdin
+env_files: claude.env
+contract_key: claude
+[stderr]
+Warning: no Liza contract symlink found for claude. Agents may not find the behavioral contract.
+Run 'liza init --claude' to create one.

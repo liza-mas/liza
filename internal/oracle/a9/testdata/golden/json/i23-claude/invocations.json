@@ -1,0 +1,22 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--settings",
+        "{\"hooks\":{\"PostToolBatch\":[{\"hooks\":[{\"command\":\"'<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' claude-hook\",\"timeout\":60,\"type\":\"command\"}]}],\"PostToolUse\":[{\"hooks\":[{\"command\":\"'<CLI>/cli0' tool-result --root '<PROJECT>/.liza/tool-results' claude-hook\",\"timeout\":60,\"type\":\"command\"}],\"matcher\":\"Read|Grep|Glob|mcp__.*\"}]}}",
+        "-p",
+        "--permission-mode",
+        "auto",
+        "--verbose",
+        "--output-format",
+        "stream-json"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "claude",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "claude"
+}

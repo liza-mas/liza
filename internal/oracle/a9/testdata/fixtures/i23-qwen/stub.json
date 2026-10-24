@@ -1,0 +1,15 @@
+{
+  "executables": {
+    "qwen": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}

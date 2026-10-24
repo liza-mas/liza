@@ -1,0 +1,18 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "run",
+        "--dangerously-skip-permissions",
+        "--format",
+        "json"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "opencode",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "opencode"
+}
