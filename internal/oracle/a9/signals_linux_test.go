@@ -29,7 +29,10 @@ func signalSubreaper() error {
 	return signalSubreaperErr
 }
 
-type signalChild struct{ pid, pgid, sid int }
+type signalChild struct {
+	pid, pgid, sid int
+	zombie         bool
+}
 
 // signalChildrenOf lists the processes whose parent is ppid, zombies included,
 // from /proc. A failed observation is an error: it never reads as no children.
@@ -64,7 +67,7 @@ func signalChildrenOf(ppid int) ([]signalChild, error) {
 			return nil, errors.New("unreadable process stat")
 		}
 		if parent == ppid {
-			kids = append(kids, signalChild{pid, pgid, sid})
+			kids = append(kids, signalChild{pid, pgid, sid, fields[0] == "Z"})
 		}
 	}
 	return kids, nil
@@ -85,9 +88,11 @@ func (o signalOwner) owns(c signalChild) bool {
 // signalReap kills the scenario's supervisor session and every child of this
 // test process the scenario owns, with its process group, and reaps them, until
 // none is left. Because the test process is the subreaper, an orphan is a child
-// whatever the exit order of its ancestors. The supervisor itself stays with
-// its exec.Cmd, which reaps it. It reports whether none was left before the
-// deadline; a failed observation reports false.
+// whatever the exit order of its ancestors, but only once its parent is dead:
+// the supervisor, which stays with its exec.Cmd to be reaped, counts as left
+// until it is a zombie or gone, since a descendant is not yet ours before that.
+// It reports whether none was left before the deadline; a failed observation
+// reports false.
 func signalReap(o signalOwner) bool {
 	owned := map[int]bool{}
 	deadline := time.Now().Add(5 * time.Second)
@@ -99,7 +104,13 @@ func signalReap(o signalOwner) bool {
 		}
 		left := 0
 		for _, c := range kids {
-			if c.pid == o.sid || (!owned[c.pid] && !o.owns(c)) {
+			if c.pid == o.sid {
+				if !c.zombie {
+					left++
+				}
+				continue
+			}
+			if !owned[c.pid] && !o.owns(c) {
 				continue
 			}
 			owned[c.pid] = true
