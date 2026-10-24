@@ -45,22 +45,18 @@ func TestAcceptanceReceiptBoundEdges(t *testing.T) {
 	for _, tc := range []struct {
 		name                       string
 		mappings, commands, output int
-		want                       string
+		want                       string // the complete ordered diagnostics, one per line
 	}{
 		{"256 mappings", 256, 1, 0, ""},
-		{"257 mappings", 257, 1, 0, "invalid manifest or result bounds (mappings)"},
+		{"257 mappings", 257, 1, 0, "task task-1 acceptance_receipt has invalid manifest or result bounds (mappings)"},
 		{"64 commands", 1, 64, 0, ""},
-		{"65 commands", 1, 65, 0, "invalid manifest or result bounds (commands)"},
+		{"65 commands", 1, 65, 0, "task task-1 acceptance_receipt has invalid manifest or result bounds (commands)"},
 		{"1048576 output bytes", 1, 1, 1048576, ""},
-		{"1048577 output bytes", 1, 1, 1048577, "output exceeds 1 MiB"},
+		{"1048577 output bytes", 1, 1, 1048577, "task task-1 acceptance_receipt output exceeds 1 MiB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := acceptanceViolations(acceptanceReceiptTask(tc.mappings, tc.commands, tc.output))
-			if tc.want == "" && got != "" {
-				t.Fatalf("unexpected violations: %s", got)
-			}
-			if tc.want != "" && !strings.Contains(got, tc.want) {
-				t.Fatalf("violations %q lack %q", got, tc.want)
+			if got := acceptanceViolations(acceptanceReceiptTask(tc.mappings, tc.commands, tc.output)); got != tc.want {
+				t.Fatalf("violations = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -69,12 +65,28 @@ func TestAcceptanceReceiptBoundEdges(t *testing.T) {
 func TestAcceptanceDigestLengthEdges(t *testing.T) {
 	task := acceptanceReceiptTask(1, 1, 0)
 	task.AcceptanceReceipt.ManifestBlob = strings.Repeat("a", 41)
-	if got := acceptanceViolations(task); !strings.Contains(got, "requires manifest blob identity") {
-		t.Fatalf("41-char blob accepted: %q", got)
+	if got, want := acceptanceViolations(task), "task task-1 acceptance_receipt requires manifest blob identity"; got != want {
+		t.Fatalf("41-char blob: violations = %q, want %q", got, want)
 	}
 	task = acceptanceReceiptTask(1, 1, 0)
 	task.AcceptanceReceipt.Commands[0].CommandSHA256 = strings.Repeat("b", 63)
-	if got := acceptanceViolations(task); !strings.Contains(got, "requires canonical command identity") {
-		t.Fatalf("63-char command digest accepted: %q", got)
+	if got, want := acceptanceViolations(task), "task task-1 acceptance_receipt requires canonical command identity (command 0)"; got != want {
+		t.Fatalf("63-char command digest: violations = %q, want %q", got, want)
+	}
+}
+
+// Every bound broken at once pins the emission order: receipt bounds, manifest
+// blob, per-command identity, then total output.
+func TestAcceptanceReceiptMultiDefectOrder(t *testing.T) {
+	task := acceptanceReceiptTask(257, 65, 1048577)
+	task.AcceptanceReceipt.ManifestBlob = strings.Repeat("a", 41)
+	task.AcceptanceReceipt.Commands[1].CommandSHA256 = strings.Repeat("b", 63)
+	want := "task task-1 acceptance_receipt has invalid manifest or result bounds (mappings)\n" +
+		"task task-1 acceptance_receipt has invalid manifest or result bounds (commands)\n" +
+		"task task-1 acceptance_receipt requires manifest blob identity\n" +
+		"task task-1 acceptance_receipt requires canonical command identity (command 1)\n" +
+		"task task-1 acceptance_receipt output exceeds 1 MiB"
+	if got := acceptanceViolations(task); got != want {
+		t.Fatalf("violations = %q, want %q", got, want)
 	}
 }

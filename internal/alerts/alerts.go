@@ -59,12 +59,12 @@ func ParseLine(line string) (Alert, bool) {
 	}
 
 	rest := strings.TrimLeft(line[closeBracket+1:], " ")
-	colonIdx := strings.Index(rest, ": ")
+	colonIdx := strings.Index(rest, levelCategorySeparator)
 	if colonIdx < 0 {
 		return Alert{}, false
 	}
 	levelAndCategory := rest[:colonIdx]
-	message := rest[colonIdx+2:]
+	message := rest[colonIdx+len(levelCategorySeparator):]
 
 	spaceIdx := strings.IndexByte(levelAndCategory, ' ')
 	if spaceIdx < 0 {
@@ -94,6 +94,9 @@ func GateKey(alert Alert) string {
 	}
 	return Key(alert)
 }
+
+// levelCategorySeparator ends the "LEVEL CATEGORY" prefix of an alert line.
+const levelCategorySeparator = ": "
 
 // alertFileMode is the permission of the alerts log and its once-ledger.
 const alertFileMode = 0644

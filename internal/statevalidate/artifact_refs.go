@@ -218,11 +218,14 @@ func cloneInt(value *int) *int {
 	return &cloned
 }
 
+// driveLetterPrefixLen is the length of a Windows drive prefix such as "C:".
+const driveLetterPrefixLen = 2
+
 func isAbsAnyPlatform(path string) bool {
 	if filepath.IsAbs(path) {
 		return true
 	}
-	if len(path) >= 2 && path[1] == ':' {
+	if len(path) >= driveLetterPrefixLen && path[1] == ':' {
 		c := path[0]
 		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
 	}

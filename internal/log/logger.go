@@ -16,6 +16,8 @@ const (
 	defaultTailReadBytes int64 = 64 * 1024
 	maxTailReadBytes     int64 = 256 * 1024
 	logFileMode                = 0644
+	// tailWindowGrowthFactor doubles the tail read window after each miss.
+	tailWindowGrowthFactor = 2
 )
 
 // Entry represents a single log entry
@@ -184,7 +186,7 @@ func (l *Logger) GetLastTimestamp() (time.Time, error) {
 		if start == 0 || window >= maxTailReadBytes || window >= size {
 			break
 		}
-		window = min(window*2, maxTailReadBytes, size)
+		window = min(window*tailWindowGrowthFactor, maxTailReadBytes, size)
 	}
 
 	return time.Time{}, fmt.Errorf("failed to parse last log entry from bounded tail window")

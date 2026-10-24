@@ -27,6 +27,8 @@ const (
 	// Caller chain recorded for diagnostics: stack depth walked and names kept.
 	lockCallerMaxFrames = 32
 	lockCallerMaxNames  = 8
+	// lockCallerSkipFrames hides runtime.Callers and lockCaller themselves.
+	lockCallerSkipFrames = 2
 )
 
 // FileLock provides file-based mutual exclusion with diagnostic owner metadata.
@@ -165,7 +167,7 @@ func (fl *FileLock) writeOwnerMetadata(operation string) {
 // Operation remains the stable metrics category; this field is diagnostic only.
 func lockCaller() string {
 	var pcs [lockCallerMaxFrames]uintptr
-	n := runtime.Callers(2, pcs[:])
+	n := runtime.Callers(lockCallerSkipFrames, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
 	var names []string
 	for len(names) < lockCallerMaxNames {

@@ -16,7 +16,7 @@
     {
       "obligation_id": "AC1",
       "file": "internal/statevalidate/acceptance_bounds_test.go",
-      "assertion": "TestAcceptanceReceiptBoundEdges and TestAcceptanceDigestLengthEdges assert the exact diagnostic text at the literal 256/257 mapping, 64/65 command, 1048576/1048577 output-byte and digest-length edges; internal/models/named_values_test.go TestValidationPrerequisiteBoundEdges and TestValidationPrerequisiteCountAndByteEdges assert the unchanged prerequisite messages at their literal edges; the existing statevalidate and payloadschema diagnostic tests (mark_blocked_test.go, assess_blocked_test.go, validate_task_order_test.go) pass unchanged.",
+      "assertion": "TestAcceptanceReceiptBoundEdges, TestAcceptanceDigestLengthEdges and TestAcceptanceReceiptMultiDefectOrder compare the complete diagnostic string (exact text, order) at the literal 256/257 mapping, 64/65 command, 1048576/1048577 output-byte and digest-length edges and with every bound broken at once; internal/models/named_values_test.go TestValidationPrerequisiteBoundEdges and TestValidationPrerequisiteCountAndByteEdges compare the complete ordered diagnostic slices at the prerequisite list, env-name, argv, argument, command-count and byte-total edges, including an all-bounds-broken case and a count-mismatch-plus-cap case; existing statevalidate and payloadschema diagnostic tests pass unchanged.",
       "command_index": 1
     },
     {

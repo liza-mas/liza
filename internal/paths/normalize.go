@@ -67,6 +67,9 @@ func SplitRefFragment(ref string) string {
 	return ""
 }
 
+// driveLetterPrefixLen is the length of a Windows drive prefix such as "C:".
+const driveLetterPrefixLen = 2
+
 // IsAbsAnyPlatform returns true if the path is absolute on any platform.
 // filepath.IsAbs is platform-dependent, so we also check for Unix single-leading
 // slash paths, Windows rooted-backslash paths, and drive-letter prefixes (e.g.
@@ -83,7 +86,7 @@ func IsAbsAnyPlatform(path string) bool {
 		return true
 	}
 	// Windows drive letter: letter + colon (e.g. "C:\", "C:/", "C:file")
-	if len(path) >= 2 && path[1] == ':' {
+	if len(path) >= driveLetterPrefixLen && path[1] == ':' {
 		c := path[0]
 		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
 			return true

@@ -17,6 +17,8 @@ import (
 const (
 	objectDirMode  = 0o755
 	objectFileMode = 0o644
+	// shardPrefixLen is the digest prefix naming an object's shard directory.
+	shardPrefixLen = 2
 )
 
 // ErrConflict means an existing digest-named object has different bytes.
@@ -46,7 +48,7 @@ func Path(archiveDir, digest string) (string, error) {
 	if !IsDigest(digest) {
 		return "", fmt.Errorf("invalid archive object digest %q", digest)
 	}
-	return filepath.Join(archiveDir, "objects", digest[:2], digest+".json"), nil
+	return filepath.Join(archiveDir, "objects", digest[:shardPrefixLen], digest+".json"), nil
 }
 
 // Write installs bytes without overwriting evidence and completes durability
