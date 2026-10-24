@@ -1,0 +1,483 @@
+[
+  {
+    "desc": "Must: split provider catalog by concern",
+    "done_when": "catalog.go retains schema/lookups at <=800 lines; its A2 ratchet key is removed and S1 passes. Existing provider assertions, live oracles and E1 proof pass; exports and messages are unchanged. Behavioral test changes are not expected; mechanical test updates preserve assertions.",
+    "scope": "In: internal/providers/catalog.go, catalog_validation.go, catalog_runtime.go, catalog_load.go, catalog_detect.go, catalog_test.go, pi_catalog_test.go, same-package mechanical test splits; A2 guard key; providers acceptance manifest. Out: other production packages, oracle files, C2 policy, vocabulary.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-034826-arm-1-ar-11-cp-3.md#Task 1: Split provider catalog by concern",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash",
+          "gofmt"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: split updater by concern",
+    "done_when": "updater.go retains update decision/re-exec at <=800 lines; its A2 ratchet key is removed and S1 passes. Existing updater assertions, live oracles and E1 proof pass; exports, prompts and preference bytes are unchanged. Behavioral test changes are not expected; mechanical updates preserve assertions.",
+    "scope": "In: internal/updater/updater.go, versions.go, release_install.go, source_install.go, preferences.go, naming.go, updater_test.go and mechanical concern test splits; A2 guard key; updater acceptance manifest. Out: oracle files, real update/install/network execution, exported API or vocabulary changes.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-034826-arm-1-ar-11-cp-3.md#Task 2: Split updater by concern",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash",
+          "gofmt"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "depends_on": [
+      "0"
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: decompose native Claude tool-result processing",
+    "done_when": "ClaudePostToolResult remains at its path at <=100 lines and orchestrates the approved steps; its ratchet key is removed and S1 passes. Native-shape/routing assertions, live oracles and E1 proof pass with unchanged exports/output. Characterization additions preserve behavior; mechanical test updates preserve assertions.",
+    "scope": "In: internal/toolresult/claude.go, claude_native.go, claude_test.go and native characterization tests; ClaudePostToolResult A2 guard key; toolresult acceptance manifest. Out: store/MCP/Codex logic, oracle files, Bash capture, vocabulary, exported API changes.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-034826-arm-1-ar-11-cp-3.md#Task 3: Decompose native Claude tool-result processing",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash",
+          "gofmt"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "depends_on": [
+      "1"
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: classify the declarative tool catalog as S2",
+    "done_when": "A2 Ratchet is empty and S2 contains only toolchain/catalog.go Catalog, category table, with the prescribed rationale; S1, existing catalog assertions, live oracles and E1 proof pass. Catalog source and exports remain unchanged. No behavioral test changes; mechanical updates preserve assertions.",
+    "scope": "In: internal/testguard/archguard/area_a2_test.go Catalog ratchet-to-S2 conversion; toolchain acceptance manifest. Read-only proof: internal/toolchain/catalog.go and catalog_test.go. Out: tool catalog changes, oracle files, overview.md, installer execution.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-034826-arm-1-ar-11-cp-3.md#Task 4: Classify the declarative tool catalog as S2",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash",
+          "gofmt"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./internal/updater/ ./internal/toolchain/ ./internal/toolresult/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "depends_on": [
+      "2"
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  }
+]
