@@ -1,0 +1,169 @@
+[
+  {
+    "desc": "Must: C1 - five agent and review lease sites honour configured lease_duration via one ops resolver; terminal-1 becomes a named constant",
+    "done_when": "Plan Task 1's Done when holds: TestC1 tests show all five C1 sites use 600 s with lease_duration 600 and 1800 s by default; stored terminal is \"terminal-1\" from a named constant; all validation commands pass; manifest maps every obligation.",
+    "scope": "Plan Task 1 Files: ops lease resolver, the five C1 sites in agent, ops and commands, TestC1 tests, affected lease docs and manifest. Out: other timeouts and lease consumers, config fields, validation, C2-C6 behaviour.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-023833-arm-1-ar-22.md#Scope 1: C1 configured leases and terminal constant",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-023833-arm-1-ar-22.md#Scope 1: C1 configured leases and terminal constant",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-162653-arm-1-ar-22-cp-0.md#Task 1: Wire configured lease duration into all C1 consumers",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestC1|LeaseDuration|Heartbeat|ReviewerStartPlanner|Reclaim|Resubmission|Regist' ./internal/ops/ ./internal/agent/ ./internal/commands/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestC1|LeaseDuration|Heartbeat|ReviewerStartPlanner|Reclaim|Resubmission|Regist' ./internal/ops/ ./internal/agent/ ./internal/commands/",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  }
+]
