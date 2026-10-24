@@ -2,6 +2,8 @@ package a9
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -89,16 +91,23 @@ func TestOracleA9LeaseAssertion(t *testing.T) {
 // is no longer produced is reported, for the usage and alert files.
 func TestOracleA9ArtifactSet(t *testing.T) {
 	t.Parallel()
-	if got := missingArtifacts("i04-success", map[string]bool{}); len(got) != 1 || got[0] != "usage-records-1.jsonl" {
+	dir := t.TempDir()
+	for _, name := range []string{"alerts.log", "usage-records-1.jsonl"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal("A9 setup: artifact golden")
+		}
+	}
+	both := map[string]bool{"alerts.log": true, "usage-records-1.jsonl": true}
+	if got := missingArtifacts(dir, both); len(got) != 0 {
+		t.Fatalf("produced artifacts reported missing: %v", got)
+	}
+	if got := missingArtifacts(dir, map[string]bool{"alerts.log": true}); len(got) != 1 || got[0] != "usage-records-1.jsonl" {
 		t.Fatalf("missing usage artifact not reported: %v", got)
 	}
-	if got := missingArtifacts("i04-success", map[string]bool{"usage-records-1.jsonl": true}); len(got) != 0 {
-		t.Fatalf("produced artifact reported missing: %v", got)
-	}
-	if got := missingArtifacts("i07-spin", map[string]bool{"usage-records-1.jsonl": true}); len(got) != 1 || got[0] != "alerts.log" {
+	if got := missingArtifacts(dir, map[string]bool{"usage-records-1.jsonl": true}); len(got) != 1 || got[0] != "alerts.log" {
 		t.Fatalf("missing alert artifact not reported: %v", got)
 	}
-	if got := missingArtifacts("i04-refused", map[string]bool{}); len(got) != 0 {
-		t.Fatalf("scenario without runtime files reported missing: %v", got)
+	if got := missingArtifacts(filepath.Join(dir, "absent"), nil); len(got) != 0 {
+		t.Fatalf("scenario without runtime goldens reported missing: %v", got)
 	}
 }

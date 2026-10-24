@@ -108,10 +108,10 @@ func (p *scenario) listing(t testing.TB) []byte {
 	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
-// missingArtifacts lists the committed runtime-file goldens of a scenario that
-// are absent from the observed artifact names (sorted).
-func missingArtifacts(scenario string, observed map[string]bool) []string {
-	entries, err := os.ReadDir(filepath.Join("testdata", "golden", "state", scenario, "files"))
+// missingArtifacts lists the runtime-file goldens in dir that are absent from
+// the observed artifact names (sorted by name).
+func missingArtifacts(dir string, observed map[string]bool) []string {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
@@ -187,7 +187,7 @@ func (p *scenario) check(t *testing.T, result invocation) {
 	}
 	// A committed runtime-file golden whose artifact the run no longer writes has
 	// no observed side to compare, so its absence is checked here.
-	if missing := missingArtifacts(p.name, observed); len(missing) > 0 {
+	if missing := missingArtifacts(filepath.Join("testdata", "golden", "state", p.name, "files"), observed); len(missing) > 0 {
 		t.Fatalf("A9 %s collect: committed runtime artifacts not produced: %s", p.name, strings.Join(missing, ", "))
 	}
 	var human strings.Builder
