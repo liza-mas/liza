@@ -1,0 +1,24 @@
+[
+  {
+    "desc": "Must: D56 correction - regen reproduces C-task driver assertion flips and golden deletions through package-scoped change points",
+    "done_when": "Task 1 of the plan (M1-M9) is delivered: in cmd/regen scenario tests, a C commit that flips a demo driver assertion exits 0 with the working H1 run excluding the C package and runs at the pre-C commit (tagged) and the C commit (untagged), and exits 2 with that exclusion removed; unchanged goldens of a C package report chain pre <sha>; later C, driver-only and determinism points are each regenerated at their own SHA; a C-recorded deletion reproduced at its commit is ok ... deleted while unreproduced, unrecorded, determinism-recorded and working-tree-only deletions fail; extra, unrecorded driver change, merge, uncommitted driver edit and record-only driver record are unexplained; ledger accepts driver/fixture paths and keeps its rejections; a real disposable-clone sample C point exits 0 with its C1 link; every existing cmd/regen and harness test passes with unchanged assertions; regen -mode check over ./internal/oracle/... exits 0 with all goldens ok H1; ADR-0219 is amended under D56; the manifest maps every obligation.",
+    "scope": "IN: internal/testhelpers/oracle/cmd/regen/*.go (command and tests; new files allowed; mechanical fake-regenerator signature updates only), specs/architecture/ADR/0219-oracle-harness-and-chained-provenance.md, specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-0-cp-2-d56-regen.json. Disposable-clone production edits only inside the real-sample test. OUT: repository production Go, internal/oracle/** (drivers, fixtures, goldens, PROVENANCE), harness library outside cmd/regen, Makefile, ADR README index, C1-C6 work, live runtime state, remote actions, race commands.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-174807-arm-1-ar-0-cp-2-d56.md#Task 1: Reproduce C driver changes and deletions through package change points",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]}
+    ],
+    "inherit_inputs": {"mode": "selected", "selections": [{"upstream_task": "arm-1-ar-0-cp-2", "outputs": [0, 1]}]}
+  }
+]
