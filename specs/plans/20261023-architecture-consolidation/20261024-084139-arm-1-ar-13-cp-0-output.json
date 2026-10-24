@@ -1,0 +1,49 @@
+[
+  {
+    "desc": "Must: record the completed A3 area-boundary checkpoint",
+    "done_when": "specs/architecture/consolidation-run/boundary-a3.md is committed with passing G1-G7 evidence (empty A3 ratchet, valid S2/allowlist, empty shim register, green C0-C4, G5 measurements with dispositions, justified G6 closures or recorded non-closures) at its checked integration SHA, plus the maintainer's green G8 Linux/Windows PR CI result and recorded macOS follow-up; the manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-0-boundary.json maps all eleven allocated obligations. A failed G1-G4 instead marks the task BLOCKED naming the check and A3 or the non-A3 owner.",
+    "scope": "Owned: specs/architecture/consolidation-run/boundary-a3.md (new), specs/architecture/architectural-issues.md (justified A3 closures only), specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-0-boundary.json (new). Excluded: production code, tests, oracle fixtures/goldens, guard data, baseline, Makefile, overview, ADRs, INVARIANTS and protocol docs; no A3 repair, no remote push. G8 requires the maintainer via mark-blocked --human-action; all other A4 coding waits on this task.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 1: A3 area-boundary checkpoint",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-084139-arm-1-ar-13-cp-0.md#Task 1: Record the A3 boundary checkpoint",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/..."
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": ["env", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": ["env", "make", "go", "git", "bash", "gofmt"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/...",
+        "executables": ["env", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      }
+    ],
+    "inherit_inputs": {"mode": "all"}
+  }
+]
