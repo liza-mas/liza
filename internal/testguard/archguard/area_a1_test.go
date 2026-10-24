@@ -31,8 +31,6 @@ var areaA1 = Area{
 		{Package: "internal/usage", Layer: layerInfrastructure},
 	},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/db/yaml_write.go", Func: "projectedWriteType"}, Ceiling: 101},
-	},
-	S2: []S2Entry{},
+	Ratchet:   []RatchetEntry{},
+	S2:        []S2Entry{},
 }

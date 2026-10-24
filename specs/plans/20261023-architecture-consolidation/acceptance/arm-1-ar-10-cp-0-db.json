@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard: live production tree has no unlisted file >800 lines or function >100 lines, including projectedWriteType in internal/db/yaml_write.go, with its last A1 ratchet key removed from area_a1_test.go so areaA1.Ratchet and areaA1.S2 are both empty.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC1",
+      "file": "internal/db/blackboard_yaml_write_test.go",
+      "assertion": "TestMarshalStateForWritePreservesValidBytes, TestMarshalStateForWritePreservesSchemaAndMethods, TestMarshalStateForWritePreservesInlineUnmarshalSchema, TestMarshalStateForWriteTypedNilInterfaces, TestMarshalStateForWriteRiskyKeysAndInputImmutability, TestMarshalStateForWriteLifecycleRoundTrip, TestMarshalStateForWriteRefusesMalformedCustomValues (parseable state YAML refusal text) and TestMarshalStateForWriteAvoidsFullParseAllocations assert emitted bytes, method/schema dispatch, refusal text and allocation bound; all prior assertions are untouched. yaml_write_type_test.go TestProjectedWriteTypeShapes and TestProjectedWriteTypeActiveEntryIsNotCached (written against and passing on the unsplit function) pin per-shape classification, field/ignored/inline-map recording, recursion propagation, cache hit precedence and active-set cleanup. Extraction order is traced in review.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "TestOracleStateRoundTrip and the remaining A1 oracles run live under command 3 with goldens unchanged, proving state.yaml persistence bytes are identical.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-api",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-cohesion",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-ratchet",
+      "approved_reference_id": "arch-size"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target: existing ci-prepare and test-nosync execute the complete Go suite through go test ./... under the declared isolated environment; receipt additionally requires lint, db race, archguard, all live oracles and test-e2e.",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC5",
+      "approved_reference_id": "a1-scope"
+    }
+  ]
+}

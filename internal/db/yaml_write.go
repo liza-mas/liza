@@ -64,7 +64,7 @@ func projectedWriteType(t reflect.Type, active map[reflect.Type]bool) writeType 
 	switch {
 	case base == timeType || base == acceptanceType:
 		result.opaque = true // audited library/model marshalers, including quoted execution text
-	case base == yamlNodeType || t.Implements(yamlMarshaler) || t.Implements(textMarshaler) || t.Implements(yamlZeroer) || t.Implements(yamlUnmarshaler) || reflect.PointerTo(t).Implements(yamlUnmarshaler):
+	case hasOpaqueMethods(t, base):
 		// yaml.v3 also uses pointer Unmarshaler methods when deciding which
 		// inline fields to emit. Preserve those types even on the write path.
 		result.opaque, result.parse = true, true
@@ -77,81 +77,121 @@ func projectedWriteType(t reflect.Type, active map[reflect.Type]bool) writeType 
 		case reflect.String:
 			result.typeOf = writeStringType
 		case reflect.Pointer, reflect.Slice, reflect.Array:
-			child := projectedWriteType(t.Elem(), active)
-			if child.recursive {
-				result.opaque, result.parse, result.recursive = true, true, true
-				break
-			}
-			if child.typeOf == t.Elem() {
-				break
-			}
-			switch t.Kind() {
-			case reflect.Pointer:
-				result.typeOf = reflect.PointerTo(child.typeOf)
-			case reflect.Slice:
-				result.typeOf = reflect.SliceOf(child.typeOf)
-			case reflect.Array:
-				result.typeOf = reflect.ArrayOf(t.Len(), child.typeOf)
-			}
+			projectElementShape(&result, t, active)
 		case reflect.Map:
-			if t.Key().Kind() != reflect.String {
-				result.opaque, result.parse = true, true
-				break
-			}
-			key := projectedWriteType(t.Key(), active)
-			value := projectedWriteType(t.Elem(), active)
-			if value.recursive {
-				result.opaque, result.parse, result.recursive = true, true, true
-				break
-			}
-			result.typeOf = reflect.MapOf(key.typeOf, value.typeOf)
+			projectMapShape(&result, t, active)
 		case reflect.Interface:
 			if t.NumMethod() > 0 {
 				result.opaque, result.parse = true, true
 			}
 		case reflect.Struct:
-			fields := make([]reflect.StructField, t.NumField())
-			for i := range fields {
-				fields[i] = t.Field(i)
-				if fields[i].Anonymous && fields[i].Type == lifecycleIdentityType && strings.Contains(","+fields[i].Tag.Get("yaml")+",", ",inline,") {
-					// This model has only scalar fields and no YAML methods. Its
-					// explicit inline tag preserves flattening without embedding
-					// an anonymous synthetic type (unsupported by StructOf).
-					fields[i].Anonymous = false
-				}
-				if fields[i].Anonymous {
-					result.opaque, result.parse = true, true
-					break
-				}
-				if fields[i].PkgPath == "" && fields[i].Tag.Get("yaml") == "-" {
-					result.ignored = append(result.ignored, i)
-				}
-				if fields[i].PkgPath == "" && fields[i].Tag.Get("yaml") != "-" {
-					child := projectedWriteType(fields[i].Type, active)
-					if child.recursive {
-						result.opaque, result.parse, result.recursive = true, true, true
-						break
-					}
-					fields[i].Type = child.typeOf
-					if fields[i].Type.Kind() == reflect.Map && strings.Contains(","+fields[i].Tag.Get("yaml")+",", ",inline,") {
-						// yaml.v3 requires the exact built-in string type for inline
-						// keys; ordinary map keys can use writeString directly.
-						fields[i].Type = reflect.MapOf(reflect.TypeFor[string](), child.typeOf.Elem())
-						if result.inlineMaps == nil {
-							result.inlineMaps = make(map[int]bool)
-						}
-						result.inlineMaps[i] = true
-					}
-					result.fields = append(result.fields, i)
-				}
-			}
-			if !result.opaque {
-				result.typeOf = reflect.StructOf(fields)
-			}
+			projectStructShape(&result, t, active)
 		}
 	}
 	writeTypes.LoadOrStore(t, result)
 	return result
+}
+
+// hasOpaqueMethods reports a type whose YAML, text or zero-value methods (or a
+// pointer-receiver Unmarshaler) must keep dispatching on the original type.
+func hasOpaqueMethods(t, base reflect.Type) bool {
+	return base == yamlNodeType || t.Implements(yamlMarshaler) || t.Implements(textMarshaler) || t.Implements(yamlZeroer) || t.Implements(yamlUnmarshaler) || reflect.PointerTo(t).Implements(yamlUnmarshaler)
+}
+
+// markRecursive records that a type contains itself and must be left intact.
+func markRecursive(result *writeType) {
+	result.opaque, result.parse, result.recursive = true, true, true
+}
+
+// projectElementShape projects pointer, slice and array types from their element.
+func projectElementShape(result *writeType, t reflect.Type, active map[reflect.Type]bool) {
+	child := projectedWriteType(t.Elem(), active)
+	if child.recursive {
+		markRecursive(result)
+		return
+	}
+	if child.typeOf == t.Elem() {
+		return
+	}
+	switch t.Kind() {
+	case reflect.Pointer:
+		result.typeOf = reflect.PointerTo(child.typeOf)
+	case reflect.Slice:
+		result.typeOf = reflect.SliceOf(child.typeOf)
+	case reflect.Array:
+		result.typeOf = reflect.ArrayOf(t.Len(), child.typeOf)
+	}
+}
+
+// projectMapShape projects string-keyed maps; other key kinds stay intact.
+func projectMapShape(result *writeType, t reflect.Type, active map[reflect.Type]bool) {
+	if t.Key().Kind() != reflect.String {
+		result.opaque, result.parse = true, true
+		return
+	}
+	key := projectedWriteType(t.Key(), active)
+	value := projectedWriteType(t.Elem(), active)
+	if value.recursive {
+		markRecursive(result)
+		return
+	}
+	result.typeOf = reflect.MapOf(key.typeOf, value.typeOf)
+}
+
+// projectStructShape records the serialized, ignored and inline-map fields and
+// builds the synthetic struct, stopping at the first embedded or recursive field.
+func projectStructShape(result *writeType, t reflect.Type, active map[reflect.Type]bool) {
+	fields := make([]reflect.StructField, t.NumField())
+	for i := range fields {
+		fields[i] = t.Field(i)
+		if fields[i].Anonymous && fields[i].Type == lifecycleIdentityType && hasInlineTag(fields[i]) {
+			// This model has only scalar fields and no YAML methods. Its
+			// explicit inline tag preserves flattening without embedding
+			// an anonymous synthetic type (unsupported by StructOf).
+			fields[i].Anonymous = false
+		}
+		if fields[i].Anonymous {
+			result.opaque, result.parse = true, true
+			break
+		}
+		if fields[i].PkgPath == "" && fields[i].Tag.Get("yaml") == "-" {
+			result.ignored = append(result.ignored, i)
+		}
+		if fields[i].PkgPath == "" && fields[i].Tag.Get("yaml") != "-" {
+			if !projectStructField(result, i, &fields[i], active) {
+				break
+			}
+		}
+	}
+	if !result.opaque {
+		result.typeOf = reflect.StructOf(fields)
+	}
+}
+
+// projectStructField projects one serialized field in place and records it. It
+// reports false when the field type is recursive, which makes the struct opaque.
+func projectStructField(result *writeType, i int, field *reflect.StructField, active map[reflect.Type]bool) bool {
+	child := projectedWriteType(field.Type, active)
+	if child.recursive {
+		markRecursive(result)
+		return false
+	}
+	field.Type = child.typeOf
+	if field.Type.Kind() == reflect.Map && hasInlineTag(*field) {
+		// yaml.v3 requires the exact built-in string type for inline
+		// keys; ordinary map keys can use writeString directly.
+		field.Type = reflect.MapOf(reflect.TypeFor[string](), child.typeOf.Elem())
+		if result.inlineMaps == nil {
+			result.inlineMaps = make(map[int]bool)
+		}
+		result.inlineMaps[i] = true
+	}
+	result.fields = append(result.fields, i)
+	return true
+}
+
+func hasInlineTag(field reflect.StructField) bool {
+	return strings.Contains(","+field.Tag.Get("yaml")+",", ",inline,")
 }
 
 // projectWriteValue copies only the serialization view. Original pointers,
