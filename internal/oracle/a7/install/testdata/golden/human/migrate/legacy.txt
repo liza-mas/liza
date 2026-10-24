@@ -1,0 +1,5 @@
+--- invocation migrate
+exit 0
+--- stdout
+Migration complete: legacy state fields normalized (role names, attempted fields, legacy anomaly types, oversized text, and raw provider transcript payloads where needed).
+--- stderr

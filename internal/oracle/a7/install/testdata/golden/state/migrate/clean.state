@@ -1,0 +1,98 @@
+# before
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle installation fixture
+    spec_ref: specs/vision.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    integration_branch: integration
+    mode: RUNNING
+# after
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle installation fixture
+    spec_ref: specs/vision.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    integration_branch: integration
+    mode: RUNNING

@@ -1,0 +1,188 @@
+# before
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle installation fixture
+    spec_ref: specs/vision.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      description: Synthetic migration task
+      status: DRAFT_CODE
+      priority: 1
+      created: <TIME>
+      iteration: 0
+      review_cycles: 0
+      attempted: [coder-1]
+      lease_expires: <TIME>
+agents:
+    code-reviewer-1:
+        role: code_reviewer
+        provider: codex
+        status: IDLE
+        generation: fixture-generation
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        registered_at: <TIME>
+        terminal: terminal-1
+        iterations_total: 0
+        context_percent: 0
+        pid: 99999999
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+    - timestamp: <TIME>
+      reporter: code-reviewer-1
+      type: retry_loop
+      details:
+          agent_id: code-reviewer-1
+          role: code-reviewer
+          rounds: 21
+          impact: an approved task this reviewer owns has not merged; downstream work stays gated until it does
+    - timestamp: <TIME>
+      reporter: code-reviewer-1
+      type: provider_audit_degraded
+      details:
+          provider: codex
+          agent_id: code-reviewer-1
+          message: '{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"synthetic transcript"}}'
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    integration_branch: integration
+    mode: RUNNING
+# after
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle installation fixture
+    spec_ref: specs/vision.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      description: Synthetic migration task
+      status: DRAFT_CODE
+      priority: 1
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      attempt: 2
+      created: <TIME>
+      history: []
+      review_cycles: 0
+agents:
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        generation: fixture-generation
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        registered_at: <TIME>
+        terminal: terminal-1
+        provider: codex
+        iterations_total: 0
+        context_percent: 0
+        pid: 99999999
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+    - timestamp: <TIME>
+      task: ""
+      reporter: code-reviewer-1
+      type: pending_merge_stalled
+      details:
+        agent_id: code-reviewer-1
+        impact: an approved task this reviewer owns has not merged; downstream work stays gated until it does
+        role: code-reviewer
+        rounds: 21
+    - timestamp: <TIME>
+      task: ""
+      reporter: code-reviewer-1
+      type: provider_audit_degraded
+      details:
+        agent_id: code-reviewer-1
+        message: provider audit degraded; raw provider event omitted from state; inspect .liza/agent-outputs and alerts for transcript evidence
+        message_scrubbed: true
+        original_message_bytes: 104
+        provider: codex
+        scrub_reason: raw_provider_transcript
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    integration_branch: integration
+    mode: RUNNING

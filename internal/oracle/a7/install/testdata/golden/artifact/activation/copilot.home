@@ -1,0 +1,2 @@
++ .copilot directory 0755 -
++ .copilot/copilot-instructions.md symlink 0777 <HOME>/.liza/CORE.md
