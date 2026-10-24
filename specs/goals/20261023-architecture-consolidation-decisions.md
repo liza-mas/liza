@@ -689,6 +689,26 @@ test-only fixture cannot shorten it.
   oracle scope); a slow build-tagged suite with a longer timeout (10+ min on every batch); dropping
   I-11. Kind: oracle-contract (reachability within budget). Revert: a reviewed A9 correction.
 
+### D43 — A9 oracle: host-process correlation is volatile; spawned supervisors are reaped (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T03:42Z. `arm-1-ar-9-cp-0-code-1` blocked at admission. The merged A9 kit
+(`arm-1-ar-9-cp-0-code-0`) goldens `golden/human/i01-collision/agent.txt` and `i02-refused/agent.txt`
+pin the starting binary's collision/capacity error. That error ends `correlation unavailable` when no
+other agent supervisor is visible on the host, and `observer-visible matching pids [...]` when one is,
+so the goldens depend on host processes. At the time, three orphan `liza agent coder` supervisors from
+A9 spawn-gate scenarios (`TestOracleA9SpawnGatei22-*`, parent systemd, project directories deleted) were
+still alive. The operator terminated them (SIGTERM, verified gone).
+- Ruling 1 (determinism-only exception for `arm-1-ar-9-cp-0-code-1`): `newA9Normaliser` replaces that
+  correlation suffix, whichever variant appears (`correlation unavailable` or `observer-visible
+  matching pids [...]`), with one fixed token. The two kit goldens are regenerated from the starting
+  commit with write-new. Every other byte, kit API and golden is unchanged.
+- Ruling 2 (test hygiene for every A9 scenario that starts a supervisor, including
+  `arm-1-ar-9-cp-0-code-4` spawn-gate rows): each test stops and reaps every process it started (whole
+  process group) in `t.Cleanup`, and asserts that none outlives the test.
+- Intent relied on: an oracle must be deterministic under the run's normal concurrency. Leaked
+  supervisors waste resources and can launch real provider sessions.
+- Rejected: requiring a quiet host (agents always run concurrently); pinning one variant (flaky).
+  Kind: oracle-contract (volatility) and test hygiene. Revert: a reviewed A9 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
