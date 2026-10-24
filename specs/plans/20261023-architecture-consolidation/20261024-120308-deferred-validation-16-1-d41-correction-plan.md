@@ -372,8 +372,8 @@ the two declared files.
   "obligations": ["AG-unadmitted", "AG-publish", "AG-d41-retained", "AG-package", "AG-sleep", "AG-lint", "AG-preserve", "AG-red"],
   "validation": [
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/agent/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -timeout 30m -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/agent/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -427,7 +427,7 @@ traceability rows hold. Only the two declared files change.
   "validation": [
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestAwaitVerdict_Rejected_NewAttempt$' ./internal/ops/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -482,7 +482,7 @@ hold. Only the two declared files change.
   "validation": [
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestCheckpointPassedPlansRefusesUnqualifiedState$' ./internal/ops/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -570,7 +570,7 @@ d9240928…344d, `ops_probe_test.go` 48bab504…2591.
 | RP8 | `go test -race -count=20 -overlay … -run '^TestProbe(UHeldPrompt\|UStallHeld\|PHeldPrompt\|PStallHeld)$' ./internal/agent/` 11:54–12:01Z, load 6.7–8.9 | ok 387.4 s, 80 runs. |
 | RP9 | `go test -race -count=20 -overlay … -run '^TestProbe(AwaitReadySlowSetup\|CheckpointRelativeLate\|CheckpointRelativePrompt)$' ./internal/ops/` 12:01Z | ok 27.0 s, 60 runs. |
 | RP10 | `go test -count=1 -run '^TestSleepUsageBudget$' -v ./internal/testguard/` (index 3) | PASS. No `time.Sleep(` in the three target files (`grep -c` 0 each). |
-| RP11 | `go test -list` with the index 1 regexes; `make -n test-e2e` | Selects the four agent tests and each ops test. e2e = `go test -race -tags e2e -run '^(TestFullSprintSequence\|TestTerminalDependencyRecovery)$' ./internal/integration/`. |
+| RP11 | `go test -list` with the index 1 regexes (agent also with `-race -timeout 30m`, iteration 2); `make -n test-e2e` | Selects the four agent tests and each ops test. e2e = `go test -race -tags e2e -run '^(TestFullSprintSequence\|TestTerminalDependencyRecovery)$' ./internal/integration/`. |
 | RP12 | `git grep -c 't.Parallel()' -- 'internal/ops/*_test.go'` | 1619 calls. Package wall times are 359–428 s under race in batches 15/16. |
 | RP13 | `models/config.go:94,100` | Default await poll is 10 s; default agent progress timeout is 1800 s. |
 
@@ -588,6 +588,22 @@ vet.
 
 Deferred commands do not count toward admission. All budgets are under the
 14400 s cap.
+
+**Runner envelope.** Go's default test-binary timeout is 10 min (`go help
+testflag`), and `timeout_seconds` bounds only the outer batch. The
+estimates above leave too little margin under that default:
+
+- Task 1 index 1: RP8 measured 387 s for the new shapes, and the D41
+  receipt measured 214 s for the retained tests.
+- Package races: up to 452 s (agent) and 428 s (ops) in the batch logs.
+
+Task 1 index 1 and every package race (index 2 of each task) therefore pass
+`-timeout 30m`, the same runner bound that `make test-race` uses (RP6). The
+worst case still fits each outer envelope: Task 1 is 900 + 1800 + 1800 +
+70 = 4570 s against 5400 s, and Tasks 2–3 are 900 + 200 + 1800 + 70 =
+2970 s against 3600 s. This aligns the runner with the estimate only: no
+`count`, scenario deadline or assertion changes. The short ops focused runs
+(≈ 27 s, RP9) and the guard keep the default.
 
 ## Spec Compliance Matrix
 

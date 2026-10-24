@@ -8,8 +8,8 @@
     "rca_required": true,
     "validation": [
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -timeout 30m -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/agent/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -17,8 +17,8 @@
     ],
     "validation_prerequisites": [
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/agent/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -timeout 30m -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/agent/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "sh", "make", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
@@ -35,7 +35,7 @@
     "validation": [
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestAwaitVerdict_Rejected_NewAttempt$' ./internal/ops/",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -44,7 +44,7 @@
     "validation_prerequisites": [
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestAwaitVerdict_Rejected_NewAttempt$' ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "sh", "make", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
@@ -61,7 +61,7 @@
     "validation": [
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestCheckpointPassedPlansRefusesUnqualifiedState$' ./internal/ops/",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
@@ -70,7 +70,7 @@
     "validation_prerequisites": [
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestCheckpointPassedPlansRefusesUnqualifiedState$' ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/", "executables": ["env", "sh", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "sh", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
       {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "sh", "make", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
