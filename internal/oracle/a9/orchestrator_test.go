@@ -212,29 +212,56 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 	})
 }
 
-// TestOracleA9OrchestratorReap shows the cleanup on a held-provider failure path:
-// the supervisor is cancelled while the summary stub is held, which orphans the
-// stub, and the cleanup must signal, reap and confirm the end of every child.
+// TestOracleA9OrchestratorReap shows the D45 cleanup on a held-provider failure
+// path: the supervisor is cancelled while the summary stub is held, which orphans
+// the stub, and every child must be killed, reaped and gone. The second case
+// kills the orphan first, so the cleanup meets an adopted zombie whose
+// environment can no longer attribute it.
 func TestOracleA9OrchestratorReap(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("A9: the child subreaper (decision D45) is Linux-only")
 	}
-	p := newScenario(t, "i15-pending")
-	a, _ := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
-	p.await(t, "first summary held", func() bool { return len(p.records(t)) == 1 })
-	a.cancel()
-	<-a.done
-	var orphans []int
-	p.await(t, "held provider reparented", func() bool { orphans = orchChildren(p.home); return len(orphans) > 0 })
-	orchReap(t, p.home)
-	if left := orchChildren(p.home); len(left) != 0 {
-		t.Fatalf("A9 cleanup: %d scenario children remain after the reap", len(left))
-	}
-	for _, pid := range orphans {
-		if orchAlive(pid) {
-			t.Fatal("A9 cleanup: a reaped provider still names a process")
-		}
+	for _, exitedFirst := range []bool{false, true} {
+		name := map[bool]string{false: "live-provider", true: "exited-before-reap"}[exitedFirst]
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := newScenario(t, "i15-pending")
+			a, _ := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
+			owner := orchGuard(t, p)
+			p.await(t, "first summary held", func() bool { return len(p.records(t)) == 1 })
+			orchSnapshot(owner)
+			a.cancel()
+			<-a.done
+			owner.mu.Lock()
+			held := map[int]string{}
+			for pid, start := range owner.seen {
+				held[pid] = start
+			}
+			owner.mu.Unlock()
+			if len(held) == 0 {
+				t.Fatal("A9 cleanup: the held provider was not recorded before its supervisor died")
+			}
+			if exitedFirst {
+				for pid := range held {
+					orchKillPID(pid)
+				}
+				p.await(t, "provider exit", func() bool {
+					for pid, start := range held {
+						if !orchZombie(pid, start) {
+							return false
+						}
+					}
+					return true
+				})
+			}
+			orchReap(t, owner)
+			for pid, start := range held {
+				if orchExists(pid, start) {
+					t.Fatal("A9 cleanup: a recorded provider still exists after the reap")
+				}
+			}
+		})
 	}
 }
 
@@ -243,20 +270,10 @@ func TestOracleA9OrchestratorReap(t *testing.T) {
 func orchRun(t *testing.T, name string) (*scenario, invocation, []byte) {
 	t.Helper()
 	p := newScenario(t, name)
-	orchGuard(t, p)
-	r := p.run(t, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
+	a, _ := orchStart(t, p, "agent", "orchestrator", "--cli", "claude", "--agent-id", "orchestrator-1")
+	r := p.finish(t, a, 60*time.Second)
 	requireCode(t, p, r, 0)
 	return p, r, mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
-}
-
-// orchGuard makes this test process the reaper of the scenario's orphaned
-// descendants before its first supervisor starts, and reaps them when the test
-// ends on any path, a deadline or failure included (decision D45). It registers
-// first so its cleanup runs after the supervisor's own.
-func orchGuard(t *testing.T, p *scenario) {
-	t.Helper()
-	orchSubreaper(t)
-	t.Cleanup(func() { orchReap(t, p.home) })
 }
 
 // orchObserve stores the running state as at-launch snapshot n, beside the
@@ -298,15 +315,19 @@ func (b *orchBuffer) String() string {
 // the supervisor's log records go to stdout.
 func orchStart(t *testing.T, p *scenario, args ...string) (*runningAgent, *orchBuffer) {
 	t.Helper()
-	orchGuard(t, p)
+	owner := orchGuard(t, p)
 	a := &runningAgent{done: make(chan error, 1)}
 	seen := &orchBuffer{}
 	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
 	a.cmd.Stdout, a.cmd.Stderr = io.MultiWriter(&a.stdout, seen), &a.stderr
+	orchDetach(a.cmd)
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)
 	}
+	owner.addLeader(a.cmd.Process.Pid)
 	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	t.Cleanup(func() { a.cancel(); <-a.done })
+	// The snapshot precedes the cancel: once the supervisor is gone its
+	// providers are orphans, and the reap needs them recorded.
+	t.Cleanup(func() { orchSnapshot(owner); a.cancel(); <-a.done })
 	return a, seen
 }
