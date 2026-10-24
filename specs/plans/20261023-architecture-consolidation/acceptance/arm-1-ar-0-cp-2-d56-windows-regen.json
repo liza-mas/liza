@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "W-exclude",
+      "file": "internal/testhelpers/oracle/cmd/regen/regenerate_test.go",
+      "assertion": "TestRegenExclusionResolvesListedDirs: keptPackages(L, listed, [./internal/oracle/sample]) over a tree P reached through a symlink L, with a leading go: warning line, returns exactly [./internal/oracle/other] for the given spelling (L/...) and the resolved spelling (EvalSymlinks(P)/...). keptPackages in regenerate.go resolves every listed directory with filepath.EvalSymlinks before filepath.Rel against the resolved base. Native Windows proof is not claimed from Linux and is deferred to the D52 exact-SHA boundary run.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W-regress",
+      "file": "internal/testhelpers/oracle/cmd/regen/regenerate_test.go",
+      "assertion": "Red first, recorded in the checkpoint: with the seam alone (the 6f0245e7b filter moved unchanged into keptPackages) the given-spelling subtest fails keeping the C package as ./../<tmp>/link/internal/oracle/..., the resolved subtest passes and the outside subtest fails; green after EvalSymlinks and the outside-tree error. The outside subtest lists a real directory of a different tree and requires the error listed package outside the materialised tree; mutation (that check replaced by false) turns only the outside subtest red with outside directory not rejected, the check restored turns it green. Failure messages print no path.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W-real",
+      "file": "internal/testhelpers/oracle/cmd/regen/regenerate_test.go",
+      "assertion": "TestRegenReproducesChangedSampleAssertion, unchanged: exit 0 with ok ...error-envelope.json chain pre <pre> C1 <c1>, ok ...help.txt chain pre <pre>, ok internal/oracle/sample package pre <pre> C1 <c1>, and no leaked worktree.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W-d56",
+      "file": "internal/testhelpers/oracle/cmd/regen/d56_test.go",
+      "assertion": "The unchanged D56 R1-R3 tests (TestRegenD56FlippedDriverAssertion with its unexcluded exit-2 negative, TestRegenD56PreChangeState, TestRegenD56LaterPoints, TestRegenD56TerminalDeletion, TestRegenD56RejectsUnexplained, TestRegenD56PackageScope, TestRegenD56FiltersSelectDriverRecords) and every other cmd/regen and harness package test pass under go test ./internal/testhelpers/oracle/...",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "W-h1",
+      "file": "internal/testhelpers/oracle/cmd/regen/regenerate.go",
+      "assertion": "regen -mode check -pkg ./internal/oracle/... at HEAD, with no C record, prints only lines ok <golden> H1 and exits 0 through the real go list path of withoutExcluded and keptPackages.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "W-lint",
+      "file": "internal/testhelpers/oracle/cmd/regen/regenerate.go",
+      "assertion": "make lint passes over regenerate.go and regenerate_test.go.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "W-preserve",
+      "approved_reference_id": "d56-task1"
+    },
+    {
+      "obligation_id": "W-proof",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}

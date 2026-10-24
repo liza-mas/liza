@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -100,25 +101,41 @@ func (c commands) regenerate(ctx context.Context, dir, commit string, baseline b
 // the excluded directories, so a package is never run against a tree whose
 // drivers it cannot pass.
 func (c commands) withoutExcluded(ctx context.Context, dir string, tags, packages, excluded []string) ([]string, error) {
-	base, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return nil, err
-	}
 	out, err := c.output(ctx, dir, "go", nil, nil, append(append([]string{"list", "-f", "{{.Dir}}"}, tags...), packages...)...)
 	if err != nil {
 		return nil, err
 	}
+	return keptPackages(dir, out, excluded)
+}
+
+// keptPackages parses the go list directories in the tree at dir and drops the
+// excluded ones.
+func keptPackages(dir string, listed []byte, excluded []string) ([]string, error) {
+	base, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
 	var kept []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(string(listed), "\n") {
 		// Warnings share the stream; only absolute directories are packages.
 		if !filepath.IsAbs(line) {
 			continue
+		}
+		// The tree is resolved, so a listed directory must be too: go list may
+		// spell it through a symlink, which Rel would read as outside the tree.
+		line, err = filepath.EvalSymlinks(line)
+		if err != nil {
+			return nil, err
 		}
 		rel, err := filepath.Rel(base, line)
 		if err != nil {
 			return nil, err
 		}
-		if rel = "./" + filepath.ToSlash(rel); !slices.Contains(excluded, rel) {
+		rel = filepath.ToSlash(rel)
+		if rel == ".." || strings.HasPrefix(rel, "../") {
+			return nil, errors.New("listed package outside the materialised tree")
+		}
+		if rel = "./" + rel; !slices.Contains(excluded, rel) {
 			kept = append(kept, rel)
 		}
 	}

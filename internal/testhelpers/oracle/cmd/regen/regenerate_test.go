@@ -185,6 +185,54 @@ func TestRegenReproducesChangedSampleAssertion(t *testing.T) {
 	}
 }
 
+// TestRegenExclusionResolvesListedDirs guards the exclusion by directory: go
+// list may spell a directory through a symlink (Windows CI keeps the given
+// temporary path, others print the resolved one), and both spellings name the
+// same package. A directory outside the tree is an error, never a package.
+func TestRegenExclusionResolvesListedDirs(t *testing.T) {
+	newTree := func() string {
+		root := t.TempDir()
+		for _, name := range []string{"sample", "other"} {
+			if err := os.MkdirAll(filepath.Join(root, "internal", "oracle", name), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return root
+	}
+	tree := newTree()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(tree, link); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	excluded := []string{"./internal/oracle/sample"}
+	listing := func(root string) []byte {
+		return []byte("go: warning: unused module\n" +
+			filepath.Join(root, "internal", "oracle", "sample") + "\n" +
+			filepath.Join(root, "internal", "oracle", "other") + "\n")
+	}
+	for name, root := range map[string]string{"given": link, "resolved": resolved} {
+		t.Run(name, func(t *testing.T) {
+			kept, err := keptPackages(link, listing(root), excluded)
+			if err != nil {
+				t.Fatal("keptPackages failed")
+			}
+			if !reflect.DeepEqual(kept, []string{"./internal/oracle/other"}) {
+				t.Fatalf("kept %d packages, want only the unexcluded one", len(kept))
+			}
+		})
+	}
+	t.Run("outside", func(t *testing.T) {
+		_, err := keptPackages(link, listing(newTree()), excluded)
+		if err == nil || !strings.Contains(err.Error(), "listed package outside the materialised tree") {
+			t.Fatal("outside directory not rejected")
+		}
+	})
+}
+
 func (s *scenario) read(name string) string {
 	s.t.Helper()
 	b, err := os.ReadFile(filepath.Join(s.dir, filepath.FromSlash(name)))
