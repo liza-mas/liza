@@ -9,10 +9,10 @@ Source revision: "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "original-rca": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Root Cause Analysis" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "a4-proof": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Proof and Shared Ownership" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "a3-proof": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Proof and Shared Ownership" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
-- "a2-chain": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
+- "a2-chain": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Output" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "cp5-task1": "specs/plans/20261023-architecture-consolidation/20261024-105657-arm-1-ar-13-cp-5.md#Task 1: Separate sprint checkpoint preparation, authorization and locked update" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "a5-task5": "specs/plans/20261023-architecture-consolidation/20261024-113541-arm-1-ar-14-cp-0.md#Task 5: Separate await-verdict ownership, polling, classification and finish" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
-- "a2-boundary-o3": "specs/plans/20261023-architecture-consolidation/20261024-045004-arm-1-ar-12-cp-0.md" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
+- "a2-boundary-o3": "specs/plans/20261023-architecture-consolidation/20261024-045004-arm-1-ar-12-cp-0.md#Spec Compliance Matrix" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 - "goal-tests": "specs/goals/20261023-architecture-consolidation.md#Test Policy and Sequencing" @ "49595a9d7cf9d52f5348cfce74cb614a7ad7e7bc"
 
 ### Obligation Coverage
