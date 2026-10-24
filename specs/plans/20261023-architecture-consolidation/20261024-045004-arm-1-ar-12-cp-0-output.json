@@ -1,0 +1,122 @@
+[
+  {
+    "desc": "Must: record the completed A2 area-boundary checkpoint",
+    "done_when": "boundary-a2.md commits passing G1-G7 evidence at its checked integration SHA, the maintainer's green G8 Linux/Windows result and macOS follow-up; justified issue closures and the acceptance manifest validate. Failures hold A3 without A2 repairs here.",
+    "scope": "specs/architecture/consolidation-run/boundary-a2.md; justified A2 closures in specs/architecture/architectural-issues.md; specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-0-boundary.json. No production, test, oracle or guard-data repairs.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 1: A2 area-boundary checkpoint",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-045004-arm-1-ar-12-cp-0.md#Task 1: Record the A2 boundary checkpoint",
+    "task_depends_on": [
+      "deferred-validation-2-1-correction-plan-code-0"
+    ],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/git ./internal/gitenv ./internal/gitbash ./internal/worktreeexclude ./internal/subprocess ./internal/procscan ./internal/secretmask ./internal/toolresult ./internal/toolresultacp ./internal/sessionvalidation ./internal/precommit ./internal/projectdetect ./internal/initcheck ./internal/codexconfig ./internal/bash-policy-cli ./internal/providers ./internal/embedded/... ./internal/brandrender/... ./internal/scipsearch ./internal/stacklit ./internal/semble ./internal/functionalclusters ./internal/pairingindex ./internal/toolchain ./internal/updater ./internal/termutil"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/git ./internal/gitenv ./internal/gitbash ./internal/worktreeexclude ./internal/subprocess ./internal/procscan ./internal/secretmask ./internal/toolresult ./internal/toolresultacp ./internal/sessionvalidation ./internal/precommit ./internal/projectdetect ./internal/initcheck ./internal/codexconfig ./internal/bash-policy-cli ./internal/providers ./internal/embedded/... ./internal/brandrender/... ./internal/scipsearch ./internal/stacklit ./internal/semble ./internal/functionalclusters ./internal/pairingindex ./internal/toolchain ./internal/updater ./internal/termutil",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  }
+]
