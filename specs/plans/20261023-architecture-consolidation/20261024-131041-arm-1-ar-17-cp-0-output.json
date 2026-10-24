@@ -907,7 +907,7 @@
   },
   {
     "desc": "Must: separate agent-pool capacity evaluation, start planning, spawn execution and rendering (K-POOL)",
-    "done_when": "The repair_agent_pool.go file, FindRoleCapacity and RepairAgentPool keys are absent from area_a7_test.go; TestOracleRepairAgentPoolDryRun and TestOracleRepairAgentPoolSpawn goldens (G-a) precede the production edit and every delivered golden is unchanged; the C1 lease expression is present unchanged; all canonical commands pass",
+    "done_when": "The repair_agent_pool.go file, FindRoleCapacity and RepairAgentPool keys are absent from area_a7_test.go; TestOracleRepairAgentPoolDryRun (human and --json CLI invocations, including the no-usable-provider refusal) and TestOracleRepairAgentPoolSpawn goldens (G-a) precede the production edit and every delivered golden is unchanged; the C1 lease expression is present unchanged; all canonical commands pass",
     "scope": "internal/commands/repair_agent_pool.go, new pool files, their white-box tests, new internal/oracle/a7/present G-a files and fixtures, the INVARIANTS.md instance-limit reference it invalidates, area_a7_test.go key removals, manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-17-cp-0-pool.json. Out: behaviour changes, C1-C6 edits, new packages, mutation moves into ops, internal/ops/init_project.go and its key, delivered oracle files, other areas' logic, overview.md, historical ADRs, A7 issue closures, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-004056-arm-1-ar-17.md#Scope 1: A6 boundary and A7 presentation consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-004056-arm-1-ar-17.md#Scope 1: A6 boundary and A7 presentation consolidation",
@@ -1151,7 +1151,7 @@
   },
   {
     "desc": "Must: separate TUI message handlers, inline-action executors and view panels (K-TUI)",
-    "done_when": "The view.go file, Model.Update, Model.executeInlineAction, Model.View, Model.renderAgentPanel and Model.renderTaskPanel keys are absent from area_a7_test.go; the TUI auto-resume golden is unchanged and every TUI white-box assertion remains; the single A7 Modify is unchanged; all canonical commands pass",
+    "done_when": "The view.go file, Model.Update, Model.executeInlineAction, Model.View, Model.renderAgentPanel and Model.renderTaskPanel keys are absent from area_a7_test.go; the TUI auto-resume golden is unchanged and every TUI white-box assertion remains; the single A7 Modify is unchanged; the G1.3 non-default-brand evidence is recorded; all canonical commands pass",
     "scope": "internal/tui files, new tui files, their white-box tests, alert-category adoption, area_a7_test.go key removals, manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-17-cp-0-tui.json. Out: behaviour changes, C1-C6 edits, new packages, mutation moves into ops, internal/ops/init_project.go and its key, delivered oracle files, other areas' logic, overview.md, historical ADRs, A7 issue closures, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-004056-arm-1-ar-17.md#Scope 1: A6 boundary and A7 presentation consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-004056-arm-1-ar-17.md#Scope 1: A6 boundary and A7 presentation consolidation",
