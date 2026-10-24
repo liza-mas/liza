@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "N-store",
+      "file": "internal/testhelpers/oracle/golden_test.go",
+      "assertion": "TestGoldenStorageNames: logical names map to the %XX storage names (<ID>.txt to %3CID%3E.txt, % to %25, safe names unchanged) and every storage name passes WindowsPathProblem; TestGoldenStorageNamesRefuseUnmappableNames refuses reserved device names and trailing dot or space.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "N-collide",
+      "file": "internal/testhelpers/oracle/golden_test.go",
+      "assertion": "TestGoldenStorageNamesAreCollisionSafe: <ID>.txt and the literal %3CID%3E.txt get distinct storage paths, each write then live read returns its own bytes, and nothing is written at the raw logical name.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "N-rename",
+      "file": "internal/oracle/a2/cli/tool_result_store_test.go",
+      "assertion": "TestOracleA2ToolResultFilter large and redaction effects read the four renamed goldens through the mapping with contents unchanged.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "N-guard",
+      "file": "internal/testguard/tracked_paths_test.go",
+      "assertion": "TestTrackedPathsAreWindowsSafe lists git ls-files -z and fails naming each path invalid on Windows; it failed on the four <ID>/<EVENT-1> A2 paths before the renames and passes after.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "N-provenance",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "regen check mode exits 0 with every A2 golden, including the four renamed %XX names, reproduced as H1.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "N-doc",
+      "approved_reference_id": "adr-0219"
+    },
+    {
+      "obligation_id": "N-proof",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}

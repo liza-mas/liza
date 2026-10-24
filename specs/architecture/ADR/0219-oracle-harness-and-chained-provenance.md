@@ -18,7 +18,9 @@ settles that case with reproduction at every change point.
 1. **Test-only convention.** Suites are `internal/oracle/a<N>/**`, with tests
    named `TestOracle…`, fixtures in `testdata/fixtures/`, and goldens in
    `testdata/golden/<kind>/`. Discovery is `./internal/oracle/...`, without a
-   registry. Golden paths are never renamed. The two `internal/oracle/sample/`
+   registry. Golden paths are never renamed, except storage-name-only renames that
+   [D53](../../goals/20261023-architecture-consolidation-decisions.md) requires,
+   with content unchanged. The two `internal/oracle/sample/`
    goldens are harness proof outside every area's surface inventory.
 2. **Shared harness.** `internal/testhelpers/oracle/` uses only the standard
    library and imports no other module package. Prompt and artifact goldens
