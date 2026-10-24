@@ -2,6 +2,7 @@ package testguard
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -46,12 +47,12 @@ func checkoutHistoryViolations(file string, data []byte, exempt map[string]strin
 		return nil, fmt.Errorf("parse %s: %w", file, err)
 	}
 	var violations []string
-	for _, job := range sortedKeys(exempt) {
+	for _, job := range slices.Sorted(maps.Keys(exempt)) {
 		if _, ok := wf.Jobs[job]; !ok {
 			violations = append(violations, fmt.Sprintf("%s: exempt job %q does not exist; remove the stale exemption", file, job))
 		}
 	}
-	for _, job := range sortedKeys(wf.Jobs) {
+	for _, job := range slices.Sorted(maps.Keys(wf.Jobs)) {
 		_, isExempt := exempt[job]
 		for i, step := range wf.Jobs[job].Steps {
 			if isExempt && exemptRunsTests.MatchString(step.Run) {
@@ -67,15 +68,6 @@ func checkoutHistoryViolations(file string, data []byte, exempt map[string]strin
 		}
 	}
 	return violations, nil
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
 }
 
 func TestCIWorkflowCheckoutsFetchFullHistory(t *testing.T) {
