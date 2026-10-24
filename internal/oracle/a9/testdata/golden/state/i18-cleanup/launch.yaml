@@ -1,0 +1,173 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:sZ>
+  status: IN_PROGRESS
+tasks:
+  - id: ia-2
+    type: integration
+    role_pair: integration-pair
+    description: A9 not-clean fixture
+    done_when: A9 oracle keeps the worktree
+    status: INTEGRATION_ANALYSIS_REJECTED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <T1:sZ>
+    iteration: 1
+    worktree: .worktrees/ia-2
+    history: []
+  - id: ia-1
+    type: integration
+    role_pair: integration-pair
+    description: A9 clean-terminal fixture
+    done_when: A9 oracle removes the worktree
+    status: INTEGRATION_ANALYSIS_CLEAN
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <T1:sZ>
+    iteration: 1
+    worktree: .worktrees/ia-1
+    history: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [ia-1, ia-2]
+    stretch: []
+  timeline:
+    started: <T1:sZ>
+    deadline: <T1+2493072000s:sZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:sZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
+# after
+## state.yaml
+version: 1
+pipeline_version: 3
+mutation_sequence: 3
+goal:
+    id: goal-1
+    description: A9 oracle fixture
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <T1:sZ>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: ia-2
+      type: integration
+      role_pair: integration-pair
+      description: A9 not-clean fixture
+      status: INTEGRATION_ANALYSIS_REJECTED
+      priority: 1
+      worktree: .worktrees/ia-2
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: A9 oracle keeps the worktree
+      scope: ""
+      created: <T1:sZ>
+      history: []
+    - id: ia-1
+      type: integration
+      role_pair: integration-pair
+      description: A9 clean-terminal fixture
+      status: INTEGRATION_ANALYSIS_CLEAN
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: A9 oracle removes the worktree
+      scope: ""
+      handoff_events:
+        - timestamp: <T3:fO>
+          agent: system
+          trigger: completion
+      created: <T1:sZ>
+      history: []
+agents:
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        generation: <V1>
+        lease_expires: <T4:fZ>
+        heartbeat: <T5:fZ>
+        registered_at: <T5:fZ>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <V2>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - ia-1
+            - ia-2
+        stretch: []
+    timeline:
+        started: <T1:sZ>
+        deadline: <T1+2493072000s:sZ>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <T1:sZ>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 0
+    max_review_cycles: 0
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING

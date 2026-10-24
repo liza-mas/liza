@@ -1,0 +1,10 @@
+exit_code: 0
+[stdout]
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: coder-1
+Agents will exit cleanly at their next check.
+fixture codex output
+[stderr]
+Warning: no Liza contract symlink found for codex. Agents may not find the behavioral contract.
+Run 'liza init --codex' to create one.
