@@ -1,0 +1,70 @@
+[
+  {
+    "desc": "Make TestExecuteAgentProgressWatchdogStillBlocksDuringHandback and TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds deterministic by holding the session's in-flight marker from before executeAgent (D41), test-only, with a late-start regression subtest for each",
+    "done_when": "In internal/agent/inflight_submit_deadline_test.go both tests write their in-flight marker before executeAgent and each runs 'prompt start' and 'late start' subtests (agent's first action delayed past ExecutionTimeout) with every prior assertion and value kept; the late-start subtests were captured failing against the old shape with the :241 'session was cancelled before the agent saw its submit's outcome' and :286 'executeAgent = (1, <nil>)' signatures and now pass; go test -race -count=20 on the two tests and the full internal/agent race run pass; make lint, make test, the A1 persist race, regen check, tamper test and git diff of internal/oracle/a1/persist against global-refactoring pass; the diff touches only the test file and the declared manifest.",
+    "scope": "IN: internal/agent/inflight_submit_deadline_test.go (the two D41 tests and, if extended, the lateSubmitSession helper with the third test's behavior unchanged); specs/plans/20261023-architecture-consolidation/acceptance/deferred-validation-2-1-correction-plan-agent-deadline-tests.json. OUT: any production .go file, execution_deadline_test.go and other test files, testhelpers, oracle fixtures/goldens/adapters, the other tests in the file, skipping or widening-only fixes, runtime state, installed tooling.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-031400-deferred-validation-2-1-correction-plan.md#Task 1: Make the two D41 deadline tests deterministic",
+    "rca_required": true,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^(TestExecuteAgentProgressWatchdogStillBlocksDuringHandback|TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/persist/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/persist/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_VERIFY_TAMPER=1 go test -count=1 -timeout 25m -run '^TestOraclePersistenceTamper$' ./internal/oracle/a1/persist",
+      "git diff --exit-code global-refactoring -- internal/oracle/a1/persist",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": ["env", "sh", "make", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^(TestExecuteAgentProgressWatchdogStillBlocksDuringHandback|TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+        "executables": ["env", "sh", "go", "git", "gcc"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/agent/",
+        "executables": ["env", "sh", "go", "git", "gcc"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a1/persist/...",
+        "executables": ["env", "sh", "go", "git", "gcc"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a1/persist/...",
+        "executables": ["env", "sh", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp ORACLE_VERIFY_TAMPER=1 go test -count=1 -timeout 25m -run '^TestOraclePersistenceTamper$' ./internal/oracle/a1/persist",
+        "executables": ["env", "sh", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "git diff --exit-code global-refactoring -- internal/oracle/a1/persist",
+        "executables": ["git"],
+        "env": [],
+        "probes": [["git", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "sh", "make", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["make", "--version"], ["go", "version"]]
+      }
+    ]
+  }
+]
