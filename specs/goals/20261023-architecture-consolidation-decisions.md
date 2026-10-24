@@ -878,6 +878,24 @@ correction fixes. Holding it (option B) stalls the A1 critical path until the co
   (no such admission mechanism; it would need an engine change).
 - Kind: delivery/ordering. Revert: switch to option B by handing the task back before its next submission.
 
+### D52 — G8 boundary CI by `workflow_dispatch` on the pushed integration branch; one PR to `main` later (human, 2026-10-24)
+Human decision ("go for your recommendation"), 2026-10-24T15:08Z. E1 prescribes a `global-refactoring`→`main` PR at each of the ~9
+area boundaries, with macOS on the subsequent `main` push, so `main` would absorb every area as it closes. `ci.yml`
+also triggers on `workflow_dispatch`, and `ci-core.yml:172` runs macOS for every event except `pull_request`.
+- Ruling: `global-refactoring` is pushed to `origin`. At each area boundary, G8 evidence is a `workflow_dispatch` run of
+  `ci.yml` on `global-refactoring`, whose tested SHA equals the boundary record's integration SHA, with green Linux,
+  Windows and macOS jobs. The record cites the run URL, the tested SHA and each job's conclusion. Red CI keeps the next area held,
+  and the maintainer commissions the fix (E1 unchanged). No PR is opened per boundary. One PR to `main` is opened at a
+  point the human chooses; merging it needs the human's explicit approval.
+- The human action at each boundary stays a human-action hold. The operator may push and trigger the run under this
+  ruling, and the maintainer confirms the result. A boundary record must not claim G8 before the run's jobs complete.
+- Publication accepted: `liza-mas/liza` is public, so the branch's commits, including force-added `specs/goals` files,
+  become public. A pre-push scan of `origin/main..global-refactoring` (356 commits) found one pattern hit, the labelled
+  synthetic key in `internal/oracle/a2/cli/testdata/fixtures/tool-result/redaction.txt`, and no real secret.
+- Rejected: a PR plus a `main` merge per boundary (a merge decision every few hours, and `main` absorbs partially consolidated
+  areas); deferring CI to the end of the run (platform breaks would compound across areas).
+- Kind: proof mechanism (E1 form; N2 coverage kept and widened, since macOS now runs at every boundary). Revert: return to per-boundary PRs.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
