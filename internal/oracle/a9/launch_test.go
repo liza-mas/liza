@@ -51,7 +51,20 @@ func launchScenario(t *testing.T, name string) *scenario {
 }
 
 // launchOwners maps a scenario to its process tracker.
-var launchOwners sync.Map
+var launchOwners launchRegistry
+
+type launchRegistry struct{ m sync.Map }
+
+func (r *launchRegistry) Store(p *scenario, o *launchOwner) { r.m.Store(p, o) }
+
+// owner returns the tracker of a scenario made by launchScenario.
+func (r *launchRegistry) owner(p *scenario) *launchOwner {
+	o, ok := r.m.Load(p)
+	if !ok {
+		panic("A9 launch: scenario without a process tracker")
+	}
+	return o.(*launchOwner)
+}
 
 // launchRun runs the CLI like scenario.run, but registers the process with the
 // scenario's tracker as soon as it starts and, if the run's deadline expires,
@@ -63,11 +76,8 @@ func launchRun(t *testing.T, p *scenario, args ...string) invocation {
 	launchBind(cmd)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	if err := cmd.Start(); err != nil {
+	if err := launchOwners.owner(p).start(cmd); err != nil {
 		t.Fatalf("A9 %s run: cannot start the CLI", p.name)
-	}
-	if own, ok := launchOwners.Load(p); ok {
-		own.(*launchOwner).adopt(cmd.Process.Pid)
 	}
 	code := 0
 	if err := cmd.Wait(); err != nil {
@@ -439,11 +449,8 @@ func spawnHelper(t *testing.T, p *scenario, req spawnRequest) (invocation, []str
 	launchBind(cmd)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	if err := cmd.Start(); err != nil {
+	if err := launchOwners.owner(p).start(cmd); err != nil {
 		t.Fatalf("A9 %s run: cannot start the spawn helper", p.name)
-	}
-	if own, ok := launchOwners.Load(p); ok {
-		own.(*launchOwner).adopt(cmd.Process.Pid)
 	}
 	code := 0
 	if err := cmd.Wait(); err != nil {
@@ -540,14 +547,14 @@ func spawnCheckLogs(t *testing.T, p *scenario) {
 	p.harness(t, shas).Check(t, oracle.Human, p.name+"/supervisor-logs.txt", []byte(strings.Join(names, "\n")+"\n"))
 }
 
-// Process hygiene (D43 ruling 2). A scenario process is any live process whose
-// command line names the scenario root, everything below it, and everything in a
-// group (other than the test's own) that contains one. The gate's supervisor is
-// detached into its own session, so a failed scenario can leave it, and the
-// provider stubs below it, behind. Ownership is taken while the scenario runs: a
-// tracker polls for the processes as they appear, launches are adopted at start,
-// and a deadline kills the whole tree from its live leader, so a child whose
-// leader has gone is still known when the cleanup stops it.
+// Process hygiene (D43 ruling 2). A scenario process is any live process in a
+// process group the test launched, whose command line names the scenario root,
+// or that descends from one. Every command the scenario launches leads its own
+// session and group, recorded at start from its pid, so a child is owned even when
+// its leader exits before anything could observe it; the gate's supervisor is
+// detached the same way. A tracker also polls for what the groups do not hold (the
+// provider processes the supervisor places in groups of their own), and a deadline
+// kills a launched tree from its live leader.
 
 type launchProc struct {
 	pid, ppid, pgid int
@@ -619,9 +626,16 @@ type launchOwner struct {
 	done    chan struct{}
 }
 
-// launchTrack starts following the processes of the scenario rooted at root.
+// newLaunchOwner returns an owner that follows no process until told to.
+func newLaunchOwner(root string) *launchOwner {
+	return &launchOwner{root: root, members: map[int]bool{}, groups: map[int]bool{}}
+}
+
+// launchTrack starts following the processes of the scenario rooted at root: the
+// groups of the commands it launches, and whatever a poll finds while it runs.
 func launchTrack(root string) *launchOwner {
-	o := &launchOwner{root: root, members: map[int]bool{}, groups: map[int]bool{}, stop: make(chan struct{}), done: make(chan struct{})}
+	o := newLaunchOwner(root)
+	o.stop, o.done = make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(o.done)
 		for {
@@ -629,19 +643,25 @@ func launchTrack(root string) *launchOwner {
 			select {
 			case <-o.stop:
 				return
-			case <-time.After(25 * time.Millisecond):
+			case <-time.After(250 * time.Millisecond):
 			}
 		}
 	}()
 	return o
 }
 
-// adopt records a process the test started itself.
-func (o *launchOwner) adopt(pid int) {
+// start launches cmd as the leader of its own session and process group (see
+// spawnDetach) and records that group before returning. The group id is the leader's pid, so every process that stays
+// in the group is owned even if the leader exits before anything observes it.
+func (o *launchOwner) start(cmd *exec.Cmd) error {
+	spawnDetach(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
 	o.mu.Lock()
-	o.members[pid] = true
+	o.members[cmd.Process.Pid], o.groups[cmd.Process.Pid] = true, true
 	o.mu.Unlock()
-	_, _ = o.scan()
+	return nil
 }
 
 // scan grows the remembered membership and returns the live members. A process
@@ -691,8 +711,10 @@ func (o *launchOwner) scan() ([]launchProc, error) {
 // deadline.
 func launchReap(t testing.TB, o *launchOwner) int {
 	t.Helper()
-	close(o.stop)
-	<-o.done
+	if o.stop != nil {
+		close(o.stop)
+		<-o.done
+	}
 	killed := map[int]bool{}
 	grace := time.Now().Add(2 * time.Second)
 	deadline := time.Now().Add(20 * time.Second)
@@ -752,6 +774,7 @@ func TestOracleA9LaunchCleanup(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, "-test.run=^TestOracleA9LaunchCleanupProbe$", "-test.count=1")
 	cmd.Dir, cmd.Env = dir, env
+	spawnDetach(cmd)
 	launchBind(cmd)
 	out, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
@@ -792,21 +815,20 @@ func TestOracleA9LaunchCleanupProbe(t *testing.T) {
 		t.Skip("probe of TestOracleA9LaunchCleanup")
 	}
 	root := t.TempDir()
-	own := launchTrack(root)
+	// No poller: the cleanup may know the orphan only through its leader's group.
+	own := newLaunchOwner(root)
 	t.Cleanup(func() { launchCleanup(t, "probe", own) })
-	// The leader names the root and exits a second after starting its child, which
-	// names nothing and starts after the leader was adopted: only what the tracker
-	// saw while the leader lived can find it.
-	cmd := exec.Command("sh", "-c", `sleep 0.5; sleep 300 & sleep 1; exit 0`, filepath.Join(root, "hold"))
+	// The leader names the root and exits at once after forking a child that names
+	// nothing, so nothing can observe the child while the leader lives.
+	cmd := exec.Command("sh", "-c", `sleep 300 & exit 0`, filepath.Join(root, "hold"))
 	env, err := oracle.ChildEnv(oracle.EnvBase{Home: root, Path: os.Getenv("PATH"), Tmp: root})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd.Env = env
-	if err := cmd.Start(); err != nil {
+	if err := own.start(cmd); err != nil {
 		t.Fatal("A9 probe: start leader")
 	}
-	own.adopt(cmd.Process.Pid)
 	if err := cmd.Wait(); err != nil {
 		t.Fatal("A9 probe: leader wait")
 	}
@@ -814,19 +836,17 @@ func TestOracleA9LaunchCleanupProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal("A9 probe: process listing unavailable")
 	}
-	own.mu.Lock()
 	orphan := 0
 	for _, p := range procs {
 		if p.pid == cmd.Process.Pid {
 			t.Fatal("A9 probe: the leader must have exited")
 		}
-		if own.members[p.pid] && p.command == "sleep 300" {
+		if p.pgid == cmd.Process.Pid && p.command == "sleep 300" {
 			orphan = p.pid
 		}
 	}
-	own.mu.Unlock()
 	if orphan == 0 {
-		t.Fatal("A9 probe: the rootless child must outlive its leader and be tracked")
+		t.Fatal("A9 probe: the rootless child must outlive its leader in the leader's group")
 	}
 	fmt.Println("A9PROBE root: " + root)
 	fmt.Printf("A9PROBE orphan: %d\n", orphan)
