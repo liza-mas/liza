@@ -1,0 +1,15 @@
+exit 0
+--- stdout
+Read a supported config key. Equivalent to liza get <key>, e.g. liza get config.post_worktree_cmd; an unset post_worktree_cmd is null in JSON.
+Usage:
+liza config get <key> [flags]
+Flags:
+--format string Output format: json, yaml, table, value (default "value")
+-h, --help help for get
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

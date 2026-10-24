@@ -1,0 +1,16 @@
+exit 0
+--- stdout
+Apply native Claude post tool-result hooks
+Usage:
+liza tool-result claude-hook [flags]
+Flags:
+-h, --help help for claude-hook
+Global Flags:
+--check-update check for a Liza update before running
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-C, --project-root string Liza project root for state commands
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,12 @@
+completeCLINames agent --cli
+completeToolIDs toolchain doctor --include
+completeToolIDsOrAll toolchain doctor --tool
+completePipelineTransitions proceed task-merged
+completeAgentRoles mark-agent-degraded --role
+completeAgentArgs agent
+completeTaskIDs mark-agent-degraded --task
+completeTaskIDArgs get-tasks
+completeAgentIDs mark-blocked --agent-id
+completeAgentIDArgs recover-agent
+completeGetQueries get
+completeConfigKeys config get

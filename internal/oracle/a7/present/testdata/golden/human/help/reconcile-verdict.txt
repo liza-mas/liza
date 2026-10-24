@@ -1,0 +1,22 @@
+exit 0
+--- stdout
+Append an audited reconciliation decision without changing task status or review quorum.
+Requires a registered orchestrator with current LIZA_AGENT_GENERATION
+authority and the reconcile-verdict capability. Use inherited agent authority;
+do not copy registration credentials into an operator shell.
+Refuted and superseded clear a conflicting hold with a reason. Accepted rejection
+keeps the unchanged review boundary blocked. Escalated keeps the hold pending.
+Unmatched evidence remains non-gating regardless of disposition.
+Usage:
+liza reconcile-verdict <task-id> <finding-id> <accepted|refuted|superseded|escalated> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+-h, --help help for reconcile-verdict
+--json output result as structured JSON
+--reason string required justification, at most 4096 bytes
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

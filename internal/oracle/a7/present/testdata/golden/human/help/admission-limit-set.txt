@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Store one admission limit. The class name is lowercase letters, digits and
+dashes. An identical definition is a successful no-op; replacing a different
+one requires --replace and --reason. A new --max-concurrent also reaches
+commands already queued for the class within about 10 s; commands already
+holding a slot keep it. Write a substring that starts with a dash as
+--match=<substring>.
+Example:
+liza admission-limit set db-suite --max-concurrent 2 --match=--decision-model-db
+Usage:
+liza admission-limit set <class> --max-concurrent <n> --match <substring> [--match <substring>...] [flags]
+Flags:
+-h, --help help for set
+--json output result as structured JSON
+--match stringArray Substring that puts a command in the class (repeatable)
+--max-concurrent int How many commands of the class may execute at once
+--reason string Reason for the change
+--replace Replace a different existing definition (requires --reason)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

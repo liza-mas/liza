@@ -1,0 +1,181 @@
+exit 0
+--- stdout
+--- stderr
+goal:
+description: Presentation oracle fixture
+status: IN_PROGRESS
+specref: spec.md
+sprint:
+id: sprint-1
+number: 1
+status: IN_PROGRESS
+checkpointtrigger: ""
+checkpointnotice: ""
+starttime: "<TIME>"
+tasksdone: 2
+taskstotal: 6
+config:
+mode: running
+pausedby: null
+pausereason: null
+tasks:
+total: 6
+active: 4
+terminal: 2
+bystatus:
+ABANDONED: 1
+ARCHITECTURE_APPROVED: 1
+BLOCKED: 1
+IMPLEMENTING_CODE: 1
+MERGED: 1
+REVIEWING_CODE: 1
+claimable: 0
+reviewable: 0
+claimable_by_role:
+- role: architect
+count: 0
+- role: code-planner
+count: 0
+- role: coder
+count: 0
+- role: epic-planner
+count: 0
+- role: integration-analyst
+count: 0
+- role: us-writer
+count: 0
+reviewable_by_role:
+- role: architecture-reviewer
+count: 0
+- role: code-plan-reviewer
+count: 0
+- role: code-reviewer
+count: 0
+- role: epic-plan-reviewer
+count: 0
+- role: integration-reviewer
+count: 0
+- role: us-reviewer
+count: 0
+legacy_coder_claimable: 0
+legacy_code_reviewer_reviewable: 0
+blocked: 1
+blockedbydeps: 0
+agents:
+- id: architect-1
+role: architect
+status: IDLE
+health: ""
+healthreason: ""
+recoverhint: ""
+pid: 5000003
+currenttask: ""
+timesinceheartbeat: <REL>
+processstatus: stopped
+processstatussource: signal(0)
+processstatusdetail: process does not exist
+- id: code-reviewer-1
+role: code-reviewer
+status: REVIEWING
+health: ""
+healthreason: ""
+recoverhint: ""
+pid: 5000002
+currenttask: task-review
+timesinceheartbeat: <REL>
+processstatus: stopped
+processstatussource: signal(0)
+processstatusdetail: process does not exist
+- id: coder-1
+role: coder
+status: WORKING
+health: ""
+healthreason: ""
+recoverhint: ""
+pid: 5000001
+currenttask: task-executing
+timesinceheartbeat: <REL>
+processstatus: stopped
+processstatussource: signal(0)
+processstatusdetail: process does not exist
+agenthealth: {}
+agent_capacity:
+live: 2
+free: 0
+degraded: 0
+by_role:
+- role: architect
+live: 0
+free: 0
+degraded: 0
+- role: architecture-reviewer
+live: 0
+free: 0
+degraded: 0
+- role: code-plan-reviewer
+live: 0
+free: 0
+degraded: 0
+- role: code-planner
+live: 0
+free: 0
+degraded: 0
+- role: code-reviewer
+live: 1
+free: 0
+degraded: 0
+- role: coder
+live: 1
+free: 0
+degraded: 0
+- role: epic-plan-reviewer
+live: 0
+free: 0
+degraded: 0
+- role: epic-planner
+live: 0
+free: 0
+degraded: 0
+- role: integration-analyst
+live: 0
+free: 0
+degraded: 0
+- role: integration-reviewer
+live: 0
+free: 0
+degraded: 0
+- role: orchestrator
+live: 0
+free: 0
+degraded: 0
+- role: us-reviewer
+live: 0
+free: 0
+degraded: 0
+- role: us-writer
+live: 0
+free: 0
+degraded: 0
+orchestratorstate:
+trigger: BLOCKED_TASKS
+triggercount: 1
+reason: 1 task(s) are blocked and need attention
+integration:
+status: waiting
+reason_code: planning_unsettled
+task_ids:
+- task-approved
+guidance: listed tasks must finish and run their outgoing transitions; for a merged, outputless source that can never run its transition and whose downstream work merged, an operator runs liza plan-check TASK --retire --ruling DECISION
+workqueues:
+coder:
+available: 0
+reason: No claimable tasks; 1 blocked tasks; 2 in progress
+reviewer:
+available: 0
+reason: No reviewable tasks; 1 actively being reviewed
+pendingtransitions:
+- taskid: task-approved
+transitions:
+- architecture-to-code-plan
+anomalies: null
+circuitbreaker: null

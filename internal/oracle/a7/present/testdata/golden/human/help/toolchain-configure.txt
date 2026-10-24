@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+Write machine-local toolchain env and optional project activation
+Usage:
+liza toolchain configure [flags]
+Flags:
+--agent-tools string AGENT_TOOLS.md handling: auto, skip, or force (default "auto")
+--agents string comma-separated provider contracts to activate in --project
+--exclude stringArray tool id to exclude (repeatable)
+--global-dir string global Liza config directory (default: ~/.liza)
+-h, --help help for configure
+--include stringArray tool id to include (repeatable)
+--install-dir string directory for managed binaries in generated env (default: ~/.local/bin)
+--json output result as structured JSON
+--profile string tool profile: balanced, lean, or full (default "balanced")
+--project string project root where provider contracts and optional indexing hooks should be activated
+--write-shell-profile source generated env.sh from the current shell startup file
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

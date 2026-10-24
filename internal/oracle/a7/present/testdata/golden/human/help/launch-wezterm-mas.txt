@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Launch a Liza multi-agent role set in one WezTerm window.
+Preset role sets:
+technical-spec orchestrator, code-planner, code-plan-reviewer, coder, code-reviewer
+functional-spec technical-spec plus architect, architecture-reviewer
+general-objective functional-spec plus epic-planner, epic-plan-reviewer, us-writer, us-reviewer
+Usage:
+liza launch wezterm mas [flags]
+Flags:
+--class string WezTerm window class (default depends on launch type)
+--cli string CLI to pass to liza agent for every launched role
+--cwd string working directory for launched panes (default: current Liza project for MAS, current directory for pairing)
+--dry-run print the wezterm command without launching it
+-h, --help help for mas
+--no-tui do not launch liza tui in the first pane
+--preset string role preset: technical-spec, functional-spec, general-objective (default "technical-spec")
+--role stringArray role to launch; repeat to override --preset
+--workspace string WezTerm workspace name (defaults to --class)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

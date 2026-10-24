@@ -1,0 +1,63 @@
+exit 0
+--- stdout
+Store a supported project-scoped configuration value.
+config.post_worktree_cmd stores a setup command without executing it.
+Quote the command as one argument.
+An identical value is a successful no-op. Replacing a different value requires
+--replace and --reason. These flags prevent accidental replacement; they do not
+authenticate a human caller. Existing provider sessions are not restarted.
+Read the current value with liza config get config.post_worktree_cmd --json
+or liza get config.post_worktree_cmd --json.
+With an agent ID (flag or environment), the role must allow
+config-set-post-worktree-cmd and the current registration generation is required.
+No default agent role has this capability. Without an ID this is an operator write.
+Audit records are emitted to the process log (stderr), including in JSON mode;
+they are not persisted in state.yaml or the activity log.
+Agent-pool keys take a positive integer and are operator-only (an identified
+agent is refused):
+config.max_instances live agents per non-orchestrator role without its
+own max-instances (minimum 1, default 3)
+config.doer_max_wait seconds an idle doer waits before leaving the pool
+config.reviewer_max_wait seconds an idle reviewer waits before leaving the
+pool (minimum 300, default 600 for each wait)
+Replacing a different value needs --replace and --reason, as above. A changed
+wait applies to agents started afterwards; running ones keep theirs. A lowered
+max_instances applies to running agents: each one over the cap retires at its
+next task boundary once it holds no in-flight work.
+config.await_poll_interval takes positive seconds (default 10 when unset)
+and is operator-only. It controls periodic checks and fallback polling for
+await-verdict and await-resubmission, not the foreground POLL slice or total
+wait budget. Notifications still trigger checks immediately. Changes apply
+at the next invocation (including the next foreground slice).
+config.auto_resume takes exactly true or false and is operator-only. The write
+itself changes no mode, sprint or task state, but running agents act on it at
+their next state poll: enabling it at a CHECKPOINT or COMPLETED sprint releases
+that gate (a transition checkpoint only for the orchestrator). Run pause first
+if the current gate must hold; pause is never auto-resumed. Repeating the value
+succeeds with outcome unchanged. This key does not use --replace or --reason.
+config.runtime_input_registry is the repository-relative path of the
+runtime-input recipe registry, read at the integration commit. Operator-only.
+config.agent_env_deny takes comma-separated variable names withheld from
+supervisors, every process they start, agent sessions, gate commands and
+copied env files. Operator-only. The value replaces the whole list; an empty
+value clears it. Replacing a different list needs --replace and --reason.
+Newly denied names reach the next session at once and other processes at the
+next supervisor start; a name removed from the list returns only in a fresh
+supervisor. Process and engine variables cannot be listed.
+Examples:
+liza config set config.post_worktree_cmd "make setup"
+liza config set config.max_instances 5 --replace --reason "wider fan-out"
+Usage:
+liza config set <key> <value> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+-h, --help help for set
+--json output result as structured JSON
+--reason string Reason for the configuration change
+--replace Replace a different existing value (requires --reason)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,26 @@
+exit 0
+--- stdout
+Read a complete tool result from stdin
+Usage:
+liza tool-result filter [flags]
+Flags:
+--agent-id string Agent identifier
+--command string Command (use JSON stdin for sensitive metadata)
+--command-class string Command class
+--exit-code int Original tool exit code (filter success still exits zero)
+-h, --help help for filter
+--json-input Read a JSON result envelope instead of plain text
+--role string Agent role
+--session-id string Session identifier
+--task-id string Task identifier
+--tool string Tool name
+--truncated Source result was already truncated
+Global Flags:
+--check-update check for a Liza update before running
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-C, --project-root string Liza project root for state commands
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

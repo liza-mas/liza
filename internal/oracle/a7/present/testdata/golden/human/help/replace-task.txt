@@ -1,0 +1,27 @@
+exit 0
+--- stdout
+Replace a source task with one new task in a single transaction.
+The JSON file declares source_task_id, reason, replacement (the add-task
+object), consumers (expected and desired dependency lists), and optionally
+preserved_base (both base_commit and an existing matching worktree) and changed
+(what differs from the blocked attempt; required when the source is BLOCKED).
+Requires an orchestrator with the replace-task capability. Both --request-id
+and --expected-transition are required; preserve the original pair and payload
+across retries. Read result.outcome and result.safe_action before proceeding.
+Example:
+liza replace-task --replacement-file replacement.json --request-id replace-1 --expected-transition <token> --json
+Usage:
+liza replace-task --replacement-file <file> --request-id <id> --expected-transition <token> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for replace-task
+--json output result as structured JSON
+--replacement-file string path to the JSON replacement transaction
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

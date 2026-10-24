@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": "unblock_rebase_conflict",
+    "details": {
+      "repair_request": true,
+      "target_ref": "integration",
+      "target_sha": "<ID>",
+      "task_id": "task-blocked",
+      "task_status": "BLOCKED"
+    },
+    "message": "unblock rebase conflict: task remains BLOCKED with repair_request"
+  },
+  "ok": false,
+  "result": null
+}

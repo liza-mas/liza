@@ -1,0 +1,5 @@
+exit 0
+--- stdout
+--- stderr
+AGE TYPE TASK REPORTER TIMESTAMP DETAILS
+<REL> spec_ambiguity task-blocked coder-1 <TIME> question=Fixture dependency

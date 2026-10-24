@@ -1,0 +1,16 @@
+exit 0
+--- stdout
+--- stderr
+ID: coder-1
+Role: coder
+Status: WORKING
+Provider: codex
+Current Task: task-executing
+Time on Task: <REL>
+Last Heartbeat: <REL>
+Lease Expires: <REL>
+Terminal: terminal-1
+PID: 5000001
+Process Status: stopped
+Iterations Total: 2
+Context Usage: 17%

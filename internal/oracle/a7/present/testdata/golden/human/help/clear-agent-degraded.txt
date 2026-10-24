@@ -1,0 +1,13 @@
+exit 0
+--- stdout
+Clear degraded health for an agent
+Usage:
+liza clear-agent-degraded <agent-id> [flags]
+Flags:
+-h, --help help for clear-agent-degraded
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

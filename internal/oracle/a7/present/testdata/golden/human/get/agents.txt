@@ -1,0 +1,7 @@
+exit 0
+--- stdout
+--- stderr
+ID ROLE PROVIDER STATUS HEALTH PID CURRENT_TASK TIME_ON_TASK HEARTBEAT CONTEXT
+architect-1 architect codex IDLE - 5000003 ✗ - - <REL> 17%
+code-reviewer-1 code-reviewer codex REVIEWING - 5000002 ✗ task-review <REL> <REL> 17%
+coder-1 coder codex WORKING - 5000001 ✗ task-executing <REL> <REL> 17%

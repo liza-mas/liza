@@ -1,0 +1,19 @@
+exit 0
+--- stdout
+Install, verify, and configure optional local tools used by Liza agents and project activation.
+Usage:
+liza toolchain [command]
+Available Commands:
+configure Write machine-local toolchain env and optional project activation
+doctor Check selected toolchain tools
+install Install selected local Liza toolchain CLIs
+list List known Liza toolchain tools
+Flags:
+-h, --help help for toolchain
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza toolchain [command] --help" for more information about a command.
+--- stderr

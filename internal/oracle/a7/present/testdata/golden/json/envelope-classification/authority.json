@@ -1,0 +1,19 @@
+{
+  "error": {
+    "code": "stale_caller",
+    "details": {
+      "agent_id": "coder-1",
+      "effects": "none",
+      "outcome": "STALE_CALLER",
+      "safe_action": "stop"
+    },
+    "message": "agent coder-1 authority rejected: registration changed; stop"
+  },
+  "ok": false,
+  "result": {
+    "agent_id": "coder-1",
+    "effects": "none",
+    "outcome": "STALE_CALLER",
+    "safe_action": "stop"
+  }
+}

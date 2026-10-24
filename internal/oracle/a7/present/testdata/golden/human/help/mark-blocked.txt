@@ -1,0 +1,47 @@
+exit 0
+--- stdout
+Mark a task as BLOCKED when work cannot proceed.
+Per the blocking protocol (specs/architecture/roles.md), use this when:
+- Spec ambiguity prevents implementation
+- Missing external dependency blocks progress
+- Design conflict discovered that requires rescoping
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in an executing status (e.g. IMPLEMENTING_CODE, CODE_PLANNING)
+- Only the assigned agent can mark a task as blocked
+- Requires a reason and 1-3 clarifying questions
+Effects:
+- status = BLOCKED
+- blocked_reason = <reason>
+- blocked_questions = [<questions>]
+- repair_request = <structured orchestrator repair request> when --repair-* flags or --repair-request-file are provided
+- With --human-action, the block is human-owned: an AWAITING HUMAN alert names the ask
+- Clear assigned_to
+- Clear lease_expires
+- Add history entry with event "blocked"
+- Triggers orchestrator wake
+Usage:
+liza mark-blocked <task-id> [flags]
+Flags:
+--agent-id string agent ID marking the task as blocked
+--depends-on strings task IDs blocking this task; also used as the orchestrator re-wake signal
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for mark-blocked
+--human-action string one-line action only a human can take to clear this block, and how to signal it is done; raises AWAITING HUMAN
+--json output result as structured JSON
+--questions strings clarifying questions (1-3 required)
+--reason string reason why the task is blocked (required)
+--repair-command string exact command the orchestrator should run or adapt
+--repair-evidence stringArray evidence gathered before requesting orchestrator repair
+--repair-operation string orchestrator-only repair operation requested for this blocker
+--repair-request-file string path to a complete JSON repair request; mutually exclusive with --repair-* fields
+--repair-target string task or state object the requested repair should modify
+--repair-validation stringArray validation already run or required after orchestrator repair
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--state-lock-timeout tag an infrastructure-only state-lock timeout for automatic continuation after a later successful publication
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

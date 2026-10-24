@@ -1,0 +1,4 @@
+[<TIME>] 🚨 DEAD AGENT PROCESS: task-executing — status IMPLEMENTING_CODE has doer coder-1 but no live process (pid 5000001: process does not exist)
+[<TIME>] 🚨 DEAD AGENT PROCESS: task-review — status REVIEWING_CODE has reviewer code-reviewer-1 but no live process (pid 5000002: process does not exist)
+[<TIME>] ⚠️ BLOCKED: task-blocked — Waiting for fixture dependency
+[<TIME>] ⚠️ STALLED: no task progress for <REL> minutes — no claimable work; 1 task(s) held (read blocked_reason), 2 task(s) waiting on dependencies

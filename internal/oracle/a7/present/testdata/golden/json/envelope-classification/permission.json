@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "permission_denied",
+    "details": {
+      "agent_id": "coder-1",
+      "operation": "fixture",
+      "role": "coder"
+    },
+    "message": "fixture permission denied"
+  },
+  "ok": false,
+  "result": null
+}

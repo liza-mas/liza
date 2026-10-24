@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+Claim a task for a doer agent using the three-phase claim pattern.
+Supports claiming from multiple source states:
+- Initial state: normal new claim (e.g. DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US)
+- Rejected state: re-claim (same doer preserves worktree, different doer gets fresh)
+- INTEGRATION_FAILED: any doer can claim (worktree preserved for conflict resolution)
+Phase 1: Validate under lock (check status, deps, agent availability)
+Phase 2: Handle worktree outside lock (create/preserve/delete as needed)
+Phase 3: Re-validate and commit under lock (atomic state update)
+This pattern prevents TOCTOU races in multi-agent scenarios.
+Usage:
+liza claim-task <task-id> <agent-id> [flags]
+Flags:
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for claim-task
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

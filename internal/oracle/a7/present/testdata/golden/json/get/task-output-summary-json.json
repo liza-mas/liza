@@ -1,0 +1,20 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "id": "task-executing",
+      "output": [
+        {
+          "desc": "Example output",
+          "index": 0,
+          "spec_ref": "spec.md"
+        }
+      ],
+      "role_pair": "coding-pair",
+      "status": "IMPLEMENTING_CODE",
+      "transition_id": "<ID>"
+    }
+  }
+}

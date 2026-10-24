@@ -1,0 +1,14 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "for": "orchestrator",
+        "message": "Keep fixture outputs readable",
+        "timestamp": "<TIME>"
+      }
+    ]
+  }
+}

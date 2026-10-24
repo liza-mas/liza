@@ -1,0 +1,34 @@
+exit 0
+--- stdout
+Cancel a task by transitioning it to ABANDONED status with a reason.
+Unlike delete-task (removes from state) or supersede-task (marks as replaced/completed externally),
+cancel-task simply stops the task while preserving full audit trail.
+Cancellable states are determined by the pipeline transition map. Generally:
+- Initial states: DRAFT_CODE, DRAFT_CODING_PLAN, DRAFT_EPIC_PLAN, DRAFT_US
+- Active states: executing, submitted, and reviewing states before approval
+- Rejected states: CODE_REJECTED, CODING_PLAN_REJECTED, etc.
+- BLOCKED, INTEGRATION_FAILED
+Not cancellable: approved or terminal states. Cancelling releases Liza's state
+claims and removes the task worktree/branch best-effort; it does not kill a
+live provider process. Stale agent commands fail once they observe the
+ABANDONED task state or missing worktree.
+Example:
+liza cancel-task task-3 "Requirements no longer valid"
+Without an agent identity (no LIZA_AGENT_ID, no --agent-id) it runs as the
+operator: no registration generation is needed, no role permission applies,
+and --changed-by (default "human") is the audit actor.
+Usage:
+liza cancel-task <task-id> <reason> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for cancel-task
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,30 @@
+exit 0
+--- stdout
+Manage admission limits: per resource class, how many canonical validation
+commands may execute at once across canonical admission (submit-for-review,
+update-review-commit, the orphaned-base heal) and the deferred-validation
+runner. A command belongs to a class when its text contains any of the
+class's --match substrings.
+A command whose class is full waits in arrival order for a slot. The wait
+does not count against its timeout_seconds budget. A submit waits up to the
+engine cap of 14400 s minus its budget, but at least 2 h; other bounded
+callers keep wait plus budget within the cap. A submit waits before it
+prepares or rebases anything: if the class stays full it is refused as
+RETRYABLE, and the same submission is simply retried. The deferred runner
+waits until a slot frees.
+Read the current limits with liza get config.admission_limits.
+Identified agent sessions cannot use this command.
+Usage:
+liza admission-limit [command]
+Available Commands:
+remove Remove one admission limit
+set Create or replace one admission limit
+Flags:
+-h, --help help for admission-limit
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza admission-limit [command] --help" for more information about a command.
+--- stderr

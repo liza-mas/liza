@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+Operator recovery for a paused run whose first global analysis was created
+before upstream planning finished. Requires an unreviewed submitted report in a
+clean worktree, with no contributor, coverage, verdict, closure or descendant.
+Preserves the report under a durable Git ref, retires the task, and resets the
+empty cohort atomically. Replace old state writers before using this recovery.
+Use --dry-run to inspect eligibility without changing Git or state.
+Usage:
+liza recover-integration <task-id> [flags]
+Flags:
+--dry-run check eligibility without changing state or Git
+-h, --help help for recover-integration
+--json output result as structured JSON
+--reason string reason for retiring the premature analysis
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

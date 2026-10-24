@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "integration failed: fixture integration"
+  },
+  "ok": false,
+  "result": null
+}

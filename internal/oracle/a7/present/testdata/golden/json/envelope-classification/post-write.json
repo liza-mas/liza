@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "validation failed: precondition not met"
+  },
+  "ok": false,
+  "result": null
+}

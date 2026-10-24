@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Generate the autocompletion script for powershell.
+To load completions in your current shell session:
+liza completion powershell | Out-String | Invoke-Expression
+To load completions for every new session, add the output of the above command
+to your powershell profile.
+Usage:
+liza completion powershell [flags]
+Flags:
+-h, --help help for powershell
+--no-descriptions disable completion descriptions
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

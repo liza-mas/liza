@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+--- stderr
+ID: task-executing
+Transition ID: <ID>
+Description: Fixture task-executing
+Status: IMPLEMENTING_CODE
+Priority: 1
+Assigned To: coder-1
+Reviewing By: -
+Age: <REL>
+Time in Status: <REL>
+Dependencies: none
+Iteration: 2
+Lease Expires: <REL>
+Worktree: .
+Done When: Fixture result is inspectable
+Scope: fixture only
+Spec Ref: spec.md
+Rejection Reason: First review requested a concrete example
+Output: 1 entries

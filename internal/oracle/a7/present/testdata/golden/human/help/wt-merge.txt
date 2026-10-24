@@ -1,0 +1,32 @@
+exit 0
+--- stdout
+Merge an approved task's worktree into the integration branch.
+This is the final step in the task lifecycle, integrating completed and approved
+work back into the main codebase.
+Requirements:
+- Task must be in an approved status (resolved from pipeline config or legacy statuses)
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Agent must be a reviewer role (code-reviewer, code-plan-reviewer, epic-plan-reviewer, or us-reviewer)
+- Worktree HEAD must match the task's review_commit
+Process:
+1. Validates task status and review_commit
+2. Attempts fast-forward merge (or merge commit if needed)
+3. Handles merge conflicts by marking task as INTEGRATION_FAILED
+4. Runs integration tests if scripts/integration-test.sh exists
+5. On success: cleans up worktree, marks task as MERGED, updates sprint metrics
+6. On failure: preserves worktree for conflict resolution
+The worktree and branch are automatically cleaned up after a successful merge.
+Usage:
+liza wt-merge <task-id> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for wt-merge
+--json output result as structured JSON
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

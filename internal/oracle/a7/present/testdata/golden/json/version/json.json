@@ -1,0 +1,12 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "built": "unknown",
+      "commit": "unknown",
+      "version": "dev"
+    }
+  }
+}

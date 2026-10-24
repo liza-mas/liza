@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "fixture CLI input"
+  },
+  "ok": false,
+  "result": null
+}

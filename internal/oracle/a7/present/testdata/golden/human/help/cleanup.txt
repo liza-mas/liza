@@ -1,0 +1,17 @@
+exit 0
+--- stdout
+Remove Liza workspace runtime state, task worktrees, and the
+associated task branches after displaying the exact targets for confirmation.
+Cleanup refuses unrecognized registered worktrees and live agents. Use --yes
+to approve the displayed deletion without an interactive prompt.
+Usage:
+liza cleanup [flags]
+Flags:
+-h, --help help for cleanup
+--yes auto-confirm deletion of displayed cleanup targets
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

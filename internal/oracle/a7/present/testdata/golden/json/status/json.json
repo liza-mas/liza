@@ -1,0 +1,247 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "agent_capacity": {
+        "by_role": [
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "architect"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "architecture-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "code-plan-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "code-planner"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 1,
+            "role": "code-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 1,
+            "role": "coder"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "epic-plan-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "epic-planner"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "integration-analyst"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "integration-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "orchestrator"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "us-reviewer"
+          },
+          {
+            "degraded": 0,
+            "free": 0,
+            "live": 0,
+            "role": "us-writer"
+          }
+        ],
+        "degraded": 0,
+        "free": 0,
+        "live": 2
+      },
+      "agents": [
+        {
+          "current_task": "",
+          "id": "architect-1",
+          "pid": 5000003,
+          "process_status": "stopped",
+          "process_status_detail": "process does not exist",
+          "process_status_source": "signal(0)",
+          "role": "architect",
+          "status": "IDLE",
+          "time_since_heartbeat": "<REL>"
+        },
+        {
+          "current_task": "task-review",
+          "id": "code-reviewer-1",
+          "pid": 5000002,
+          "process_status": "stopped",
+          "process_status_detail": "process does not exist",
+          "process_status_source": "signal(0)",
+          "role": "code-reviewer",
+          "status": "REVIEWING",
+          "time_since_heartbeat": "<REL>"
+        },
+        {
+          "current_task": "task-executing",
+          "id": "coder-1",
+          "pid": 5000001,
+          "process_status": "stopped",
+          "process_status_detail": "process does not exist",
+          "process_status_source": "signal(0)",
+          "role": "coder",
+          "status": "WORKING",
+          "time_since_heartbeat": "<REL>"
+        }
+      ],
+      "config": {
+        "mode": "running"
+      },
+      "goal": {
+        "description": "Presentation oracle fixture",
+        "spec_ref": "spec.md",
+        "status": "IN_PROGRESS"
+      },
+      "integration": {
+        "guidance": "listed tasks must finish and run their outgoing transitions; for a merged, outputless source that can never run its transition and whose downstream work merged, an operator runs liza plan-check TASK --retire --ruling DECISION",
+        "reason_code": "planning_unsettled",
+        "status": "waiting",
+        "task_ids": [
+          "task-approved"
+        ]
+      },
+      "orchestrator_state": {
+        "reason": "1 task(s) are blocked and need attention",
+        "trigger": "BLOCKED_TASKS",
+        "trigger_count": 1
+      },
+      "pending_transitions": [
+        {
+          "task_id": "task-approved",
+          "transitions": [
+            "architecture-to-code-plan"
+          ]
+        }
+      ],
+      "sprint": {
+        "id": "sprint-1",
+        "number": 1,
+        "start_time": "<TIME>",
+        "status": "IN_PROGRESS",
+        "tasks_done": 2,
+        "tasks_total": 6
+      },
+      "tasks": {
+        "active": 4,
+        "blocked": 1,
+        "blocked_by_deps": 0,
+        "by_status": {
+          "ABANDONED": 1,
+          "ARCHITECTURE_APPROVED": 1,
+          "BLOCKED": 1,
+          "IMPLEMENTING_CODE": 1,
+          "MERGED": 1,
+          "REVIEWING_CODE": 1
+        },
+        "claimable": 0,
+        "claimable_by_role": [
+          {
+            "count": 0,
+            "role": "architect"
+          },
+          {
+            "count": 0,
+            "role": "code-planner"
+          },
+          {
+            "count": 0,
+            "role": "coder"
+          },
+          {
+            "count": 0,
+            "role": "epic-planner"
+          },
+          {
+            "count": 0,
+            "role": "integration-analyst"
+          },
+          {
+            "count": 0,
+            "role": "us-writer"
+          }
+        ],
+        "legacy_code_reviewer_reviewable": 0,
+        "legacy_coder_claimable": 0,
+        "reviewable": 0,
+        "reviewable_by_role": [
+          {
+            "count": 0,
+            "role": "architecture-reviewer"
+          },
+          {
+            "count": 0,
+            "role": "code-plan-reviewer"
+          },
+          {
+            "count": 0,
+            "role": "code-reviewer"
+          },
+          {
+            "count": 0,
+            "role": "epic-plan-reviewer"
+          },
+          {
+            "count": 0,
+            "role": "integration-reviewer"
+          },
+          {
+            "count": 0,
+            "role": "us-reviewer"
+          }
+        ],
+        "terminal": 2,
+        "total": 6
+      },
+      "work_queues": {
+        "coder": {
+          "available": 0,
+          "reason": "No claimable tasks; 1 blocked tasks; 2 in progress"
+        },
+        "reviewer": {
+          "available": 0,
+          "reason": "No reviewable tasks; 1 actively being reviewed"
+        }
+      }
+    }
+  }
+}

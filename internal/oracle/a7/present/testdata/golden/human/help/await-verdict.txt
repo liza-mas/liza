@@ -1,0 +1,29 @@
+exit 0
+--- stdout
+Block until a reviewer approves or rejects a submitted task.
+Used by doer agents after submit-for-review to wait for the review outcome.
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in a submitted/reviewing status
+Possible outcomes:
+- APPROVED: work accepted, agent can exit
+- REJECTED: work needs revision, reason provided
+- ALREADY_TRANSITIONED: verdict was recovered after task moved onward; follow safe_action
+- POLL: the foreground call cap expired; run the same command again (no argument to carry over)
+- TIMEOUT: the total wait budget expired without a verdict
+- PAUSED: the system halted; stop this session and follow the resume hint
+- NEW_ATTEMPT: task reassigned for fresh attempt
+- ABORTED: task was superseded or cancelled
+Usage:
+liza await-verdict <task-id> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+-h, --help help for await-verdict
+--json output result as structured JSON
+--timeout-seconds int total wait budget in seconds, measured from submission/rejection; each invocation waits at most 100 seconds (540 for Claude Code); maximum 1800 (default 1800)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

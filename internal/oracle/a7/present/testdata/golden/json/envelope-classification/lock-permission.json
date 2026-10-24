@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "permission_denied",
+    "message": "lock permission denied"
+  },
+  "ok": false,
+  "result": null
+}

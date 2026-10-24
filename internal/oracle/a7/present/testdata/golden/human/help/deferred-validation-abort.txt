@@ -1,0 +1,20 @@
+exit 0
+--- stdout
+Ask the live runner to end its batch. Within seconds it stops starting work,
+kills the commands and bisect steps running then, records them not run, and
+keeps every result already finished. The batch ends aborted
+(aborted_by_operator) and is not retried at the same HEAD without run --force;
+the integration gate reports deferred_validation_aborted until a merge or a
+forced run. Refused when no runner holds the lock.
+Usage:
+liza deferred-validation abort [flags]
+Flags:
+-h, --help help for abort
+--json output result as structured JSON
+--ruling string decision that authorizes this change
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

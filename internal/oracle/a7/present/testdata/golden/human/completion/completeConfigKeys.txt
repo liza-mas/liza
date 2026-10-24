@@ -1,0 +1,13 @@
+exit 0
+--- stdout
+config.agent_env_deny
+config.auto_resume
+config.await_poll_interval
+config.doer_max_wait
+config.max_instances
+config.post_worktree_cmd
+config.reviewer_max_wait
+config.runtime_input_registry
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

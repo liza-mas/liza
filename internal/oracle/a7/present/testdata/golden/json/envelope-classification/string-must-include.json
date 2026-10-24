@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "validation failed"
+  },
+  "ok": false,
+  "result": null
+}

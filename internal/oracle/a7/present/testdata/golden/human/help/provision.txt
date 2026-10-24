@@ -1,0 +1,33 @@
+exit 0
+--- stdout
+Register one hand-produced runtime input in the consumption ledger.
+The envelope is an operator-owned KEY=VALUE file outside the repository and its
+worktrees. It must define exactly the variables the task's runtime_inputs
+declaration names, with no surrounding whitespace, inline " #" comments or
+empty values; secret values need at least 8 bytes. Variables listed under the
+declaration's files hold absolute paths to file artifacts, which must also live
+outside the repository. The ledger stores the envelope path, variable names and
+a keyed identity digest, never values. The key is created on first use at
+<home>/<global dir>/runtime-input.key; back it up with your secret sources.
+The identity covers the delivered values and file-artifact contents, not the
+envelope's formatting or the files' locations. Recording a materialization
+already in the ledger returns it unchanged: a consumed or invalidated one stays
+spent. A reusable input may be recorded for several tasks (repeat --task).
+Operator-only: identified agent sessions are refused. As with other operator
+commands, absence of an agent identity is not authentication of a human.
+After recording, restore a task blocked for a missing input with liza unblock-task <task-id>.
+Usage:
+liza provision --record --task <task-id> --input <input-id> --file <envelope> [flags]
+Flags:
+--file string Absolute path of the KEY=VALUE envelope
+-h, --help help for provision
+--input string Runtime input id declared by the task(s)
+--json output result as structured JSON
+--record Record an operator-produced instance
+--task stringArray Task the instance serves (repeatable for reusable inputs)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

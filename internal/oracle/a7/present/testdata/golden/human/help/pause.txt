@@ -1,0 +1,27 @@
+exit 0
+--- stdout
+Pause the Liza system by setting config.mode to PAUSED in state.yaml.
+While PAUSED, no agent claims a task, starts a provider turn or starts a
+merge. Turns already running, and merges already prepared, finish; agents
+then wait at their next check, still sending heartbeats. A claim whose
+provider had not started yet is released and claimed again after resume.
+The command returns once every provider start admitted before the pause has
+happened. If one does not finish in time it reports an error, with the
+system still PAUSED; run pause again to wait for it.
+This is useful for:
+- Making manual adjustments to state.yaml
+- Investigating issues
+- Coordinated maintenance
+Use 'liza resume' to continue normal operation.
+Usage:
+liza pause [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for pause
+--reason string reason for pausing the system
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,28 @@
+exit 0
+--- stdout
+Run a batch of the effective deferred commands at integration HEAD unless a
+passed batch there already covers them. It is a no-op while another runner holds
+the lock. A failed or operator-aborted batch, or exhausted attempts, at an
+unchanged HEAD is not retried without --force. Merges and integration
+reconciliation start this command automatically.
+A command whose newest execution passed at an ancestor of HEAD is carried
+forward, not run, when nothing changed since in the paths
+config.deferred_validation.scopes declares for it (the whole tree when none)
+outside config.deferred_validation.inert_paths. A command whose newest execution
+failed, attributed to a culprit whose discovery was converted to a fix task
+still in flight, is recorded known_red and neither run nor bisected until that
+fix merges or dies. --force carries nothing forward, skips nothing and
+re-executes every command, also at a covered HEAD: use it after correcting a
+scope or inert path that was too narrow.
+Usage:
+liza deferred-validation run [flags]
+Flags:
+--force re-execute every command, also after a failed or aborted batch, exhausted attempts or a covering batch at the same HEAD
+-h, --help help for run
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

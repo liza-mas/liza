@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Read a bounded byte range from a sanitized artifact
+Usage:
+liza tool-result read HASH [flags]
+Flags:
+-h, --help help for read
+--limit int Maximum bytes to read (defaults to the active threshold; 1..65536)
+--offset int Starting byte offset
+Global Flags:
+--check-update check for a Liza update before running
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-C, --project-root string Liza project root for state commands
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

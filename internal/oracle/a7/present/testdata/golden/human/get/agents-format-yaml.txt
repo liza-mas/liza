@@ -1,0 +1,45 @@
+exit 0
+--- stdout
+--- stderr
+- id: architect-1
+role: architect
+status: IDLE
+provider: codex
+pid: 5000003
+process_status: stopped
+process_status_source: signal(0)
+process_status_detail: process does not exist
+time_since_heartbeat: <REL>
+terminal: terminal-1
+iterations_total: 2
+context_percent: 17
+- id: code-reviewer-1
+role: code-reviewer
+status: REVIEWING
+provider: codex
+pid: 5000002
+process_status: stopped
+process_status_source: signal(0)
+process_status_detail: process does not exist
+current_task: task-review
+time_on_task: <REL>
+time_since_heartbeat: <REL>
+lease_expires: <REL>
+terminal: terminal-1
+iterations_total: 2
+context_percent: 17
+- id: coder-1
+role: coder
+status: WORKING
+provider: codex
+pid: 5000001
+process_status: stopped
+process_status_source: signal(0)
+process_status_detail: process does not exist
+current_task: task-executing
+time_on_task: <REL>
+time_since_heartbeat: <REL>
+lease_expires: <REL>
+terminal: terminal-1
+iterations_total: 2
+context_percent: 17

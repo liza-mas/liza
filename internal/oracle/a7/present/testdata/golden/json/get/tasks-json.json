@@ -1,0 +1,101 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "age": "<REL>",
+        "assigned_to": "coder-1",
+        "attempt_num": 1,
+        "description": "Fixture task-executing",
+        "done_when": "Fixture result is inspectable",
+        "id": "task-executing",
+        "iteration": 2,
+        "lease_expires": "<REL>",
+        "output": [
+          {
+            "desc": "Example output",
+            "done_when": "Example readable",
+            "scope": "fixture",
+            "spec_ref": "spec.md"
+          }
+        ],
+        "priority": 1,
+        "rejection_reason": "First review requested a concrete example",
+        "scope": "fixture only",
+        "spec_ref": "spec.md",
+        "status": "IMPLEMENTING_CODE",
+        "time_in_status": "<REL>",
+        "transition_id": "<ID>",
+        "worktree": "."
+      },
+      {
+        "age": "<REL>",
+        "attempt_num": 1,
+        "description": "Fixture task-review",
+        "done_when": "Fixture result is inspectable",
+        "id": "task-review",
+        "priority": 1,
+        "reviewing_by": "code-reviewer-1",
+        "scope": "fixture only",
+        "spec_ref": "spec.md",
+        "status": "REVIEWING_CODE",
+        "time_in_status": "<REL>",
+        "transition_id": "<ID>"
+      },
+      {
+        "age": "<REL>",
+        "attempt_num": 1,
+        "blocked_questions": [
+          "When is the dependency available?"
+        ],
+        "blocked_reason": "Waiting for fixture dependency",
+        "depends_on": [
+          "task-executing"
+        ],
+        "description": "Fixture task-blocked",
+        "done_when": "Fixture result is inspectable",
+        "id": "task-blocked",
+        "priority": 1,
+        "scope": "fixture only",
+        "spec_ref": "spec.md",
+        "status": "BLOCKED",
+        "time_in_status": "<REL>",
+        "transition_id": "<ID>",
+        "waiting_on": {
+          "heads": [
+            {
+              "claimable": false,
+              "id": "task-executing",
+              "reason": "unsatisfied_pending",
+              "status": "IMPLEMENTING_CODE"
+            }
+          ],
+          "unmet": [
+            {
+              "blocking": [
+                "task-executing"
+              ],
+              "dependency": "task-executing",
+              "kind": "unsatisfied_pending"
+            }
+          ]
+        }
+      },
+      {
+        "age": "<REL>",
+        "attempt_num": 1,
+        "description": "Fixture task-approved",
+        "done_when": "Fixture result is inspectable",
+        "id": "task-approved",
+        "priority": 1,
+        "scope": "fixture only",
+        "spec_ref": "spec.md",
+        "status": "ARCHITECTURE_APPROVED",
+        "time_in_status": "<REL>",
+        "transition_id": "<ID>"
+      }
+    ]
+  }
+}

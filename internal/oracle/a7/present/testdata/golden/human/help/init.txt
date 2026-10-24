@@ -1,0 +1,66 @@
+exit 0
+--- stdout
+Initialize a new Liza workspace by creating .liza directory structure,
+generating initial state.yaml, and setting up the integration branch.
+The description argument is required and describes the goal.
+The spec file (default: specs/vision.md) must exist and be fully committed
+before initialization.
+Use --config to provide a pipeline YAML file (defaults to ~/.liza/pipeline.yaml).
+The config is validated and frozen into .liza/pipeline.yaml. Use --entry-point to
+specify which entry-point to use (must be defined in the config).
+Use --branch to set the integration branch name (default: "integration").
+All worktrees branch from and merge back to this branch.
+Use --post-worktree-cmd to specify a shell command that runs after every worktree
+creation (e.g. 'make setup', 'npm install'). This ensures worktrees are
+build/test-ready without hardcoding project-specific tooling into Liza.
+For existing workspaces, use liza config get config.post_worktree_cmd or
+liza config set config.post_worktree_cmd "<command>".
+Use --copy-worktree-env-files to explicitly authorize copying ignored root env
+files into task worktrees before post-worktree setup runs.
+Use --max-instances to cap live agents per non-orchestrator role that does not
+set its own max-instances (default 3). Auto-repair starts agents for claimable
+work up to that cap; idle agents exit after doer_max_wait/reviewer_max_wait.
+For existing workspaces, use liza config set config.max_instances <n>.
+PAIRING MODE: Use agent flags without a description to create only the contract
+symlinks needed for pairing (no .liza/ workspace):
+liza init --claude # activates Claude's global contract
+liza init --claude --codex # activates both global contracts and repo hooks
+liza init --cursor # creates repo AGENTS.md plus dependent setup
+liza init --opencode # activates OpenCode's global contract
+liza init --copilot # activates Copilot's global instructions
+Usage:
+liza init [description] [flags]
+Flags:
+--agent-env-deny stringArray withhold a host variable from agents, their processes and copied env files (repeatable)
+--auto-resume automatically resume at checkpoint and sprint completion
+--branch string integration branch name (default "integration")
+--claude activate the global Claude contract from ~/.liza/CORE.md
+--codex activate the global Codex contract from ~/.liza/CORE.md and configure repo hooks
+--config string path to pipeline YAML config file
+--copilot activate the global GitHub Copilot CLI contract from ~/.liza/CORE.md
+--copy-worktree-env-files copy ignored root env files into worktrees before setup commands
+--cursor create the repo AGENTS.md contract and dependent Claude/Codex project setup
+--default-cli string default CLI for agent spawning (built-in and catalog-backed providers; see 'liza providers list')
+--default-doer-cli string default CLI for doer and orchestrator agent spawning (built-in and catalog-backed providers; see 'liza providers list')
+--default-reviewer-cli string default CLI for reviewer agent spawning (built-in and catalog-backed providers; see 'liza providers list')
+--entry-point string entry-point name: "general-objective", "functional-spec", "technical-spec", or legacy "detailed-spec" in default pipeline (default: auto-classified by orchestrator)
+--gemini activate the global Gemini contract from ~/.liza/CORE.md
+-h, --help help for init
+--max-instances int default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it (default 3)
+--mistral set up ~/.vibe/ for Liza contract
+--no-follow-up run only the entry-point subpipeline by suppressing top-level pipeline transitions
+--opencode activate the global OpenCode contract from ~/.liza/CORE.md
+--pi activate the global Pi contract from ~/.liza/CORE.md and install the pi init-gate extension
+--post-worktree-cmd string shell command to run after worktree creation (e.g. 'make setup')
+--provider stringArray activate provider catalog id (repeatable)
+--scip-search stringArray enable a SCIP language for indexing (repeatable)
+--scip-search-plan stringArray pairing SCIP root override: go=<module-root>, typescript=<cwd>,<project-root>, or python=<cwd>[,<target-only>] (repeatable)
+--spec string path to goal spec file (default "specs/vision.md")
+--validation-execution string "local": assert that the agent CLIs run validation commands locally, enabling declared validation prerequisites
+--yes auto-confirm init prompts, including deletion of displayed existing workspace targets
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

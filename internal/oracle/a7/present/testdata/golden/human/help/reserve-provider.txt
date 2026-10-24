@@ -1,0 +1,35 @@
+exit 0
+--- stdout
+Place an existing writer after a provider's generated work. The task gains a
+provider_reservations entry and stays unclaimable until the provider is
+MERGED with --transition executed and every child it generated there has
+merged, however many outputs the provider authors. A provider that merges
+with no output releases it.
+The task must not have started: its role pair's initial or rejected status
+or BLOCKED, with no assignee or lease. Replan and same-pair replace-task of
+the provider carry the reservation to the successor; cancelling or
+superseding the provider is refused while the reservation is unsatisfied.
+When other writers already select the provider's outputs by index, the
+provider needs max_outputs and those selections must cover every output:
+set the cap in the same call with --provider-max-outputs (tighten-only).
+--release withdraws the placement; it is a policy decision, never a step of
+retiring the provider. A repeated call is a no-op.
+Examples:
+liza reserve-provider vb-cp-0 corr --transition architecture-to-code-plan --reason "Correction lands first"
+liza reserve-provider vb-cp-0 corr --transition architecture-to-code-plan --reason "Placement withdrawn" --release
+Usage:
+liza reserve-provider <task-id> <provider-task-id> --transition <name> --reason <reason> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+-h, --help help for reserve-provider
+--json output result as structured JSON
+--provider-max-outputs int Set or tighten the provider's max_outputs in the same transaction
+--reason string Why the writer is placed (recorded in history)
+--release Withdraw the reservation instead of adding it
+--transition string Per-subtask transition of the provider whose children the task waits for
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

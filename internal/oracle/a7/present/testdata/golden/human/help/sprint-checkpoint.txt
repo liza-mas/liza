@@ -1,0 +1,29 @@
+exit 0
+--- stdout
+Create a checkpoint by setting sprint.status to CHECKPOINT in state.yaml.
+This pauses all agents and generates a sprint summary report with:
+- Current task status and distribution
+- Sprint metrics and progress
+- Active agents
+- Anomalies and circuit breaker status
+The sprint summary is written to .liza/sprint_summary.md.
+Agents will pause at their next check. After reviewing the summary,
+use 'liza resume' to continue the sprint.
+This is useful for:
+- Sprint review meetings
+- Progress assessment
+- Decision points (continue vs pivot)
+- Coordinated team synchronization
+Usage:
+liza sprint-checkpoint [flags]
+Aliases:
+sprint-checkpoint, checkpoint
+Flags:
+-h, --help help for sprint-checkpoint
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

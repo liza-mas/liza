@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+Set the task-level arch_ref of one task whose arch_ref is empty, typically a
+replacement created before replacements inherited it. The task must be in its
+role pair's initial status and never claimed; a non-empty arch_ref is refused.
+--arch-ref must name an artifact on the integration branch and an exact heading
+in it (path#Scope heading), checked the way an architecture output's arch_ref
+is checked; a working-tree file does not count. The repair is recorded as an
+arch_ref_repaired history entry and in the activity log. It changes no status
+and wakes no agent: add an operator note to prompt a blocked consumer's
+reassessment. Identified agent sessions cannot use this command.
+Usage:
+liza repair-arch-ref <task-id> --arch-ref <path#exact Scope heading> --reason <reason> [flags]
+Flags:
+--arch-ref string Integration-branch artifact and exact Scope heading (path#heading)
+-h, --help help for repair-arch-ref
+--json output result as structured JSON
+--reason string Why the arch_ref is being restored (recorded in history)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

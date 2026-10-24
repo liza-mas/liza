@@ -1,0 +1,11 @@
+exit 0
+--- stdout
+task-abandoned
+task-approved
+task-blocked
+task-executing
+task-merged
+task-review
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

@@ -1,0 +1,8 @@
+exit 0
+--- stdout
+architect-1
+code-reviewer-1
+coder-1
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

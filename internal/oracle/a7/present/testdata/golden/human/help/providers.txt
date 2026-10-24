@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Inspect the provider catalog
+Usage:
+liza providers [command]
+Available Commands:
+detect Detect installed catalog providers
+list List catalog providers
+refresh Refresh the provider catalog cache
+Flags:
+-h, --help help for providers
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza providers [command] --help" for more information about a command.
+--- stderr
