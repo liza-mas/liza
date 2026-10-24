@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-fixed-sha",
+      "file": "internal/testhelpers/oracle/fixed_sha_test.go",
+      "assertion": "TestFixedSHAPreservation, TestFixedSHAKinds and TestFixedSHAGoldenComparison: exact 40/64-hex recipe spellings, idempotent and invalid registrations, unchanged volatile normalisation, instance isolation and concurrent readers, literal state/JSON/human bytes, public instance write/live comparison and one-digit SHA mismatch for every kind with no golden writes",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-start-sha",
+      "file": "internal/testhelpers/oracle/fixed_sha_test.go",
+      "assertion": "TestProviderCorrectionA9Start calls runCorrectionAtStart with all three fixed-SHA tests, requiring their execution and success on immutable start 96c9ad69aee983ce2b929dd681b6ba43bf920535 overlaid only with the current harness under ChildEnv and oraclestart",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-normalisation-defaults",
+      "file": "internal/testhelpers/oracle/fixed_sha_test.go",
+      "assertion": "TestFixedSHAGoldenComparison verifies package-level Check/CheckState and fresh instances still normalise the same SHAs; existing normalise_test.go, kind_test.go and golden_test.go retain all default assertions unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-stdlib-harness",
+      "file": "internal/testhelpers/oracle/import_test.go",
+      "assertion": "TestHarnessImportsStdlibOnly scans every harness Go file including KeepSHA and the new fixed-SHA tests",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-sample-regeneration",
+      "file": "internal/oracle/sample/sample_test.go",
+      "assertion": "TestOracleSampleHelp and TestOracleSampleErrorEnvelope exercised by the existing regeneration entry point: both unchanged sample goldens reproduce from the starting baseline",
+      "command_index": 3
+    }
+  ]
+}

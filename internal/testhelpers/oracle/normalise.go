@@ -7,6 +7,7 @@
 package oracle
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -43,6 +44,7 @@ type literalRepl struct{ value, token string }
 type Normaliser struct {
 	dirs     []dirRepl
 	literals []literalRepl
+	keptSHAs map[string]bool
 }
 
 // NewNormaliser returns a normaliser that already maps the system temporary
@@ -91,7 +93,23 @@ func (n *Normaliser) Literal(value, token string) {
 	})
 }
 
-// Text normalises s.
+// KeepSHA preserves this exact spelling during hex-ID normalisation. Only
+// complete 40- or 64-character ASCII hex strings are accepted; an invalid
+// registration leaves the allowlist unchanged. Repeated registration is a no-op.
+// Register before use: concurrent reads are safe, concurrent mutation is not.
+// Earlier Dir and Literal substitutions still apply.
+func (n *Normaliser) KeepSHA(sha string) error {
+	if (len(sha) != 40 && len(sha) != 64) || hexIDRE.FindString(sha) != sha {
+		return errors.New("oracle: SHA must be exactly 40 or 64 ASCII hex characters")
+	}
+	if n.keptSHAs == nil {
+		n.keptSHAs = make(map[string]bool)
+	}
+	n.keptSHAs[sha] = true
+	return nil
+}
+
+// Text normalises s, retaining explicitly registered SHAs verbatim.
 func (n *Normaliser) Text(s string) string {
 	for _, d := range n.dirs {
 		s = replaceDir(s, d.dir, d.token)
@@ -101,7 +119,12 @@ func (n *Normaliser) Text(s string) string {
 	}
 	s = timestampRE.ReplaceAllString(s, TokenTime)
 	s = uuidRE.ReplaceAllString(s, TokenID)
-	return hexIDRE.ReplaceAllString(s, TokenID)
+	return hexIDRE.ReplaceAllStringFunc(s, func(sha string) string {
+		if n.keptSHAs[sha] {
+			return sha
+		}
+		return TokenID
+	})
 }
 
 // SortLines sorts the lines of s, for outputs whose line order is not
