@@ -1,0 +1,14 @@
+exit_code: 0
+--- stdout
+🚨 CIRCUIT BREAKER TRIGGERED — HALT
+Pattern: retry_cluster
+Severity: ARCHITECTURE_FLAW
+Response: HALT
+Evidence class:
+Evidence: 3 retry_loop anomalies with similar error patterns
+Explanation:
+State action: execution halted
+Recovery: run `liza resume` after remediation
+Report written to: <FIXTURE>/.liza/circuit_breaker_report.md
+Rejection RCA gate: no gated tasks
+--- stderr

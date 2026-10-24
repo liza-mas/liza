@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-provenance-3",
+      "file": "internal/oracle/a4/testdata/golden/state/archive-terminal-tasks/success.txt",
+      "assertion": "Filtered regeneration check reproduces every A4 golden from the starting commit, including archive-terminal-tasks/success and its three immutable object payloads",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-budget-3",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleSprintCheckpoint and the complete command-0 suite: measured 6.53 seconds wall time (6.258 seconds package time) on this host, target <=45 seconds; measured with env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp time -p go test -count=1 ./internal/oracle/a4/...; original command 0 is identical without time -p",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary-3",
+      "approved_reference_id": "a4-scope1"
+    },
+    {
+      "obligation_id": "AC-S1",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleSprintCheckpoint/success and /refused: report and local checkpoint timestamps; CHECKPOINT is the only invalid precondition, frozen human reason and JSON internal code",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S2",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOraclePassedPlanCheckpoint/checkpoints and /none: re-executed adapter calls CheckpointPassedPlans, asserts cp-1 or exact no-work sentinel, and compares state plus written summary",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S3",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleUpdateSprintMetrics/success: mixed DRAFT_CODE/MERGED fixture, three approvals, recomputed metrics and suspiciously-high warnings in both output modes",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S4",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleAnalyze/ok and /triggered: no-pattern OK, retry_cluster HALT/TRIGGERED and written circuit-breaker report",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S5",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleAddHumanNote/success and /refused: valid note with operator identity; t9 is the only absent precondition, removal would append a note and exit zero",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S6",
+      "file": "internal/oracle/a4/sprint_test.go",
+      "assertion": "TestOracleSetDiscoveryDisposition/success and /refused: existing disc-1, deferred versus syntactically-valid missing task t9; exact named missing-reference refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S7",
+      "file": "internal/oracle/a4/archive_test.go",
+      "assertion": "TestOracleArchiveTerminalTasks/success: three terminal tasks archived, state references and written object content; success-only because no state refusal exists below discovery (comment beside case)",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-S8",
+      "file": "internal/oracle/a4/archive_test.go",
+      "assertion": "TestOracleArchiveTerminalTasks/restore: committed archived fixture restores three tasks inline and disables archival, retaining objects; success-only per case comment",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-O1",
+      "file": "internal/oracle/a4/operator_test.go",
+      "assertion": "TestOracleOperatorOnly: all nine operator-only operations with well-formed flags and registered orchestrator identity; operator-only text, exit/code and before/after state goldens exclude unrelated refusals",
+      "command_index": 0
+    }
+  ]
+}

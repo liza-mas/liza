@@ -1,0 +1,32 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "iterations_total": 0,
+      "lifecycle_outcomes": {
+        "available": false,
+        "warning": "lifecycle metrics unavailable: no observation window"
+      },
+      "planning_changes": {
+        "daily": [],
+        "missing_created": 0,
+        "unknown_attribution": 0
+      },
+      "review_cycles_total": 3,
+      "review_verdict_approval_rate_percent": 100,
+      "review_verdict_approvals": 3,
+      "review_verdict_count": 3,
+      "review_verdict_rejections": 0,
+      "task_outcome_approval_rate_percent": 100,
+      "task_submitted_for_review_count": 3,
+      "tasks_blocked": 0,
+      "tasks_done": 3,
+      "tasks_in_progress": 0
+    },
+    "warnings": [
+      "⚠️  Review verdict approval rate is 100% (3/3) - suspiciously high",
+      "⚠️  Task outcome approval rate is 100% (3/3) - suspiciously high"
+    ]
+  }
+}

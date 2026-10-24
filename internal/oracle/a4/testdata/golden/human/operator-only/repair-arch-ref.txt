@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: repair-arch-ref is operator-only; agent sessions cannot repair task metadata

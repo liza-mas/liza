@@ -1,0 +1,27 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "classification": "",
+      "evidence": "",
+      "explanation": "",
+      "pattern": "",
+      "rejection_rca": {
+        "currently_gated": 0,
+        "gate_cycles": 0,
+        "max_seconds_to_gate": 0,
+        "median_seconds_to_gate": 0,
+        "resumed_still_open": 0,
+        "resumed_then_regated": 0,
+        "resumed_then_terminal": 0,
+        "tasks_gated": 0,
+        "unrecognized_causes": 0
+      },
+      "report_path": "",
+      "response": "",
+      "severity": "",
+      "triggered": false
+    }
+  }
+}

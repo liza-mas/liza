@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: archive-terminal-tasks: FORBIDDEN (safe_action=stop): archive-terminal-tasks is an operator-only command; agent sessions archive terminal tasks only through authenticated merge maintenance

@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "archived": [
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "batches": 1,
+      "bytes": "<BYTES>"
+    }
+  }
+}

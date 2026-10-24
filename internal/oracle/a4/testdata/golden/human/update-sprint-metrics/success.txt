@@ -1,0 +1,15 @@
+exit_code: 0
+--- stdout
+Sprint metrics updated:
+Tasks done: 3
+Tasks in progress: 0
+Tasks blocked: 0
+Total iterations: 0
+Total review cycles: 3
+Review verdicts: 3 approvals, 0 rejections (100%)
+Task outcomes: 3 submitted, 100% approval rate
+Lifecycle outcomes: unavailable
+Warning: lifecycle metrics unavailable: no observation window
+⚠️ Review verdict approval rate is 100% (3/3) - suspiciously high
+⚠️ Task outcome approval rate is 100% (3/3) - suspiciously high
+--- stderr

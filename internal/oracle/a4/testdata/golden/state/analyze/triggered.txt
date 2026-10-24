@@ -1,0 +1,275 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+  - id: retry-1
+    type: retry_loop
+    task: t1
+    reporter: orchestrator-1
+    timestamp: <INSTANT Z>
+    details: {error_pattern: fixture failure, command: fixture-command, count: 3}
+  - id: retry-2
+    type: retry_loop
+    task: t1
+    reporter: orchestrator-1
+    timestamp: <INSTANT Z>
+    details: {error_pattern: fixture failure, command: fixture-command, count: 3}
+  - id: retry-3
+    type: retry_loop
+    task: t1
+    reporter: orchestrator-1
+    timestamp: <INSTANT Z>
+    details: {error_pattern: fixture failure, command: fixture-command, count: 3}
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: goal-1
+    description: A4 oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <INSTANT Z>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: t1
+      type: coding
+      role_pair: coding-pair
+      description: Fixture t1
+      status: DRAFT_CODE
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      created: <INSTANT Z>
+      history: []
+agents:
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        heartbeat: <INSTANT Z>
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+    - timestamp: <INSTANT Z>
+      task: t1
+      reporter: orchestrator-1
+      type: retry_loop
+      details:
+        command: fixture-command
+        count: 3
+        error_pattern: fixture failure
+      id: retry-1
+    - timestamp: <INSTANT Z>
+      task: t1
+      reporter: orchestrator-1
+      type: retry_loop
+      details:
+        command: fixture-command
+        count: 3
+        error_pattern: fixture failure
+      id: retry-2
+    - timestamp: <INSTANT Z>
+      task: t1
+      reporter: orchestrator-1
+      type: retry_loop
+      details:
+        command: fixture-command
+        count: 3
+        error_pattern: fixture failure
+      id: retry-3
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - t1
+        stretch: []
+    timeline:
+        started: <INSTANT Z>
+        deadline: <INSTANT Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <INSTANT +02:00>
+    status: TRIGGERED
+    current_trigger:
+        timestamp: <INSTANT +02:00>
+        pattern: retry_cluster
+        severity: ARCHITECTURE_FLAW
+        report_file: <FIXTURE>/.liza/circuit_breaker_report.md
+    current_response:
+        timestamp: <INSTANT +02:00>
+        pattern: retry_cluster
+        severity: ARCHITECTURE_FLAW
+        response: HALT
+        classification: ""
+        explanation: ""
+        report_file: <FIXTURE>/.liza/circuit_breaker_report.md
+    history:
+        - timestamp: <INSTANT +02:00>
+          pattern: retry_cluster
+          severity: ARCHITECTURE_FLAW
+          result: TRIGGERED
+          response: HALT
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: CIRCUIT_BREAKER_TRIPPED
+# written files
+## .liza/circuit_breaker_report.md
+# Circuit Breaker Report
+**Analyzed:** <INSTANT +02:00>
+**Pattern:** retry_cluster
+**Severity:** ARCHITECTURE_FLAW
+**Evidence class:**
+**Response:** HALT
+**Explanation:**
+## Evidence
+3 retry_loop anomalies with similar error patterns
+## Response Action
+Circuit breaker triggered and execution halted. Review the explanation. Run `liza resume` after remediation.
+## Anomalies (trimmed)
+1. `retry_loop` at `<INSTANT Z>`
+- task: `t1`
+- reporter: `orchestrator-1`
+2. `retry_loop` at `<INSTANT Z>`
+- task: `t1`
+- reporter: `orchestrator-1`
+3. `retry_loop` at `<INSTANT Z>`
+- task: `t1`
+- reporter: `orchestrator-1`
+## Anomalies (raw)
+```yaml
+- timestamp: <INSTANT Z>
+task: t1
+reporter: orchestrator-1
+type: retry_loop
+details:
+command: fixture-command
+count: 3
+error_pattern: fixture failure
+id: retry-1
+- timestamp: <INSTANT Z>
+task: t1
+reporter: orchestrator-1
+type: retry_loop
+details:
+command: fixture-command
+count: 3
+error_pattern: fixture failure
+id: retry-2
+- timestamp: <INSTANT Z>
+task: t1
+reporter: orchestrator-1
+type: retry_loop
+details:
+command: fixture-command
+count: 3
+error_pattern: fixture failure
+id: retry-3
+```
+## Human Decision Required
+- [ ] Acknowledge report
+- [ ] Confirm severity assessment
+- [ ] Determine remediation
+- [ ] Release checkpoint with decision logged

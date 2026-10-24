@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Operator note recorded for t1 (26 bytes).
+--- stderr

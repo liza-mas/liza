@@ -1,0 +1,27 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "classification": "",
+      "evidence": "3 retry_loop anomalies with similar error patterns",
+      "explanation": "",
+      "pattern": "retry_cluster",
+      "rejection_rca": {
+        "currently_gated": 0,
+        "gate_cycles": 0,
+        "max_seconds_to_gate": 0,
+        "median_seconds_to_gate": 0,
+        "resumed_still_open": 0,
+        "resumed_then_regated": 0,
+        "resumed_then_terminal": 0,
+        "tasks_gated": 0,
+        "unrecognized_causes": 0
+      },
+      "report_path": "<FIXTURE>/.liza/circuit_breaker_report.md",
+      "response": "HALT",
+      "severity": "ARCHITECTURE_FLAW",
+      "triggered": true
+    }
+  }
+}

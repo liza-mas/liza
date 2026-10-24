@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "withdraw-pending is operator-only"
+    },
+    "ok": false,
+    "result": null
+  }
+}

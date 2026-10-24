@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Circuit breaker: OK — no patterns detected
+Rejection RCA gate: no gated tasks
+--- stderr
