@@ -75,6 +75,7 @@
           "make",
           "go",
           "git",
+          "gcc",
           "sh",
           "gofmt",
           "find",
@@ -100,7 +101,8 @@
         "executables": [
           "env",
           "go",
-          "git"
+          "git",
+          "gcc"
         ],
         "env": [
           "HOME",
