@@ -496,17 +496,29 @@ func TestOracleA9SpawnGateHelper(t *testing.T) {
 		return
 	}
 	fmt.Println(spawnLinePrefix + "error: none")
-	// The gate reaps the supervisor itself; the process is gone once signalling it
-	// fails.
-	deadline := time.Now().Add(60 * time.Second)
-	for cmd.Process.Signal(syscall.Signal(0)) == nil {
-		if time.Now().After(deadline) {
-			// The supervisor is detached from this process; stop its whole tree
-			// while the leader is alive, so no child is orphaned.
-			launchKillTree(cmd.Process.Pid)
-			t.Fatal("A9 spawn helper: supervisor exit deadline")
+	// The gate waits on the supervisor itself, so the command's own Wait is spent:
+	// a second Wait on it would race the gate's. A fresh handle on the child waits
+	// for its exit instead, whichever of the two collects the status, and the
+	// process is gone once signalling it fails.
+	exited := make(chan struct{})
+	go func() {
+		defer close(exited)
+		if child, err := os.FindProcess(cmd.Process.Pid); err == nil {
+			_, _ = child.Wait()
 		}
-		time.Sleep(10 * time.Millisecond)
+	}()
+	deadline := time.NewTimer(60 * time.Second)
+	defer deadline.Stop()
+	select {
+	case <-exited:
+	case <-deadline.C:
+		// The supervisor is detached from this process; stop its whole tree
+		// while the leader is alive, so no child is orphaned.
+		launchKillTree(cmd.Process.Pid)
+		t.Fatal("A9 spawn helper: supervisor exit deadline")
+	}
+	if cmd.Process.Signal(syscall.Signal(0)) == nil {
+		t.Fatal("A9 spawn helper: supervisor still signalable after its exit")
 	}
 	fmt.Println(spawnLinePrefix + "exited: true")
 }
