@@ -785,6 +785,27 @@ non-child exit event.
 - Rejected: weakening the orphan check; a ticker or ps poll (D46). Kind: test hygiene. Revert: drop the
   exception.
 
+### D48 — D45 completed: ownership by test isolation, not by process tracking (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T05:23Z. `arm-1-ar-9-cp-0-code-3` reached the high-churn RCA gate (4 rejections; the last
+three on D45 cleanup). Implementations identify "their" descendants by observation (`ps` or `/proc` scans,
+`HOME` in `/proc/<pid>/environ`, periodic trackers). A process that exits or is reparented before it is
+observed escapes, because zombies have no environment. They filter at all because the subreaper is shared by
+the whole test binary, and A9 has `t.Parallel` tests.
+- Ruling (the definitive D43/D45 bar):
+  - Isolation: every A9 test that starts supervisors is a top-level test that does not call
+    `t.Parallel` and runs no parallel subtests. Go never runs such a test concurrently with parallel
+    tests, so at its cleanup every child of the test process belongs to it.
+  - Linux cleanup (in `t.Cleanup` and on deadline and failure paths): with `PR_SET_CHILD_SUBREAPER` set,
+    enumerate `/proc/*/stat` entries whose ppid equals `os.Getpid()`, zombies included, with no
+    environment or ownership filter. Signal each child's process group, then `syscall.Wait4` each with
+    a deadline select (no `time.Sleep`). Repeat the enumeration until no child remains, then assert
+    that none remains.
+  - Elsewhere: D45 best effort.
+  - One shared helper shape: tasks reuse D47's `reap_linux_test.go` and `reap_other_test.go` when they
+    are present on their base, otherwise add them identically.
+- Rejected: further observation-based tracking (racy by construction). Kind: test hygiene. Revert: a
+  reviewed A9 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
