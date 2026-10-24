@@ -16,6 +16,7 @@ func TestOracleA9Registration(t *testing.T) {
 	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
+	requireLeases(t, launch, 3, true)
 	for _, value := range []string{"role: coder", "status: WORKING", "terminal: terminal-1", "provider: claude", "registered_at:", "lease_expires:"} {
 		if !bytes.Contains(launch, []byte(value)) {
 			t.Fatalf("I-01 at-launch entry missing %s", value)
@@ -71,6 +72,7 @@ func TestOracleA9DoerClaim(t *testing.T) {
 	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
+	requireLeases(t, launch, 3, true)
 	for _, value := range []string{"status: IMPLEMENTING_CODE", "assigned_to: coder-1", "current_task: task-1", "operation: claim-task", "base_commit:"} {
 		if !bytes.Contains(launch, []byte(value)) {
 			t.Fatalf("I-04 launch missing %s", value)

@@ -108,6 +108,22 @@ func (p *scenario) listing(t testing.TB) []byte {
 	return []byte(strings.Join(lines, "\n") + "\n")
 }
 
+// missingArtifacts lists the committed runtime-file goldens of a scenario that
+// are absent from the observed artifact names (sorted).
+func missingArtifacts(scenario string, observed map[string]bool) []string {
+	entries, err := os.ReadDir(filepath.Join("testdata", "golden", "state", scenario, "files"))
+	if err != nil {
+		return nil
+	}
+	var missing []string
+	for _, entry := range entries {
+		if !observed[entry.Name()] {
+			missing = append(missing, entry.Name())
+		}
+	}
+	return missing
+}
+
 var fileSafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 func (p *scenario) check(t *testing.T, result invocation) {
@@ -156,6 +172,7 @@ func (p *scenario) check(t *testing.T, result invocation) {
 	}
 	sort.Strings(names)
 	ordinals := map[string]int{}
+	observed := map[string]bool{}
 	for _, name := range names {
 		pattern := a9StampRE.ReplaceAllString(name, "<STAMP>")
 		pattern = a9DateRE.ReplaceAllString(pattern, "<DATE>")
@@ -164,7 +181,14 @@ func (p *scenario) check(t *testing.T, result invocation) {
 		for _, token := range []string{"<STAMP>", "<DATE>", "<HASH>"} {
 			pattern = strings.ReplaceAll(pattern, token, fmt.Sprint(ordinals[pattern]))
 		}
-		pair("files/"+fileSafeRE.ReplaceAllString(pattern, "-"), p.beforeFiles[name], afterFiles[name])
+		safe := fileSafeRE.ReplaceAllString(pattern, "-")
+		observed[safe] = true
+		pair("files/"+safe, p.beforeFiles[name], afterFiles[name])
+	}
+	// A committed runtime-file golden whose artifact the run no longer writes has
+	// no observed side to compare, so its absence is checked here.
+	if missing := missingArtifacts(p.name, observed); len(missing) > 0 {
+		t.Fatalf("A9 %s collect: committed runtime artifacts not produced: %s", p.name, strings.Join(missing, ", "))
 	}
 	var human strings.Builder
 	fmt.Fprintf(&human, "exit_code: %d\n[stdout]\n", result.code)
