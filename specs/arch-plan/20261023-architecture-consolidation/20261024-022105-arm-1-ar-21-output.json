@@ -1,0 +1,16 @@
+[
+  {
+    "desc": "Plan C6 named ops mutations, migrate all external callers, and enforce the boundary with the architecture lint guard",
+    "done_when": "make lint enforces no production mutating Blackboard calls outside ops/db and no external mutation callbacks into ops; agent/db has only the SI-5 residual rationale; affected state effects and oracles pass unchanged, with no added validation.",
+    "scope": "C6 callers in agent, commands and tui; named ops operations; new mutation guard and A9 allowlist rationale; preservation tests, acceptance manifests and affected current code references. Excludes C1-C5, new validation, schema/CLI changes and general query redesign.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-022105-arm-1-ar-21.md#Scope 1: C6 named mutation operations and guard",
+    "rca_required": false,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -timeout 30m ./internal/ops/ ./internal/agent/ ./internal/commands/ ./internal/tui/"
+    ]
+  }
+]
