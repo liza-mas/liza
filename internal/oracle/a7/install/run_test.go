@@ -46,7 +46,9 @@ func (f *fixture) invoke(t *testing.T, label, stdin string, omitStderr bool, exp
 func (f *fixture) checkHuman(t *testing.T, name string) {
 	t.Helper()
 	data := []byte(f.human.String())
-	f.normaliser(data).Check(t, oracle.Human, name+".txt", data)
+	n := f.normaliser(data)
+	data = []byte(normaliseDecoration(n.Text(string(data))))
+	n.Check(t, oracle.Human, name+".txt", data)
 }
 
 func (f *fixture) checkState(t *testing.T, name string, before, after []byte) {

@@ -2,9 +2,45 @@ package install
 
 import (
 	"regexp"
+	"testing"
 
 	"github.com/liza-mas/liza/internal/testhelpers/oracle"
 )
+
+var (
+	boxDrawingLine = regexp.MustCompile(`(?m)^[\x{2500}-\x{257F}]+\r?$`)
+	horizontalRun  = regexp.MustCompile(`[─═━]+`)
+)
+
+// D37: path length changes box width. After harness path normalization, collapse
+// horizontal runs on box-drawing-only lines; preserve all other bytes.
+func normaliseDecoration(text string) string {
+	return boxDrawingLine.ReplaceAllStringFunc(text, func(line string) string {
+		return horizontalRun.ReplaceAllString(line, "<BORDER>")
+	})
+}
+
+func TestDecorationNormalisationPreservesContent(t *testing.T) {
+	cases := []struct {
+		name, input, want string
+	}{
+		{"rounded", "╭────╮\n╰──╯\n", "╭<BORDER>╮\n╰<BORDER>╯\n"},
+		{"double-heavy-mixed", "╔══╗\n┏━━┓\n╚─═━╝", "╔<BORDER>╗\n┏<BORDER>┓\n╚<BORDER>╝"},
+		{"separate-runs", "┌──┐┌───┐\n", "┌<BORDER>┐┌<BORDER>┐\n"},
+		{"vertical-edges", "│┃║\n╭╮╰╯\n", "│┃║\n╭╮╰╯\n"},
+		{"text-and-order", "│ Label: café ─═━ │\nvalue  42\tα\n", "│ Label: café ─═━ │\nvalue  42\tα\n"},
+		{"ascii-and-whitespace", "+---+\n ╭──╮\n╰──╯ \n\n", "+---+\n ╭──╮\n╰──╯ \n\n"},
+		{"line-endings", "╭──╮\r\n│ text ─ │\r\n╰──╯", "╭<BORDER>╮\r\n│ text ─ │\r\n╰<BORDER>╯"},
+		{"invalid-utf8", "╭──\xff╮\n", "╭──\xff╮\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normaliseDecoration(tc.input); got != tc.want {
+				t.Fatalf("decoration content mismatch: got %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 // AC4 masks are selected by identifier syntax, state key or human label. Stable
 // values, timestamps and identifiers in installed artifacts never pass here.
