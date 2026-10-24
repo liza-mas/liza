@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-prepared-project",
+      "file": "internal/testhelpers/oracle/prepared_project_test.go",
+      "assertion": "TestPreparedProjectSequence proves ordered preparation and before/after effects in caller-owned Git project/home/tmp, with failed preparation stopping the driver; TestPreparedProjectIsolation observes independent cases concurrently; TestPreparedProjectInvalidDirectories rejects empty, relative, missing and file-valued project/HOME/TMPDIR before invocation without clearing fixtures",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-prepared-environment",
+      "file": "internal/testhelpers/oracle/prepared_project_test.go",
+      "assertion": "TestPreparedProjectEnvironment proves exact ChildEnv names, explicit empty PATH, fixture extra and stdin, exclusion of a host-only sentinel, policy-name override refusal before spawning, and distinct stdout/stderr/nonzero exit",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-run-defaults",
+      "file": "internal/testhelpers/oracle/cli_test.go",
+      "assertion": "Unchanged TestRunUsesFreshDisposableProjectAndNormalisesIt, TestRunChildEnvironmentIsExactlyThePolicyPlusSuppliedPairs, TestRunReportsExitCode and TestRunRejectsPolicyRedefinition retain the fresh-project defaults and normaliser policy",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-start-project",
+      "file": "internal/testhelpers/oracle/prepared_project_test.go",
+      "assertion": "TestProviderCorrectionA5Start exports immutable start 96c9ad69aee983ce2b929dd681b6ba43bf920535, overlays only the current harness and requires sequence, isolation, environment and invalid-directory tests to execute and pass under oraclestart with ChildEnv",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-stdlib-harness",
+      "file": "internal/testhelpers/oracle/import_test.go",
+      "assertion": "Unchanged TestHarnessImportsStdlibOnly scans every harness Go file including RunInProject, the new tests and preparedprobe fixture",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-sample-regeneration",
+      "file": "internal/oracle/sample/sample_test.go",
+      "assertion": "TestOracleSampleHelp and TestOracleSampleErrorEnvelope selected by the existing regeneration entry point reproduce both unchanged sample goldens from the starting baseline",
+      "command_index": 3
+    }
+  ]
+}
