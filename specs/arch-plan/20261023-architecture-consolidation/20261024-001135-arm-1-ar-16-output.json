@@ -1,0 +1,20 @@
+[
+  {
+    "desc": "C5: make the merge operation's completion handoff timestamp and merged history time persist in UTC, keeping local-offset state loadable",
+    "done_when": "Both values written by the final MERGED transaction are UTC in memory and persist with a Z suffix under a non-UTC local zone; a state and an archived terminal task with local-offset values for both fields load, validate and keep the same instants, and a later state write leaves those values unchanged; focused tests prove each and fail on pre-C5 code; the production diff changes only those two clock readings; no golden changes except one asserting those values; E1 plus ops race pass.",
+    "scope": "The two clock readings in the merge MERGED transaction (wherever Scope 15 placed them), focused tests in internal/ops or internal/db, goldens asserting those two values. Out: every other timestamp (reconciliation path, agent clean-terminal handoff), load/write normalisation, migration, model, schema, rendering, guard data, ADR and chain-serialized doc edits, refactors.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-001135-arm-1-ar-16.md#Scope 1: C5 UTC merge timestamps in the A6 merge path",
+    "rca_required": false,
+    "decomposition": {
+      "owned_modules": [
+        "internal/ops (A6 merge path)"
+      ],
+      "interfaces_consumed": [
+        "SI-3",
+        "A6 merge operation (post-Scope-15)"
+      ],
+      "coverage_notes": "Must; one C-change, one coding unit. Default inheritance holds the code plan and its coding unit on arm-1-ar-15's code plan and coding units, so C5 runs after the whole A6 refactor. Persisted-form proof needs a forced non-UTC local zone in a race-free way (child process with explicit env recommended). Expected golden delta empty (SI-3 masks timestamps)."
+    }
+  }
+]
