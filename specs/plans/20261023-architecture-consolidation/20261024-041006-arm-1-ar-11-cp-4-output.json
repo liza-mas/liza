@@ -95,7 +95,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -209,7 +210,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -323,7 +325,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -437,7 +440,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -551,7 +555,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -665,7 +670,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -779,7 +785,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -893,7 +900,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -1007,7 +1015,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
@@ -1131,7 +1140,8 @@
           "env",
           "go",
           "make",
-          "git"
+          "git",
+          "cc"
         ],
         "env": [
           "HOME",
