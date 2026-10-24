@@ -1,0 +1,49 @@
+[
+  {
+    "desc": "Must: C5 - convert the merge's completion handoff timestamp and merged history time to UTC in the final MERGED transaction, with focused tests pinning UTC and local-offset load compatibility",
+    "done_when": "After every arm-1-ar-15-cp-0 coding child merged, the production diff is exactly the two clock readings converted to UTC in the resolved final-MERGED-transaction function; TestC5MergeTimestampsAreUTCInMemory (in-memory Location()==time.UTC) and TestC5MergeTimestampsPersistWithZUnderNonUTCZone (child process TZ=Etc/GMT-2: new values end in Z, a seeded +02:00 task stays byte-identical and loads equal instants) fail on pre-C5 code and pass; TestC5LocalOffsetMergeTimestampsLoadAndSurviveWrites proves live and archived +02:00 values load with equal instants, validate, and survive a later write; no golden or oracle file changed; the manifest names the resolved function and file; C0-C4 pass.",
+    "scope": "In: the two clock readings in the resolved C5 function (A6 merge final MERGED transaction); new internal/ops/merge_c5_utc_test.go; manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-16-cp-0-c5.json; a golden only if it asserts one of the two values. Out: every other timestamp (deferrals, failures, reconciliation, agent clean-terminal handoff), db/models/statevalidate, load or write normalisation, migration, rendering, guard data, oracle files, ADRs, chain-serialized docs, any refactor, seam or helper.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-001135-arm-1-ar-16.md#Scope 1: C5 UTC merge timestamps in the A6 merge path",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-001135-arm-1-ar-16.md#Scope 1: C5 UTC merge timestamps in the A6 merge path",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-125017-arm-1-ar-16-cp-0.md#Task 1: Make the two merge timestamps UTC",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -run '^TestC5' -v ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -run '^TestC5' -v ./internal/ops/",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": ["env", "make", "go", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": ["env", "make", "go", "git", "bash"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+        "executables": ["env", "go", "git"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      }
+    ]
+  }
+]
