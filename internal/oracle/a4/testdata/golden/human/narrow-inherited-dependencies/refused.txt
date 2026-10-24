@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: DRAFT_CODE
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+Error: narrow inherited dependencies: narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): failed to narrow inherited dependencies: modification function failed: narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): validation failed: producer t1 has no executed per-subtask transition; pass --transition explicitly

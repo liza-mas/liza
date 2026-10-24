@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task t1 must have an unused MERGED reviewed handoff, or be an outputless many-to-one source outside any cohort whose downstream work merged: it is not MERGED"
+    },
+    "ok": false,
+    "result": null
+  }
+}

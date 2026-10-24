@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Plan cp-1: correction cp-1-amend-2 (changed: true)
+--- stderr

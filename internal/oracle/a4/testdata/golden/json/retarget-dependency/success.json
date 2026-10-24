@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "canonical_dependencies": [
+        "t3"
+      ],
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "new_dependencies": [
+        "t3"
+      ],
+      "old_dependency": "t1",
+      "operation": "retarget-dependency",
+      "outcome": "COMPLETED",
+      "repair_request_cleared": false,
+      "safe_action": "continue",
+      "task_id": "t2",
+      "task_status": "DRAFT_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

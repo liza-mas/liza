@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: amend-plan failed: modification function failed: validation failed: replace-pending must name the exact pending correction

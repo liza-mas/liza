@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "amendment requires a live MERGED planning original"
+    },
+    "ok": false,
+    "result": null
+  }
+}

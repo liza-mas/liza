@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-provenance-2",
+      "file": "internal/oracle/a4/testdata/golden/state/amend-plan/apply.txt",
+      "assertion": "Filtered starting-commit regeneration check reproduces every A4 golden, including amendment apply and D35 before/after validation",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-budget-2",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "AC-budget-2: the complete command-0 suite passed in 28.22 seconds wall time (26.818 seconds package time), measured in this worktree on 2026-10-24 with /usr/bin/time around the exact env-i go test command; includes fixture validation and CLI build, within the <=45 second target",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary-2",
+      "approved_reference_id": "a4-scope1"
+    },
+    {
+      "obligation_id": "AC-D1",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleRetargetDependency success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-D2",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleNarrowInheritedDependencies success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-D3",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleApplyDependencyRepair success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-D4",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleRepairSupersededDependencies success/refused, D35 exact validation error before and valid true after; human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-D5",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleDeferProviderDependency success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-D6",
+      "file": "internal/oracle/a4/dependencies_test.go",
+      "assertion": "TestOracleReserveProvider success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L1",
+      "file": "internal/oracle/a4/planning_test.go",
+      "assertion": "TestOracleRepairArchRef success/refused with named precondition and human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L2",
+      "file": "internal/oracle/a4/planning_test.go",
+      "assertion": "TestOraclePlanCheck all five modes and their named refusals",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L3",
+      "file": "internal/oracle/a4/planning_test.go",
+      "assertion": "TestOracleAmendPlan reason, contract, apply, replace-pending and withdraw-pending with named refusals",
+      "command_index": 0
+    }
+  ]
+}

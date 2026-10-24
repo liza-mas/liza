@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+arch_ref set for cp-p: specs/architecture/a.md#Scope 1: One
+--- stderr

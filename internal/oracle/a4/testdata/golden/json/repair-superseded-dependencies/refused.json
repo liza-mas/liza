@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "effects": "none",
+        "operation": "repair-superseded-dependencies",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "t1",
+        "task_status": "DRAFT_CODE",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "repair-superseded-dependencies: INVALID_INPUT (safe_action=correct_input): failed to repair superseded dependencies: modification function failed: repair-superseded-dependencies: INVALID_INPUT (safe_action=correct_input): validation failed: cannot repair dependencies on task t1 in status DRAFT_CODE (must be SUPERSEDED)"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "repair-superseded-dependencies",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "t1",
+      "task_status": "DRAFT_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

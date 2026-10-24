@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: DRAFT_CODE
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+Error: apply dependency repair: apply-dependency-repair: ALREADY_TRANSITIONED (safe_action=stop): failed to apply dependency repair: modification function failed: apply-dependency-repair: ALREADY_TRANSITIONED (safe_action=stop): validation failed: cannot apply dependency repair from task t1 in status DRAFT_CODE (must be BLOCKED)

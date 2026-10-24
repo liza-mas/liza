@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "effects": "none",
+        "operation": "retarget-dependency",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "m1",
+        "task_status": "MERGED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): failed to retarget dependency: modification function failed: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): validation failed: cannot retarget dependencies on terminal task m1 (MERGED): only a MERGED planning task with output can have a replan lineage edge repaired"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "retarget-dependency",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "m1",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

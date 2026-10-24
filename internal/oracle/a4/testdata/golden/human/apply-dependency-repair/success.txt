@@ -1,0 +1,12 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: BLOCKED
+effects: committed
+task_id: b1
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+Applied dependency repair requested by b1
+t2 dependencies: t3
+--- stderr

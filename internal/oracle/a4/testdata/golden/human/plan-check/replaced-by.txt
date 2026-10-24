@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Plan check recorded for cp-1: verdict replaced, class
+Replaced by: cp-c
+--- stderr

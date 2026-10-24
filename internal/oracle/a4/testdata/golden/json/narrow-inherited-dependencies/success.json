@@ -1,0 +1,36 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "children": [
+        {
+          "action": "narrowed",
+          "canonical_dependencies": [
+            "cp-a-code-0"
+          ],
+          "output_index": 0,
+          "removed_dependencies": [
+            "cp-a-code-1"
+          ],
+          "status": "DRAFT_CODE",
+          "task_id": "cp-b-code-0"
+        }
+      ],
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "narrowed": 1,
+      "operation": "narrow-inherited-dependencies",
+      "outcome": "COMPLETED",
+      "producer_id": "cp-b",
+      "safe_action": "continue",
+      "skipped": 0,
+      "task_id": "cp-b",
+      "task_status": "MERGED",
+      "transition": "code-plan-to-coding",
+      "transition_id": "<DIGEST 1>",
+      "unchanged": 0
+    }
+  }
+}

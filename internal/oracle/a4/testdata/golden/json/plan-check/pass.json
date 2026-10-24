@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "action": "pass",
+      "changed": true,
+      "class": "passed",
+      "task_id": "cp-1",
+      "verdict": "passed"
+    }
+  }
+}

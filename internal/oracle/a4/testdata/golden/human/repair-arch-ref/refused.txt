@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: repair arch_ref: modification function failed: validation failed: task cp-q already has arch_ref "specs/architecture/a.md#Scope 1: One"; repair-arch-ref only fills an empty arch_ref
