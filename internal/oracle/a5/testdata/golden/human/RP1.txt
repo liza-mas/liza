@@ -1,0 +1,5 @@
+# exit_code
+0
+# stdout
+Re-affirmed proof identity for task-1: specs/plan.md#Task 1 moved f6cf9c2d -> c7943866
+# stderr

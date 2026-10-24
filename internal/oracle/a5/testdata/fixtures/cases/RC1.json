@@ -1,0 +1,69 @@
+{
+  "id": "RC1",
+  "base": "main",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "planning",
+        "description": "Frozen A5 fixture",
+        "status": "CODING_PLAN_MAIN_TO_REVIEW",
+        "role_pair": "code-planning-main-pair",
+        "priority": 1,
+        "assigned_to": "code-planner-1",
+        "lease_expires": "2099-01-01T00:00:00Z",
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          }
+        ],
+        "review_commit": "{{commit:candidate}}",
+        "reviewing_by": null,
+        "review_lease_expires": null,
+        "handoff_events": [
+          {
+            "timestamp": "2020-01-01T00:00:00Z",
+            "agent": "code-planner-1",
+            "trigger": "submission"
+          }
+        ]
+      }
+    ],
+    "agents": {
+      "code-planner-1": {
+        "provider": "codex"
+      },
+      "code-plan-reviewer-1": {
+        "status": "WAITING",
+        "current_task": null,
+        "provider": "claude"
+      },
+      "code-plan-reviewer-2": {
+        "provider": "claude"
+      }
+    }
+  },
+  "prepare": [],
+  "step": {
+    "agent": "code-plan-reviewer-1",
+    "adapter": "claim",
+    "exit": 0
+  },
+  "modes": [
+    "state"
+  ]
+}

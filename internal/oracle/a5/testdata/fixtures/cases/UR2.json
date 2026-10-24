@@ -1,0 +1,18 @@
+{
+  "id": "UR2",
+  "base": "legacy",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "update-review-commit",
+      "task-1"
+    ],
+    "exit": 1,
+    "contains": "review"
+  },
+  "modes": [
+    "json"
+  ]
+}

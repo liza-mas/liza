@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task task-1 must be in submitted or reviewing state (current: IMPLEMENTING_CODE)"
+    },
+    "ok": false,
+    "result": null
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "SV6",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "stale_generation": true,
+    "agent": "code-reviewer-1",
+    "args": [
+      "submit-verdict",
+      "task-1",
+      "REJECTED",
+      "A5 defect",
+      "--review-commit",
+      "{{commit:candidate}}"
+    ],
+    "exit": 1,
+    "contains": "quarantined"
+  },
+  "modes": [
+    "json",
+    "state"
+  ]
+}

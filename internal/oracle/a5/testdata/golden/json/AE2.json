@@ -1,0 +1,32 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "unknown",
+        "operation": "submit-for-review",
+        "outcome": "STATE_CHANGED",
+        "request_id": "sha:<commit:candidate-failing>",
+        "safe_action": "requery",
+        "task_id": "task-1",
+        "task_status": "IMPLEMENTING_CODE",
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: STATE_CHANGED (safe_action=requery): task task-1 acceptance.execution: acceptance.execution[0] for task task-1: command failed (exit 1): exit status 1 — correct the evidence and submit, or run liza update-review-commit task-1 for a submitted task"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "unknown",
+      "operation": "submit-for-review",
+      "outcome": "STATE_CHANGED",
+      "request_id": "sha:<commit:candidate-failing>",
+      "safe_action": "requery",
+      "task_id": "task-1",
+      "task_status": "IMPLEMENTING_CODE",
+      "transition_id": "<ID>"
+    }
+  }
+}

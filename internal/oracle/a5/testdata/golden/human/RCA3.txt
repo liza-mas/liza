@@ -1,0 +1,15 @@
+# exit_code
+0
+# stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: BLOCKED
+effects: committed
+task_id: task-1
+transition_id: <ID>
+completed_transition_id: <ID>
+Resumed rejection RCA on task-1: recovery_path implementation_correction, restore_mode claimable
+Task stays BLOCKED; restore it with unblock-task in the form restore_mode claimable allows.
+# stderr
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing done_when: task-1
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing spec_ref: task-1

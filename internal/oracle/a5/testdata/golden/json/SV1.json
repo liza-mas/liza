@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "agent_id": "code-reviewer-1",
+      "blocked_reason": "",
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "current_assignee": "coder-1",
+      "effects": "committed",
+      "escalated_to_blocked": false,
+      "new_attempt_triggered": false,
+      "operation": "submit-verdict",
+      "outcome": "COMPLETED",
+      "reason": "A5 defect",
+      "request_id": "verdict-<ID>",
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "CODE_REJECTED",
+      "transition_id": "<ID>",
+      "verdict": "REJECTED"
+    }
+  }
+}

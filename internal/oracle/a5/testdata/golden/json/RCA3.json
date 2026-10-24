@@ -1,0 +1,73 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "effects": "committed",
+      "operation": "resume-rejection-rca",
+      "outcome": "COMPLETED",
+      "rejection_rca": {
+        "contributions": [
+          {
+            "categories": [
+              "product_defect"
+            ],
+            "evidence": [
+              "A5 defect 1"
+            ],
+            "rejection_index": 1
+          },
+          {
+            "categories": [
+              "product_defect"
+            ],
+            "evidence": [
+              "A5 defect 2"
+            ],
+            "rejection_index": 2
+          },
+          {
+            "categories": [
+              "product_defect"
+            ],
+            "evidence": [
+              "A5 defect 3"
+            ],
+            "rejection_index": 3
+          },
+          {
+            "categories": [
+              "product_defect"
+            ],
+            "evidence": [
+              "A5 defect 4"
+            ],
+            "rejection_index": 4
+          }
+        ],
+        "disposition": {
+          "actor": "orchestrator-1",
+          "decided_at": "<TIME>",
+          "lifecycle_version": 2,
+          "recovery_path": "implementation_correction",
+          "restore_mode": "claimable"
+        },
+        "fingerprint": "<ID>",
+        "gated_at": "<TIME>",
+        "gating_commit": "<commit:candidate>",
+        "recorded_at": "<TIME>",
+        "recorded_by": "orchestrator-1",
+        "rejection_count": 4,
+        "schema_version": 1,
+        "summary": "Prior rejections identify product defects.",
+        "threshold": 4
+      },
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "BLOCKED",
+      "transition_id": "<ID>"
+    }
+  }
+}

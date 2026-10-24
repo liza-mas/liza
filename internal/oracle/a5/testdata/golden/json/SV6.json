@@ -1,0 +1,30 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "stale_caller",
+      "details": {
+        "agent_id": "code-reviewer-1",
+        "effects": "committed",
+        "matched": true,
+        "operation": "submit-verdict",
+        "outcome": "STALE_CALLER",
+        "post_merge": false,
+        "quarantined_verdict_id": "qv-<ID>",
+        "safe_action": "stop",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "submit-verdict: STALE_CALLER (safe_action=stop): agent code-reviewer-1 authority rejected: registration changed; stop; evidence saved as quarantined verdict qv-<ID>; an authorized orchestrator can use liza reconcile-verdict to record a judgment"
+    },
+    "ok": false,
+    "result": {
+      "effects": "committed",
+      "operation": "submit-verdict",
+      "outcome": "STALE_CALLER",
+      "safe_action": "stop",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

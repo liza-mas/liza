@@ -1,0 +1,22 @@
+{
+  "id": "SV3",
+  "base": "main",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "code-plan-reviewer-1",
+    "args": [
+      "submit-verdict",
+      "task-1",
+      "APPROVED",
+      "--review-commit",
+      "{{commit:candidate}}"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "state"
+  ]
+}

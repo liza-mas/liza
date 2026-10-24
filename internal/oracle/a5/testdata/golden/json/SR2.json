@@ -1,0 +1,30 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "stale_caller",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "none",
+        "operation": "submit-for-review",
+        "outcome": "STALE_CALLER",
+        "safe_action": "stop",
+        "task_id": "task-1",
+        "task_status": "IMPLEMENTING_CODE",
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: STALE_CALLER (safe_action=stop): validation failed: task task-1 is not assigned to agent coder-2 (currently assigned to: coder-1)"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "none",
+      "operation": "submit-for-review",
+      "outcome": "STALE_CALLER",
+      "safe_action": "stop",
+      "task_id": "task-1",
+      "task_status": "IMPLEMENTING_CODE",
+      "transition_id": "<ID>"
+    }
+  }
+}

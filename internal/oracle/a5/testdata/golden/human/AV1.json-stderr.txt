@@ -1,0 +1,2 @@
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing done_when: task-1
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing spec_ref: task-1

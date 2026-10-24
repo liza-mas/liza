@@ -1,0 +1,9 @@
+# exit_code
+0
+# stdout
+Verdict: RESUBMITTED
+Status: REVIEWING_CODE
+Base commit: <commit:base>
+Review commit: <commit:revised>
+Review cycle: 1
+# stderr

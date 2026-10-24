@@ -1,0 +1,21 @@
+{
+  "id": "RP2",
+  "base": "legacy",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "orchestrator-9",
+    "args": [
+      "reaffirm-proof",
+      "task-1",
+      "identity",
+      "--reason",
+      "A5 proof"
+    ],
+    "exit": 1,
+    "contains": "stale_caller"
+  },
+  "modes": [
+    "json"
+  ]
+}

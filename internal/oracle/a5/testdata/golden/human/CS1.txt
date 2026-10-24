@@ -1,0 +1,5 @@
+# exit_code
+0
+# stdout
+Cleared 1 stale review claim(s)
+# stderr

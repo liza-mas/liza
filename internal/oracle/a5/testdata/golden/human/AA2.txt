@@ -1,0 +1,5 @@
+# exit_code
+0
+# stdout
+Archived 0 acceptance receipts in 0 batches (0 bytes)
+# stderr

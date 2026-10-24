@@ -1,0 +1,29 @@
+{
+  "id": "AE2",
+  "base": "acceptance",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "coder-1",
+    "args": [
+      "submit-for-review",
+      "task-1",
+      "{{commit:candidate-failing}}"
+    ],
+    "exit": 1,
+    "contains": "canonical"
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ],
+  "repository_delta": [
+    {
+      "label": "candidate-failing",
+      "files": {
+        "boundary_test.sh": "#!/bin/sh\nexit 1\n"
+      }
+    }
+  ]
+}

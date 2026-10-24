@@ -1,0 +1,32 @@
+{
+  "id": "AV2",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [
+    {
+      "agent": "code-reviewer-1",
+      "args": [
+        "submit-verdict",
+        "task-1",
+        "APPROVED",
+        "--review-commit",
+        "{{commit:candidate}}"
+      ],
+      "exit": 0,
+      "contains": ""
+    }
+  ],
+  "step": {
+    "agent": "coder-1",
+    "args": [
+      "await-verdict",
+      "task-1"
+    ],
+    "exit": 0,
+    "contains": "APPROVED"
+  },
+  "modes": [
+    "json",
+    "human"
+  ]
+}

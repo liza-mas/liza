@@ -1,0 +1,309 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-SR1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SR1: coder submits a legacy coding task; COMPLETED CODE_TO_REVIEW",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SR2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SR2: non-assignee submit refused with stale_caller; state unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AE1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AE1: strict acceptance contract passes; receipt published at CODE_TO_REVIEW",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AE2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AE2: failing acceptance command refused with state_changed; state unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AE3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AE3: claim-stage content refusal passed to BlockAcceptanceRefusedTask; task BLOCKED",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV1: reviewer REJECTED verdict; CODE_REJECTED with reason",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV2: reviewer APPROVED verdict at quorum 1; CODE_APPROVED",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV3: first of two main-pair approvals; PARTIALLY_APPROVED",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV4",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV4: fourth rejection reaches the high-churn threshold; BLOCKED with rejection_rca gate",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV5",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV5: wrong --review-commit refused INVALID_INPUT; state unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-SV6",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/SV6: stale generation verdict quarantined; finding stored",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AV1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AV1: doer awaits after REJECTED; verdict and guidance",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AV2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AV2: doer awaits after APPROVED; verdict and cleanup guidance",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AV3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AV3: non-submitter await refused; state unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AR1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AR1: reviewer reclaims a resubmission with the default 30-minute lease",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AR2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AR2: await-resubmission on a BLOCKED task reports the abort",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AR3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AR3: non-rejecting reviewer await refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RC1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RC1: different-provider reviewer claims; 30-minute review and agent lease",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RC2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RC2: same-provider claimer refused while a different-provider reviewer is registered; no effect",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RC3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RC3: same-provider claimer claims when no alternative exists",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RC4",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RC4: codex doer, codex-acp claimer claims under the tool-name rule",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RC5",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RC5: claimer takes the candidate not approved by its own provider",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RCA1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RCA1: orchestrator records a valid rejection RCA on the gated task",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RCA2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RCA2: RCA payload with no contribution refused INVALID_INPUT",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RCA3",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RCA3: valid disposition resumes the gated task",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RCA4",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RCA4: resume without a recorded RCA refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-VP1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/VP1: preflight with local policy and pinned session records a passed readiness entry",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-VP2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/VP2: preflight records environment_missing for the absent prerequisite variable",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-UR1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/UR1: operator moves the review boundary to the advanced worktree HEAD",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-UR2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/UR2: update-review-commit on an executing task refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-CS1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/CS1: operator clears one expired review lease",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-CS2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/CS2: operator run with no expired lease reports none",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RV1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RV1: orchestrator disposes the quarantined finding produced by SV6's step",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RV2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RV2: unknown finding ID refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RP1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RP1: orchestrator reaffirms a drifted approved proof against the inspected section",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RP2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RP2: unregistered caller refused with stale_caller",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AA1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AA1: operator archives the terminal task's receipt",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-AA2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/AA2: operator archive with nothing to archive",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RA1",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RA1: operator dry-run audit finds every parent reachable",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-RA2",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5/RA2: operator repair remaps the orphaned parent commits by patch identity",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-inventory",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5Inventory and TestA5GoldenCoverage fix the 40 IDs, their modes and the exact golden set independently of discovery",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-capture",
+      "file": "internal/oracle/a5/capture_test.go",
+      "assertion": "TestA5CaptureForms keeps the stdout document and exit code intact, separates human streams, and TestOracleA5 compares each mode with CheckState pairs",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-preparation",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5Preparation shows a failed preparation fails the case with its index before the snapshot and tested step run",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-entrypoints",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5Entrypoints binds operator and agent steps to their entry, environment names and oracle.RunInProject without a private runner",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-determinism",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5Determinism keeps lease offsets and the default duration, drops free log lines and elapsed text, and pins session variables",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-isolation",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5Isolation shows two materialisations share no directory, marker, HOME or state and keep fixed-recipe commit labels",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-adapters",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5AdapterBoundary requires stdlib and harness imports outside untagged adapter files",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-provenance",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5 executed by the A5-filtered regeneration entry point reproduces every committed golden from the starting commit",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-sensitivity",
+      "file": "internal/oracle/a5/sensitivity_test.go",
+      "assertion": "TestA5GoldenSensitivity alters one golden byte in a scratch clone and requires the live and regeneration checks to fail naming it",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-failure-signals",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5FailureSignals requires missing-golden and differing-golden failures to name the golden path and first differing line",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a5-scope"
+    }
+  ]
+}

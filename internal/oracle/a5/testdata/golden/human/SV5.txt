@@ -1,0 +1,9 @@
+# exit_code
+1
+# stdout
+# stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: UNKNOWN
+effects: none
+Error: submit verdict: submit-verdict: INVALID_INPUT (safe_action=correct_input): validation failed: review-commit does not match the current task review boundary; re-read and review the submitted commit

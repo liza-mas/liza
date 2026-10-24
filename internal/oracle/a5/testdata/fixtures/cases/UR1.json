@@ -1,0 +1,28 @@
+{
+  "id": "UR1",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "update-review-commit",
+      "task-1"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ],
+  "repository_delta": [
+    {
+      "label": "advanced",
+      "files": {
+        "feature.go": "package fixture\n// advanced candidate\n"
+      }
+    }
+  ]
+}

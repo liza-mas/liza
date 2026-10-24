@@ -1,0 +1,5 @@
+# exit_code
+0
+# stdout
+No orphaned acceptance evidence: every merged planning parent is reachable from integration.
+# stderr
