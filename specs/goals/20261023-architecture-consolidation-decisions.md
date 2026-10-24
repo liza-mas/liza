@@ -753,6 +753,23 @@ providers in a detached group, so they leave the supervisor's group.
   editing the merged kit from two concurrent tasks (writer conflict). Kind: test hygiene. Revert:
   a reviewed A9 correction.
 
+### D46 — Remove the time.Sleep calls merged by A9 oracle rows; the sleep budget stays (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T05:04Z. `deferred-validation-2-1-correction-plan-code-0` (the D41 fix; its 20x race
+proof passed) blocked at admission because `make test` fails `internal/testguard` `TestSleepUsageBudget`
+(`time.Sleep()` budget 16, got 17). Merged A9 rows added three sleeps: `internal/oracle/a9/launch_test.go:509`
+and `:742` (`arm-1-ar-9-cp-0-code-4`), and `internal/oracle/a9/review_test.go:212` (`arm-1-ar-9-cp-0-code-2`).
+They merged because `make test` was recorded known_red (D-16) while the flake fix was pending, so the
+guard did not run on their admission.
+- Ruling: the budget is a ratchet and stays at 16. The D41 task receives a bounded scope exception for
+  those two files. It replaces the three sleeps with synchronisation that uses no `time.Sleep`: wait on
+  the child's exit (`cmd.Wait` in a goroutine with a deadline select) for the process loops, and await an
+  observable event (the claim attempt's state or log record) instead of the 1 s dwell before the absence
+  assertion. Assertions, scenarios, goldens and every other file are unchanged. A ticker or `time.After`
+  loop that merely renames the sleep does not satisfy the ruling.
+- Rejected: raising `maxSleepCallsInTests` (defeats the ratchet); a separate task (the D41 task is
+  idle on exactly this and no other writer touches these files). Kind: test hygiene. Revert: drop
+  the exception.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
