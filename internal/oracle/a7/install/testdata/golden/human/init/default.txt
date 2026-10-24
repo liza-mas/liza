@@ -90,7 +90,7 @@ Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
 <HOME>/.liza/support-docs/USAGE_PAIRING.md
 <HOME>/.liza/support-docs/how-to-produce-a-goal.md
 <HOME>/.liza/pipeline.yaml (pipeline config)
-╭───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭<BORDER>╮
 │ │
 │ Liza global setup complete │
 │ │
@@ -100,14 +100,14 @@ Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
 │ 2. Enable Liza in a project: │
 │ cd your-project && liza init --claude │
 │ │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╰<BORDER>╯
 --- stderr
 --- invocation init
 exit 0
 --- stdout
 Liza initialized at <PROJECT>/.liza
 Integration branch: integration
-╭──────────────────────────────────────────────────────────────────────────╮
+╭<BORDER>╮
 │ │
 │ Liza workspace initialized │
 │ │
@@ -116,7 +116,7 @@ Integration branch: integration
 │ 2. Run the TUI: liza tui │
 │ 3. Spawn agents: press [s] to spawn an orchestrator and workers │
 │ │
-╰──────────────────────────────────────────────────────────────────────────╯
+╰<BORDER>╯
 --- stderr
 ⚠️ No --post-worktree-cmd set, and auto-detection found no Node.js project layout.
 Task worktrees are fresh checkouts: no installed dependencies, no build artifacts. Agent builds and tests can fail for environment reasons and burn iterations.

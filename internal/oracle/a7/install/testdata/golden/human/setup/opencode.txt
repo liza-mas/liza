@@ -93,7 +93,7 @@ Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
 <HOME>/.liza/pipeline.yaml (pipeline config)
 Some agents require manual configuration.
 See: https://github.com/liza-mas/liza/blob/main/GETTING_STARTED.md
-╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭<BORDER>╮
 │ │
 │ Liza global setup complete │
 │ │
@@ -103,5 +103,5 @@ See: https://github.com/liza-mas/liza/blob/main/GETTING_STARTED.md
 │ 2. Enable Liza in a project: │
 │ cd your-project && liza init --claude │
 │ │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╰<BORDER>╯
 --- stderr
