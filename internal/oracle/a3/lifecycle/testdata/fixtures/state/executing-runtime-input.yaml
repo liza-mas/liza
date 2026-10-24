@@ -1,0 +1,100 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: Lifecycle oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: Lifecycle oracle task
+    done_when: Lifecycle oracle complete
+    status: IMPLEMENTING_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    assigned_to: coder-1
+    base_commit: '{{COMMIT:base}}'
+    worktree: .worktrees/task-1
+    lease_expires: 2099-01-01T00:00:00Z
+    validation: [oracle-validation]
+    runtime_inputs:
+      - id: tok
+        commands: [oracle-validation]
+        recipe: project.tok
+        consumption: single_use
+        env: [TOK]
+    history: []
+agents:
+  coder-1:
+    role: coder
+    status: WORKING
+    generation: gen-1
+    current_task: task-1
+    lease_expires: 2099-01-01T00:00:00Z
+    heartbeat: 2099-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: '{{LIVE_PID}}'
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    lease_expires: 2099-01-01T00:00:00Z
+    heartbeat: 2099-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: '{{LIVE_PID}}'
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  history: []
+config:
+  terminal_task_archival: true
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  max_global_integration_generations: 3
+  max_instances: 3
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  doer_max_wait: 600
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 18000
+  reviewer_poll_interval: 30
+  reviewer_max_wait: 600
+  agent_progress_timeout: 1800
+  integration_branch: integration
+  mode: RUNNING
+  auto_resume: false
+  no_follow_up: false

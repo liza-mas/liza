@@ -1,0 +1,16 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: DRAFT_CODE
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+Recovered task task-1
+In state: yes
+Agent: coder-1 (coder)
+Claim released: yes
+Worktree preserved: yes
+Agent recovered: yes
+stderr:

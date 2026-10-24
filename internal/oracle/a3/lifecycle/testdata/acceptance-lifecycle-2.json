@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-L8",
+      "file": "internal/oracle/a3/lifecycle/assess_blocked_test.go",
+      "assertion": "TestOracleAssessBlocked: registered live orchestrator; blocked success versus valid executing fixture refusing with already_transitioned and IMPLEMENTING_CODE. Exact JSON/human/state goldens distinguish the BLOCKED precondition from unrelated failures",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L9",
+      "file": "internal/oracle/a3/lifecycle/assess_hypothesis_exhausted_test.go",
+      "assertion": "TestOracleAssessHypothesisExhausted: valid blocked fixtures differ by one versus two failed_by entries; refusal golden names the 2+ threshold and has 1, while success records assessment. JSON/human/state equality cannot pass on another refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L10",
+      "file": "internal/oracle/a3/lifecycle/unblock_task_test.go",
+      "assertion": "TestOracleUnblockTask: operator unblocks blocked task; valid executing fixture refuses with already_transitioned and IMPLEMENTING_CODE. JSON/human/state goldens guard the BLOCKED precondition without a caller-authority failure",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L11",
+      "file": "internal/oracle/a3/lifecycle/release_blocked_chain_test.go",
+      "assertion": "TestOracleReleaseBlockedChain: valid capped lineage releases; valid blocked fixture with no recoveries refuses with 0 of 2 blocked recoveries. JSON/human/state goldens distinguish the recovery-cap precondition from malformed lineage",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L12",
+      "file": "internal/oracle/a3/lifecycle/recover_task_test.go",
+      "assertion": "TestOracleRecoverTask: matching executing fixtures with dead versus test-process PID; no --force. Exact refusal names the live PID and still running; JSON/human/state goldens and Git effects guard process-liveness refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L13",
+      "file": "internal/oracle/a3/lifecycle/recover_agent_test.go",
+      "assertion": "TestOracleRecoverAgent: matching executing fixtures with dead versus test-process PID; no --force. Exact refusal names the live PID and still running; JSON/human/state goldens and Git effects guard process-liveness refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L14",
+      "file": "internal/oracle/a3/lifecycle/provision_test.go",
+      "assertion": "TestOracleProvision: same valid executing-runtime-input fixture and synthetic envelope; declared tok succeeds with fresh HOME, undeclared nope refuses with declares no runtime input nope. JSON/human/state goldens distinguish input declaration from file or key failures; TestLifecycleRuntimeIdentityMask preserves full-key/prefix equality and stable or undeclared digits",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-L15",
+      "file": "internal/oracle/a3/lifecycle/repair_doer_ownership_test.go",
+      "assertion": "TestOracleRepairDoerOwnership: dead-PID doer repaired by validate --repair --json; state-only golden records exit",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-validate-fixtures-2",
+      "file": "internal/oracle/a3/lifecycle/fixture_test.go",
+      "assertion": "buildFixture validates every Task 2 fixture with validate --json, asserting valid true and byte-unchanged state, against starting-commit binary in regeneration",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-reproduce-2",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "Check mode filtered to ./internal/oracle/a3/lifecycle/... reproduces every committed golden from the starting commit with ok H1",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-live-2",
+      "file": "internal/oracle/a3/lifecycle/case_test.go",
+      "assertion": "runCases/runCase compare all L8-L15 live command surfaces under make test; human final states equal JSON final states",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-additive-2",
+      "approved_reference_id": "a3-scope1"
+    }
+  ]
+}

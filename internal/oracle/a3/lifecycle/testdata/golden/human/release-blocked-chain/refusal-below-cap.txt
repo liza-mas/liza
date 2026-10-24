@@ -1,0 +1,4 @@
+exit 1
+stdout:
+stderr:
+Error: release blocked chain: modification function failed: validation failed: task task-1 is not at the blocked-recovery cap (0 of 2 blocked recoveries in lineage task-1); agents can already replace it

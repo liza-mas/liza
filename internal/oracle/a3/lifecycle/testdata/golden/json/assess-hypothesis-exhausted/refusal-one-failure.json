@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "assess-hypothesis-exhausted",
+            "outcome": "INVALID_INPUT",
+            "safe_action": "correct_input",
+            "task_id": "task-1",
+            "task_status": "BLOCKED",
+            "transition_id": "<id-1>"
+          },
+          "message": "assess-hypothesis-exhausted: INVALID_INPUT (safe_action=correct_input): failed to assess hypothesis-exhausted task: modification function failed: assess-hypothesis-exhausted: INVALID_INPUT (safe_action=correct_input): validation failed: task must have 2+ entries in failed_by to assess as hypothesis-exhausted, has 1"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "assess-hypothesis-exhausted",
+          "outcome": "INVALID_INPUT",
+          "safe_action": "correct_input",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

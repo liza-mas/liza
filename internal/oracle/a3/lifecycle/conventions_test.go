@@ -109,8 +109,8 @@ func TestLifecycleIdentifierMask(t *testing.T) {
 	if m.text(stable) != "<hex:"+strings.TrimSuffix(strings.Repeat("bbbbbbbb.", 8), ".")+">" {
 		t.Fatal("stable hex digits changed")
 	}
-	if m.text("12345 912345 123456") != "<live-pid> 912345 123456" {
-		t.Fatal("PID masking must use whole words")
+	if m.text("PID 12345 PID 912345 PID 123456 12345") != "PID <live-pid> PID 912345 PID 123456 12345" {
+		t.Fatal("PID masking must use labelled whole words")
 	}
 	textMask := newMask(time.Now(), nil, nil, 12345)
 	textMask.discover(`key_id: 0123456789abcdef`, `transition_id: `+x)
@@ -123,6 +123,108 @@ func TestLifecyclePathMask(t *testing.T) {
 	m := newMask(time.Now(), nil, map[string]string{"/scratch/project": "<PROJECT>", "/scratch/project/home": "<HOME>", "/scratch/tmp": "<TMP>"}, 12345)
 	if got := m.text("/scratch/project/home/key /scratch/project/file /scratch/tmp/input"); got != "<HOME>/key <PROJECT>/file <TMP>/input" {
 		t.Fatal("path replacement lost longest-first directory identities")
+	}
+}
+
+func TestLifecyclePIDMask(t *testing.T) {
+	// D38: PID 60 collides with the fixed heartbeat interval. Only PID
+	// fields and the starting CLI's labelled recovery messages are volatile.
+	m := newMask(time.Now(), nil, nil, 60)
+	t.Run("state", func(t *testing.T) {
+		input := "agents:\n  coder-1:\n    pid: 60\n  dead:\n    pid: 99999999\nconfig:\n  heartbeat_interval: 60\nvalue: 60\n"
+		want := "agents:\n  coder-1:\n    pid: <live-pid>\n  dead:\n    pid: 99999999\nconfig:\n  heartbeat_interval: 60\nvalue: 60\n"
+		if m.text(input) != want {
+			t.Fatal("PID field normalization changed fixed state values")
+		}
+	})
+	t.Run("human", func(t *testing.T) {
+		input := "coder agent coder-1 (PID 60) still running; agent coder-1 is still running with PID 60, use --force to recover\n60 160 600 heartbeat_interval: 60 PID 600\n"
+		want := "coder agent coder-1 (PID <live-pid>) still running; agent coder-1 is still running with PID <live-pid>, use --force to recover\n60 160 600 heartbeat_interval: 60 PID 600\n"
+		if m.text(input) != want {
+			t.Fatal("labelled PID normalization changed unlabelled or longer numbers")
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		input := map[string]any{
+			"agent":              map[string]any{"pid": json.Number("60")},
+			"dead":               map[string]any{"pid": json.Number("99999999")},
+			"heartbeat_interval": json.Number("60"),
+			"values":             []any{json.Number("60"), "60", "heartbeat_interval: 60"},
+			"message":            "coder agent coder-1 (PID 60) still running",
+		}
+		want := map[string]any{
+			"agent":              map[string]any{"pid": "<live-pid>"},
+			"dead":               map[string]any{"pid": json.Number("99999999")},
+			"heartbeat_interval": json.Number("60"),
+			"values":             []any{json.Number("60"), "60", "heartbeat_interval: 60"},
+			"message":            "coder agent coder-1 (PID <live-pid>) still running",
+		}
+		if !reflect.DeepEqual(m.document(input), want) {
+			t.Fatal("JSON PID normalization changed a fixed number or string")
+		}
+	})
+}
+
+func TestLifecycleRuntimeIdentityMask(t *testing.T) {
+	base := strings.Repeat("e", 40)
+	stable := strings.Repeat("b", 64)
+	unknown := strings.Repeat("d", 64)
+	hexToken := func(value string) string {
+		var chunks []string
+		for i := 0; i < len(value); i += 8 {
+			chunks = append(chunks, value[i:min(i+8, len(value))])
+		}
+		return "<hex:" + strings.Join(chunks, ".") + ">"
+	}
+	for _, mode := range []string{"json", "human", "named-json-only"} {
+		t.Run(mode, func(t *testing.T) {
+			// Different runs have different keyed identities. Only JSON names
+			// instance_id; human mode must discover it from the state ledger.
+			id := strings.Repeat("a", 64)
+			if mode == "human" {
+				id = strings.Repeat("c", 64)
+			}
+			for _, indent := range []string{"  ", "    "} {
+				ledger := "runtime_inputs:\n" + indent + id + ":\n" + indent + "  key_id: 0123456789abcdef\n"
+				m := newMask(time.Now(), map[string]string{"base": base}, nil, 12345)
+				if mode != "named-json-only" {
+					m.discover(ledger)
+				}
+				if mode != "human" {
+					m.discover(`{"instance_id":"` + id + `"}`)
+				}
+				// Prefix first must allocate the same token as the full map key.
+				if got := m.text(id[:16] + " " + id + " " + id[:16]); got != "<id-1> <id-1> <id-1>" {
+					t.Fatal("runtime full identity and displayed prefix lost equality")
+				}
+				m.discover(ledger) // Also register the key_id for the state check.
+				want := "runtime_inputs:\n" + indent + "<id-1>:\n" + indent + "  key_id: <id-2>\n"
+				if m.text(ledger) != want {
+					t.Fatal("runtime ledger masking depends on output mode")
+				}
+				if m.text(base+" "+stable+" "+unknown+" "+unknown[:16]) != "<commit:base> "+hexToken(stable)+" "+hexToken(unknown)+" "+unknown[:16] {
+					t.Fatal("runtime masking changed a fixture commit, stable digest or undeclared identifier")
+				}
+				fullFirst := newMask(time.Now(), nil, nil, 12345)
+				fullFirst.discover(ledger)
+				if fullFirst.text(id+" "+id[:16]) != "<id-1> <id-1>" {
+					t.Fatal("runtime prefix allocated a second token after full identity")
+				}
+			}
+		})
+	}
+	// A hex-shaped key outside the root ledger, including task declarations,
+	// is not evidence of a volatile runtime instance.
+	for _, source := range []string{
+		"other:\n  " + unknown + ":\n    state: available\n",
+		"tasks:\n  - runtime_inputs:\n      " + unknown + ":\n        state: available\n",
+		"runtime_inputs:\n  " + strings.Repeat("a", 64) + ":\n    metadata:\n      " + unknown + ": value\nother:\n  " + stable + ":\n",
+	} {
+		m := newMask(time.Now(), nil, nil, 12345)
+		m.discover(source)
+		if m.text(unknown+" "+stable) != hexToken(unknown)+" "+hexToken(stable) {
+			t.Fatal("non-ledger key declared volatile")
+		}
 	}
 }
 
