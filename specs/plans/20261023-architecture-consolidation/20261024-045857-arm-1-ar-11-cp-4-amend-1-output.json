@@ -1,0 +1,1162 @@
+[
+  {
+    "desc": "Must: type SCIP language carriers and route index feature gates through envgate",
+    "done_when": "W1 carriers and indexer keys use the owning language type; all three duplicate truthy parsers and their callers are migrated. Language planning, unknown-input and envgate tests pass; index artifact and CLI oracles are unchanged.",
+    "scope": "SCIP plan/result language fields, pairingindex adopters, scipsearch/semble/stacklit truthiness and all affected callers/test doubles/oracle adapters; colocated tests and indexes acceptance manifest. Persisted language configuration stays string; no refresh-policy changes.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 1: Type repository index vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/scipsearch/ ./internal/pairingindex/ ./internal/semble/ ./internal/stacklit/ ./internal/functionalclusters/ ./internal/commands/ ./internal/agent/ ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/scipsearch/ ./internal/pairingindex/ ./internal/semble/ ./internal/stacklit/ ./internal/functionalclusters/ ./internal/commands/ ./internal/agent/ ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type provider backend and prompt transport carriers",
+    "done_when": "Provider backend, Runtime prompt transport and runtimeToolConfig backend use W2/W3. Catalog validation and projection tests preserve accepted/unknown behavior and persisted strings; provider oracles pass unchanged.",
+    "scope": "internal/providers catalog/types, validation and runtime projection split files, their tests, exact caller/conformance changes and providers acceptance manifest. Excludes A9 adoption and retyping models.AgentToolConfig.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 2: Type provider launch vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./cmd/liza/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/providers/ ./cmd/liza/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type toolchain configure modes and package-manager dispatch",
+    "done_when": "Configure mode normalization and package-manager selection use W4/W5; existing default, refusal, manager preference and package fallback tests pass with unchanged command/environment output and toolchain oracles.",
+    "scope": "internal/toolchain/configure.go and install.go, local tests, cmd/liza/cmd_toolchain.go conversions and toolchain acceptance manifest. Generic command names and package catalog keys remain strings.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 3: Type toolchain selection vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolchain/ ./cmd/liza/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolchain/ ./cmd/liza/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type updater channel carriers",
+    "done_when": "Updater Config and preferences channels use W6; selection precedence, invalid channels and stored preference bytes remain unchanged under updater tests and the settings-only oracle.",
+    "scope": "internal/updater channel declarations and carriers across Scope 4 split files, tests, cmd/liza/main.go conversions and updater acceptance manifest. No real install/update or new configuration.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 4: Type updater channel vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/updater/ ./cmd/liza/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/updater/ ./cmd/liza/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type native hook events and handled tool names",
+    "done_when": "Claude and Codex event/tool carriers use W7/W8; accepted events, unsupported events, unknown tool pass-through and native permission behavior are unchanged under focused tests and hook oracles.",
+    "scope": "internal/toolresult Claude/Codex hook files and tests, exact cmd/liza hook-ingress conversions, oracle call-site adapters and hooks acceptance manifest. Result metadata and other non-A2 carriers stay strings.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 5: Type native hook vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolresult/ ./cmd/liza/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolresult/ ./cmd/liza/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type all ten handled ACP methods without changing open routing",
+    "done_when": "fromHost, fromAgent and terminalCall use W9 for all ten handled methods. Focused tests preserve responses, unknown forwarding, terminal-prefix routing, check order and wire error mapping; C-13 passes unchanged.",
+    "scope": "internal/toolresultacp/proxy.go, local method declarations and focused proxy/terminal tests, ACP acceptance manifest. No protocol allowlist, permission or cancellation-policy change.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 6: Type ACP method dispatch",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolresultacp/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/toolresultacp/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type validation-preflight diagnostic codes",
+    "done_when": "Error.Code uses W10 including every currently accepted code and prerequisite_failed; known/unknown diagnostic formatting and errors.Is behavior remain unchanged under preflight tests.",
+    "scope": "internal/sessionvalidation code declarations, producers and tests; exact external Error construction/conformance edits in agent/ops; preflight acceptance manifest. No prerequisite or validation-policy changes.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 7: Type preflight error vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/sessionvalidation/ ./internal/agent/ ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/sessionvalidation/ ./internal/agent/ ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: type Git object and batch-status query records",
+    "done_when": "W11 owns object/status values in batch/query records; blob/commit queries and missing/submodule/error paths keep their existing results and refusal messages under disposable-repository tests.",
+    "scope": "internal/git/batch.go and query.go, typed record consumers and tests, exact call-site conversions and git acceptance manifest. No Git command, locking, persistence or non-A2 API redesign.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 8: Type Git object query vocabulary",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/git/ ./internal/ops/ ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/git/ ./internal/ops/ ./internal/agent/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  },
+  {
+    "desc": "Must: complete A2 existing-vocabulary and named-value adoption",
+    "done_when": "A reviewed A2 sweep leaves no W-set control-flow literals outside declarations, adopts existing W12/A1 vocabulary where applicable and names remaining magic values without changing them; focused value tests, guards and live oracles pass.",
+    "scope": "All A2 production packages listed by arch-areas, their colocated tests and values acceptance manifest; necessary call-site-only conversions under X2. Excludes non-A2 adoption, new configuration, new packages, shims and guard weakening.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 9: Complete A2 named-value adoption",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/git/ ./internal/gitenv/ ./internal/gitbash/ ./internal/worktreeexclude/ ./internal/subprocess/ ./internal/procscan/ ./internal/secretmask/ ./internal/toolresult/ ./internal/toolresultacp/ ./internal/sessionvalidation/ ./internal/precommit/ ./internal/projectdetect/ ./internal/initcheck/ ./internal/codexconfig/ ./internal/bash-policy-cli/ ./internal/providers/ ./internal/embedded/ ./internal/brandrender/ ./internal/scipsearch/ ./internal/stacklit/ ./internal/semble/ ./internal/functionalclusters/ ./internal/pairingindex/ ./internal/toolchain/ ./internal/updater/ ./internal/termutil/ ./internal/commands/ ./internal/agent/ ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/git/ ./internal/gitenv/ ./internal/gitbash/ ./internal/worktreeexclude/ ./internal/subprocess/ ./internal/procscan/ ./internal/secretmask/ ./internal/toolresult/ ./internal/toolresultacp/ ./internal/sessionvalidation/ ./internal/precommit/ ./internal/projectdetect/ ./internal/initcheck/ ./internal/codexconfig/ ./internal/bash-policy-cli/ ./internal/providers/ ./internal/embedded/ ./internal/brandrender/ ./internal/scipsearch/ ./internal/stacklit/ ./internal/semble/ ./internal/functionalclusters/ ./internal/pairingindex/ ./internal/toolchain/ ./internal/updater/ ./internal/termutil/ ./internal/commands/ ./internal/agent/ ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "depends_on": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+    ]
+  },
+  {
+    "desc": "Must: record A2 vocabulary ownership in an ADR",
+    "done_when": "One next-free ADR and its index row document the approved W-table placement, persisted-string conversions, envgate ownership and BC2 embedded-file placement, with no new decision or implementation claim.",
+    "scope": "One new specs/architecture/ADR document, ADR/README.md index row and adr acceptance manifest. No historical ADR, registry, overview, runtime source or behavioral test changes.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-195624-arm-1-ar-11.md#Scope 5: A2 typed vocabulary and named values",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-041006-arm-1-ar-11-cp-4.md#Task 10: Record A2 vocabulary ownership",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "go",
+          "make",
+          "git",
+          "cc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  }
+]
