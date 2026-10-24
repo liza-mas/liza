@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -175,12 +176,18 @@ func TestGoldenStorageNamesAreCollisionSafe(t *testing.T) {
 	expectFailure(t, func(tb testing.TB) { compareGolden(tb, root, false, Artifact, logical, literalBytes) })
 	expectFailure(t, func(tb testing.TB) { compareGolden(tb, root, false, Artifact, literal, logicalBytes) })
 
-	dir := filepath.Join(root, "testdata", "golden", "artifact")
-	if _, err := os.Stat(filepath.Join(dir, logical)); !os.IsNotExist(err) {
-		t.Errorf("a write landed at the raw logical name %q (stat error: %v)", logical, err)
+	// Listing the directory proves no raw-name entry exists without asking the
+	// OS to stat an invalid Windows name.
+	entries, err := os.ReadDir(filepath.Join(root, "testdata", "golden", "artifact"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if files := readTree(t, root); len(files) != 2 {
-		t.Errorf("want exactly two stored goldens, got %v", files)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if want := []string{"%253CID%253E.txt", "%3CID%3E.txt"}; !slices.Equal(names, want) {
+		t.Errorf("stored golden entries = %q, want exactly %q", names, want)
 	}
 }
 
