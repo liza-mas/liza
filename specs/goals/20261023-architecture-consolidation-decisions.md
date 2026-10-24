@@ -976,6 +976,22 @@ to exit 0 (`internal/testhelpers/oracle/cmd/regen/materialise.go`, `regenerate.g
   provenance).
 - Kind: oracle provenance (D24 family). Revert: C3 keeps the old assertion and the golden (the C change becomes unprovable).
 
+### D57 — D53 extended: the A1 CLI oracle (D31 git-only PATH) is excluded on Windows (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T18:29Z. `d53-oracle-portability-followup-plan` blocked AWAITING HUMAN at 18:27Z: on Windows every
+`internal/oracle/a1/cli` case fails with "failed to detect project root" (run 40115874515, job 120936918717). The D31 isolation
+places a symlink named `git.exe` (`isolation_test.go:17-26`, `helpers_test.go:61`) in a git-only PATH, and the fixture requires it
+to be a symlink. Making it launch on Windows was not proven: the reviewer rejected a `git.cmd` shim, and Git for Windows' launcher
+locates its installation from its own path. The cause is plausible but unproven.
+- Ruling: under the D53 scoping principle (host-specific harness techniques are scoped, not ported), the `internal/oracle/a1/cli`
+  package gets a `//go:build !windows` constraint, giving the D31 isolation technique as the reason. It keeps running on Linux and
+  macOS, where it passes (macOS green in run 40115874515). Windows CLI behaviour stays covered by the white-box suites, which pass
+  on the Windows shards. No assertion, fixture or golden changes.
+- The follow-up correction fixes the A5 path-separator expectations, the missing `state/VP2.state.yaml` and the ops
+  `TestSubmitProgressRepeatsWhileQueuedAndRunning` timing test, and applies this constraint. No Windows launch capture is needed.
+- Rejected: a Windows launch-capture cycle (a diagnostic branch, outward push and extra CI rounds for a test-harness technique); weakening the
+  D31 symlink assertion on Windows (an assertion change outside a C task).
+- Kind: proof scope (D53 family). Revert: port the D31 isolation to Windows and drop the constraint.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
