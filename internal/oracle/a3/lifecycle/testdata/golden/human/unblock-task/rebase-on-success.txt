@@ -1,0 +1,12 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: DRAFT_CODE
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+Task task-1 unblocked: BLOCKED -> DRAFT_CODE, claimable
+Rebased task-1: <commit:base> -> <commit:integration> onto integration (<commit:integration>)
+stderr:

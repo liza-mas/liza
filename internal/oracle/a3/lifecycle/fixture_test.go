@@ -48,8 +48,12 @@ func (r environment) git(t *testing.T, args ...string) string {
 	return strings.TrimSpace(res.stdout)
 }
 
+// buildFixture renders the state fixture named name. A name may carry recipes,
+// "state+recipe+recipe", that arrange the Git side of the fixture before the
+// before snapshot (see applyRecipe); plain names behave as before.
 func buildFixture(t *testing.T, bin, name, caller string) fixture {
 	t.Helper()
+	name, recipes, _ := strings.Cut(name, "+")
 	f := fixture{environment: newEnvironment(t, caller), commits: map[string]string{}}
 	f.git(t, "init", "-b", "main")
 	writeFile(t, filepath.Join(f.project, "README"), []byte("Lifecycle oracle fixture\n"))
@@ -75,6 +79,11 @@ func buildFixture(t *testing.T, bin, name, caller string) fixture {
 	if strings.Contains(state, "worktree: .worktrees/task-1") {
 		f.git(t, "worktree", "add", "-b", "task/task-1", ".worktrees/task-1", f.commits["base"])
 	}
+	if recipes != "" {
+		for _, recipe := range strings.Split(recipes, "+") {
+			f.applyRecipe(t, recipe)
+		}
+	}
 	// Validate with the actual CLI for every repository, including every mode.
 	// A dead PID is structural fixture data; validate itself must not repair it.
 	result := f.command(t, bin, "validate", "--json")
@@ -93,6 +102,48 @@ func buildFixture(t *testing.T, bin, name, caller string) fixture {
 	f.before = state
 	f.gitBefore = f.snapshot(t)
 	return f
+}
+
+// applyRecipe arranges one Git condition of a preserved task worktree, which
+// the state fixture cannot express. Recipes run before the before snapshot, so
+// they are part of the fixture, not an effect of the command under test.
+//
+//   - integration-ahead: the integration branch gains a commit the task
+//     worktree lacks, so a rebase onto it moves the worktree.
+//   - integration-conflict: integration and the task worktree both edit
+//     README, so a rebase onto integration conflicts.
+//   - dirty-worktree: README carries an uncommitted tracked edit in the task
+//     worktree.
+func (f *fixture) applyRecipe(t *testing.T, recipe string) {
+	t.Helper()
+	worktree := filepath.Join(f.project, ".worktrees", "task-1")
+	switch recipe {
+	case "integration-ahead":
+		f.advanceIntegration(t, "integration-note", "integration moved ahead\n")
+	case "integration-conflict":
+		f.advanceIntegration(t, "README", "integration edit\n")
+		writeFile(t, filepath.Join(worktree, "README"), []byte("task edit\n"))
+		f.git(t, "-C", worktree, "commit", "-a", "-m", "task edit")
+		f.commits["task"] = f.git(t, "-C", worktree, "rev-parse", "HEAD")
+	case "dirty-worktree":
+		writeFile(t, filepath.Join(worktree, "README"), []byte("local edit\n"))
+	default:
+		t.Fatalf("unknown fixture recipe %q", recipe)
+	}
+}
+
+// advanceIntegration commits one file on the integration branch through a
+// temporary worktree, so neither the project checkout nor the task worktree
+// changes.
+func (f *fixture) advanceIntegration(t *testing.T, name, content string) {
+	t.Helper()
+	scratch := filepath.Join(f.tmp, "integration-recipe")
+	f.git(t, "worktree", "add", scratch, "integration")
+	writeFile(t, filepath.Join(scratch, name), []byte(content))
+	f.git(t, "-C", scratch, "add", name)
+	f.git(t, "-C", scratch, "commit", "-m", "integration ahead")
+	f.commits["integration"] = f.git(t, "-C", scratch, "rev-parse", "HEAD")
+	f.git(t, "worktree", "remove", "--force", scratch)
 }
 
 type gitSnapshot struct{ refs, worktrees map[string]string }
