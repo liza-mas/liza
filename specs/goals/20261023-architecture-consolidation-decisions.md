@@ -648,6 +648,26 @@ verified; a handoff recipe is unproven.
   dropping I-06 (coverage loss). Kind: oracle-contract (expected outcome). Revert: a reviewed A9
   correction.
 
+### D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T02:52Z. Deferred batches 2 (`make test`) and 8 (`make test-race`) went red
+with the same signature, a failing `internal/agent`. The bisect named docs-only or test-only merges
+(`2f3374a6d`, `be0c4d4ca`). The operator's capture (two `go test -race -count=1 -v ./internal/agent/`
+runs at `aaac7a4a1`) passed once and failed once, on
+`TestExecuteAgentProgressWatchdogStillBlocksDuringHandback` ("session was cancelled before the agent
+saw its submit's outcome") and `TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds` ("executeAgent
+= (1, <nil>), want exit 0"). Both live in `internal/agent/inflight_submit_deadline_test.go`, which has
+not changed since the starting commit, and both rely on real-time budgets of 0.2–2 s that a loaded host
+misses.
+- Ruling: `deferred-validation-2-1-correction-plan` is repurposed to one bounded test-only task. It
+  makes these two tests deterministic, through an injected or controlled clock or event
+  synchronisation instead of wall-clock budgets, without weakening any assertion and without
+  changing production code. Proof: `go test -race -count=20 -run '<the two tests>'
+  ./internal/agent/` passes while the host runs the usual agent load, and the full package passes.
+  Owned outside A1 (the A1 attribution is withdrawn).
+- Rejected: marking the commands known-red or skipping the tests (hides a signal, CORE Rule 14);
+  widening the budgets only (still load-dependent). Kind: test-stability (delivery-neutral). Revert:
+  drop the task; batches stay intermittently red.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
