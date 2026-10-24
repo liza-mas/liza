@@ -207,9 +207,16 @@ func TestOracleA9ReviewerClaimRefused(t *testing.T) {
 		s := p.state(t)
 		return bytes.Contains(s, []byte("code-reviewer-1:")) && bytes.Contains(s, []byte("status: IDLE"))
 	})
-	// The claim step follows registration within the same second; a short dwell
-	// lets a wrongly admitted claim surface before the absence is asserted.
-	time.Sleep(time.Second)
+	// The claim step is the reviewer's wait for work, which evaluates the task and
+	// claims it when admitted. Entering it takes the state lock, and the lock owner
+	// record names that caller, so the record is the claim attempt's observable
+	// trace, but it precedes the eligibility decision, so it is only the entry
+	// barrier. The decision itself is awaited after it (D50, Linux).
+	p.await(t, "claim attempt", func() bool {
+		owner, err := os.ReadFile(filepath.Join(p.dir, ".liza", "state.yaml.lock.owner.json"))
+		return err == nil && bytes.Contains(owner, []byte("reviewerStrategy).WaitForWork"))
+	})
+	awaitRefusalDecision(t, p, a.cmd.Process.Pid)
 	p.observeLaunch(t)
 	state := p.state(t)
 	if len(p.records(t)) != 0 || bytes.Contains(state, []byte("reviewing_by: code-reviewer-1")) || !bytes.Contains(state, []byte("reviewing_by: code-reviewer-2")) ||

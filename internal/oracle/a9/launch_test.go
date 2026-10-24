@@ -37,14 +37,14 @@ var launchCatalog = []string{
 // scenarios; I-24 and I-25 use the common (task-less) state.
 const launchStateFixture = "testdata/fixtures/i22-common/state.yaml"
 
-// launchScenario is newScenario plus the process hygiene of decision D43: a
-// tracker follows the scenario's processes from the start, and the cleanup,
+// launchScenario is newScenario plus the process hygiene of decisions D43-D48:
+// top-level, nonparallel tests own all children of the test process. The cleanup,
 // registered after the kit's temporary-directory cleanup, runs first so the
 // fixture state outlives it.
 func launchScenario(t *testing.T, name string) *scenario {
 	t.Helper()
 	p := newScenario(t, name)
-	own := launchTrack(p.root)
+	own := newLaunchOwner(p.root)
 	launchOwners.Store(p, own)
 	t.Cleanup(func() { launchCleanup(t, p.name, own) })
 	return p
@@ -98,7 +98,10 @@ func launchBind(cmd *exec.Cmd) {
 			return os.ErrProcessDone
 		}
 		launchKillTree(cmd.Process.Pid)
-		return nil
+		// D48: on Linux the subreaper owns even descendants whose leaders
+		// exited before the tree snapshot. Reap those on the deadline path too.
+		_, err := launchReapChildren(nil)
+		return err
 	}
 	cmd.WaitDelay = 5 * time.Second
 }
@@ -489,6 +492,10 @@ func TestOracleA9SpawnGateHelper(t *testing.T) {
 	for _, name := range environmentNames(os.Environ()) {
 		fmt.Println(spawnNamePrefix + name)
 	}
+	if err := launchSubreaper(); err != nil {
+		t.Fatal("A9 spawn helper: child subreaper unavailable")
+	}
+	t.Cleanup(func() { launchCleanup(t, "spawn helper", nil) })
 	cmd, err := spawnAdapter(req.Configured, req.Project, req.Role, req.CLI, req.Args...)
 	fmt.Printf("%sstarted: %t\n", spawnLinePrefix, cmd != nil)
 	if err != nil {
@@ -496,17 +503,29 @@ func TestOracleA9SpawnGateHelper(t *testing.T) {
 		return
 	}
 	fmt.Println(spawnLinePrefix + "error: none")
-	// The gate reaps the supervisor itself; the process is gone once signalling it
-	// fails.
-	deadline := time.Now().Add(60 * time.Second)
-	for cmd.Process.Signal(syscall.Signal(0)) == nil {
-		if time.Now().After(deadline) {
-			// The supervisor is detached from this process; stop its whole tree
-			// while the leader is alive, so no child is orphaned.
-			launchKillTree(cmd.Process.Pid)
-			t.Fatal("A9 spawn helper: supervisor exit deadline")
+	// The gate waits on the supervisor itself, so the command's own Wait is spent:
+	// a second Wait on it would race the gate's. A fresh handle on the child waits
+	// for its exit instead, whichever of the two collects the status, and the
+	// process is gone once signalling it fails.
+	exited := make(chan struct{})
+	go func() {
+		defer close(exited)
+		if child, err := os.FindProcess(cmd.Process.Pid); err == nil {
+			_, _ = child.Wait()
 		}
-		time.Sleep(10 * time.Millisecond)
+	}()
+	deadline := time.NewTimer(60 * time.Second)
+	defer deadline.Stop()
+	select {
+	case <-exited:
+	case <-deadline.C:
+		// The supervisor is detached from this process; stop its whole tree
+		// while the leader is alive, so no child is orphaned.
+		launchKillTree(cmd.Process.Pid)
+		t.Fatal("A9 spawn helper: supervisor exit deadline")
+	}
+	if cmd.Process.Signal(syscall.Signal(0)) == nil {
+		t.Fatal("A9 spawn helper: supervisor still signalable after its exit")
 	}
 	fmt.Println(spawnLinePrefix + "exited: true")
 }
@@ -547,14 +566,9 @@ func spawnCheckLogs(t *testing.T, p *scenario) {
 	p.harness(t, shas).Check(t, oracle.Human, p.name+"/supervisor-logs.txt", []byte(strings.Join(names, "\n")+"\n"))
 }
 
-// Process hygiene (D43 ruling 2). A scenario process is any live process in a
-// process group the test launched, whose command line names the scenario root,
-// or that descends from one. Every command the scenario launches leads its own
-// session and group, recorded at start from its pid, so a child is owned even when
-// its leader exits before anything could observe it; the gate's supervisor is
-// detached the same way. A tracker also polls for what the groups do not hold (the
-// provider processes the supervisor places in groups of their own), and a deadline
-// kills a launched tree from its live leader.
+// Process hygiene (D48). Linux ownership comes from nonparallel test isolation
+// and the subreaper, never process observations. The portable process listing
+// and remembered groups below support probes and non-Linux best-effort cleanup.
 
 type launchProc struct {
 	pid, ppid, pgid int
@@ -622,32 +636,15 @@ type launchOwner struct {
 	mu      sync.Mutex
 	members map[int]bool
 	groups  map[int]bool
-	stop    chan struct{}
-	done    chan struct{}
 }
 
 // newLaunchOwner returns an owner that follows no process until told to.
 func newLaunchOwner(root string) *launchOwner {
+	// Before any process of the scenario starts, so none can be orphaned to init.
+	if err := launchSubreaper(); err != nil {
+		panic("A9 launch: child subreaper unavailable")
+	}
 	return &launchOwner{root: root, members: map[int]bool{}, groups: map[int]bool{}}
-}
-
-// launchTrack starts following the processes of the scenario rooted at root: the
-// groups of the commands it launches, and whatever a poll finds while it runs.
-func launchTrack(root string) *launchOwner {
-	o := newLaunchOwner(root)
-	o.stop, o.done = make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(o.done)
-		for {
-			_, _ = o.scan()
-			select {
-			case <-o.stop:
-				return
-			case <-time.After(250 * time.Millisecond):
-			}
-		}
-	}()
-	return o
 }
 
 // start launches cmd as the leader of its own session and process group (see
@@ -664,83 +661,17 @@ func (o *launchOwner) start(cmd *exec.Cmd) error {
 	return nil
 }
 
-// scan grows the remembered membership and returns the live members. A process
-// joins when its command line names the root, its parent is a member, or it sits
-// in a member's group; the test's own group is never adopted.
-func (o *launchOwner) scan() ([]launchProc, error) {
-	procs, err := launchProcesses()
-	if err != nil {
-		return nil, err
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	self, parent, selfGroup := os.Getpid(), os.Getppid(), 0
-	for _, p := range procs {
-		if p.pid == self {
-			selfGroup = p.pgid
-		}
-	}
-	for grown := true; grown; {
-		grown = false
-		for _, p := range procs {
-			if p.pid == self || p.pid == parent {
-				continue
-			}
-			known := o.members[p.pid]
-			if !known && (strings.Contains(p.command, o.root+"/") || o.members[p.ppid] || (o.groups[p.pgid] && p.pgid != selfGroup)) {
-				o.members[p.pid], grown = true, true
-				known = true
-			}
-			if known && p.pgid != selfGroup && !o.groups[p.pgid] {
-				o.groups[p.pgid], grown = true, true
-			}
-		}
-	}
-	var live []launchProc
-	for _, p := range procs {
-		if o.members[p.pid] {
-			live = append(live, p)
-		}
-	}
-	return live, nil
-}
-
-// launchReap stops tracking, waits briefly for the scenario's processes to leave
-// on their own, then kills the survivors and waits until none is left. It returns
-// how many had to be killed and fails the test if any process remains at the
-// deadline.
+// launchReap stops the remaining children and their groups, reaps their exits,
+// and asserts that none remains (D48). Non-Linux cleanup is best effort (D45).
+// The count excludes zombies: their exit status must be collected, but they
+// were already stopped before cleanup.
 func launchReap(t testing.TB, o *launchOwner) int {
 	t.Helper()
-	if o.stop != nil {
-		close(o.stop)
-		<-o.done
+	n, err := launchReapChildren(o)
+	if err != nil {
+		t.Errorf("A9 cleanup: %v", err)
 	}
-	killed := map[int]bool{}
-	grace := time.Now().Add(2 * time.Second)
-	deadline := time.Now().Add(20 * time.Second)
-	for {
-		live, err := o.scan()
-		if err != nil {
-			t.Errorf("A9 cleanup: process listing unavailable")
-			return len(killed)
-		}
-		if len(live) == 0 {
-			return len(killed)
-		}
-		if time.Now().After(deadline) {
-			t.Errorf("A9 cleanup: %d scenario process(es) survived the kill", len(live))
-			return len(killed)
-		}
-		if time.Now().After(grace) {
-			for _, p := range live {
-				if proc, err := os.FindProcess(p.pid); err == nil {
-					_ = proc.Kill()
-					killed[p.pid] = true
-				}
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	return n
 }
 
 // launchCleanup stops every process left in the scenario and fails the test when
@@ -766,6 +697,8 @@ func TestOracleA9LaunchCleanup(t *testing.T) {
 		t.Fatal("A9 cleanup probe: test executable")
 	}
 	dir := t.TempDir()
+	own := newLaunchOwner(dir)
+	t.Cleanup(func() { launchCleanup(t, "cleanup probe", own) })
 	env, err := oracle.ChildEnv(oracle.EnvBase{Home: dir, Path: os.Getenv("PATH"), Tmp: dir}, launchProbeVar+"=1")
 	if err != nil {
 		t.Fatal(err)
@@ -815,7 +748,7 @@ func TestOracleA9LaunchCleanupProbe(t *testing.T) {
 		t.Skip("probe of TestOracleA9LaunchCleanup")
 	}
 	root := t.TempDir()
-	// No poller: the cleanup may know the orphan only through its leader's group.
+	// No observer: Linux cleanup owns every child, including this rootless orphan.
 	own := newLaunchOwner(root)
 	t.Cleanup(func() { launchCleanup(t, "probe", own) })
 	// The leader names the root and exits at once after forking a child that names

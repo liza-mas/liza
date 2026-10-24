@@ -136,26 +136,36 @@ func TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks(t *testing.T) {
 	}
 }
 
-// lateSubmitSession runs a coder session whose submit starts after 0.5 s,
+// lateSubmitSession runs a coder session whose submit starts after startDelay,
 // with a 1 s execution budget, and records whether the session was still live
-// when the submit returned. idle keeps the agent waiting for the session's end
-// after the submit, as an agent that never settles the outcome would.
-func lateSubmitSession(t *testing.T, scenario *testhelpers.AcceptanceSubmitScenario, progressTimeout time.Duration) (exitCode int, liveAtReturn bool, handback time.Duration, submitErr error) {
+// when the submit returned. The agent then waits for the session's end, as an
+// agent that never settles the outcome would. With holdMarker, a marker of the
+// session's own submit is written before the session starts, so the deferral
+// of the execution timeout does not depend on when the submit gets to write
+// its own; the agent removes it right after recording liveAtReturn, which
+// starts the hand-back.
+func lateSubmitSession(t *testing.T, scenario *testhelpers.AcceptanceSubmitScenario, progressTimeout, startDelay time.Duration, holdMarker bool) (exitCode int, liveAtReturn bool, handback time.Duration, submitErr error) {
 	t.Helper()
 	previous := executionDeadlineRecheckInterval
 	executionDeadlineRecheckInterval = 50 * time.Millisecond
 	t.Cleanup(func() { executionDeadlineRecheckInterval = previous })
+	releaseMarker := func() {}
+	if holdMarker {
+		releaseMarker = ops.WriteInflightSubmitMarkerForTest(scenario.Root, scenario.Authority, scenario.TaskID, time.Now().Add(10*time.Minute))
+		t.Cleanup(releaseMarker)
+	}
 	var returned time.Time
 	mock := &MockLLMAgent{
 		OnExecute: func(ctx context.Context, _ string, _ string, _ string, _ string, _ []string) error {
 			select {
-			case <-time.After(500 * time.Millisecond):
+			case <-time.After(startDelay):
 			case <-ctx.Done():
 				return ctx.Err()
 			}
 			_, submitErr = ops.SubmitForReviewWithAuthority(scenario.Root, scenario.TaskID, scenario.Commit, scenario.Authority)
 			returned = time.Now()
 			liveAtReturn = ctx.Err() == nil
+			releaseMarker()
 			<-ctx.Done()
 			handback = time.Since(returned)
 			return ctx.Err()
@@ -209,7 +219,7 @@ func TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback(t *testing.T) {
 	shortenSubmitHandback(t, 500*time.Millisecond)
 
 	// WHEN the agent submits late and then idles
-	exitCode, liveAtReturn, handback, submitErr := lateSubmitSession(t, &scenario, time.Hour)
+	exitCode, liveAtReturn, handback, submitErr := lateSubmitSession(t, &scenario, time.Hour, 500*time.Millisecond, false)
 
 	// THEN the agent saw the failure in a live session, kept the hand-back,
 	// and the task ended BLOCKED with the hand-back reason
@@ -232,63 +242,95 @@ func TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback(t *testing.T) {
 // progress timeout shorter than the hand-back is blocked by the watchdog,
 // still never released.
 func TestExecuteAgentProgressWatchdogStillBlocksDuringHandback(t *testing.T) {
-	scenario := testhelpers.SetupAcceptanceSubmitScenario(t, "sleep 1\nexit 3\n", 30)
-	shortenSubmitHandback(t, time.Hour)
+	for _, tc := range []struct {
+		name       string
+		startDelay time.Duration
+	}{
+		{"prompt start", 500 * time.Millisecond},
+		// The agent's first action comes after the 1 s execution timeout.
+		{"late start", 1500 * time.Millisecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scenario := testhelpers.SetupAcceptanceSubmitScenario(t, "sleep 1\nexit 3\n", 30)
+			shortenSubmitHandback(t, time.Hour)
 
-	exitCode, liveAtReturn, _, _ := lateSubmitSession(t, &scenario, 2*time.Second) // above the idle time and preparation before the marker
+			exitCode, liveAtReturn, _, _ := lateSubmitSession(t, &scenario, 2*time.Second, tc.startDelay, true) // above the idle time; the held marker exempts the watchdog until the agent releases it
 
-	if !liveAtReturn {
-		t.Fatal("the session was cancelled before the agent saw its submit's outcome")
+			if !liveAtReturn {
+				t.Fatal("the session was cancelled before the agent saw its submit's outcome")
+			}
+			if exitCode != 0 {
+				t.Fatalf("exit code = %d, want 0 after the watchdog block", exitCode)
+			}
+			requireSupervisorBlocked(t, &scenario, "progress timeout")
+		})
 	}
-	if exitCode != 0 {
-		t.Fatalf("exit code = %d, want 0 after the watchdog block", exitCode)
-	}
-	requireSupervisorBlocked(t, &scenario, "progress timeout")
 }
 
-// A submit still running past its own marker deadline is interrupted at the
-// end of the grace, and the task is blocked as an interrupted admission.
+// A submit still running when the grace cap ends is interrupted, and the task
+// is blocked as an interrupted admission. The cap bounds the deferral even for
+// a marker whose own deadline is far later; the marker's deadline semantics are
+// asserted by TestExecutionDeadlineMarkerPastItsDeadlineWithLiveProcessIsInterrupted.
 func TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds(t *testing.T) {
-	scenario := testhelpers.SetupAcceptanceSubmitScenario(t, "printf 'PASS identity assertion\\n'\n", 30)
-	shortenSubmitHandback(t, time.Hour)
-	previous := executionDeadlineRecheckInterval
-	executionDeadlineRecheckInterval = 50 * time.Millisecond
-	t.Cleanup(func() { executionDeadlineRecheckInterval = previous })
-	mock := &MockLLMAgent{
-		OnExecute: func(ctx context.Context, _ string, _ string, _ string, _ string, _ []string) error {
-			// A submit of this process whose marker deadline falls 0.5 s
-			// after the execution timeout, and which never returns.
-			remove := ops.WriteInflightSubmitMarkerForTest(scenario.Root, scenario.Authority, scenario.TaskID, time.Now().Add(700*time.Millisecond))
-			defer remove()
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	}
-	state, err := scenario.BB.Read()
-	if err != nil {
-		t.Fatal(err)
-	}
-	config := SupervisorConfig{
-		AgentID:          scenario.AgentID,
-		Authority:        scenario.Authority,
-		Role:             models.RoleCoder,
-		ProjectRoot:      scenario.Root,
-		StatePath:        scenario.StatePath,
-		CLIName:          "codex",
-		LLMAgent:         mock,
-		ExecutionTimeout: 200 * time.Millisecond,
-	}
+	for _, tc := range []struct {
+		name       string
+		startDelay time.Duration
+	}{
+		{"prompt start", 0},
+		// The agent's first action comes after the 200 ms execution timeout.
+		{"late start", time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scenario := testhelpers.SetupAcceptanceSubmitScenario(t, "printf 'PASS identity assertion\\n'\n", 30)
+			shortenSubmitHandback(t, time.Hour)
+			previous := executionDeadlineRecheckInterval
+			executionDeadlineRecheckInterval = 50 * time.Millisecond
+			t.Cleanup(func() { executionDeadlineRecheckInterval = previous })
+			previousGrace := maxInflightSubmitGrace
+			maxInflightSubmitGrace = 500 * time.Millisecond
+			t.Cleanup(func() { maxInflightSubmitGrace = previousGrace })
+			// A submit of this process that never returns, held for the whole
+			// session: its marker is there when the execution timeout elapses,
+			// whenever the agent gets to act.
+			t.Cleanup(ops.WriteInflightSubmitMarkerForTest(scenario.Root, scenario.Authority, scenario.TaskID, time.Now().Add(time.Hour)))
+			mock := &MockLLMAgent{
+				OnExecute: func(ctx context.Context, _ string, _ string, _ string, _ string, _ []string) error {
+					select {
+					case <-time.After(tc.startDelay):
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					<-ctx.Done()
+					return ctx.Err()
+				},
+			}
+			state, err := scenario.BB.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			config := SupervisorConfig{
+				AgentID:          scenario.AgentID,
+				Authority:        scenario.Authority,
+				Role:             models.RoleCoder,
+				ProjectRoot:      scenario.Root,
+				StatePath:        scenario.StatePath,
+				CLIName:          "codex",
+				LLMAgent:         mock,
+				ExecutionTimeout: 200 * time.Millisecond,
+			}
 
-	start := time.Now()
-	exitCode, _, execErr := executeAgent(context.Background(), config, "prompt", nil, scenario.TaskID, state.Config)
+			start := time.Now()
+			exitCode, _, execErr := executeAgent(context.Background(), config, "prompt", nil, scenario.TaskID, state.Config)
 
-	if execErr != nil || exitCode != 0 {
-		t.Fatalf("executeAgent = (%d, %v), want exit 0 after a supervisor block", exitCode, execErr)
+			if execErr != nil || exitCode != 0 {
+				t.Fatalf("executeAgent = (%d, %v), want exit 0 after a supervisor block", exitCode, execErr)
+			}
+			if elapsed := time.Since(start); elapsed > 3*time.Second {
+				t.Fatalf("executeAgent took %s, want the session to end at the grace cap", elapsed)
+			}
+			requireSupervisorBlocked(t, &scenario, "admission interrupted by session deadline")
+		})
 	}
-	if elapsed := time.Since(start); elapsed > 3*time.Second {
-		t.Fatalf("executeAgent took %s, want the session to end at the marker's deadline", elapsed)
-	}
-	requireSupervisorBlocked(t, &scenario, "admission interrupted by session deadline")
 }
 
 // A task that moves between the supervisor's observation and its transaction

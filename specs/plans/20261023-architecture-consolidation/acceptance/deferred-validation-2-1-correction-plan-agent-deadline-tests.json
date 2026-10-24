@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "D41-watchdog",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestExecuteAgentProgressWatchdogStillBlocksDuringHandback prompt start and late start subtests: live at submit return, exit 0, BLOCKED with progress timeout (held marker)",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "D41-grace",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds prompt start and late start subtests: exit 0 within 3s, BLOCKED with admission interrupted by session deadline (held marker, 500ms grace cap)",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "D41-package",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "whole internal/agent package passes under race, including TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback unchanged in behavior",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "D41-preserve",
+      "approved_reference_id": "d41"
+    },
+    {
+      "obligation_id": "A1-race",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "A1 persistence oracle tests pass under race",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "A1-regen",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "regen check mode reproduces every committed persist golden",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "A1-tamper",
+      "file": "internal/oracle/a1/persist/tamper_test.go",
+      "assertion": "TestOraclePersistenceTamper corrupts each golden and requires live comparison and baseline check to fail naming the path",
+      "command_index": 5
+    },
+    {
+      "obligation_id": "A1-goldens",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "git diff --exit-code against global-refactoring: persist goldens and package unchanged",
+      "command_index": 6
+    },
+    {
+      "obligation_id": "E-lint",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "make lint passes on the changed Go test file",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "E-suite",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "make test passes for the whole suite",
+      "command_index": 7
+    }
+  ]
+}
