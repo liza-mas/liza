@@ -203,3 +203,20 @@ func TestOracleA9SignalMatch(t *testing.T) {
 		})
 	}
 }
+
+// TestSignalCorrelationSuffix pins D43: the collision/capacity correlation
+// suffix depends on host processes, so every variant normalises to one token.
+func TestSignalCorrelationSuffix(t *testing.T) {
+	t.Parallel()
+	const want = "recorded namespace-local pid <V1>; <CORRELATION>"
+	for _, suffix := range []string{
+		"correlation unavailable",
+		"observer-visible matching pid 4242",
+		"observer-visible matching pids [4242 4243]",
+	} {
+		got := newA9Normaliser(nil).text("recorded namespace-local pid 77; " + suffix)
+		if got != want {
+			t.Fatalf("correlation suffix %q: got %q; want %q", suffix, got, want)
+		}
+	}
+}
