@@ -1,0 +1,4 @@
+{
+  "executables": {"codex":[{"args":["--version"],"reply":"codex-cli 0.154.0"}]},
+  "calls": [{"print":["ERROR failed to record rollout items: thread 019a-fixture not found"],"commands":[["stop"]],"exit_code":0}]
+}

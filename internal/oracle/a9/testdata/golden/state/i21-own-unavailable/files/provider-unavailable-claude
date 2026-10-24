@@ -1,0 +1,8 @@
+# before
+provider: claude
+detected: <T1:sZ>
+message: Failed to authenticate: OAuth session expired
+# after
+provider: claude
+detected: <T1:sZ>
+message: Failed to authenticate: OAuth session expired

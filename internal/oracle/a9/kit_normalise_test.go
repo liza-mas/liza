@@ -11,6 +11,9 @@ var (
 	a9TimeRE  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?`)
 	a9StampRE = regexp.MustCompile(`\b\d{8}-\d{6}\b`)
 	a9DateRE  = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+	// Host-process correlation suffix of agent-collision and capacity errors:
+	// it depends on which supervisors are visible on the host (D43).
+	a9CorrelationRE = regexp.MustCompile(`correlation unavailable|observer-visible matching pids? (?:\[[0-9 ]*\]|[0-9]+)`)
 	// Process IDs quoted in message text ("pid 12", "pids [3 4]").
 	a9PidProseRE = regexp.MustCompile(`(?i)\b(pids?\s+)(\[[0-9 ]*\]|[0-9]+)`)
 	a9DigitsRE   = regexp.MustCompile(`[0-9]+`)
@@ -36,6 +39,7 @@ func newA9Normaliser(shas []string) *a9Normaliser {
 
 func (n *a9Normaliser) text(s string) string {
 	s = a9TimeRE.ReplaceAllStringFunc(s, n.timestamp)
+	s = a9CorrelationRE.ReplaceAllString(s, "<CORRELATION>")
 	s = a9StampRE.ReplaceAllString(s, "<STAMP>")
 	s = a9DateRE.ReplaceAllString(s, "<DATE>")
 	s = a9PidProseRE.ReplaceAllStringFunc(s, func(match string) string {

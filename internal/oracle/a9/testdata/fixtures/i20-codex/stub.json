@@ -1,0 +1,4 @@
+{
+  "executables": {"codex":[{"args":["--version"],"reply":"codex-cli 0.154.0"}]},
+  "calls": [{"print":["thread/start failed: error creating thread: Codex cannot access session files under .codex/sessions (permission denied)"],"exit_code":1}]
+}

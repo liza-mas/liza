@@ -1,0 +1,6 @@
+# before
+
+# after
+provider: codex
+detected: <T1:sZ>
+message: thread/start failed: error creating thread: Codex cannot access session files under .codex/sessions (permission denied)

@@ -1,0 +1,5 @@
+exit_code: 0
+[stdout]
+[stderr]
+Warning: no Liza contract symlink found for codex-acp. Agents may not find the behavioral contract.
+Run 'liza init --codex' to create one.

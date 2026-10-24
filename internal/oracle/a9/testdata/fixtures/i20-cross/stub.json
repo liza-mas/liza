@@ -1,0 +1,4 @@
+{
+  "executables": {"codex":[{"args":["--version"],"reply":"codex-cli 0.154.0"}]},
+  "calls": [{"print":["Failed to authenticate: OAuth session expired"],"exit_code":1},{"commands":[["stop"]],"exit_code":0}]
+}

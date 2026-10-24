@@ -1,0 +1,65 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: ia-2
+    type: integration
+    role_pair: integration-pair
+    description: A9 not-clean fixture
+    done_when: A9 oracle keeps the worktree
+    status: INTEGRATION_ANALYSIS_REJECTED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    worktree: .worktrees/ia-2
+    history: []
+  - id: ia-1
+    type: integration
+    role_pair: integration-pair
+    description: A9 clean-terminal fixture
+    done_when: A9 oracle removes the worktree
+    status: INTEGRATION_ANALYSIS_CLEAN
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    worktree: .worktrees/ia-1
+    history: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [ia-1, ia-2]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
