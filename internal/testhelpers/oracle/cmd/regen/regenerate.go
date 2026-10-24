@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/testhelpers/oracle"
 )
 
-type regenerator func(context.Context, string, string, bool, []string) (map[string][]byte, error)
+// A regenerator runs the oracle packages matching the patterns, except the
+// excluded ones, in a materialised tree and returns the goldens it wrote.
+type regenerator func(ctx context.Context, dir, commit string, baseline bool, packages, excluded []string) (map[string][]byte, error)
 
 // Every entry-point child, including Git reads and cleanup, uses this constructor.
 type commands struct{ home, path, tmp string }
@@ -61,7 +64,7 @@ func (c commands) git(ctx context.Context, repo string, args ...string) ([]byte,
 	return c.output(ctx, repo, "git", nil, nil, args...)
 }
 
-func (c commands) regenerate(ctx context.Context, dir, commit string, baseline bool, packages []string) (map[string][]byte, error) {
+func (c commands) regenerate(ctx context.Context, dir, commit string, baseline bool, packages, excluded []string) (map[string][]byte, error) {
 	files, err := readGoldens(dir)
 	if err != nil {
 		return nil, fmt.Errorf("error go-test %s: %w", commit, err)
@@ -74,15 +77,52 @@ func (c commands) regenerate(ctx context.Context, dir, commit string, baseline b
 	if _, err := c.output(ctx, dir, "go", nil, nil, "run", "./internal/brandrender/cmd/sync-embedded", "--repo-root", "."); err != nil {
 		return nil, fmt.Errorf("error sync %s: %w", commit, err)
 	}
-	args := []string{"test", "-count=1"}
+	var tags []string
 	if baseline {
-		args = append(args, "-tags", "oraclestart")
+		tags = []string{"-tags", "oraclestart"}
 	}
-	args = append(args, packages...)
+	if len(excluded) > 0 {
+		if packages, err = c.withoutExcluded(ctx, dir, tags, packages, excluded); err != nil {
+			return nil, fmt.Errorf("error go-list %s: %w", commit, err)
+		}
+		if len(packages) == 0 {
+			return readGoldens(dir)
+		}
+	}
+	args := append(append([]string{"test", "-count=1"}, tags...), packages...)
 	if _, err := c.output(ctx, dir, "go", nil, []string{"ORACLE_WRITE=1"}, args...); err != nil {
 		return nil, fmt.Errorf("error go-test %s: %w", commit, err)
 	}
 	return readGoldens(dir)
+}
+
+// withoutExcluded lists the packages the patterns match in the tree and drops
+// the excluded directories, so a package is never run against a tree whose
+// drivers it cannot pass.
+func (c commands) withoutExcluded(ctx context.Context, dir string, tags, packages, excluded []string) ([]string, error) {
+	base, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.output(ctx, dir, "go", nil, nil, append(append([]string{"list", "-f", "{{.Dir}}"}, tags...), packages...)...)
+	if err != nil {
+		return nil, err
+	}
+	var kept []string
+	for _, line := range strings.Split(string(out), "\n") {
+		// Warnings share the stream; only absolute directories are packages.
+		if !filepath.IsAbs(line) {
+			continue
+		}
+		rel, err := filepath.Rel(base, line)
+		if err != nil {
+			return nil, err
+		}
+		if rel = "./" + filepath.ToSlash(rel); !slices.Contains(excluded, rel) {
+			kept = append(kept, rel)
+		}
+	}
+	return kept, nil
 }
 
 func readGoldens(repo string) (map[string][]byte, error) {

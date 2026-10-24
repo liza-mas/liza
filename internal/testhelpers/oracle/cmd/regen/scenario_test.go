@@ -93,7 +93,7 @@ func (s *scenario) firstChange() string {
 	return sha
 }
 
-func fakeRegen(_ context.Context, dir, _ string, _ bool, _ []string) (map[string][]byte, error) {
+func fakeRegen(_ context.Context, dir, _ string, _ bool, _, _ []string) (map[string][]byte, error) {
 	source, err := os.ReadFile(filepath.Join(dir, "source.txt"))
 	if err != nil {
 		return nil, err
@@ -114,9 +114,9 @@ func (s *scenario) run(reg regenerator, want int, args []string, fragments ...st
 	s.t.Helper()
 	refs := s.git("for-each-ref", "--format=%(refname) %(objectname)")
 	var roots []string
-	wrapped := func(ctx context.Context, dir, sha string, baseline bool, pkgs []string) (map[string][]byte, error) {
+	wrapped := func(ctx context.Context, dir, sha string, baseline bool, pkgs, excluded []string) (map[string][]byte, error) {
 		roots = append(roots, filepath.Dir(dir))
-		return reg(ctx, dir, sha, baseline, pkgs)
+		return reg(ctx, dir, sha, baseline, pkgs, excluded)
 	}
 	var out, stderr bytes.Buffer
 	code := run(context.Background(), append([]string{"-repo", s.dir}, args...), &out, &stderr, wrapped)
@@ -220,12 +220,12 @@ func TestRegenRejectsUnexplained(t *testing.T) {
 func TestRegenRejectsDeletedChainedGolden(t *testing.T) {
 	s := newScenario(t)
 	s.firstChange()
-	reg := func(ctx context.Context, dir, sha string, baseline bool, pkgs []string) (map[string][]byte, error) {
+	reg := func(ctx context.Context, dir, sha string, baseline bool, pkgs, excluded []string) (map[string][]byte, error) {
 		// An absent marker models a removed driver: it emits no goldens.
 		if _, err := os.Stat(filepath.Join(dir, "internal/oracle/demo/marker.txt")); errors.Is(err, os.ErrNotExist) {
 			return map[string][]byte{}, nil
 		}
-		return fakeRegen(ctx, dir, sha, baseline, pkgs)
+		return fakeRegen(ctx, dir, sha, baseline, pkgs, excluded)
 	}
 	s.run(reg, 0, nil, "ok "+sampleGolden+" chain pre ")
 	for _, name := range []string{sampleGolden, "internal/oracle/demo/marker.txt"} {
@@ -241,7 +241,7 @@ func TestRegenMissingExtraAndWriteNew(t *testing.T) {
 	missing := "internal/oracle/demo/testdata/golden/json/new.json"
 	extra := "internal/oracle/demo/testdata/golden/artifact/extra.txt"
 	s.put(extra, "extra")
-	reg := func(context.Context, string, string, bool, []string) (map[string][]byte, error) {
+	reg := func(context.Context, string, string, bool, []string, []string) (map[string][]byte, error) {
 		return map[string][]byte{sampleGolden: []byte("different"), missing: []byte("new")}, nil
 	}
 	s.run(reg, 1, nil, "missing "+missing, "extra "+extra, "unexplained "+sampleGolden)
@@ -272,9 +272,9 @@ func TestRegenBaselineFixAndHistoricalOverlay(t *testing.T) {
 	s.record("determinism")
 	c2 := s.commit("normaliser edit")
 	seen := map[string]bool{}
-	reg := func(ctx context.Context, dir, sha string, baseline bool, pkgs []string) (map[string][]byte, error) {
+	reg := func(ctx context.Context, dir, sha string, baseline bool, pkgs, excluded []string) (map[string][]byte, error) {
 		seen[sha+"/"+strings.ToLower(boolText(baseline))] = true
-		return fakeRegen(ctx, dir, sha, baseline, pkgs)
+		return fakeRegen(ctx, dir, sha, baseline, pkgs, excluded)
 	}
 	s.run(reg, 0, nil, "chain pre "+pre, "C1 "+c1, "determinism "+c2)
 	for _, key := range []string{pre + "/true", c1 + "/false", c2 + "/false"} {
@@ -293,7 +293,7 @@ func boolText(b bool) string {
 
 func TestRegenCleanupOnRegeneratorError(t *testing.T) {
 	s := newScenario(t)
-	s.run(func(context.Context, string, string, bool, []string) (map[string][]byte, error) {
+	s.run(func(context.Context, string, string, bool, []string, []string) (map[string][]byte, error) {
 		return nil, errors.New("fixture regeneration failed")
 	}, 2, nil, "fixture regeneration failed")
 }
@@ -329,13 +329,13 @@ func TestRegenCancellationCleansWorktrees(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var root string
-	reg := func(context.Context, string, string, bool, []string) (map[string][]byte, error) {
+	reg := func(context.Context, string, string, bool, []string, []string) (map[string][]byte, error) {
 		cancel()
 		return nil, ctx.Err()
 	}
-	wrapped := func(ctx context.Context, dir, sha string, baseline bool, pkgs []string) (map[string][]byte, error) {
+	wrapped := func(ctx context.Context, dir, sha string, baseline bool, pkgs, excluded []string) (map[string][]byte, error) {
 		root = filepath.Dir(dir)
-		return reg(ctx, dir, sha, baseline, pkgs)
+		return reg(ctx, dir, sha, baseline, pkgs, excluded)
 	}
 	var out bytes.Buffer
 	if code := run(ctx, []string{"-repo", s.dir}, &out, &out, wrapped); code != 2 || !strings.Contains(out.String(), "context canceled") {

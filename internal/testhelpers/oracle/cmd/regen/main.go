@@ -98,6 +98,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, regenerat
 		fmt.Fprintln(stderr, "error ledger: working ledger differs from HEAD")
 		return 2
 	}
+	e.excluded = e.cPackages(l)
 	if regenerate == nil {
 		regenerate = e.commands.regenerate
 	}

@@ -80,9 +80,11 @@ func TestRegenDiagnosticNamesAndRedaction(t *testing.T) {
 	}
 }
 
-func TestRegenNamesAlteredSampleGolden(t *testing.T) {
-	// The command under test mutates only this shared clone, including its
-	// detached worktrees; the source repository is queried read-only.
+// sampleClone returns a scenario over a shared disposable clone of this
+// repository, detached at its HEAD, with the working oracle and harness trees
+// committed. The command under test mutates only this clone, including its
+// detached worktrees; the source repository is queried read-only.
+func sampleClone(t *testing.T) *scenario {
 	s := newScenario(t)
 	source := s.gitSourceRoot()
 	clone := filepath.Join(t.TempDir(), "clone")
@@ -100,6 +102,12 @@ func TestRegenNamesAlteredSampleGolden(t *testing.T) {
 	}
 	s.put("regen-test-marker.txt", "commit current oracle overlay")
 	s.commit("test oracle overlay")
+	return s
+}
+
+func TestRegenNamesAlteredSampleGolden(t *testing.T) {
+	s := sampleClone(t)
+	clone := s.dir
 	altered := "internal/oracle/sample/testdata/golden/json/error-envelope.json"
 	p := filepath.Join(clone, filepath.FromSlash(altered))
 	b, err := os.ReadFile(p)
@@ -137,4 +145,51 @@ func (s *scenario) gitSourceRoot() string {
 		}
 		wd = parent
 	}
+}
+
+// TestRegenReproducesChangedSampleAssertion is the D56 real-regeneration
+// proof: in one commit a production line moves, the sample driver asserts the
+// new value and its golden follows, with the C1 record.
+func TestRegenReproducesChangedSampleAssertion(t *testing.T) {
+	s := sampleClone(t)
+	pre := s.git("rev-parse", "HEAD")
+	golden := "internal/oracle/sample/testdata/golden/json/error-envelope.json"
+	for name, replace := range map[string][2]string{
+		"internal/jsonout/classify.go":          {`message:  "resource not found"`, `message:  "resource missing"`},
+		"internal/oracle/sample/sample_test.go": {"\toracle.Check(t, oracle.JSON, \"error-envelope.json\", errorEnvelope())", "\tif !bytes.Contains(errorEnvelope(), []byte(\"resource missing\")) {\n\t\tt.Fatal(\"envelope lacks the C1 message\")\n\t}\n\toracle.Check(t, oracle.JSON, \"error-envelope.json\", errorEnvelope())"},
+		golden:                                  {"resource not found", "resource missing"},
+	} {
+		p := filepath.Join(s.dir, filepath.FromSlash(name))
+		b, err := os.ReadFile(p)
+		if err != nil || !strings.Contains(string(b), replace[0]) {
+			t.Fatalf("edit anchor missing in %s: %v", name, err)
+		}
+		s.put(name, strings.Replace(string(b), replace[0], replace[1], 1))
+	}
+	s.put("internal/oracle/sample/sample_test.go", strings.Replace(s.read("internal/oracle/sample/sample_test.go"), "import (\n", "import (\n\t\"bytes\"\n", 1))
+	s.recordPath(golden, "C1")
+	c1 := s.commit("C1 changes a production message and the driver that asserts it")
+	var out, stderr bytes.Buffer
+	code := run(context.Background(), []string{"-repo", s.dir, "-pkg", "./internal/oracle/sample/..."}, &out, &stderr, nil)
+	for _, want := range []string{
+		"ok " + golden + " chain pre " + pre + " C1 " + c1 + "\n",
+		"ok internal/oracle/sample/testdata/golden/human/help.txt chain pre " + pre + "\n",
+		"ok internal/oracle/sample package pre " + pre + " C1 " + c1 + "\n",
+	} {
+		if code != 0 || !strings.Contains(out.String(), want) {
+			t.Fatalf("exit %d, missing %q; stdout:\n%s\nstderr:\n%s", code, want, &out, &stderr)
+		}
+	}
+	if strings.Count(s.git("worktree", "list", "--porcelain"), "worktree ") != 1 {
+		t.Fatal("real regeneration leaked worktree")
+	}
+}
+
+func (s *scenario) read(name string) string {
+	s.t.Helper()
+	b, err := os.ReadFile(filepath.Join(s.dir, filepath.FromSlash(name)))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return string(b)
 }

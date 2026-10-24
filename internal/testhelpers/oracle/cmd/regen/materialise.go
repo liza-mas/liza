@@ -16,6 +16,7 @@ type engine struct {
 	commands   commands
 	regenerate regenerator
 	packages   []string
+	excluded   []string // C packages, reproduced from history instead of H1
 	trees      map[string]map[string][]byte
 	worktrees  []string
 }
@@ -109,8 +110,8 @@ func (e *engine) oracleFile(ctx context.Context, source, name string) ([]byte, e
 	return e.commands.git(ctx, e.repo, "show", source+":"+name)
 }
 
-func (e *engine) values(ctx context.Context, source string, baseline bool) (map[string][]byte, error) {
-	key := fmt.Sprintf("%t/%s", baseline, source)
+func (e *engine) values(ctx context.Context, source string, baseline bool, packages, excluded []string) (map[string][]byte, error) {
+	key := fmt.Sprintf("%t/%s/%s/%s", baseline, source, strings.Join(packages, ","), strings.Join(excluded, ","))
 	if value, ok := e.trees[key]; ok {
 		return value, nil
 	}
@@ -118,7 +119,7 @@ func (e *engine) values(ctx context.Context, source string, baseline bool) (map[
 	if err != nil {
 		return nil, err
 	}
-	value, err := e.regenerate(ctx, dir, source, baseline, e.packages)
+	value, err := e.regenerate(ctx, dir, source, baseline, packages, excluded)
 	if err != nil {
 		return nil, fmt.Errorf("error regeneration %s: %w", source, err)
 	}
@@ -126,7 +127,7 @@ func (e *engine) values(ctx context.Context, source string, baseline bool) (map[
 		if !goldenPath(name) {
 			return nil, fmt.Errorf("error go-test %s: invalid golden path", source)
 		}
-		if !selected(name, e.packages) {
+		if !selected(name, packages) {
 			delete(value, name)
 		}
 	}
