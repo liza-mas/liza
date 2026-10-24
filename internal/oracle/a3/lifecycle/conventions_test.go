@@ -109,8 +109,8 @@ func TestLifecycleIdentifierMask(t *testing.T) {
 	if m.text(stable) != "<hex:"+strings.TrimSuffix(strings.Repeat("bbbbbbbb.", 8), ".")+">" {
 		t.Fatal("stable hex digits changed")
 	}
-	if m.text("12345 912345 123456") != "<live-pid> 912345 123456" {
-		t.Fatal("PID masking must use whole words")
+	if m.text("PID 12345 PID 912345 PID 123456 12345") != "PID <live-pid> PID 912345 PID 123456 12345" {
+		t.Fatal("PID masking must use labelled whole words")
 	}
 	textMask := newMask(time.Now(), nil, nil, 12345)
 	textMask.discover(`key_id: 0123456789abcdef`, `transition_id: `+x)
@@ -124,6 +124,45 @@ func TestLifecyclePathMask(t *testing.T) {
 	if got := m.text("/scratch/project/home/key /scratch/project/file /scratch/tmp/input"); got != "<HOME>/key <PROJECT>/file <TMP>/input" {
 		t.Fatal("path replacement lost longest-first directory identities")
 	}
+}
+
+func TestLifecyclePIDMask(t *testing.T) {
+	// D38: PID 60 collides with the fixed heartbeat interval. Only PID
+	// fields and the starting CLI's labelled recovery messages are volatile.
+	m := newMask(time.Now(), nil, nil, 60)
+	t.Run("state", func(t *testing.T) {
+		input := "agents:\n  coder-1:\n    pid: 60\n  dead:\n    pid: 99999999\nconfig:\n  heartbeat_interval: 60\nvalue: 60\n"
+		want := "agents:\n  coder-1:\n    pid: <live-pid>\n  dead:\n    pid: 99999999\nconfig:\n  heartbeat_interval: 60\nvalue: 60\n"
+		if m.text(input) != want {
+			t.Fatal("PID field normalization changed fixed state values")
+		}
+	})
+	t.Run("human", func(t *testing.T) {
+		input := "coder agent coder-1 (PID 60) still running; agent coder-1 is still running with PID 60, use --force to recover\n60 160 600 heartbeat_interval: 60 PID 600\n"
+		want := "coder agent coder-1 (PID <live-pid>) still running; agent coder-1 is still running with PID <live-pid>, use --force to recover\n60 160 600 heartbeat_interval: 60 PID 600\n"
+		if m.text(input) != want {
+			t.Fatal("labelled PID normalization changed unlabelled or longer numbers")
+		}
+	})
+	t.Run("json", func(t *testing.T) {
+		input := map[string]any{
+			"agent":              map[string]any{"pid": json.Number("60")},
+			"dead":               map[string]any{"pid": json.Number("99999999")},
+			"heartbeat_interval": json.Number("60"),
+			"values":             []any{json.Number("60"), "60", "heartbeat_interval: 60"},
+			"message":            "coder agent coder-1 (PID 60) still running",
+		}
+		want := map[string]any{
+			"agent":              map[string]any{"pid": "<live-pid>"},
+			"dead":               map[string]any{"pid": json.Number("99999999")},
+			"heartbeat_interval": json.Number("60"),
+			"values":             []any{json.Number("60"), "60", "heartbeat_interval: 60"},
+			"message":            "coder agent coder-1 (PID <live-pid>) still running",
+		}
+		if !reflect.DeepEqual(m.document(input), want) {
+			t.Fatal("JSON PID normalization changed a fixed number or string")
+		}
+	})
 }
 
 func TestLifecycleRuntimeIdentityMask(t *testing.T) {

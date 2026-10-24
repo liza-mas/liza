@@ -34,7 +34,10 @@ type mask struct {
 }
 
 func newMask(start time.Time, commits map[string]string, paths map[string]string, pid int) *mask {
-	m := &mask{start: start.Truncate(time.Second), commits: commits, volatile: map[string]bool{}, instancePrefixes: map[string]string{}, ids: map[string]string{}, pid: pid, pidRE: regexp.MustCompile(`\b` + strconv.Itoa(pid) + `\b`)}
+	// D38: only state PID fields and the CLI's labelled recovery messages
+	// carry volatile PIDs. Equal configuration values must remain asserted.
+	pidRE := regexp.MustCompile(`(?m)(^[ \t]*pid:[ \t]*|\bPID[ \t]+)` + strconv.Itoa(pid) + `\b`)
+	m := &mask{start: start.Truncate(time.Second), commits: commits, volatile: map[string]bool{}, instancePrefixes: map[string]string{}, ids: map[string]string{}, pid: pid, pidRE: pidRE}
 	for path, token := range paths {
 		m.paths = append(m.paths, [2]string{path, token})
 	}
@@ -133,7 +136,7 @@ func (m *mask) text(s string) string {
 		}
 		return m.identifier(value)
 	})
-	return m.pidRE.ReplaceAllString(s, "<live-pid>")
+	return m.pidRE.ReplaceAllString(s, "${1}<live-pid>")
 }
 
 // Object keys are traversed in canonical order before assigning ID tokens.
@@ -147,7 +150,11 @@ func (m *mask) document(value any) any {
 		sort.Strings(keys)
 		out := map[string]any{}
 		for _, key := range keys {
-			out[m.text(key)] = m.document(v[key])
+			item := v[key]
+			if pid, ok := item.(json.Number); key == "pid" && ok && pid.String() == strconv.Itoa(m.pid) {
+				item = "<live-pid>"
+			}
+			out[m.text(key)] = m.document(item)
 		}
 		return out
 	case []any:
@@ -158,11 +165,6 @@ func (m *mask) document(value any) any {
 		return out
 	case string:
 		return m.text(v)
-	case json.Number:
-		if v.String() == strconv.Itoa(m.pid) {
-			return "<live-pid>"
-		}
-		return v
 	default:
 		return value
 	}
