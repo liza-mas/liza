@@ -1,0 +1,10 @@
+--- invocation validate-clean-fixture
+exit 0
+--- stdout
+VALID
+--- stderr
+--- invocation migrate
+exit 0
+--- stdout
+No changes needed: no legacy state fields require migration.
+--- stderr

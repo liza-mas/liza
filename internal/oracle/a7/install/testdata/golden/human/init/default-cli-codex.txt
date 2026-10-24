@@ -1,0 +1,126 @@
+--- invocation prerequisite-setup
+exit 0
+--- stdout
+Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
+<HOME>/.liza/AGENT_TOOLS.md
+<HOME>/.liza/COLLABORATION_CONTINUITY.md
+<HOME>/.liza/CORE.md
+<HOME>/.liza/MULTI_AGENT_MODE.md
+<HOME>/.liza/PAIRING_MODE.md
+<HOME>/.liza/SUBAGENT_MODE.md
+<HOME>/.liza/skills/adr-backfill/SKILL.md
+<HOME>/.liza/skills/adversarial-pairing/SKILL.md
+<HOME>/.liza/skills/adversarial-pairing/scripts/blackboard_op.py
+<HOME>/.liza/skills/adversarial-pairing/scripts/blackboard_state.py
+<HOME>/.liza/skills/adversarial-pairing/scripts/blackboard_write.py
+<HOME>/.liza/skills/adversarial-pairing/scripts/test_blackboard_op.py
+<HOME>/.liza/skills/adversarial-pairing/scripts/test_blackboard_state.py
+<HOME>/.liza/skills/adversarial-pairing/scripts/test_blackboard_write.py
+<HOME>/.liza/skills/architecture-planning/SKILL.md
+<HOME>/.liza/skills/architecture-planning/references/arch-plan-format.md
+<HOME>/.liza/skills/bash-policy/SKILL.md
+<HOME>/.liza/skills/black-box-red-testing/SKILL.md
+<HOME>/.liza/skills/check-liza-input-readiness/SKILL.md
+<HOME>/.liza/skills/checkpoint-summary/SKILL.md
+<HOME>/.liza/skills/clean-code/SKILL.md
+<HOME>/.liza/skills/clean-code/languages/go.md
+<HOME>/.liza/skills/clean-code/languages/python.md
+<HOME>/.liza/skills/code-quality-assessment/SKILL.md
+<HOME>/.liza/skills/code-quality-assessment/references/report-format.md
+<HOME>/.liza/skills/code-review/SKILL.md
+<HOME>/.liza/skills/code-spec-backfill/SKILL.md
+<HOME>/.liza/skills/code-spec-backfill/references/report-format.md
+<HOME>/.liza/skills/context-engineering/SKILL.md
+<HOME>/.liza/skills/context-engineering/scripts/context-corpus-index.py
+<HOME>/.liza/skills/debugging/SKILL.md
+<HOME>/.liza/skills/detailed-spec-writing/SKILL.md
+<HOME>/.liza/skills/detailed-spec-writing/references/prd-format.md
+<HOME>/.liza/skills/epic-writing/SKILL.md
+<HOME>/.liza/skills/epic-writing/references/epic-format.md
+<HOME>/.liza/skills/feynman/SKILL.md
+<HOME>/.liza/skills/generic-subagent/SKILL.md
+<HOME>/.liza/skills/goal-writing/SKILL.md
+<HOME>/.liza/skills/goal-writing/references/rubrics.md
+<HOME>/.liza/skills/have-you-considered/SKILL.md
+<HOME>/.liza/skills/lean-thinking/SKILL.md
+<HOME>/.liza/skills/lean-thinking/references/mas-run.md
+<HOME>/.liza/skills/lesson-capture/SKILL.md
+<HOME>/.liza/skills/liza-logs/SKILL.md
+<HOME>/.liza/skills/liza-logs/report-format.md
+<HOME>/.liza/skills/liza-logs/scripts/analyze-log.py
+<HOME>/.liza/skills/liza-logs/scripts/analyze-state.py
+<HOME>/.liza/skills/liza-logs/scripts/query-log.py
+<HOME>/.liza/skills/liza-logs/scripts/test_analyze_log.py
+<HOME>/.liza/skills/liza-logs/scripts/test_analyze_state.py
+<HOME>/.liza/skills/liza-logs/scripts/test_log_cli_e2e.py
+<HOME>/.liza/skills/liza-logs/scripts/test_query_log.py
+<HOME>/.liza/skills/liza-logs/scripts/testdata/claude-rich-init-redacted.ndjson
+<HOME>/.liza/skills/liza-logs/tools/liza-session-analyzer.html
+<HOME>/.liza/skills/liza-operator/SKILL.md
+<HOME>/.liza/skills/liza-operator/scripts/critical-paths.py
+<HOME>/.liza/skills/liza-operator/scripts/test_critical_paths.py
+<HOME>/.liza/skills/liza-operator/scripts/test_watch_until.py
+<HOME>/.liza/skills/liza-operator/scripts/watch-until.py
+<HOME>/.liza/skills/shared/references/acceptance-evidence.md
+<HOME>/.liza/skills/shared/references/reference-first-authoring.md
+<HOME>/.liza/skills/software-architecture-review/SKILL.md
+<HOME>/.liza/skills/spec-backfill/SKILL.md
+<HOME>/.liza/skills/spec-backfill/references/mapping-schema.md
+<HOME>/.liza/skills/spec-backfill/references/report-format.md
+<HOME>/.liza/skills/spec-backfill/references/session-state-schema.md
+<HOME>/.liza/skills/spec-backfill/references/spec-templates.md
+<HOME>/.liza/skills/spec-backfill/scripts/detect-stale.sh
+<HOME>/.liza/skills/spec-backfill/scripts/update-mapping.sh
+<HOME>/.liza/skills/spec-review/SKILL.md
+<HOME>/.liza/skills/systemic-thinking/SKILL.md
+<HOME>/.liza/skills/testing/SKILL.md
+<HOME>/.liza/skills/user-story-writing/SKILL.md
+<HOME>/.liza/skills/user-story-writing/references/user-story-format.md
+<HOME>/.liza/skills/white-box-red-testing/SKILL.md
+<HOME>/.liza/skills/white-box-red-testing/references/finding-classification.md
+<HOME>/.liza/skills/white-box-red-testing/references/output-format.md
+<HOME>/.liza/skills/white-box-red-testing/scripts/discover_targets.py
+<HOME>/.liza/support-docs/ADVERSARIAL_PAIRING.md
+<HOME>/.liza/support-docs/CONFIGURATION.md
+<HOME>/.liza/support-docs/CUSTOMIZING_AGENT_TOOLS.md
+<HOME>/.liza/support-docs/SUPPORT.md
+<HOME>/.liza/support-docs/TOOLCHAIN.md
+<HOME>/.liza/support-docs/TROUBLESHOOTING.md
+<HOME>/.liza/support-docs/USAGE_MULTI_AGENTS.md
+<HOME>/.liza/support-docs/USAGE_PAIRING.md
+<HOME>/.liza/support-docs/how-to-produce-a-goal.md
+<HOME>/.liza/pipeline.yaml (pipeline config)
+╭<BORDER>╮
+│ │
+│ Liza global setup complete │
+│ │
+│ Next steps: │
+│ 1. Customize agent tools for your project: │
+│ <HOME>/.liza/support-docs/CUSTOMIZING_AGENT_TOOLS.md │
+│ 2. Enable Liza in a project: │
+│ cd your-project && liza init --claude │
+│ │
+╰<BORDER>╯
+--- stderr
+--- invocation init
+exit 0
+--- stdout
+Liza initialized at <PROJECT>/.liza
+Integration branch: integration
+╭<BORDER>╮
+│ │
+│ Liza workspace initialized │
+│ │
+│ Next steps: │
+│ 1. Read the guide: ~/.liza/support-docs/USAGE_MULTI_AGENTS.md │
+│ 2. Run the TUI: liza tui │
+│ 3. Spawn agents: press [s] to spawn an orchestrator and workers │
+│ │
+╰<BORDER>╯
+--- stderr
+⚠️ No --post-worktree-cmd set, and auto-detection found no Node.js project layout.
+Task worktrees are fresh checkouts: no installed dependencies, no build artifacts. Agent builds and tests can fail for environment reasons and burn iterations.
+Set one with: liza init "<goal>" --post-worktree-cmd "make setup", or liza config set config.post_worktree_cmd "make setup" later.
+For an empty repository, you can continue without a setup command. After scaffolding merges, supported layouts may be detected automatically; otherwise validate and set your project's command.
+Continue without a post-worktree setup command? (y/n): yes
+Validation prerequisites are off; pass --validation-execution local if the agent CLIs run validation commands locally.

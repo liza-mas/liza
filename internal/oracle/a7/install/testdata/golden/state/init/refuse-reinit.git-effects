@@ -1,0 +1,16 @@
+# before
+config core.bare=false
+config core.filemode=true
+config core.logallrefupdates=true
+config core.repositoryformatversion=0
+exclude /.liza/
+ref refs/heads/integration fixture
+ref refs/heads/main fixture
+# after
+config core.bare=false
+config core.filemode=true
+config core.logallrefupdates=true
+config core.repositoryformatversion=0
+exclude /.liza/
+ref refs/heads/integration fixture
+ref refs/heads/main fixture

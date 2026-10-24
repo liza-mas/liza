@@ -1,0 +1,3 @@
++ .config directory 0755 -
++ .config/opencode directory 0755 -
++ .config/opencode/AGENTS.md symlink 0777 <HOME>/.liza/CORE.md

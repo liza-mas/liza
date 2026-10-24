@@ -1,0 +1,2 @@
++ .claude directory 0755 -
++ .claude/CLAUDE.md symlink 0777 <HOME>/.liza/CORE.md

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-setup", "file": "internal/oracle/a7/install/setup_test.go", "assertion": "TestOracleSetup covers thirteen setup actions, streams and home deltas", "command_index": 1},
+    {"obligation_id": "AC-init", "file": "internal/oracle/a7/install/init_test.go", "assertion": "TestOracleInitWorkspace covers default, all config flags, eight default CLIs and both refusals with state/tree/Git observations", "command_index": 1},
+    {"obligation_id": "AC-activation", "file": "internal/oracle/a7/install/activation_test.go", "assertion": "TestOracleProviderActivation covers all nine provider activations after recorded default setup", "command_index": 1},
+    {"obligation_id": "AC-migrate", "file": "internal/oracle/a7/install/migrate_test.go", "assertion": "TestOracleMigrate covers five legacy normalizations, validated clean fixture and malformed-file refusal", "command_index": 1},
+    {"obligation_id": "AC-toggle", "file": "internal/oracle/a7/install/toggle_test.go", "assertion": "TestOracleTUIAutoResume persists false-to-true through exported TUI key handling and returned command", "command_index": 1},
+    {"obligation_id": "AC-streams", "file": "internal/oracle/a7/install/run_test.go", "assertion": "invoke and checkHuman record labelled stdout, exit and stderr for every binary invocation; only Codex/Cursor activation stderr uses AC5", "command_index": 1},
+    {"obligation_id": "AC-manifest", "file": "internal/oracle/a7/install/snapshot_test.go", "assertion": "manifest/checkManifest compare sorted added/changed/removed entries, types, permissions, symlink targets and path-only content digests, retaining the D29 state marker", "command_index": 1},
+    {"obligation_id": "AC-git-effects", "file": "internal/oracle/a7/install/init_test.go", "assertion": "TestOracleInitWorkspace compares before/after gitSnapshot refs relative to fixture commit, excludes, hooks and local config", "command_index": 1},
+    {"obligation_id": "AC-git-artifact", "file": "internal/oracle/a7/install/snapshot_test.go", "assertion": "checkActivations compares path-only ownership-map bytes or explicit absence for every init and activation action", "command_index": 1},
+    {"obligation_id": "AC-normalisation", "file": "internal/oracle/a7/install/normalise_test.go", "assertion": "normaliser registers disposable roots and AC4 goal-ID/field/label-selected duration masks; TestDecorationNormalisationPreservesContent asserts D37 border-run collapse and byte preservation elsewhere; artifact pathOnly retains all other bytes", "command_index": 1},
+    {"obligation_id": "AC-provenance", "file": "internal/oracle/a7/install/main_test.go", "assertion": "Filtered regen check reproduces the complete committed package golden set from the ledger starting tree using these drivers", "command_index": 3},
+    {"obligation_id": "AC-live", "file": "internal/oracle/a7/install/main_test.go", "assertion": "All five TestOracle families compare the live build against committed starting-tree goldens via RunMain", "command_index": 1},
+    {"obligation_id": "AC-safety", "approved_reference_id": "guard"},
+    {"obligation_id": "AC-adapter", "approved_reference_id": "harness"},
+    {"obligation_id": "AC-boundary", "approved_reference_id": "a7-install"},
+    {"obligation_id": "AC-platform-budget", "approved_reference_id": "oracle"}
+  ]
+}

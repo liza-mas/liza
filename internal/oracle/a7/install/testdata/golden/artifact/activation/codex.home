@@ -1,0 +1,3 @@
++ .codex directory 0755 -
++ .codex/AGENTS.md symlink 0777 <HOME>/.liza/CORE.md
++ .codex/config.toml file 0644 d1d3ebc2cc795b8481055d1e26af48a56ec3066b22db78538abafece442a6c8d
