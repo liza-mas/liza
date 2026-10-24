@@ -528,75 +528,108 @@ func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	}
 }
 
+// The rejection is written only after the real watcher has registered, so an
+// event exists whatever the set-up duration. A sleep cannot order that: a
+// rejection landing between AwaitVerdict's initial read and the registration
+// leaves only the 10s fallback tick, which equals the test budget. This test
+// swaps a package seam, so neither it nor its subtests run in parallel.
 func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmpDir)
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range []struct {
+		name       string
+		setupDelay time.Duration
+	}{
+		{name: "prompt setup"},
+		{name: "slow setup", setupDelay: time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	state.Config.MaxCoderIterations = 10
-	state.Config.MaxReviewCycles = 5
+			watcherReady := make(chan struct{})
+			originalWatcher := newAwaitVerdictWatcher
+			newAwaitVerdictWatcher = func(bb *db.Blackboard) (awaitVerdictWatcher, error) {
+				if tc.setupDelay > 0 {
+					<-time.After(tc.setupDelay)
+				}
+				watcher, err := originalWatcher(bb)
+				close(watcherReady)
+				return watcher, err
+			}
+			t.Cleanup(func() { newAwaitVerdictWatcher = originalWatcher })
 
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.Iteration = 1
-	task.Attempt = 1
-	task.ReviewCyclesCurrent = 4 // one below limit — budget gate passes
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			state.Config.MaxCoderIterations = 10
+			state.Config.MaxReviewCycles = 5
 
-	var result *AwaitVerdictResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.Iteration = 1
+			task.Attempt = 1
+			task.ReviewCyclesCurrent = 4 // one below limit — budget gate passes
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	testhelpers.WaitForAsyncSetup()
-	// Simulate reviewer rejection: increment ReviewCyclesCurrent (as submit_verdict does).
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusRejected
-		reason := "Missing tests"
-		tk.RejectionReason = &reason
-		tk.ReviewCyclesCurrent = 5 // now at limit — ClaimTask triggers new attempt
-		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
-		tk.LeaseExpires = &leaseExpires
-		reviewer := "code-reviewer-1"
-		tk.History = append(tk.History, models.TaskHistoryEntry{
-			Time:  time.Now().UTC(),
-			Event: models.TaskEventRejected,
-			Agent: &reviewer,
+			var result *AwaitVerdictResult
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
+
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			// Simulate reviewer rejection: increment ReviewCyclesCurrent (as submit_verdict does).
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusRejected
+				reason := "Missing tests"
+				tk.RejectionReason = &reason
+				tk.ReviewCyclesCurrent = 5 // now at limit — ClaimTask triggers new attempt
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				tk.LeaseExpires = &leaseExpires
+				reviewer := "code-reviewer-1"
+				tk.History = append(tk.History, models.TaskHistoryEntry{
+					Time:  time.Now().UTC(),
+					Event: models.TaskEventRejected,
+					Agent: &reviewer,
+				})
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
+
+			<-done
+			if awaitErr != nil {
+				t.Fatalf("AwaitVerdict error: %v", awaitErr)
+			}
+			if result.Verdict != VerdictNewAttempt {
+				t.Errorf("Verdict = %q, want NEW_ATTEMPT; reason=%q", result.Verdict, result.Reason)
+			}
+
+			// Verify ownership released.
+			s, readErr := db.For(stateFile).Read()
+			if readErr != nil {
+				t.Fatalf("Failed to read state: %v", readErr)
+			}
+			agent := s.Agents["coder-1"]
+			if agent.CurrentTask != nil {
+				t.Errorf("expected CurrentTask=nil after NEW_ATTEMPT, got %q", *agent.CurrentTask)
+			}
 		})
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
-
-	<-done
-	if awaitErr != nil {
-		t.Fatalf("AwaitVerdict error: %v", awaitErr)
-	}
-	if result.Verdict != VerdictNewAttempt {
-		t.Errorf("Verdict = %q, want NEW_ATTEMPT; reason=%q", result.Verdict, result.Reason)
-	}
-
-	// Verify ownership released.
-	s, readErr := db.For(stateFile).Read()
-	if readErr != nil {
-		t.Fatalf("Failed to read state: %v", readErr)
-	}
-	agent := s.Agents["coder-1"]
-	if agent.CurrentTask != nil {
-		t.Errorf("expected CurrentTask=nil after NEW_ATTEMPT, got %q", *agent.CurrentTask)
 	}
 }
 
