@@ -589,6 +589,24 @@ The task's scope forbids harness edits.
   same local rule, citing D37. Kind: oracle-contract (volatility). Revert: a reviewed harness
   correction.
 
+### D38 — A3 lifecycle PID masking is positional, not by value (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T00:40Z. `arm-1-ar-3-cp-0-code-1` blocked on an unresolved reviewer blocker. The
+inherited lifecycle mask (`internal/oracle/a3/lifecycle/mask_test.go`) builds a whole-word regex of the
+live PID, replaces it globally, and also masks every JSON number equal to it. When the PID collides with
+a fixed value (reviewer run at PID 60), `heartbeat_interval: 60` becomes `<live-pid>` and every
+L1–L15 state case fails. The run is nondeterministic, and the mask erases genuine values.
+- Ruling: bounded exception for this task to edit `internal/oracle/a3/lifecycle/mask_test.go` and
+  `conventions_test.go`. The PID is masked only where the starting CLI writes a PID: PID-bearing
+  fields identified by key/path, and human-output positions identified by their label. No masking
+  is done by value. Add a focused regression that forces a PID colliding with a fixed value (for
+  example 60) and asserts `heartbeat_interval: 60` survives. Production, contracts, existing golden
+  bytes and paths, fixtures, stable identifiers and acceptance obligations are unchanged. The
+  starting-commit H1 reproduction must still pass.
+- Intent relied on: masks hide only volatile values (D36 and D37 are the same principle); masking by
+  value corrupts fixed data and makes the oracle flaky.
+- Rejected: leaving it (a flaky oracle and a falsified golden comparison); a harness change (the defect
+  is package-local). Kind: oracle-contract (volatility). Revert: a reviewed A3 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
