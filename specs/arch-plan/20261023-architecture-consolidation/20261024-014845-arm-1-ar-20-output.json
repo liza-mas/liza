@@ -1,0 +1,18 @@
+[
+  {
+    "desc": "Close A8 at its boundary, then consolidate A9 supervision and extract reusable launch and provider-signal capabilities",
+    "done_when": "A8 boundary passed; A9 ratchet empty with only justified separate S2 exceptions; launch/signal packages importable by ops; remaining presentation-agent symbols justified; K7 and docs audited; shims empty; E1, scoped race and immutable oracles pass.",
+    "scope": "A9 runtime/process, A8 boundary evidence, X2 callers and X3 extractions, associated tests/oracle additions/manifests, A9 guard data and chain-owned documentation. Excludes behavior changes, mutation moves across ops, Makefile, historical ADRs and overview rewrite.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-014845-arm-1-ar-20.md#Scope 1: A8 boundary and A9 runtime consolidation",
+    "rca_required": false,
+    "inherit_inputs": {"mode": "all"},
+    "decomposition": {
+      "owned_modules": ["internal/agent (except A8 assembly files)", "internal/process", "internal/agentlaunch", "internal/providersignal"],
+      "owned_files": ["internal/testguard/archguard/area_a9_test.go", "specs/architecture/consolidation-run/boundary-a8.md"],
+      "interfaces_owned": ["SI-5 presentation->agent", "extracted launch/provider-signal packages"],
+      "interfaces_consumed": ["SI-1", "SI-2", "SI-3", "SI-4", "Area-Boundary Checkpoint Contract", "A8 resolved prompt inputs"],
+      "coverage_notes": "Must; ordinary code planning. Default whole-input inheritance preserves A8 implementation and all A9 oracle prerequisites. First coding unit closes A8; all A9 implementation depends on it. Serialize overlapping runtime, guard and shared-document writers. Scope 1 permits tests, oracle additions, manifests and X2/X3 changes; preserves C1-C3 policy and C6 sites. No optional dependency or direct coding allocation."
+    }
+  }
+]
