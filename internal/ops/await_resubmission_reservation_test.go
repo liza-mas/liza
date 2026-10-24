@@ -300,7 +300,7 @@ func TestAwaitResubmission_ForcedReleaseEndsOldAwait(t *testing.T) {
 	wait, _ := startOptionsWait(t, root, 3*time.Second, AwaitResubmissionOptions{})
 	waitForReviewOwnership(t, bb, "task-1", "reviewer-1", wait, 10*time.Second)
 
-	if _, err := ReleaseClaim(root, "task-1", roles.ClaimReviewer, true, "operator release", "operator"); err != nil {
+	if _, err := ReleaseClaim(root, "task-1", string(roles.ClaimReviewer), true, "operator release", "operator"); err != nil {
 		t.Fatal(err)
 	}
 	releasedAt := time.Now()

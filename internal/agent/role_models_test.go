@@ -9,7 +9,9 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 var testRoleTypes = map[string]string{"coder": "doer", "code-reviewer": "reviewer", "orchestrator": "orchestrator"}
@@ -69,7 +71,7 @@ roles:
 		{"architecture-reviewer", "reviewer", rolemodels.Entry{CLI: "codex"}},
 	}
 	for _, tt := range tests {
-		got, covered := rm.For(tt.role, tt.roleType)
+		got, covered := rm.For(tt.role, roles.RoleType(tt.roleType))
 		if !covered || got.List || got.First() != tt.want {
 			t.Errorf("For(%s) = %+v, %v; want single %+v", tt.role, got, covered, tt.want)
 		}
@@ -286,5 +288,29 @@ func TestModelSelectionRefusedForACPXEvenWithModelArgs(t *testing.T) {
 	}
 	if _, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "codex-acp", Prompt: "p", Model: "m", RuntimeConfig: config}); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("ResolveLaunchPlan() error = %v, want %q", err, want)
+	}
+}
+
+// The resolver's typed role type reaches the string consumers (models.yaml
+// validation, launch selection, prompt data) as the same bytes the pipeline
+// declares.
+func TestRoleTypesOfResolverReachesStringConsumers(t *testing.T) {
+	cfg, err := pipeline.LoadEmbeddedReference()
+	if err != nil {
+		t.Fatalf("LoadEmbeddedReference() error = %v", err)
+	}
+	resolver := pipeline.NewResolver(cfg)
+
+	got := RoleTypesOf(resolver)
+	if len(got) != len(cfg.Pipeline.Roles) {
+		t.Fatalf("RoleTypesOf() has %d roles, want %d", len(got), len(cfg.Pipeline.Roles))
+	}
+	for name, role := range cfg.Pipeline.Roles {
+		if got[name] != string(role.Type) {
+			t.Errorf("RoleTypesOf()[%q] = %q, want %q", name, got[name], role.Type)
+		}
+	}
+	if got[roles.Coder] != "doer" || got[roles.CodeReviewer] != "reviewer" || got[roles.Orchestrator] != "orchestrator" {
+		t.Errorf("RoleTypesOf() = %v, want the doer, reviewer and orchestrator spellings", got)
 	}
 }

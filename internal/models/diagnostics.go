@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RoleTaskReadiness is the number of tasks currently claimable by one
@@ -33,22 +35,22 @@ func GetTaskReadiness(state *State, pr PipelineResolver) TaskReadiness {
 		return readiness
 	}
 
-	roles := slices.Clone(pr.AllRoleNames())
-	slices.Sort(roles)
-	roles = slices.Compact(roles)
+	names := slices.Clone(pr.AllRoleNames())
+	slices.Sort(names)
+	names = slices.Compact(names)
 	now := time.Now().UTC()
-	for _, role := range roles {
+	for _, role := range names {
 		roleType, err := pr.RoleType(role)
 		if err != nil {
 			continue
 		}
 
 		switch roleType {
-		case "doer":
+		case roles.RoleTypeDoer:
 			count := countRoleReadyTasks(state, role, pr, now)
 			readiness.ClaimableByRole = append(readiness.ClaimableByRole, RoleTaskReadiness{Role: role, Count: count})
 			readiness.Claimable += count
-		case "reviewer":
+		case roles.RoleTypeReviewer:
 			count := countRoleReadyTasks(state, role, pr, now)
 			readiness.ReviewableByRole = append(readiness.ReviewableByRole, RoleTaskReadiness{Role: role, Count: count})
 			readiness.Reviewable += count

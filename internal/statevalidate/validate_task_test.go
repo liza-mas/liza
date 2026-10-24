@@ -1414,9 +1414,10 @@ func TestValidateVerdictPayloadShapeDiagnostics(t *testing.T) {
 	oversizedReason := strings.Repeat("x", 4097)
 
 	cases := []struct {
-		name                                                string
-		taskID, verdict, reason, agentID, impact, reviewSHA string
-		field, constraint, valueClass, rejectedValue        string
+		name                                         string
+		taskID, verdict, reason, agentID, reviewSHA  string
+		impact                                       pipeline.ReviewImpact
+		field, constraint, valueClass, rejectedValue string
 	}{
 		{
 			name: "missing task id", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit,
@@ -1457,11 +1458,15 @@ func TestValidateVerdictPayloadShapeDiagnostics(t *testing.T) {
 
 	t.Run("valid payloads", func(t *testing.T) {
 		valid := []struct {
-			name                                                string
-			taskID, verdict, reason, agentID, impact, reviewSHA string
+			name                                        string
+			taskID, verdict, reason, agentID, reviewSHA string
+			impact                                      pipeline.ReviewImpact
 		}{
 			{name: "approved", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit},
 			{name: "rejected with reason", taskID: "task-1", verdict: "REJECTED", reason: "identity mismatch", agentID: "code-reviewer-1", impact: "significant", reviewSHA: reviewCommit},
+			{name: "standard impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactStandard, reviewSHA: reviewCommit},
+			{name: "significant impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactSignificant, reviewSHA: reviewCommit},
+			{name: "architecture impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactArchitecture, reviewSHA: reviewCommit},
 			{name: "legacy unauthenticated call without review commit", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1"},
 		}
 		for _, tc := range valid {

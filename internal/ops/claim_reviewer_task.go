@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -51,7 +52,7 @@ type ClaimReviewerTaskResult struct {
 // ReviewerClaimPolicyResolver exposes the review-policy lookups needed to
 // project whether a registered reviewer can claim a specific task.
 type ReviewerClaimPolicyResolver interface {
-	ProviderDiversity(string, string) (string, error)
+	ProviderDiversity(string, pipeline.ReviewImpact) (pipeline.ProviderDiversityMode, error)
 	ReviewerRole(string) (string, error)
 }
 
@@ -728,10 +729,7 @@ func filterDoerProviderDiversity(
 	claimerProvider string,
 	claimerAgentID string,
 	state *models.State,
-	resolver interface {
-		ProviderDiversity(string, string) (string, error)
-		ReviewerRole(string) (string, error)
-	},
+	resolver ReviewerClaimPolicyResolver,
 ) []*models.Task {
 	if claimerProvider == "" {
 		return candidates
@@ -756,10 +754,7 @@ func isBlockedByDoerDiversity(
 	claimerProvider string,
 	claimerAgentID string,
 	state *models.State,
-	resolver interface {
-		ProviderDiversity(string, string) (string, error)
-		ReviewerRole(string) (string, error)
-	},
+	resolver ReviewerClaimPolicyResolver,
 ) bool {
 	return isBlockedByDoerDiversityAt(task, claimerProvider, claimerAgentID, state, resolver, rolemodels.Selection{}, time.Now().UTC())
 }
@@ -776,8 +771,8 @@ func isBlockedByDoerDiversityAt(
 	// Resolve effective impact from task history, then check if provider-diversity
 	// is configured at that impact level (with base-level fallthrough).
 	effectiveImpact := ResolveEffectiveImpact(task.History)
-	diversity, err := resolver.ProviderDiversity(task.RolePair, effectiveImpact)
-	if err != nil || diversity != "preferred" {
+	diversity, err := resolver.ProviderDiversity(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
+	if err != nil || diversity != pipeline.ProviderDiversityPreferred {
 		return false
 	}
 

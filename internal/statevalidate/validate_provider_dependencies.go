@@ -151,7 +151,7 @@ func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task
 	}
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err != nil || source != task.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, task.Output) {
+		if err != nil || source != task.RolePair || transition.Cardinality != models.CardinalityPerSubtask || !resolver.TransitionApplies(transition.Name, task.Output) {
 			continue
 		}
 		if !task.TransitionsExecuted[transition.Name] {
@@ -244,7 +244,7 @@ func projectedProviderGraph(state *models.State, resolver *pipeline.Resolver) pr
 		}
 		for _, transition := range resolver.AllTransitions() {
 			source, err := resolver.TransitionSourceRolePair(transition.Name)
-			if err != nil || source != parent.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, parent.Output) {
+			if err != nil || source != parent.RolePair || transition.Cardinality != models.CardinalityPerSubtask || !resolver.TransitionApplies(transition.Name, parent.Output) {
 				continue
 			}
 			ids, skipped, _ := models.ResolveOutputSiblings(parent.Output, models.NonTerminalTasksByKind(state, retiring), parent.ID, transition.TaskSlugOrName())

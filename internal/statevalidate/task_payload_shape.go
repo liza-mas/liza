@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
@@ -66,7 +67,7 @@ func ValidateRejectionRCADispositionRequest(request models.RejectionRCADispositi
 // submit-verdict payload, keyed by the command's flag names. An empty
 // review_commit stays valid because the unauthenticated legacy call does not
 // carry one; a supplied value must be the full immutable SHA reviewed.
-func ValidateVerdictPayloadShape(taskID, verdict, reason, agentID, impact, reviewCommit string) []models.FieldDiagnostic {
+func ValidateVerdictPayloadShape(taskID, verdict, reason, agentID string, impact pipeline.ReviewImpact, reviewCommit string) []models.FieldDiagnostic {
 	var diagnostics []models.FieldDiagnostic
 
 	if strings.TrimSpace(taskID) == "" {
@@ -101,12 +102,11 @@ func ValidateVerdictPayloadShape(taskID, verdict, reason, agentID, impact, revie
 	return models.NormalizeFieldDiagnostics(diagnostics)
 }
 
-// isVerdictImpact mirrors the impact classifications submit-verdict accepts.
-// The ops package owns the ordering those values carry; this package cannot
-// import it, so the vocabulary is repeated here and must change with it.
-func isVerdictImpact(impact string) bool {
+// isVerdictImpact reports whether impact is one of the impact classifications
+// submit-verdict accepts. The ops package owns the ordering those values carry.
+func isVerdictImpact(impact pipeline.ReviewImpact) bool {
 	switch impact {
-	case "standard", "significant", "architecture":
+	case pipeline.ReviewImpactStandard, pipeline.ReviewImpactSignificant, pipeline.ReviewImpactArchitecture:
 		return true
 	}
 	return false

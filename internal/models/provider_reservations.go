@@ -87,7 +87,7 @@ func ResolveReservation(res ProviderReservation, state *State, pr PipelineResolv
 	if err != nil {
 		return invalid(err.Error())
 	}
-	if td.Cardinality != "per-subtask" || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
+	if td.Cardinality != CardinalityPerSubtask || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
 		return invalid(fmt.Sprintf("provider transition %q must identify a per-subtask source, target and task slug", res.Transition))
 	}
 	provider := state.FindTask(providerID)

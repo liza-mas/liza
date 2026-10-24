@@ -107,7 +107,7 @@ func Measure(repoRoot string) (Report, error) {
 			continue
 		}
 		for _, pair := range variantPairs(config, role) {
-			rendered, err := renderVariant(resolver, shape, role, roleType, pair)
+			rendered, err := renderVariant(resolver, shape, role, string(roleType), pair)
 			if err != nil {
 				return Report{}, fmt.Errorf("render %s via %s: %w", role, pair.name, err)
 			}

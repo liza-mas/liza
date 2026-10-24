@@ -2,6 +2,7 @@ package payloadschema
 
 import (
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -20,13 +21,13 @@ func init() {
 
 // SubmitVerdictPayload builds the canonical flag-keyed object the mutation
 // boundary validates, so the preflight and the command validate the same keys.
-func SubmitVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit string) map[string]any {
+func SubmitVerdictPayload(taskID, verdict, reason, agentID string, impact pipeline.ReviewImpact, reviewCommit string) map[string]any {
 	return map[string]any{
 		"task_id":       taskID,
 		"verdict":       verdict,
 		"reason":        reason,
 		"agent_id":      agentID,
-		"impact":        impact,
+		"impact":        string(impact), // the shared parser asserts string-kind values
 		"review_commit": reviewCommit,
 	}
 }
@@ -56,5 +57,5 @@ func validateSubmitVerdictPayload(payload any) []models.FieldDiagnostic {
 		return value
 	}
 	return statevalidate.ValidateVerdictPayloadShape(
-		text("task_id"), text("verdict"), text("reason"), text("agent_id"), text("impact"), text("review_commit"))
+		text("task_id"), text("verdict"), text("reason"), text("agent_id"), pipeline.ReviewImpact(text("impact")), text("review_commit"))
 }

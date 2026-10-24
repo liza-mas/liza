@@ -388,7 +388,7 @@ func loadRolesCmd(projectRoot string) tea.Cmd {
 			if err != nil {
 				return rolesMsg{}
 			}
-			roleTypes[role] = roleType
+			roleTypes[role] = string(roleType)
 		}
 		return rolesMsg{
 			Roles:           roles,

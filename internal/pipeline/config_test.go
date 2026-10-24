@@ -10,6 +10,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -1466,7 +1467,7 @@ func assertMasterPlanningTopology(t *testing.T, cfg *PipelineConfig, decompositi
 			steps: []string{"architecture-main-pair", "architecture-pair"},
 			transition: TransitionDef{
 				Name: "arch-decompose", TaskSlug: decompositionSlugs["arch-decompose"],
-				When: decompositionModes["arch-decompose"],
+				When: models.AllocationRoute(decompositionModes["arch-decompose"]),
 				From: "architecture-main-pair.approved", To: "architecture-pair.initial",
 				Trigger: "auto", Cardinality: "per-subtask",
 			},
@@ -2242,7 +2243,7 @@ func TestLoad_EmbeddedPipelineRoles(t *testing.T) {
 	}, map[string]string{"arch-decompose": "scope-decomposition"})
 	assertEmbeddedTaskSlugs(t, cfg)
 
-	expectedRoles := map[string]string{
+	expectedRoles := map[string]roles.RoleType{
 		"coder":                 "doer",
 		"code-reviewer":         "reviewer",
 		"orchestrator":          "orchestrator",

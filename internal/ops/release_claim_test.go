@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statevalidate"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -723,12 +724,12 @@ func writeValidationSpecRefs(t *testing.T, tmpDir string) {
 type partialResolutionFailureResolver struct{}
 
 func (partialResolutionFailureResolver) RolePairNames() []string { return []string{"coding-pair"} }
-func (partialResolutionFailureResolver) RoleType(role string) (string, error) {
+func (partialResolutionFailureResolver) RoleType(role string) (roles.RoleType, error) {
 	switch role {
 	case "coder":
-		return "doer", nil
+		return roles.RoleTypeDoer, nil
 	case "code-reviewer":
-		return "reviewer", nil
+		return roles.RoleTypeReviewer, nil
 	default:
 		return "", assertAnError{}
 	}

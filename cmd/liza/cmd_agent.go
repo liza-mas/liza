@@ -160,7 +160,7 @@ Example:
 		}
 		selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
 			Role:       role,
-			RoleType:   roleType,
+			RoleType:   string(roleType),
 			CLI:        cliName,
 			CLIChanged: cmd.Flags().Changed("cli"),
 			Model:      modelName,

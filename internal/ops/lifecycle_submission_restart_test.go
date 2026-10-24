@@ -80,7 +80,7 @@ func TestLifecycleSubmissionAbandonedPreparationReleaseReclaim(t *testing.T) {
 
 	// The original process disappears with every lock released. Recover through
 	// normal ownership APIs; do not erase the marker or change task status directly.
-	released, err := ReleaseClaim(root, taskID, roles.ClaimDoer, true, "original process exited during indexing", "human")
+	released, err := ReleaseClaim(root, taskID, string(roles.ClaimDoer), true, "original process exited during indexing", "human")
 	if err != nil || released == nil || !released.ReleasedDoer {
 		t.Fatalf("release abandoned claim: %+v, %v", released, err)
 	}

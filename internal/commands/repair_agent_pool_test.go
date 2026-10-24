@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -105,8 +106,8 @@ type repairReviewerPolicyResolver struct {
 	reviewerRole string
 }
 
-func (r repairReviewerPolicyResolver) ProviderDiversity(string, string) (string, error) {
-	return r.diversity, r.diversityErr
+func (r repairReviewerPolicyResolver) ProviderDiversity(string, pipeline.ReviewImpact) (pipeline.ProviderDiversityMode, error) {
+	return pipeline.ProviderDiversityMode(r.diversity), r.diversityErr
 }
 
 func (r repairReviewerPolicyResolver) ReviewerRole(rolePair string) (string, error) {

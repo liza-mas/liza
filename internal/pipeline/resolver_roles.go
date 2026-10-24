@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ResolvedTimeouts holds parsed timeout durations for a role.
@@ -14,7 +16,7 @@ type ResolvedTimeouts struct {
 }
 
 // RoleType returns the type (doer, reviewer, orchestrator) for the named role.
-func (r *Resolver) RoleType(name string) (string, error) {
+func (r *Resolver) RoleType(name string) (roles.RoleType, error) {
 	role, ok := r.config.Pipeline.Roles[name]
 	if !ok {
 		return "", fmt.Errorf("unknown role %q", name)
@@ -24,12 +26,12 @@ func (r *Resolver) RoleType(name string) (string, error) {
 
 // DoerRoleNames returns the sorted names of all roles with type "doer".
 func (r *Resolver) DoerRoleNames() []string {
-	return r.roleNamesByType("doer")
+	return r.roleNamesByType(roles.RoleTypeDoer)
 }
 
 // ReviewerRoleNames returns the sorted names of all roles with type "reviewer".
 func (r *Resolver) ReviewerRoleNames() []string {
-	return r.roleNamesByType("reviewer")
+	return r.roleNamesByType(roles.RoleTypeReviewer)
 }
 
 // AllRoleNames returns the sorted names of all declared roles.
@@ -100,7 +102,7 @@ func (r *Resolver) MaxInstances(name string) (int, error) {
 	if !ok {
 		return 0, fmt.Errorf("unknown role %q", name)
 	}
-	if role.Type == "orchestrator" {
+	if role.Type == roles.RoleTypeOrchestrator {
 		return 1, nil
 	}
 	return role.MaxInstances, nil
@@ -117,7 +119,7 @@ func (r *Resolver) RoleDisplayName(name string) string {
 }
 
 // roleNamesByType returns the sorted names of all roles matching the given type.
-func (r *Resolver) roleNamesByType(roleType string) []string {
+func (r *Resolver) roleNamesByType(roleType roles.RoleType) []string {
 	var names []string
 	for name, role := range r.config.Pipeline.Roles {
 		if role.Type == roleType {
@@ -143,9 +145,9 @@ func (r *Resolver) ContextSections(name string) ([]string, error) {
 	sections := slices.Clone(role.ContextSections)
 	var recoveryOperation string
 	switch capabilities.RoleType {
-	case "doer":
+	case roles.RoleTypeDoer:
 		recoveryOperation = "mark-blocked"
-	case "reviewer":
+	case roles.RoleTypeReviewer:
 		recoveryOperation = "submit-verdict"
 	default:
 		return sections, nil

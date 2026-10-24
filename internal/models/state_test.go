@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1572,12 +1573,12 @@ type mockPipelineResolver struct {
 
 func (m *mockPipelineResolver) DoerRole(string) (string, error)     { return m.doer, nil }
 func (m *mockPipelineResolver) ReviewerRole(string) (string, error) { return m.reviewer, nil }
-func (m *mockPipelineResolver) RoleType(role string) (string, error) {
+func (m *mockPipelineResolver) RoleType(role string) (roles.RoleType, error) {
 	switch role {
 	case m.doer:
-		return "doer", nil
+		return roles.RoleTypeDoer, nil
 	case m.reviewer:
-		return "reviewer", nil
+		return roles.RoleTypeReviewer, nil
 	default:
 		return "", fmt.Errorf("unknown role %q", role)
 	}

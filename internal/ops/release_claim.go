@@ -254,7 +254,7 @@ func ReleaseClaimWithRequest(projectRoot, taskID, role string, force bool, reaso
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
-	if role != roles.ClaimReviewer && role != roles.ClaimDoer && role != roles.ClaimBoth {
+	if claim := roles.ClaimType(role); claim != roles.ClaimReviewer && claim != roles.ClaimDoer && claim != roles.ClaimBoth {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("role must be reviewer, doer, or both, got: %s", role)}
 	}
 	if err := ValidateLifecycleRequestOptions(opts); err != nil {
@@ -278,7 +278,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 		}
 	}
 
-	if role != roles.ClaimReviewer && role != roles.ClaimDoer && role != roles.ClaimBoth {
+	if claim := roles.ClaimType(role); claim != roles.ClaimReviewer && claim != roles.ClaimDoer && claim != roles.ClaimBoth {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("role must be reviewer, doer, or both, got: %s", role)}
 	}
 
@@ -330,7 +330,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 			return errLifecycleReplay
 		}
 
-		if role == roles.ClaimReviewer || role == roles.ClaimBoth {
+		if claim := roles.ClaimType(role); claim == roles.ClaimReviewer || claim == roles.ClaimBoth {
 			effectiveReviewerRelease, err := resolveReviewerClaimReleaseStatus(task, resolver)
 			if err != nil {
 				return err
@@ -343,7 +343,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 		}
 
 		validateRejectedHandoff := false
-		if role == roles.ClaimDoer || role == roles.ClaimBoth {
+		if claim := roles.ClaimType(role); claim == roles.ClaimDoer || claim == roles.ClaimBoth {
 			effectiveCoderRelease := resolveDoerClaimReleaseStatus(task, resolver)
 			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, force, agentID, reason, now)
 			if err != nil {
