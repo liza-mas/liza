@@ -1,8 +1,11 @@
 package a9
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +25,51 @@ func signalAlerts(p *scenario) string {
 		return ""
 	}
 	return string(b)
+}
+
+// signalStart launches the CLI like scenario.start, but in its own process
+// group, and registers the D43 hygiene: on every exit path, normal or failing,
+// cleanup kills the whole group and fails the test if a member outlives it.
+func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
+	t.Helper()
+	a := &runningAgent{done: make(chan error, 1)}
+	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
+	signalIsolate(a.cmd)
+	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
+	if err := a.cmd.Start(); err != nil {
+		t.Fatalf("A9 %s run: agent start", p.name)
+	}
+	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
+	pgid := a.cmd.Process.Pid
+	t.Cleanup(func() {
+		a.cancel()
+		<-a.done
+		if !signalReap(pgid) {
+			t.Errorf("A9 %s cleanup: a started process outlived the test", p.name)
+		}
+	})
+	return a
+}
+
+// signalRun is signalStart followed by waiting for the exit.
+func signalRun(t *testing.T, p *scenario, args ...string) invocation {
+	t.Helper()
+	return p.finish(t, signalStart(t, p, args...), 100*time.Second)
+}
+
+// signalReap kills the process group and reports whether it emptied in time.
+func signalReap(pgid int) bool {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		signalKillGroup(pgid)
+		if !signalGroupAlive(pgid) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // signalSeed copies the scenario's committed signal files into .liza and
@@ -54,7 +102,7 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 	t.Run("i17-degraded", func(t *testing.T) {
 		t.Parallel()
 		p := newScenario(t, "i17-degraded")
-		r := p.run(t, signalCoderArgs("codex")...)
+		r := signalRun(t, p, signalCoderArgs("codex")...)
 		requireCode(t, p, r, 0)
 		if !strings.Contains(signalAlerts(p), "PROVIDER AUDIT DEGRADED — codex: failed to record rollout items: thread not found") ||
 			!bytes.Contains(p.state(t), []byte("type: provider_audit_degraded")) {
@@ -65,7 +113,7 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 	t.Run("i17-clean", func(t *testing.T) {
 		t.Parallel()
 		p := newScenario(t, "i17-clean")
-		r := p.run(t, signalCoderArgs("codex")...)
+		r := signalRun(t, p, signalCoderArgs("codex")...)
 		requireCode(t, p, r, 0)
 		if signalAlerts(p) != "" || bytes.Contains(p.state(t), []byte("provider_audit_degraded")) {
 			t.Fatal("I-17 output without the audit pattern must not degrade")
@@ -78,7 +126,7 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 		for _, id := range []string{"ia-1", "ia-2"} {
 			p.git(t, "worktree", "add", "-q", "-b", "task/"+id, filepath.Join(".worktrees", id))
 		}
-		a := p.start(t, "agent", "code-reviewer", "--cli", "claude", "--agent-id", "code-reviewer-1")
+		a := signalStart(t, p, "agent", "code-reviewer", "--cli", "claude", "--agent-id", "code-reviewer-1")
 		// The kept task precedes the clean one in the cleanup pass, so the clean
 		// task's completion event proves the kept task was evaluated and left.
 		p.await(t, "clean-terminal cleanup", func() bool { return bytes.Contains(p.state(t), []byte("trigger: completion")) })
@@ -107,7 +155,7 @@ func TestOracleA9QuotaRaise(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			p := newScenario(t, c.name)
-			r := p.run(t, signalCoderArgs("claude")...)
+			r := signalRun(t, p, signalCoderArgs("claude")...)
 			requireCode(t, p, r, 0)
 			if got := signalFiles(p); len(got) != 1 || got[0] != "provider-quota-exhausted-claude" ||
 				!strings.Contains(signalAlerts(p), "PROVIDER QUOTA EXHAUSTED — claude: You've hit your usage limit") ||
@@ -124,7 +172,7 @@ func TestOracleA9QuotaRaise(t *testing.T) {
 	t.Run("i19-other", func(t *testing.T) {
 		t.Parallel()
 		p := newScenario(t, "i19-other")
-		a := p.start(t, signalCoderArgs("codex")...)
+		a := signalStart(t, p, signalCoderArgs("codex")...)
 		p.await(t, "second provider call", func() bool {
 			calls, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
 			return len(calls) >= 2
@@ -147,7 +195,7 @@ func TestOracleA9UnavailableRaise(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			p := newScenario(t, c.name)
-			r := p.run(t, signalCoderArgs(c.cli)...)
+			r := signalRun(t, p, signalCoderArgs(c.cli)...)
 			requireCode(t, p, r, 0)
 			if got := signalFiles(p); len(got) != 1 || got[0] != c.signal || !strings.Contains(signalAlerts(p), c.alert) {
 				t.Fatal("I-20 provider pattern must raise the signal and alert")
@@ -158,7 +206,7 @@ func TestOracleA9UnavailableRaise(t *testing.T) {
 	t.Run("i20-cross", func(t *testing.T) {
 		t.Parallel()
 		p := newScenario(t, "i20-cross")
-		a := p.start(t, signalCoderArgs("codex")...)
+		a := signalStart(t, p, signalCoderArgs("codex")...)
 		p.await(t, "second provider call", func() bool {
 			calls, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
 			return len(calls) >= 2
@@ -190,7 +238,7 @@ func TestOracleA9SignalMatch(t *testing.T) {
 			t.Parallel()
 			p := newScenario(t, c.name)
 			signalSeed(t, p)
-			r := p.run(t, signalCoderArgs(c.cli)...)
+			r := signalRun(t, p, signalCoderArgs(c.cli)...)
 			requireCode(t, p, r, 0)
 			claimed := bytes.Contains(p.state(t), []byte("event: claimed"))
 			if c.blocked && (claimed || len(p.records(t)) != 0) {
@@ -218,5 +266,37 @@ func TestSignalCorrelationSuffix(t *testing.T) {
 		if got != want {
 			t.Fatalf("correlation suffix %q: got %q; want %q", suffix, got, want)
 		}
+	}
+}
+
+// TestSignalGroupReap shows the cleanup reaches a descendant that outlives its
+// group leader, which the kit's direct-child cancellation does not.
+func TestSignalGroupReap(t *testing.T) {
+	t.Parallel()
+	unixOnly(t)
+	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", "/bin/sleep 300 >/dev/null 2>&1 & echo ready; wait")
+	cmd.Env = []string{}
+	signalIsolate(cmd)
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal("A9 signal group: pipe unavailable")
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal("A9 signal group: start failed")
+	}
+	pgid := cmd.Process.Pid
+	t.Cleanup(func() { signalKillGroup(pgid) })
+	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
+		t.Fatal("A9 signal group: descendant not started")
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal("A9 signal group: leader kill failed")
+	}
+	_ = cmd.Wait()
+	if !signalGroupAlive(pgid) {
+		t.Fatal("A9 signal group: killing only the leader must leave the descendant alive")
+	}
+	if !signalReap(pgid) || signalGroupAlive(pgid) {
+		t.Fatal("A9 signal group: reap must empty the group")
 	}
 }
