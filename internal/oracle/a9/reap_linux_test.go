@@ -72,6 +72,29 @@ func launchCollect(pid int) bool {
 	}
 }
 
+// awaitRefusalDecision waits until the supervisor pid has decided to refuse a
+// claim (D50). waitForWorkEventDriven creates its state watcher, an inotify
+// instance, only after checkWork has refused, so an inotify descriptor under
+// /proc/<pid>/fd is a post-decision observable. A wrongly admitted claim returns
+// before any watcher exists, so this await fails instead of passing. The
+// supervisor holds no inotify descriptor before that point.
+func awaitRefusalDecision(t *testing.T, p *scenario, pid int) {
+	t.Helper()
+	dir := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+	p.await(t, "refusal decision", func() bool {
+		fds, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		for _, fd := range fds {
+			if target, err := os.Readlink(filepath.Join(dir, fd.Name())); err == nil && target == "anon_inode:inotify" {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 // launchReapChildren uses D48's isolation: supervisor tests are top-level,
 // nonparallel tests without parallel subtests. Every child belongs to the current
 // test, including zombies and detached descendants adopted by the subreaper.

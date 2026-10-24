@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -22,6 +23,14 @@ func launchSubreaper() error { return nil }
 // launchAwaitExit waits for nothing: the exit of a reparented descendant cannot
 // be observed here without polling (see launchReapChildren).
 func launchAwaitExit([]int, time.Duration) int { return 0 }
+
+// awaitRefusalDecision adds nothing to the entry barrier (D50): only Linux
+// exposes the supervisor's inotify descriptor, the post-decision observable. The
+// residual gap is that a supervisor descheduled between publishing its lock owner
+// record and evaluating the claim can be stopped before a wrongly admitted claim
+// surfaces. The eligibility logic is platform-independent, so the Linux runs
+// carry the regression coverage.
+func awaitRefusalDecision(*testing.T, *scenario, int) {}
 
 // D45 accepts best-effort group termination on non-Linux platforms. There is
 // no portable subreaper or way to wait for a reparented descendant here, so this
