@@ -49,10 +49,6 @@
     {
       "wait_file": ".liza/oracle-release-10",
       "exit_code": 0
-    },
-    {
-      "wait_file": ".liza/oracle-release-11",
-      "exit_code": 0
     }
   ]
 }

@@ -8,11 +8,19 @@
 // I-01 registration: TestOracleA9Registration, TestOracleA9RegistrationCollision.
 // I-02 automatic ID/cap: TestOracleA9AutoAssignID.
 // I-03 heartbeat: TestOracleA9Heartbeat, TestOracleA9HeartbeatRefused.
-// I-04 doer claim: TestOracleA9DoerClaim, TestOracleA9DoerClaimRefused.
+// I-04 doer claim: TestOracleA9DoerClaim, TestOracleA9DoerClaimRefused (the
+// starting binary idles on a named task its role cannot claim; the refusal is
+// the unclaimed task and the absent provider call, ended by liza stop).
 // I-05 exit release/unregister: TestOracleA9DoerClaim; authority fence:
-// TestOracleA9AuthorityLost.
-// I-06 graceful restart: TestOracleA9Restart42, TestOracleA9Restart42Limit.
-// I-07 spin block: TestOracleA9SpinBlock; below threshold: TestOracleA9Restart42.
+// TestOracleA9AuthorityLost (supervisors run under the canonical binary name
+// with "agent" as first argument, the identity liza delete agent --force checks).
+// I-06 graceful restart: TestOracleA9Restart42, TestOracleA9Restart42Limit. Per
+// decision D40 the limit case pins the starting behaviour of two plain exit-42
+// calls at threshold 1: claim released, restart count 2, no restart-loop block.
+// The BLOCKED branch stays unpinned: release precedes tracking, and no recipe
+// reaching it was demonstrated without production or progress-signature changes.
+// I-07 spin block: TestOracleA9SpinBlock (the eleventh execution is refused before
+// launch, so the provider runs ten times); below threshold: TestOracleA9Restart42.
 // I-08 review claim/lease: TestOracleA9ReviewerClaim, TestOracleA9ReviewerClaimRefused.
 // I-09 recover reviewer worktree: TestOracleA9ReviewerWorktree; existing worktree:
 // TestOracleA9ReviewerClaim.

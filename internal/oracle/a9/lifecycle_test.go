@@ -86,11 +86,23 @@ func TestOracleA9DoerClaim(t *testing.T) {
 func TestOracleA9DoerClaimRefused(t *testing.T) {
 	t.Parallel()
 	p := newScenario(t, "i04-refused")
-	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
-	requireCode(t, p, r, 1)
-	if len(p.records(t)) != 0 || bytes.Contains(p.state(t), []byte("event: claimed")) {
+	// The starting binary does not exit on a named task its role cannot claim: the
+	// supervisor registers and idles, so the refusal is the unclaimed task and the
+	// absent provider call. The test ends the run with `liza stop`.
+	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	p.await(t, "idle registration", func() bool {
+		s := p.state(t)
+		return bytes.Contains(s, []byte("coder-1:")) && bytes.Contains(s, []byte("status: IDLE"))
+	})
+	p.observeLaunch(t)
+	if len(p.records(t)) != 0 || bytes.Contains(p.state(t), []byte("event: claimed")) || bytes.Contains(p.state(t), []byte("assigned_to: coder-1")) {
 		t.Fatal("I-04 wrong-role named task must not claim or launch")
 	}
+	if r := p.run(t, "stop"); r.code != 0 {
+		t.Fatal("I-04 stop failed")
+	}
+	r := p.finish(t, a, 10*time.Second)
+	requireCode(t, p, r, 0)
 	p.check(t, r)
 }
 
@@ -129,13 +141,25 @@ func TestOracleA9Restart42(t *testing.T) {
 	p.check(t, r)
 }
 
+// TestOracleA9Restart42Limit pins what the starting binary does with two plain
+// exit-42 calls at threshold 1 (decision D40,
+// specs/goals/20261023-architecture-consolidation-decisions.md): the supervisor
+// releases the claim before it counts the restart, so the task returns to its
+// initial status, the count passes the threshold and no restart-loop block is
+// recorded. The BLOCKED branch is not pinned: no recipe reaches it at the
+// starting commit without a production change or a progress-signature change.
 func TestOracleA9Restart42Limit(t *testing.T) {
 	t.Parallel()
 	p := newScenario(t, "i06-limit")
 	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
-	p.await(t, "restart-loop block", func() bool { return bytes.Contains(p.state(t), []byte("status: BLOCKED")) })
-	if len(p.records(t)) != 2 || !bytes.Contains(p.state(t), []byte("restart loop")) {
-		t.Fatal("I-06 threshold 1 must refuse second restart")
+	p.await(t, "second exit-42 restart", func() bool {
+		calls, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
+		return len(calls) >= 2 && bytes.Contains(p.state(t), []byte("exit42_restart_count: 2"))
+	})
+	after := p.state(t)
+	if len(p.records(t)) != 2 || bytes.Contains(after, []byte("status: BLOCKED")) || bytes.Contains(after, []byte("restart loop")) ||
+		bytes.Contains(after, []byte("assigned_to: coder-1")) || bytes.Count(after, []byte("event: claim_released")) != 2 {
+		t.Fatal("I-06 threshold 1 must release the claim and record no restart-loop block")
 	}
 	if r := p.run(t, "stop"); r.code != 0 {
 		t.Fatal("I-06 stop failed")
@@ -152,7 +176,7 @@ func TestOracleA9SpinBlock(t *testing.T) {
 	// Distinct launch seconds prevent timestamp-named files from colliding.
 	// Each barrier is released only after its saved prompt's second has passed;
 	// the default spin threshold and all state values remain unchanged.
-	for i := 1; i <= 11; i++ {
+	for i := 1; i <= 10; i++ {
 		index := i
 		p.await(t, fmt.Sprintf("spin call %d", i), func() bool {
 			paths, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
@@ -169,8 +193,10 @@ func TestOracleA9SpinBlock(t *testing.T) {
 		p.write(t, fmt.Sprintf(".liza/oracle-release-%d", i), []byte("release\n"))
 	}
 	p.await(t, "spin block", func() bool { return bytes.Contains(p.state(t), []byte("status: BLOCKED")) })
-	if len(p.records(t)) != 11 || !bytes.Contains(p.state(t), []byte("spinning detected: 11 consecutive executions")) {
-		t.Fatal("I-07 default spin guard must block at 11 executions")
+	// The guard counts an execution before launching it: the eleventh is refused,
+	// so the provider runs ten times.
+	if len(p.records(t)) != 10 || !bytes.Contains(p.state(t), []byte("spinning detected: 11 consecutive executions")) {
+		t.Fatal("I-07 default spin guard must block the eleventh execution before launch")
 	}
 	if r := p.run(t, "stop"); r.code != 0 {
 		t.Fatal("I-07 stop failed")

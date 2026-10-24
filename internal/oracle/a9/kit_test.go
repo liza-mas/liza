@@ -27,12 +27,12 @@ var scenarioExtras = []string{
 }
 
 type scenario struct {
-	name, root, dir, home, tmp, bin, recordDir, cli string
-	env                                             []string
-	before                                          []byte
-	beforeFiles                                     map[string][]byte
-	beforeListing                                   []byte
-	recipeSHAs                                      []string
+	name, root, dir, home, tmp, bin, recordDir, cli, named string
+	env                                                    []string
+	before                                                 []byte
+	beforeFiles                                            map[string][]byte
+	beforeListing                                          []byte
+	recipeSHAs                                             []string
 }
 type invocation struct {
 	code           int
@@ -151,6 +151,16 @@ func newScenario(t *testing.T, name string) *scenario {
 	}
 	if err := os.Symlink(git, filepath.Join(p.bin, "git")); err != nil {
 		t.Fatal("A9 setup: git symlink")
+	}
+	// Supervisors run under the configured binary name with "agent" as the first
+	// argument, the identity `liza delete agent --force` verifies before signalling.
+	// The link lives outside bin, so no CLI is reachable through the child PATH.
+	if err := os.Mkdir(filepath.Join(p.root, "launch"), 0o755); err != nil {
+		t.Fatal("A9 setup: create launch directory")
+	}
+	p.named = filepath.Join(p.root, "launch", "liza")
+	if err := os.Symlink(p.cli, p.named); err != nil {
+		t.Fatal("A9 setup: canonical-name link")
 	}
 	p.env, err = oracle.ChildEnv(oracle.EnvBase{Home: p.home, Path: p.bin, Tmp: p.tmp}, scenarioExtras...)
 	if err != nil {
@@ -304,7 +314,7 @@ func (p *scenario) records(t testing.TB) []stubRecord {
 func (p *scenario) start(t *testing.T, args ...string) *runningAgent {
 	t.Helper()
 	a := &runningAgent{done: make(chan error, 1)}
-	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
+	a.cmd, a.cancel = p.command(p.named, args...)
 	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)
