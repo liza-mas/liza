@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,13 +24,12 @@ func signalGone(pid int) bool { return errors.Is(unix.Kill(pid, 0), unix.ESRCH) 
 // outlives its group leader becomes a child of the test process, and the reap
 // kills and reaps it, which the kit's direct-child cancellation does not.
 func TestSignalGroupReap(t *testing.T) {
-	t.Parallel()
 	if err := signalSubreaper(); err != nil {
 		t.Fatal("A9 signal group: child subreaper unavailable")
 	}
 	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", "/bin/sleep 300 >/dev/null 2>&1 & echo ready; wait")
 	cmd.Env = []string{}
-	signalIsolate(cmd, "/a9-signal-group-home")
+	signalIsolate(cmd)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal("A9 signal group: pipe unavailable")
@@ -37,12 +37,16 @@ func TestSignalGroupReap(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal("A9 signal group: start failed")
 	}
-	owner := signalOwner{sid: cmd.Process.Pid, home: "/a9-signal-group-home"}
-	t.Cleanup(func() { signalReap(owner) })
+	supervisor := cmd.Process.Pid
+	t.Cleanup(func() {
+		if !signalReap(supervisor) {
+			t.Error("A9 signal group: cleanup left a child")
+		}
+	})
 	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
 		t.Fatal("A9 signal group: descendant not started")
 	}
-	below, err := signalChildrenOf(owner.sid)
+	below, err := signalChildrenOf(supervisor)
 	if err != nil || len(below) != 1 {
 		t.Fatal("A9 signal group: expected one descendant")
 	}
@@ -54,8 +58,30 @@ func TestSignalGroupReap(t *testing.T) {
 	if err != nil || !signalHasChild(mine, below[0].pid) {
 		t.Fatal("A9 signal group: the orphaned descendant must reparent to the test process")
 	}
-	if !signalReap(owner) || !signalGone(below[0].pid) {
+	if !signalReap(supervisor) || !signalGone(below[0].pid) {
 		t.Fatal("A9 signal group: reap must remove and reap the descendant")
+	}
+}
+
+// TestSignalUnattributedReap guards D48's refusal to filter children by session
+// or HOME. The child has no environment and shares the test's session, with its
+// own group. ForkExec leaves Wait4 ownership with the reaper, unlike exec.Cmd.
+func TestSignalUnattributedReap(t *testing.T) {
+	if err := signalSubreaper(); err != nil {
+		t.Fatal("A9 signal child: child subreaper unavailable")
+	}
+	pid, err := syscall.ForkExec("/bin/sleep", []string{"sleep", "300"}, &syscall.ProcAttr{
+		Env: []string{}, Sys: &syscall.SysProcAttr{Setpgid: true},
+	})
+	if err != nil {
+		t.Fatal("A9 signal child: start failed")
+	}
+	t.Cleanup(func() {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		_, _ = syscall.Wait4(pid, nil, 0, nil)
+	})
+	if !signalReap(pid) || !signalGone(pid) {
+		t.Fatal("A9 signal child: a child without scenario attribution survived")
 	}
 }
 

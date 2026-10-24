@@ -11,7 +11,7 @@ func signalSubreaper() error { return nil }
 // subreaper: it kills the supervisor's process group and cannot see a provider
 // that detached into a group of its own, so it reports success without proving
 // that nothing survived.
-func signalReap(o signalOwner) bool {
-	_ = syscall.Kill(-o.sid, syscall.SIGKILL)
+func signalReap(pid int) bool {
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 	return true
 }

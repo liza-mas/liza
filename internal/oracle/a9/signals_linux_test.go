@@ -3,7 +3,6 @@
 package a9
 
 import (
-	"bytes"
 	"errors"
 	"io/fs"
 	"os"
@@ -24,14 +23,13 @@ var (
 // descendant. It is called before the first supervisor start (D45).
 func signalSubreaper() error {
 	signalSubreaperOnce.Do(func() {
-		signalSubreaperErr = unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+		signalSubreaperErr = launchSubreaper()
 	})
 	return signalSubreaperErr
 }
 
 type signalChild struct {
-	pid, pgid, sid int
-	zombie         bool
+	pid, pgid int
 }
 
 // signalChildrenOf lists the processes whose parent is ppid, zombies included,
@@ -62,71 +60,40 @@ func signalChildrenOf(ppid int) ([]signalChild, error) {
 		}
 		parent, err1 := strconv.Atoi(fields[1])
 		pgid, err2 := strconv.Atoi(fields[2])
-		sid, err3 := strconv.Atoi(fields[3])
-		if err1 != nil || err2 != nil || err3 != nil {
+		if err1 != nil || err2 != nil {
 			return nil, errors.New("unreadable process stat")
 		}
 		if parent == ppid {
-			kids = append(kids, signalChild{pid, pgid, sid, fields[0] == "Z"})
+			kids = append(kids, signalChild{pid, pgid})
 		}
 	}
 	return kids, nil
 }
 
-// owns reports whether the child belongs to the scenario: it is in the
-// supervisor's session, or its environment carries the scenario's HOME (the
-// name and value are matched, never reported). A zombie has no environment, so
-// a child is attributed while it lives.
-func (o signalOwner) owns(c signalChild) bool {
-	if c.sid == o.sid {
-		return true
-	}
-	env, err := os.ReadFile("/proc/" + strconv.Itoa(c.pid) + "/environ")
-	return err == nil && bytes.Contains(append([]byte{0}, env...), []byte("\x00HOME="+o.home+"\x00"))
-}
-
-// signalReap kills the scenario's supervisor session and every child of this
-// test process the scenario owns, with its process group, and reaps them, until
-// none is left. Because the test process is the subreaper, an orphan is a child
-// whatever the exit order of its ancestors, but only once its parent is dead:
-// the supervisor, which stays with its exec.Cmd to be reaped, counts as left
-// until it is a zombie or gone, since a descendant is not yet ours before that.
-// It reports whether none was left before the deadline; a failed observation
-// reports false.
-func signalReap(o signalOwner) bool {
-	owned := map[int]bool{}
+// signalReap uses D48 isolation: the top-level signal tests and their subtests
+// are serial, so every child belongs to this test. No session, environment or
+// prior observation is needed, including for already-dead adopted children.
+// The supervisor has already been waited by exec.Cmd before this is called.
+func signalReap(_ int) bool {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		_ = unix.Kill(-o.sid, unix.SIGKILL)
 		kids, err := signalChildrenOf(os.Getpid())
 		if err != nil {
 			return false
 		}
-		left := 0
+		if len(kids) == 0 {
+			return true
+		}
+		pids := make([]int, 0, len(kids))
 		for _, c := range kids {
-			if c.pid == o.sid {
-				if !c.zombie {
-					left++
-				}
-				continue
-			}
-			if !owned[c.pid] && !o.owns(c) {
-				continue
-			}
-			owned[c.pid] = true
-			left++
 			if c.pgid > 1 && c.pgid != unix.Getpgrp() {
 				_ = unix.Kill(-c.pgid, unix.SIGKILL)
 			}
 			_ = unix.Kill(c.pid, unix.SIGKILL)
-			_, _ = unix.Wait4(c.pid, nil, unix.WNOHANG, nil)
+			pids = append(pids, c.pid)
 		}
-		if left == 0 {
-			return true
-		}
-		if time.Now().After(deadline) {
+		if launchAwaitExit(pids, time.Until(deadline)) != len(pids) {
 			return false
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }

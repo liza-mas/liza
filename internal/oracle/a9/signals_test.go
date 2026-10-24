@@ -2,6 +2,7 @@ package a9
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,18 +37,23 @@ func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 	}
 	a := &runningAgent{done: make(chan error, 1)}
 	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
-	signalIsolate(a.cmd, p.home)
+	cancelled := signalIsolate(a.cmd)
 	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)
 	}
-	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	owner := signalOwner{sid: a.cmd.Process.Pid, home: p.home}
+	go func() {
+		err := a.cmd.Wait()
+		if cancelled.Load() && !signalReap(a.cmd.Process.Pid) && launchAwaitsExit {
+			err = errors.New("scenario processes survived cancellation")
+		}
+		a.done <- err
+		close(a.done)
+	}()
 	t.Cleanup(func() {
-		signalReap(owner)
 		a.cancel()
 		<-a.done
-		if !signalReap(owner) {
+		if !signalReap(a.cmd.Process.Pid) {
 			t.Errorf("A9 %s cleanup: a started process outlived the test", p.name)
 		}
 	})
@@ -86,9 +92,7 @@ func signalFiles(p *scenario) []string {
 }
 
 func TestOracleA9AuditAndCleanup(t *testing.T) {
-	t.Parallel()
 	t.Run("i17-degraded", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i17-degraded")
 		r := signalRun(t, p, signalCoderArgs("codex")...)
 		requireCode(t, p, r, 0)
@@ -99,7 +103,6 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i17-clean", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i17-clean")
 		r := signalRun(t, p, signalCoderArgs("codex")...)
 		requireCode(t, p, r, 0)
@@ -109,7 +112,6 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i18-cleanup", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i18-cleanup")
 		for _, id := range []string{"ia-1", "ia-2"} {
 			p.git(t, "worktree", "add", "-q", "-b", "task/"+id, filepath.Join(".worktrees", id))
@@ -135,13 +137,11 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 }
 
 func TestOracleA9QuotaRaise(t *testing.T) {
-	t.Parallel()
 	for _, c := range []struct {
 		name  string
 		dirty bool
 	}{{"i19-dirty", true}, {"i19-clean", false}} {
 		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
 			p := newScenario(t, c.name)
 			r := signalRun(t, p, signalCoderArgs("claude")...)
 			requireCode(t, p, r, 0)
@@ -158,7 +158,6 @@ func TestOracleA9QuotaRaise(t *testing.T) {
 		})
 	}
 	t.Run("i19-other", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i19-other")
 		a := signalStart(t, p, signalCoderArgs("codex")...)
 		p.await(t, "second provider call", func() bool {
@@ -175,13 +174,11 @@ func TestOracleA9QuotaRaise(t *testing.T) {
 }
 
 func TestOracleA9UnavailableRaise(t *testing.T) {
-	t.Parallel()
 	for _, c := range []struct{ name, cli, signal, alert string }{
 		{"i20-claude", "claude", "provider-unavailable-claude", "PROVIDER UNAVAILABLE — claude: Failed to authenticate: OAuth session expired and could not be refreshed"},
 		{"i20-codex", "codex", "provider-unavailable-codex", "PROVIDER UNAVAILABLE — codex: thread/start failed: error creating thread: Codex cannot access session files under .codex/sessions (permission denied)"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
 			p := newScenario(t, c.name)
 			r := signalRun(t, p, signalCoderArgs(c.cli)...)
 			requireCode(t, p, r, 0)
@@ -192,7 +189,6 @@ func TestOracleA9UnavailableRaise(t *testing.T) {
 		})
 	}
 	t.Run("i20-cross", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i20-cross")
 		a := signalStart(t, p, signalCoderArgs("codex")...)
 		p.await(t, "second provider call", func() bool {
@@ -209,7 +205,6 @@ func TestOracleA9UnavailableRaise(t *testing.T) {
 }
 
 func TestOracleA9SignalMatch(t *testing.T) {
-	t.Parallel()
 	for _, c := range []struct {
 		name, cli string
 		blocked   bool
@@ -223,7 +218,6 @@ func TestOracleA9SignalMatch(t *testing.T) {
 		{"i21-expired", "claude", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
 			p := newScenario(t, c.name)
 			signalSeed(t, p)
 			r := signalRun(t, p, signalCoderArgs(c.cli)...)
