@@ -5,6 +5,9 @@
     "scope": "specs/architecture/consolidation-run/boundary-a2.md; justified A2 closures in specs/architecture/architectural-issues.md; specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-0-boundary.json. No production, test, oracle or guard-data repairs.",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 1: A2 area-boundary checkpoint",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-045004-arm-1-ar-12-cp-0.md#Task 1: Record the A2 boundary checkpoint",
+    "task_depends_on": [
+      "deferred-validation-2-1-correction-plan-code-0"
+    ],
     "validation": [
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
