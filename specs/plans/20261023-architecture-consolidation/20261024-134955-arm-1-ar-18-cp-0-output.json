@@ -1,0 +1,31 @@
+[
+  {
+    "desc": "Must: C4 - delete ops.InitProject with its tests and A7 ratchet entry, and run the four init branch Git subprocesses through gitenv timed runners in the project root",
+    "done_when": "internal/ops/init_project.go and init_project_test.go are gone, no InitProject or InitProjectParams reference remains in cmd or internal except the never-edited s1_snapshot_test.go, area_a7_test.go holds no InitProject key and its closure assertion requires an empty A7 Ratchet; setupIsolatedAwaitProject initializes through InitCommandWithConfig and TestAwaitResubmission_TerminalFlow passes unchanged; the four helper subprocesses run through gitenv Output/CombinedOutput in the project root with timeouts reported as errors wrapping *gitenv.TimeoutError, never as negative answers (PD-1 to PD-4); the P1 and P3 tests and the root subtests of P2 fail on pre-C4 production code (recorded) and pass, the P2 precedence test passes; A7 install and present goldens unchanged; C0-C7 pass; the manifest maps every allocated obligation.",
+    "scope": "Delete internal/ops/init_project.go and its test; area_a7_test.go InitProject key and closure assertion; the internal/commands MAS init entry, discovery ordering and the four branch helpers wherever Scope 17 placed them; new internal/commands/init_git_root_test.go and call-site-only helper edits in existing init tests; setupIsolatedAwaitProject in internal/integration/await_verdict_test.go; the acceptance manifest. Out: other init behaviour and Git sites, cmd/liza launch --cwd, gitenv/paths/internal/git code, s1_snapshot_test.go, windows-weights.json, oracle files and goldens, ADRs, architectural-issues.md, chain documents.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-010919-arm-1-ar-18.md#Scope 1: C4 single init implementation on the CLI path",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-010919-arm-1-ar-18.md#Scope 1: C4 single init implementation on the CLI path",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-134955-arm-1-ar-18-cp-0.md#Task 1: Delete ops.InitProject and run init branch Git through gitenv timed runners in the project root",
+    "inherit_inputs": {"mode": "all"},
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestInitGitTargetsProjectRoot|TestInitBranchValidationPrecedence|TestInitGitTimeout' ./internal/commands/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run TestAwaitResubmission_TerminalFlow ./internal/integration/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/commands/ ./internal/ops/ ./internal/integration/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a7/..."
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestInitGitTargetsProjectRoot|TestInitBranchValidationPrecedence|TestInitGitTimeout' ./internal/commands/", "executables": ["env", "go", "git", "sh"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run TestAwaitResubmission_TerminalFlow ./internal/integration/", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "bash"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "bash", "gofmt"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "bash"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/commands/ ./internal/ops/ ./internal/integration/", "executables": ["env", "go", "git", "bash"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a7/...", "executables": ["env", "go", "git", "bash"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]}
+    ]
+  }
+]
