@@ -1,0 +1,11 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: DRAFT_CODE
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+request_id: replace-1
+Error: replace task: replace-task: STATE_CHANGED (safe_action=requery): modification function failed: replace-task: STATE_CHANGED (safe_action=requery): original task transition no longer matches; inspect before choosing a new request

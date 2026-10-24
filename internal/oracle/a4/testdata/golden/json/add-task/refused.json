@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task 't1' already exists"
+    },
+    "ok": false,
+    "result": null
+  }
+}
