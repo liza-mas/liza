@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+t1 now waits for every child cp-p generates at code-plan-to-coding
+--- stderr

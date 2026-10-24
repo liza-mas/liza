@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "action": "replace",
+      "changed": true,
+      "class": "",
+      "replaced_by": "cp-c",
+      "task_id": "cp-1",
+      "verdict": "replaced"
+    }
+  }
+}

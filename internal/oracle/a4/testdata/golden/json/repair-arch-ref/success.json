@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "arch_ref": "specs/architecture/a.md#Scope 1: One",
+      "integration": "<SHA base>",
+      "task_id": "cp-p"
+    }
+  }
+}

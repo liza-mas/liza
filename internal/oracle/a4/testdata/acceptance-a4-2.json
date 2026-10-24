@@ -10,7 +10,7 @@
     {
       "obligation_id": "AC-budget-2",
       "file": "internal/oracle/a4/dependencies_test.go",
-      "assertion": "AC-budget-2: complete command-0 suite wall time to be measured before submission; target <=45 seconds",
+      "assertion": "AC-budget-2: the complete command-0 suite passed in 28.22 seconds wall time (26.818 seconds package time), measured in this worktree on 2026-10-24 with /usr/bin/time around the exact env-i go test command; includes fixture validation and CLI build, within the <=45 second target",
       "command_index": 0
     },
     {

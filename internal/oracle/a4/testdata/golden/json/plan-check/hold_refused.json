@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task t1 has no plan awaiting hand-off: it must be a MERGED planning task with output whose children do not exist yet and that was not replanned"
+    },
+    "ok": false,
+    "result": null
+  }
+}

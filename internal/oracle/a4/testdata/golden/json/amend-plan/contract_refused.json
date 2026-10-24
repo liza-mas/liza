@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "expanded contract correction requires an architecture original"
+    },
+    "ok": false,
+    "result": null
+  }
+}
