@@ -4,7 +4,9 @@ package a9
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/testhelpers/oracle"
 	"golang.org/x/sys/unix"
 )
 
@@ -81,12 +84,11 @@ func orchReap(t testing.TB) {
 		}
 		reaped := make(chan struct{}, len(children))
 		for _, child := range children {
-			if !child.zombie {
-				if child.pgrp != ourGroup {
-					_ = syscall.Kill(-child.pgrp, syscall.SIGKILL)
-				}
-				_ = syscall.Kill(child.pid, syscall.SIGKILL)
+			// Even a zombie can lead a group with live descendants.
+			if child.pgrp > 0 && child.pgrp != ourGroup {
+				_ = syscall.Kill(-child.pgrp, syscall.SIGKILL)
 			}
+			_ = syscall.Kill(child.pid, syscall.SIGKILL)
 			go func(pid int) {
 				var status syscall.WaitStatus
 				_, _ = syscall.Wait4(pid, &status, 0, nil)
@@ -105,3 +107,69 @@ func orchReap(t testing.TB) {
 }
 
 func orchKillPID(pid int) { _ = syscall.Kill(pid, syscall.SIGKILL) }
+
+// The helper leaves an exited, unwaited child before exiting itself. The outer
+// test waits for that parent before its first process scan: the zombie is already
+// adopted, and no tracker or environment attribution can have registered it.
+func TestOracleA9OrchestratorAdoptedZombie(t *testing.T) {
+	const helper = "ORACLE_A9_ORCH_ZOMBIE"
+	if pidFile := os.Getenv(helper); pidFile != "" {
+		child := exec.Command("/bin/sh", "-c", "exit 0")
+		var err error
+		child.Env, err = oracle.ChildEnv(oracle.EnvBase{
+			Home: os.Getenv("HOME"), Path: os.Getenv("PATH"), Tmp: os.Getenv("TMPDIR"),
+		})
+		if err != nil {
+			t.Fatal("A9 zombie helper: environment")
+		}
+		orchDetach(child)
+		if err := child.Start(); err != nil {
+			t.Fatal("A9 zombie helper: child start")
+		}
+		// WNOWAIT observes exit but deliberately leaves the child waitable.
+		if err := unix.Waitid(unix.P_PID, child.Process.Pid, nil, unix.WEXITED|unix.WNOWAIT, nil); err != nil {
+			t.Fatal("A9 zombie helper: child exit")
+		}
+		if err := os.WriteFile(pidFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+			t.Fatal("A9 zombie helper: child pid")
+		}
+		return
+	}
+	root := t.TempDir()
+	orchGuard(t)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal("A9 zombie setup: test executable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	parent := exec.CommandContext(ctx, executable, "-test.run=^TestOracleA9OrchestratorAdoptedZombie$")
+	pidFile := filepath.Join(root, "zombie-pid")
+	parent.Env, err = oracle.ChildEnv(oracle.EnvBase{Home: root, Path: root, Tmp: root}, helper+"="+pidFile)
+	if err != nil {
+		t.Fatal("A9 zombie setup: environment")
+	}
+	if err := parent.Run(); err != nil {
+		t.Fatal("A9 zombie setup: parent exit")
+	}
+	pid, err := strconv.Atoi(string(mustRead(t, pidFile)))
+	if err != nil {
+		t.Fatal("A9 zombie setup: child pid")
+	}
+	found := false
+	for _, child := range orchChildren() {
+		if child.pid == pid {
+			found = true
+			if !child.zombie {
+				t.Fatal("A9 zombie setup: child must have exited before discovery")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("A9 zombie setup: exited child must be adopted before discovery")
+	}
+	orchReap(t)
+	if left := orchChildren(); len(left) != 0 {
+		t.Fatalf("A9 cleanup: %d children remain after reaping the undiscovered zombie", len(left))
+	}
+}

@@ -2,7 +2,7 @@ package a9
 
 import "testing"
 
-// Decision D45: cancelling a supervisor leaves a provider it started in a detached
+// Decisions D45/D48: cancelling a supervisor leaves a provider it started in a detached
 // process group running after the project is removed. These tests therefore end
 // by signalling, reaping and asserting the absence of every child of the test
 // process. That assertion is only sound when no other scenario owns a child, so

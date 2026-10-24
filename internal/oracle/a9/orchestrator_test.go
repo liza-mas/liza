@@ -201,9 +201,9 @@ func TestOracleA9CheckpointSummary(t *testing.T) {
 // TestOracleA9OrchestratorReap shows the D45 cleanup on a held-provider failure
 // path. The supervisor is cancelled while the summary stub is held, which orphans
 // the stub; the cleanup must kill, reap and confirm the end of every child. The
-// second case kills the orphan first and waits until it is an adopted zombie that
-// nothing observed while it lived, which no environment or earlier record can
-// attribute.
+// second case kills the orphan first to cover an observed zombie too.
+// TestOracleA9OrchestratorAdoptedZombie separately proves exit and adoption before
+// the first discovery, without registering a live child.
 func TestOracleA9OrchestratorReap(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("A9: the child subreaper (decision D45) is Linux-only")
