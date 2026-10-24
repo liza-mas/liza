@@ -854,6 +854,30 @@ while `scenario.records` (`kit_test.go`) reads every `call-*.json` with no toler
   accepting the entry barrier everywhere (coverage gap shown by the reviewer).
 - Kind: oracle test mechanics (D46–D48 family). Revert: drop the Linux await and keep the entry barrier.
 
+### D51 — Started successor `arm-1-ar-10-cp-1-code-1` runs before the D41 follow-up correction; bounded resubmission for the named flakes (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T12:52Z. `deferred-validation-16-1-d41-correction-plan-amend-1` blocked AWAITING HUMAN under
+the started-required-successor rule (A4 Proof and Shared Ownership 149–153; A3 163–166; A2 523–528).
+`arm-1-ar-10-cp-1-code-1` (IMPLEMENTING_CODE, claimed 12:12:50Z) has an undeferred proof (index 1:
+`go test -race -timeout 30m -p 2 -count=1 ./internal/agent/ ./internal/ops/`) that executes the flaky tests the
+correction fixes. Holding it (option B) stalls the A1 critical path until the correction's three children merge.
+- Ruling (option A): the task keeps running and is not paused or handed back; the correction is placed after it.
+  Task admission has no known-red exemption: `known_red` exists only in deferred validation
+  (`internal/ops/deferred_validation.go:1509` `knownRed`), so a failing proof command refuses the submission. Hence
+  the bounded rule below. If index 1 fails ONLY on these four named signatures, the coder resubmits without changing code:
+  - `internal/agent/inflight_submit_deadline_test.go` `TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks` (:101)
+  - `internal/agent/inflight_submit_deadline_test.go` `TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback` (:227/:230)
+  - `internal/ops/await_verdict_test.go` `TestAwaitVerdict_Rejected_NewAttempt` (TIMEOUT instead of NEW_ATTEMPT)
+  - `internal/ops/sprint_checkpoint_test.go` `TestCheckpointPassedPlansRefusesUnqualifiedState/attempted_after_its_pass` (:575)
+  Each resubmission records the failing test names and lines.
+- Disproof and limit: any failure outside those signatures, or a third consecutive refusal on them, means BLOCK
+  with the evidence (the flake may be a regression the refactor introduced). No test edits, no `-run` filter, no
+  `-count` change, and no weakening of the proof command.
+- Placement: the correction's children wait on `arm-1-ar-10-cp-1-code-1` (started), then take the earliest legal slot
+  before the unstarted consumers per the A4/A3/A2 rules. The planner cites D51.
+- Rejected: option B (critical-path stall measured in hours for a flake class); a per-task known-red waiver
+  (no such admission mechanism; it would need an engine change).
+- Kind: delivery/ordering. Revert: switch to option B by handing the task back before its next submission.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
