@@ -1,8 +1,10 @@
 package oracle
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -114,4 +116,131 @@ func TestCheckUsesPackageDirectoryAndWriteEnv(t *testing.T) {
 	Check(t, Human, "h.txt", []byte("a b\n"))
 	CheckState(t, "s.yaml", []byte("a: 1\n"), []byte("a: 2\n"))
 	expectFailure(t, func(tb testing.TB) { Check(tb, Human, "h.txt", []byte("a c\n")) })
+}
+
+// storageRel is the slash-separated storage name goldenPath gives a logical
+// golden name.
+func storageRel(t *testing.T, root string, kind Kind, name string) string {
+	t.Helper()
+	p, err := goldenPath(root, kind, name)
+	if err != nil {
+		t.Fatalf("goldenPath(%q): %v", name, err)
+	}
+	rel, err := filepath.Rel(filepath.Join(root, "testdata", "golden", string(kind)), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.ToSlash(rel)
+}
+
+func TestGoldenStorageNames(t *testing.T) {
+	for _, tc := range []struct{ logical, storage string }{
+		{"plain.txt", "plain.txt"},
+		{"a/b-c_d.json", "a/b-c_d.json"},
+		{"store/<ID>.txt", "store/%3CID%3E.txt"},
+		{"store/events/<EVENT-1>.json", "store/events/%3CEVENT-1%3E.json"},
+		{"<ID>.txt", "%3CID%3E.txt"},
+		{"100%.txt", "100%25.txt"},
+		{"%3CID%3E.txt", "%253CID%253E.txt"},
+		{`a:b"c|d?e*f`, "a%3Ab%22c%7Cd%3Fe%2Af"},
+		{"ctl\x01\x1f.txt", "ctl%01%1F.txt"},
+		{"é/ü.txt", "é/ü.txt"},
+	} {
+		t.Run(tc.logical, func(t *testing.T) {
+			got := storageRel(t, "r", JSON, tc.logical)
+			if got != tc.storage {
+				t.Errorf("storage name of %q = %q, want %q", tc.logical, got, tc.storage)
+			}
+			if problem := WindowsPathProblem(got); problem != "" {
+				t.Errorf("storage name %q is not Windows-safe: %s", got, problem)
+			}
+		})
+	}
+}
+
+func TestGoldenStorageNamesAreCollisionSafe(t *testing.T) {
+	root := t.TempDir()
+	const (
+		logical = "<ID>.txt"
+		literal = "%3CID%3E.txt"
+	)
+	logicalBytes, literalBytes := []byte("logical\n"), []byte("literal\n")
+	compareGolden(t, root, true, Artifact, logical, logicalBytes)
+	compareGolden(t, root, true, Artifact, literal, literalBytes)
+
+	if a, b := storageRel(t, root, Artifact, logical), storageRel(t, root, Artifact, literal); a == b {
+		t.Fatalf("%q and %q share the storage name %q", logical, literal, a)
+	}
+	compareGolden(t, root, false, Artifact, logical, logicalBytes)
+	compareGolden(t, root, false, Artifact, literal, literalBytes)
+	expectFailure(t, func(tb testing.TB) { compareGolden(tb, root, false, Artifact, logical, literalBytes) })
+	expectFailure(t, func(tb testing.TB) { compareGolden(tb, root, false, Artifact, literal, logicalBytes) })
+
+	// Listing the directory proves no raw-name entry exists without asking the
+	// OS to stat an invalid Windows name.
+	entries, err := os.ReadDir(filepath.Join(root, "testdata", "golden", "artifact"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if want := []string{"%253CID%253E.txt", "%3CID%3E.txt"}; !slices.Equal(names, want) {
+		t.Errorf("stored golden entries = %q, want exactly %q", names, want)
+	}
+}
+
+func TestGoldenStorageNamesRefuseUnmappableNames(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"con", "NUL.txt", "dir/aux.json", "COM1", "lpt9.x", "trail.", "trail ", "a./b"} {
+		msg := expectFailure(t, func(tb testing.TB) { compareGolden(tb, root, true, JSON, name, nil) })
+		if !strings.Contains(msg, "golden name") {
+			t.Errorf("name %q: unexpected message %q", name, msg)
+		}
+	}
+	if files := readTree(t, root); len(files) != 0 {
+		t.Errorf("refused names created %v", files)
+	}
+}
+
+func TestWindowsPathProblem(t *testing.T) {
+	for _, tc := range []struct {
+		path      string
+		component string // offending component, "" when the path is valid
+	}{
+		{"a/b/c.txt", ""},
+		{"COM0.txt", ""},
+		{"COMX", ""},
+		{"com10", ""},
+		{"console.txt", ""},
+		{"a.b", ""},
+		{"é/ü.txt", ""},
+		{"a//b", ""},
+		{"x/<ID>.txt", "<ID>.txt"},
+		{"x/a:b", "a:b"},
+		{`x/a"b`, `a"b`},
+		{"x/a|b", "a|b"},
+		{"x/a?b", "a?b"},
+		{"x/a*b", "a*b"},
+		{`x/a\b`, `a\b`},
+		{"x/a\x01b", "a\x01b"},
+		{"x/a.", "a."},
+		{"x/a ", "a "},
+		{"CON", "CON"},
+		{"d/nul.txt", "nul.txt"},
+		{"Prn.tar.gz", "Prn.tar.gz"},
+		{"x/aux", "aux"},
+		{"com1", "com1"},
+		{"d/LPT9.log", "LPT9.log"},
+	} {
+		got := WindowsPathProblem(tc.path)
+		if (got == "") != (tc.component == "") {
+			t.Errorf("WindowsPathProblem(%q) = %q, want a problem: %v", tc.path, got, tc.component != "")
+			continue
+		}
+		if tc.component != "" && !strings.Contains(got, fmt.Sprintf("%q", tc.component)) {
+			t.Errorf("WindowsPathProblem(%q) = %q, which does not name component %q", tc.path, got, tc.component)
+		}
+	}
 }

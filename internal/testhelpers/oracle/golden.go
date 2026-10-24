@@ -16,7 +16,8 @@ const WriteEnv = "ORACLE_WRITE"
 
 const maxLineReport = 200
 
-// goldenPath is testdata/golden/<kind>/<name> under root.
+// goldenPath is the storage path of golden <name>: testdata/golden/<kind>/ plus
+// the name mapped by goldenStorageName, under root. Write and live read share it.
 func goldenPath(root string, kind Kind, name string) (string, error) {
 	switch kind {
 	case Prompt, Artifact, JSON, Human, State:
@@ -31,7 +32,27 @@ func goldenPath(root string, kind Kind, name string) (string, error) {
 			return "", fmt.Errorf("oracle: golden name %q contains a parent element", name)
 		}
 	}
-	return filepath.Join(root, "testdata", "golden", string(kind), filepath.FromSlash(name)), nil
+	storage := goldenStorageName(name)
+	if problem := WindowsPathProblem(storage); problem != "" {
+		return "", fmt.Errorf("oracle: golden name %q has no filesystem-safe storage name: %s", name, problem)
+	}
+	return filepath.Join(root, "testdata", "golden", string(kind), filepath.FromSlash(storage)), nil
+}
+
+// goldenStorageName maps a logical golden name to the name its file is stored
+// under: %, the characters <>:"|?* and bytes below 0x20 become % plus two
+// uppercase hex digits. The mapping is injective, so a logical name and a
+// literal escape sequence never share a file. See golden-names.md.
+func goldenStorageName(name string) string {
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		if c := name[i]; c == '%' || c < 0x20 || strings.IndexByte(`<>:"|?*`, c) >= 0 {
+			fmt.Fprintf(&b, "%%%02X", c)
+		} else {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // Check normalises got per kind and compares it with the golden
