@@ -13,8 +13,9 @@ named constants, without a new configuration field or a role-name closure
 In the state core (A1), the closed sets that decide control flow — claim types,
 role types, transition cardinalities, history events, anomaly types, rejection
 causes and the like — are bare strings compared against literals in many
-packages. A typo compiles and a consumer-side set can drift from the owner's
-validation.
+packages. Consumer-side literals can drift from the owner's validation, and
+nothing separates one set from another. The decision is indexed in the
+[ADR README](README.md).
 
 [ADR-0045](0045-declarative-role-definitions.md) made role definitions
 declarative: role *names* are user-configurable pipeline YAML and must stay
@@ -110,11 +111,15 @@ It states the target contract; the coding tasks of that scope implement it.
 
 ## Consequences
 
-- A misspelled or misplaced vocabulary value fails to compile, and each set has
-  one declaration that its validation can be tested against.
+- Distinct vocabulary types stop one set from being mixed with another by
+  accident, and call sites name constants instead of repeating literals. The
+  types do not check membership: an untyped string constant or an explicit
+  conversion still compiles, so set membership stays enforced by the existing
+  runtime validation. Each set has one declaration that focused tests compare
+  with the values its validation accepts.
 - Persisted bytes, messages and goldens are unchanged by construction: the
   types add no codec behavior and unknown values still load.
-- A bare `string` placed where a vocabulary type is expected needs a
+- A `string`-typed value placed where a vocabulary type is expected needs a
   conversion, and a typed value placed in an `any` asserted as `string` fails
   at run time. AC3 and focused tests for each type's constants against the
   values its validation accepts are the defense.
