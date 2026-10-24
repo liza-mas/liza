@@ -1,0 +1,116 @@
+{
+  "id": "RA2",
+  "base": "acceptance",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "IMPLEMENTING_CODE",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "assigned_to": "coder-1",
+        "lease_expires": "2099-01-01T00:00:00Z",
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:plan}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          }
+        ],
+        "plan_ref": "specs/plan.md#Task 1",
+        "spec_ref": "specs/goal.md",
+        "validation": [
+          "sh boundary_test.sh"
+        ],
+        "parent_task": "parent-1"
+      },
+      {
+        "id": "parent-1",
+        "type": "planning",
+        "role_pair": "code-planning-pair",
+        "status": "MERGED",
+        "description": "Independently approved allocation",
+        "assigned_to": "code-planner-1",
+        "approved_by": "code-plan-reviewer-1",
+        "approvals": [
+          {
+            "agent": "code-plan-reviewer-1",
+            "timestamp": "2020-01-01T00:00:00Z"
+          }
+        ],
+        "base_commit": "{{commit:base}}",
+        "review_commit": "{{commit:oldplan}}",
+        "merge_commit": "{{commit:oldplan}}",
+        "output": [
+          {
+            "plan_ref": "specs/plan.md#Task 1",
+            "spec_ref": "specs/goal.md",
+            "validation": [
+              "sh boundary_test.sh"
+            ]
+          }
+        ],
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "submitted_for_review",
+            "agent": "code-planner-1",
+            "commit": "{{commit:oldplan}}"
+          }
+        ]
+      }
+    ]
+  },
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "repair-acceptance-commits"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "human",
+    "state"
+  ],
+  "recipe_extra": [
+    {
+      "git": [
+        "checkout",
+        "-b",
+        "side",
+        "{{commit:base}}"
+      ]
+    },
+    {
+      "label": "oldplan",
+      "files": {
+        "specs/plan.md": "# Code plan\n\n## Source References\nSource revision: \"{{commit:base}}\"\n\n### Direct References\n- \"identity\": \"specs/goal.md#Identity\"\n\n### Obligation Coverage\n- \"AC-identity\" -> \"identity\"\n\n## Task 1\n\n### Acceptance Contract\n```json\n{\"version\":1,\"manifest\":\"acceptance/task-1.json\",\"obligations\":[\"AC-identity\"],\"validation\":[\"sh boundary_test.sh\"],\"timeout_seconds\":60,\"approved_proofs\":[]}\n```\n",
+        "boundary_test.sh": "#!/bin/sh\nexit 0\n",
+        "acceptance/task-1.json": "{\"version\":1,\"mappings\":[{\"obligation_id\":\"AC-identity\",\"file\":\"boundary_test.sh\",\"assertion\":\"exit zero\",\"command_index\":0}]}\n"
+      }
+    },
+    {
+      "git": [
+        "checkout",
+        "integration"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# exit_code
+0
+# stdout
+Updated review boundary for task-1
+review_commit old: <commit:candidate>
+review_commit new: <commit:advanced>
+base_commit old: <commit:base>
+base_commit new: <commit:base>
+reviewer claim released (task returned to submitted state)
+# stderr

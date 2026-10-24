@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed_by": "human",
+      "new_base_commit": "<commit:base>",
+      "new_review_commit": "<commit:advanced>",
+      "old_base_commit": "<commit:base>",
+      "old_review_commit": "<commit:candidate>",
+      "reviewer_released": true,
+      "task_id": "task-1"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "RV1",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [
+    {
+      "stale_generation": true,
+      "agent": "code-reviewer-1",
+      "args": [
+        "submit-verdict",
+        "task-1",
+        "REJECTED",
+        "A5 defect",
+        "--review-commit",
+        "{{commit:candidate}}"
+      ],
+      "exit": 1,
+      "contains": "quarantined",
+      "capture": {
+        "label": "finding",
+        "pattern": "\"quarantined_verdict_id\":\\s*\"(qv-[0-9a-f]+)\""
+      }
+    }
+  ],
+  "step": {
+    "agent": "orchestrator-1",
+    "args": [
+      "reconcile-verdict",
+      "task-1",
+      "{{capture:finding}}",
+      "refuted",
+      "--reason",
+      "A5 finding refuted"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

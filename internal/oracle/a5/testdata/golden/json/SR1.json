@@ -1,0 +1,21 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "agent_id": "coder-1",
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "current_assignee": "coder-1",
+      "effects": "committed",
+      "operation": "submit-for-review",
+      "outcome": "COMPLETED",
+      "request_id": "sha:<commit:candidate>",
+      "review_commit": "<commit:candidate>",
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "CODE_TO_REVIEW",
+      "transition_id": "<ID>"
+    }
+  }
+}

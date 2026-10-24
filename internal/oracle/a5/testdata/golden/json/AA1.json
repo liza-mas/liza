@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "archived": [
+        "task-1"
+      ],
+      "batches": 1,
+      "bytes": 301
+    }
+  }
+}

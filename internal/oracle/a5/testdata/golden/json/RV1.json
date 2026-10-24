@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "disposition": "refuted",
+      "finding_id": "qv-<ID>",
+      "task_id": "task-1"
+    }
+  }
+}

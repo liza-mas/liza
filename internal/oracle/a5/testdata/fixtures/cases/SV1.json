@@ -1,0 +1,24 @@
+{
+  "id": "SV1",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "code-reviewer-1",
+    "args": [
+      "submit-verdict",
+      "task-1",
+      "REJECTED",
+      "A5 defect",
+      "--review-commit",
+      "{{commit:candidate}}"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

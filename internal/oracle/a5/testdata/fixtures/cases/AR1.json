@@ -1,0 +1,63 @@
+{
+  "id": "AR1",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [
+    {
+      "agent": "code-reviewer-1",
+      "args": [
+        "submit-verdict",
+        "task-1",
+        "REJECTED",
+        "A5 defect",
+        "--review-commit",
+        "{{commit:candidate}}"
+      ],
+      "exit": 0,
+      "contains": ""
+    },
+    {
+      "agent": "coder-1",
+      "args": [
+        "await-verdict",
+        "task-1"
+      ],
+      "exit": 0,
+      "contains": "REJECTED"
+    },
+    {
+      "adapter": "worktree-commit",
+      "exit": 0,
+      "commit": {
+        "label": "revised",
+        "files": {
+          "feature.go": "package fixture\n// revised after rejection\n"
+        }
+      }
+    },
+    {
+      "agent": "coder-1",
+      "args": [
+        "submit-for-review",
+        "task-1",
+        "{{commit:revised}}"
+      ],
+      "exit": 0,
+      "contains": ""
+    }
+  ],
+  "step": {
+    "agent": "code-reviewer-1",
+    "args": [
+      "await-resubmission",
+      "task-1"
+    ],
+    "exit": 0,
+    "contains": "RESUBMITTED"
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

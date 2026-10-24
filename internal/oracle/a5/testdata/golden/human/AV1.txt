@@ -1,0 +1,14 @@
+# exit_code
+0
+# stdout
+Verdict: REJECTED
+Status: CODE_REJECTED
+Reason: A5 defect
+Reviewer: code-reviewer-1
+## Rejection Feedback
+You MUST ADDRESS the following rejection feedback before resubmitting:
+A5 defect
+Current iteration: 1
+# stderr
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing done_when: task-1
+WARNING: pre-existing state violation, not caused by this change: non-DRAFT task missing spec_ref: task-1

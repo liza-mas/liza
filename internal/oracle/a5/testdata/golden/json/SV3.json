@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "agent_id": "code-plan-reviewer-1",
+      "blocked_reason": "",
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "current_assignee": "code-planner-1",
+      "effects": "committed",
+      "escalated_to_blocked": false,
+      "new_attempt_triggered": false,
+      "operation": "submit-verdict",
+      "outcome": "COMPLETED",
+      "reason": "",
+      "request_id": "verdict-<ID>",
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "CODING_PLAN_MAIN_PARTIALLY_APPROVED",
+      "transition_id": "<ID>",
+      "verdict": "APPROVED"
+    }
+  }
+}

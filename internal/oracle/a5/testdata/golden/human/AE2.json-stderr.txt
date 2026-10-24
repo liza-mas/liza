@@ -1,0 +1,2 @@
+submit-for-review task-1: preparing the submission (rebase, index refresh); <elapsed> since the submit started. Still working: do not interrupt it or submit again.
+submit-for-review task-1: running canonical validation, batch budget 1m0s; <elapsed> since the submit started, at most until <TIME>. Still working: do not interrupt it or submit again.

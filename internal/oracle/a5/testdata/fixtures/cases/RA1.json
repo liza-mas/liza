@@ -1,0 +1,18 @@
+{
+  "id": "RA1",
+  "base": "legacy",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "repair-acceptance-commits",
+      "--dry-run"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "human"
+  ]
+}

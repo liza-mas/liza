@@ -1,0 +1,22 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "stale_caller",
+      "details": {
+        "agent_id": "orchestrator-9",
+        "effects": "none",
+        "outcome": "STALE_CALLER",
+        "safe_action": "stop"
+      },
+      "message": "agent orchestrator-9 authority rejected: missing registration authority; stop"
+    },
+    "ok": false,
+    "result": {
+      "agent_id": "orchestrator-9",
+      "effects": "none",
+      "outcome": "STALE_CALLER",
+      "safe_action": "stop"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# exit_code
+0
+# stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: CODE_TO_REVIEW
+effects: committed
+task_id: task-1
+transition_id: <ID>
+completed_transition_id: <ID>
+request_id: sha:<commit:candidate>
+current_assignee: coder-1
+SUBMITTED FOR REVIEW: task-1
+review_commit: <commit:candidate>
+submitted_by: coder-1
+# stderr
+submit-for-review task-1: preparing the submission (rebase, index refresh); <elapsed> since the submit started. Still working: do not interrupt it or submit again.

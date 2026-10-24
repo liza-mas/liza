@@ -1,0 +1,112 @@
+{
+  "id": "RCA3",
+  "base": "review",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "REVIEWING_CODE",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "assigned_to": "coder-1",
+        "lease_expires": "2099-01-01T00:00:00Z",
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "rejected",
+            "agent": "code-reviewer-1",
+            "reason": "prior defect 1",
+            "commit": "{{commit:candidate}}"
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "rejected",
+            "agent": "code-reviewer-1",
+            "reason": "prior defect 2",
+            "commit": "{{commit:candidate}}"
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "rejected",
+            "agent": "code-reviewer-1",
+            "reason": "prior defect 3",
+            "commit": "{{commit:candidate}}"
+          }
+        ],
+        "review_commit": "{{commit:candidate}}",
+        "reviewing_by": "code-reviewer-1",
+        "review_lease_expires": "2099-01-01T00:00:00Z",
+        "handoff_events": [
+          {
+            "timestamp": "2020-01-01T00:00:00Z",
+            "agent": "coder-1",
+            "trigger": "submission"
+          }
+        ],
+        "review_cycles_current": 3,
+        "review_cycles_total": 3
+      }
+    ]
+  },
+  "prepare": [
+    {
+      "agent": "code-reviewer-1",
+      "args": [
+        "submit-verdict",
+        "task-1",
+        "REJECTED",
+        "A5 defect",
+        "--review-commit",
+        "{{commit:candidate}}"
+      ],
+      "exit": 0,
+      "contains": ""
+    },
+    {
+      "agent": "orchestrator-1",
+      "args": [
+        "record-rejection-rca",
+        "task-1",
+        "--rca-file",
+        "rca.json"
+      ],
+      "exit": 0,
+      "contains": ""
+    }
+  ],
+  "step": {
+    "agent": "orchestrator-1",
+    "args": [
+      "resume-rejection-rca",
+      "task-1",
+      "--disposition-file",
+      "disposition.json"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

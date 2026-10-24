@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "base_commit": "<commit:base>",
+      "reason": "",
+      "review_commit": "<commit:revised>",
+      "review_cycle": 1,
+      "task_status": "REVIEWING_CODE",
+      "verdict": "RESUBMITTED"
+    }
+  }
+}

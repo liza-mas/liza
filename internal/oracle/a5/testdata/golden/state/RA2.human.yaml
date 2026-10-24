@@ -1,0 +1,457 @@
+# before
+version: 1
+goal:
+    id: goal-1
+    description: A5 fixture
+    spec_ref: specs/goal.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Frozen A5 fixture
+      status: IMPLEMENTING_CODE
+      priority: 1
+      assigned_to: coder-1
+      worktree: .worktrees/task-1
+      base_commit: <commit:plan>
+      iteration: 1
+      parent_task: parent-1
+      lease_expires: <TIME>
+      spec_ref: specs/goal.md
+      plan_ref: specs/plan.md#Task 1
+      done_when: ""
+      validation:
+        - sh boundary_test.sh
+      scope: ""
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: pre_execution_checkpoint
+          agent: coder-1
+          extra:
+            files_to_modify:
+                - feature.go
+                - feature_test.go
+            intent: freeze A5
+            validation_plan: fixture validation
+    - id: parent-1
+      type: planning
+      role_pair: code-planning-pair
+      description: Independently approved allocation
+      status: MERGED
+      priority: 0
+      assigned_to: code-planner-1
+      base_commit: <commit:base>
+      output:
+        - desc: ""
+          done_when: ""
+          scope: ""
+          spec_ref: specs/goal.md
+          plan_ref: specs/plan.md#Task 1
+          validation:
+            - sh boundary_test.sh
+      review_commit: <commit:oldplan>
+      approved_by: code-plan-reviewer-1
+      approvals:
+        - agent: code-plan-reviewer-1
+          provider: ""
+          timestamp: <TIME>
+      merge_commit: <commit:oldplan>
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: submitted_for_review
+          agent: code-planner-1
+          commit: <commit:oldplan>
+agents:
+    code-plan-reviewer-1:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-2:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-3:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-planner-1:
+        role: code-planner
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-1:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-2:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-1:
+        role: coder
+        status: WORKING
+        generation: generation-1
+        current_task: task-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-2:
+        role: coder
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    orchestrator-1:
+        role: orchestrator
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 10
+    max_global_integration_generations: 0
+    heartbeat_interval: 0
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    agent_tools:
+        test:
+            validation_execution: local
+    integration_branch: integration
+    mode: RUNNING
+# after
+version: 1
+mutation_sequence: 1
+goal:
+    id: goal-1
+    description: A5 fixture
+    spec_ref: specs/goal.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Frozen A5 fixture
+      status: IMPLEMENTING_CODE
+      priority: 1
+      assigned_to: coder-1
+      worktree: .worktrees/task-1
+      base_commit: <commit:plan>
+      iteration: 1
+      parent_task: parent-1
+      lease_expires: <TIME>
+      spec_ref: specs/goal.md
+      plan_ref: specs/plan.md#Task 1
+      done_when: ""
+      validation:
+        - sh boundary_test.sh
+      scope: ""
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: pre_execution_checkpoint
+          agent: coder-1
+          extra:
+            files_to_modify:
+                - feature.go
+                - feature_test.go
+            intent: freeze A5
+            validation_plan: fixture validation
+    - id: parent-1
+      type: planning
+      role_pair: code-planning-pair
+      description: Independently approved allocation
+      status: MERGED
+      priority: 0
+      assigned_to: code-planner-1
+      base_commit: <commit:base>
+      output:
+        - desc: ""
+          done_when: ""
+          scope: ""
+          spec_ref: specs/goal.md
+          plan_ref: specs/plan.md#Task 1
+          validation:
+            - sh boundary_test.sh
+      review_commit: <commit:plan>
+      approved_by: code-plan-reviewer-1
+      approvals:
+        - agent: code-plan-reviewer-1
+          provider: ""
+          timestamp: <TIME>
+      merge_commit: <commit:plan>
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: submitted_for_review
+          agent: code-planner-1
+          commit: <commit:plan>
+        - time: <TIME>
+          event: acceptance_commits_remapped
+          reason: integration branch rewritten after this parent merged; commits matched by patch id
+          note: 'acceptance evidence remapped by content identity onto <commit:plan>: <commit:oldplan>-><commit:plan>'
+          history_entries: 1
+          integration: <commit:plan>
+          replaced:
+            <commit:oldplan>: <commit:plan>
+agents:
+    code-plan-reviewer-1:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-2:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-3:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-planner-1:
+        role: code-planner
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-1:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-2:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-1:
+        role: coder
+        status: WORKING
+        generation: generation-1
+        current_task: task-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-2:
+        role: coder
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    orchestrator-1:
+        role: orchestrator
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 10
+    max_global_integration_generations: 0
+    heartbeat_interval: 0
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    agent_tools:
+        test:
+            validation_execution: local
+    integration_branch: integration
+    mode: RUNNING

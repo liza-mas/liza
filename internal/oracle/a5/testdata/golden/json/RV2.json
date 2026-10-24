@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "quarantined verdict unknown-finding not found for task task-1"
+    },
+    "ok": false,
+    "result": null
+  }
+}
