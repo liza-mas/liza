@@ -10,13 +10,13 @@
     {
       "obligation_id": "AC-frozen",
       "file": "internal/oracle/a3/lifecycle/claim_task_variants_test.go",
-      "assertion": "TestOracleClaimTask (fresh success, not-claimable refusal; unchanged) and TestOracleClaimTaskVariants compare the claim --json, human and state.yaml/git effects of integration-fix, preserved-initial and rejected claims against committed goldens; existing claim goldens are unchanged.",
+      "assertion": "TestOracleClaimTask (fresh success, not-claimable refusal; unchanged) and TestOracleClaimTaskVariants compare the claim --json, human and state.yaml/git effects of integration-fix, preserved-initial, rejected, limit-escalation, stranded-takeover and receipt replay/stale claims against committed goldens; arm-1-ar-12-cp-1-claim-inventory.md maps every extracted branch to its proof; existing claim goldens are unchanged.",
       "command_index": 0
     },
     {
       "obligation_id": "AC-oracle",
       "file": "internal/oracle/a3/lifecycle/claim_task_variants_test.go",
-      "assertion": "TestOracleClaimTaskVariants goldens (json, human, state under claim-task/) were written by regen write-new before any structural edit (commit e53abbba7); regen -mode check reproduces them and every earlier A3 lifecycle golden from the provenance ledger.",
+      "assertion": "TestOracleClaimTaskVariants goldens (json, human, state under claim-task/) were written by regen write-new from the starting tree: the first set before any structural edit (commit e53abbba7), the stranded-takeover and receipt cases added after review finding R1 and verified against the refactored code; regen -mode check reproduces them and every earlier A3 lifecycle golden from the provenance ledger.",
       "command_index": 4
     },
     {

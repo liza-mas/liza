@@ -39,6 +39,10 @@ type lifecycleCase struct {
 	// L15 invokes JSON mode but freezes only its A3-owned state surface.
 	stateOnly  bool
 	setupFiles []setupFile
+	// A stranded claim takeover advances the task boundary at run time, so the
+	// receipt's expected_transition varies between runs. Only a case that needs
+	// it opts in; every other receipt digest stays a digit-for-digit assertion.
+	maskBoundaries bool
 }
 
 func runCases(t *testing.T, command string, cases ...lifecycleCase) {
@@ -97,6 +101,9 @@ func runCase(t *testing.T, bin, command string, c lifecycleCase) {
 			newRunMask := func() *mask {
 				m := newMask(start, f.commits, paths, os.Getpid())
 				m.discover(f.before, final)
+				if c.maskBoundaries {
+					m.discoverBoundaries(final)
+				}
 				for _, res := range results {
 					m.discover(res.stdout, res.stderr)
 				}
