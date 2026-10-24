@@ -258,14 +258,14 @@
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-020240-arm-1-ar-10-cp-1.md#Task 4: Record A1 vocabulary ownership",
     "validation": [
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check f2243f5e9a655e087df592a5b45829bcce96d435 HEAD -- 'specs/architecture/ADR/*-a1-typed-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-10-cp-1-adr.json",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
       {
-        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check",
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check f2243f5e9a655e087df592a5b45829bcce96d435 HEAD -- 'specs/architecture/ADR/*-a1-typed-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-10-cp-1-adr.json",
         "executables": [
           "env",
           "git"
