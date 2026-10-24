@@ -11,10 +11,6 @@ var areaA3 = Area{
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/ops/assess_blocked.go", Func: "assessBlockedWithOptionalAuthority"}, Ceiling: 266},
 		{Key: Key{File: "internal/ops/assess_hypothesis_exhausted.go", Func: "assessHypothesisExhaustedWithOptionalAuthority"}, Ceiling: 105},
-		{Key: Key{File: "internal/ops/claim_task.go"}, Ceiling: 1120},
-		{Key: Key{File: "internal/ops/claim_task.go", Func: "claimTask"}, Ceiling: 243},
-		{Key: Key{File: "internal/ops/claim_task.go", Func: "completeClaimTaskAfterValidation"}, Ceiling: 402},
-		{Key: Key{File: "internal/ops/claim_task_strategy.go", Func: "preservedInitialClaimStrategy.handleWorktree"}, Ceiling: 108},
 		{Key: Key{File: "internal/ops/handoff.go", Func: "Handoff"}, Ceiling: 141},
 		{Key: Key{File: "internal/ops/mark_blocked.go", Func: "markBlockedWithOptionalAuthority"}, Ceiling: 185},
 		{Key: Key{File: "internal/ops/mode_change.go", Func: "resume"}, Ceiling: 148},

@@ -20,6 +20,7 @@ var (
 	// remain digit-for-digit assertions, protected from harness folding.
 	volatileRE  = regexp.MustCompile(`\b(?:transition_id|completed_transition_id|instance_id|key_id)"?\s*:\s*"?([0-9a-fA-F]{16,64})\b`)
 	ledgerKeyRE = regexp.MustCompile(`^[0-9a-fA-F]{64}:$`)
+	boundaryRE  = regexp.MustCompile(`expected_transition:\s*([0-9a-fA-F]{64})\b`)
 )
 
 type mask struct {
@@ -73,6 +74,14 @@ func (m *mask) discover(sources ...string) {
 				m.discoverInstance(strings.TrimSuffix(key, ":"))
 			}
 		}
+	}
+}
+
+// discoverBoundaries marks the receipt boundaries recorded in a final state as
+// run-varying identities.
+func (m *mask) discoverBoundaries(state string) {
+	for _, match := range boundaryRE.FindAllStringSubmatch(state, -1) {
+		m.volatile[match[1]] = true
 	}
 }
 

@@ -1,0 +1,16 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: IMPLEMENTING_CODE
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+current_assignee: coder-1
+Different coder claiming REJECTED task, recreating worktree
+IMPLEMENTING: task-1 by coder-1 (from CODE_REJECTED)
+worktree: .worktrees/task-1
+base_commit: <commit:base>
+lease_expires: <now+30m Z>
+stderr:
