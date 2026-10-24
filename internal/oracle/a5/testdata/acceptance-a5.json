@@ -250,7 +250,7 @@
     {
       "obligation_id": "AC-capture",
       "file": "internal/oracle/a5/capture_test.go",
-      "assertion": "TestA5CaptureForms keeps the stdout document and exit code intact, separates human streams, and TestOracleA5 compares each mode with CheckState pairs",
+      "assertion": "TestA5CaptureForms and TestA5JSONStderr keep the stdout document, separate human streams and fail on lost or new JSON stderr; TestOracleA5 compares each mode with CheckState pairs",
       "command_index": 0
     },
     {
@@ -268,7 +268,7 @@
     {
       "obligation_id": "AC-determinism",
       "file": "internal/oracle/a5/driver_test.go",
-      "assertion": "TestA5Determinism keeps lease offsets and the default duration, drops free log lines and elapsed text, and pins session variables",
+      "assertion": "TestA5Determinism offsets only leases changed between the before/after pair, keeps the default duration, drops free log lines and elapsed text, and pins session variables",
       "command_index": 0
     },
     {

@@ -265,11 +265,19 @@ func TestA5Preparation(t *testing.T) {
 // normaliser and keep the distinctions the goldens assert.
 func TestA5Determinism(t *testing.T) {
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	got := string(normaliseLeases([]byte("lease_expires: 2026-01-01T00:30:00Z\nreview_lease_expires: \"2026-01-01T00:10:00Z\"\nlease_expires: 2099-01-01T00:00:00Z\nlease_expires: 2020-01-01T00:00:00Z\n"), start))
-	for _, want := range []string{"lease_expires: <lease:+30m>\n", "review_lease_expires: <lease:+10m>\n", "lease_expires: 2099-01-01T00:00:00Z\n", "lease_expires: 2020-01-01T00:00:00Z\n"} {
+	// A lease written by the step is offset from its start; one created during
+	// preparation and left alone stays textually identical on both sides, and so
+	// does a refreshed-looking value that did not change.
+	before := []byte("task:\n  lease_expires: 2026-01-01T00:03:00Z\n  review_lease_expires: 2020-01-01T00:00:00Z\nagent:\n  lease_expires: 2099-01-01T00:00:00Z\n")
+	after := []byte("task:\n  lease_expires: 2026-01-01T00:03:00Z\n  review_lease_expires: \"2026-01-01T00:30:00Z\"\nagent:\n  lease_expires: 2099-01-01T00:00:00Z\n  lease_expires: 2026-01-01T00:10:00Z\n")
+	got := string(normaliseLeases(before, after, start))
+	for _, want := range []string{"  lease_expires: 2026-01-01T00:03:00Z\n", "review_lease_expires: <lease:+30m>\n", "  lease_expires: 2099-01-01T00:00:00Z\n", "  lease_expires: <lease:+10m>\n"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("lease normalisation lost %q in %q", want, got)
 		}
+	}
+	if strings.Contains(got, "<lease:+3m>") {
+		t.Error("an unchanged preparation lease was rewritten as a step change")
 	}
 	if got := string(normalisePIDs([]byte("      pid: 4242\n    pid_note: 4242\n"))); got != "      pid: <pid>\n    pid_note: 4242\n" {
 		t.Errorf("pid normalisation: %q", got)
@@ -370,5 +378,22 @@ func TestA5FailureSignals(t *testing.T) {
 	})
 	if !strings.Contains(differs, "testdata/golden/human/SR1.txt") || !strings.Contains(differs, "differs at line 1") {
 		t.Errorf("difference signal: %q", differs)
+	}
+}
+
+// TestA5JSONStderr requires lost frozen stderr to fail like new stderr.
+func TestA5JSONStderr(t *testing.T) {
+	liveOnly(t)
+	n := oracle.NewNormaliser()
+	lost := fails(t, func(_ oracle.Result, rec testing.TB) { checkJSONStderr(rec, n, "SR1", nil) })
+	if !strings.Contains(lost, "testdata/golden/human/SR1.json-stderr.txt") || !strings.Contains(lost, "differs at line") {
+		t.Errorf("lost stderr did not fail against its golden: %q", lost)
+	}
+	appeared := fails(t, func(_ oracle.Result, rec testing.TB) { checkJSONStderr(rec, n, "SR2X", []byte("new\n")) })
+	if !strings.Contains(appeared, "is missing") {
+		t.Errorf("new stderr without a golden did not fail: %q", appeared)
+	}
+	if quiet := fails(t, func(_ oracle.Result, rec testing.TB) { checkJSONStderr(rec, n, "SR2X", nil) }); quiet != "" {
+		t.Errorf("no stderr and no golden must pass: %q", quiet)
 	}
 }

@@ -283,7 +283,7 @@ tasks:
       review_commit: <commit:revised>
       reviewing_by: code-reviewer-1
       review_lease_expires: <lease:+30m>
-      lease_expires: <lease:+30m>
+      lease_expires: <TIME>
       spec_ref: ""
       done_when: ""
       scope: ""
@@ -311,7 +311,7 @@ tasks:
               transition_id: <ID>
               projection:
                 base_commit: <commit:base>
-                lease_expires: <lease:+30m>
+                lease_expires: "<TIME>"
                 source_status: CODE_REJECTED
                 attempt: 1
                 iteration: 2
