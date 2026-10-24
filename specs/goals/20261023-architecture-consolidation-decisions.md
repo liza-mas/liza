@@ -995,6 +995,28 @@ locates its installation from its own path. The cause is plausible but unproven.
   D31 symlink assertion on Windows (an assertion change outside a C task).
 - Kind: proof scope (D53 family). Revert: port the D31 isolation to Windows and drop the constraint.
 
+### D58 — A2 runs in parallel with the A3–A7 chain (human, 2026-10-24)
+Human decision ("I suspect this is over-conservative … parallelizable … even if it implies some rebasing" → trial approved), 2026-10-24T21:36Z.
+Package-level scope overlap of the open coding tasks (INFERRED from scope text): A3–A7 share `internal/ops`, `internal/commands`,
+`internal/agent` and `cmd/liza` pairwise, so they stay serial. A2 (`toolresult`, `providers`, `git`, `embedded`, `scipsearch`, …) shares
+only `cmd/liza` wiring with them. Gain estimate: about 13 h off the critical path (19 A2 tasks × 43 min median).
+- Ruling: A3's refactor coding (`arm-1-ar-12-cp-1…cp-4` children) and A4's coding (`arm-1-ar-13-*` children) stop waiting on A2's coding
+  and on the A2 boundary task `arm-1-ar-12-cp-0-code-0`. The 155 edges on 28 tasks were counted at 21:45Z. Everything else stays: A3→A7 order,
+  each area's oracle-before-refactor (goal Must), and C tasks after their area. The A2 boundary task is unchanged: it records G1–G8 when
+  A2's coding completes. Goal line 234 ("the next area does not start until CI is green") is relaxed for A2→A3 only. A red A2 G8 holds A2's
+  closure and the run close (Scope 25), not A3–A7.
+- Mechanism, verified in source and help before ruling (D-23):
+  - The orchestrator runs `narrow-inherited-dependencies` on the A3/A4 producers, with selections that keep every upstream except
+    `arm-1-ar-11`. It is orchestrator-only, applies only to children still in their initial status, and refuses, writing nothing, if a selection fails.
+  - The operator removes residual sibling or boundary edges with `retarget-dependency`, which runs unfenced.
+  - NO `amend-plan` on `arm-1` or `arm-1-ar-12`: a pending amendment fences every transitive descendant's checkpoint
+    (`internal/models/plan_amendment_consumer.go:5-30`, `write_checkpoint.go:100`), which would stall all coding.
+- A8 (`internal/prompts`, 3 tasks) may be decoupled the same way, if its edges allow it, as a separate step.
+- Disproof and stop: if narrowing refuses, or a removed edge carries a real input (a type or API produced by A2 and consumed by A3/A4), the
+  orchestrator reports it and keeps that edge. Rebase conflicts on the `cmd/liza` wiring are accepted.
+- Rejected: a master-plan amendment (it would stall the whole run during authoring); parallelising A3–A7 (semantic refactor-on-refactor conflicts).
+- Kind: delivery (ordering). Revert: retarget the edges back (audit history keeps the originals).
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
