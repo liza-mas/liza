@@ -1,0 +1,55 @@
+[
+  {
+    "desc": "Must: correct the oracle proof-scope inventory for the D57 A1 CLI Windows TestMain guard and make its enumeration recipe discover that guard (docs-only)",
+    "done_when": "proof-scope.md differs from 8e93a3904 only in the recipe, authority line, a new Windows-skipped A1 a1/cli row (TestMain guard, one D57/D31 line, os.Exit(0) before oracle.RunMain, no build constraint) and the all-platforms A1 bullet (a1/persist and sample only); recipe grep checks and guard tests pass; pre-commit passes; checkpoint records tdd_not_required.",
+    "scope": "IN: internal/testhelpers/oracle/proof-scope.md (four planned places), manifest. OUT: every internal/oracle/** file, other harness files, production, CI, tests, fixtures, goldens, D53 follow-up outputs 0-2 and their artifacts, race commands, holds, push/dispatch.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D57 — D53 extended: the A1 CLI oracle (D31 git-only PATH) is excluded on Windows (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-195551-d57-oracle-proof-scope-plan.md#Task 1: Correct the oracle proof-scope inventory for the D57 A1 CLI Windows guard",
+    "validation": [
+      "pre-commit run --files internal/testhelpers/oracle/proof-scope.md specs/plans/20261023-architecture-consolidation/acceptance/d57-oracle-proof-scope-plan-proof-scope.json",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIWindowsExclusion|TestOracleCLIBoundary)$' ./internal/oracle/a1/cli/",
+      "grep -nF 'os\\.Exit\\(0\\)' internal/testhelpers/oracle/proof-scope.md",
+      "git grep -nE '^//go:build|t\\.Skip\\(|os\\.Exit\\(0\\)' -- internal/oracle/a1/cli/main_test.go",
+      "git grep -nE '^//go:build|t\\.Skip\\(|os\\.Exit\\(0\\)' -- internal/oracle"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "pre-commit run --files internal/testhelpers/oracle/proof-scope.md specs/plans/20261023-architecture-consolidation/acceptance/d57-oracle-proof-scope-plan-proof-scope.json",
+        "executables": ["pre-commit"],
+        "env": [],
+        "probes": [["pre-commit", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -v -run '^(TestOracleCLIWindowsExclusion|TestOracleCLIBoundary)$' ./internal/oracle/a1/cli/",
+        "executables": ["env", "go"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"]]
+      },
+      {
+        "command": "grep -nF 'os\\.Exit\\(0\\)' internal/testhelpers/oracle/proof-scope.md",
+        "executables": ["grep"],
+        "env": [],
+        "probes": [["grep", "--version"]]
+      },
+      {
+        "command": "git grep -nE '^//go:build|t\\.Skip\\(|os\\.Exit\\(0\\)' -- internal/oracle/a1/cli/main_test.go",
+        "executables": ["git"],
+        "env": [],
+        "probes": [["git", "--version"]]
+      },
+      {
+        "command": "git grep -nE '^//go:build|t\\.Skip\\(|os\\.Exit\\(0\\)' -- internal/oracle",
+        "executables": ["git"],
+        "env": [],
+        "probes": [["git", "--version"]]
+      }
+    ],
+    "provider_dependencies": [
+      {
+        "provider_task": "d53-oracle-portability-followup-plan",
+        "transition": "code-plan-to-coding",
+        "outputs": [0, 1, 2]
+      }
+    ]
+  }
+]
