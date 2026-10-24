@@ -1,0 +1,11 @@
+[
+  {
+    "id": "t3",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "coding-pair",
+    "priority": 1
+  }
+]

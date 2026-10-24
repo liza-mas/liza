@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "at least one task is required"
+    },
+    "ok": false,
+    "result": null
+  }
+}

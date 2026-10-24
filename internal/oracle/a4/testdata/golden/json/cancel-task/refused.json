@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "effects": "none",
+        "operation": "cancel-task",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "m1",
+        "task_status": "MERGED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "cancel-task: ALREADY_TRANSITIONED (safe_action=stop): failed to cancel task: modification function failed: cancel-task: ALREADY_TRANSITIONED (safe_action=stop): task is already terminal"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "cancel-task",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "m1",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "current_assignee": "architect-1",
+      "effects": "committed",
+      "operation": "set-task-output",
+      "outcome": "COMPLETED",
+      "output_count": 1,
+      "safe_action": "continue",
+      "state_path": "<FIXTURE>/.liza/state.yaml",
+      "task_id": "arch-1",
+      "task_status": "ARCHITECTING",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

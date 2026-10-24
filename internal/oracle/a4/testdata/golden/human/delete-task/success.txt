@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Deleted task t3 (was DRAFT_CODE)
+--- stderr

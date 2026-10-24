@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: cannot delete MERGED task m1 (use --force if you really want to)

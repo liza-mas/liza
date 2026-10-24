@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: proceed failed: sprint must be COMPLETED before proceeding (current: IN_PROGRESS)
