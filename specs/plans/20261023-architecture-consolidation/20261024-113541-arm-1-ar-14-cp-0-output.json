@@ -173,7 +173,7 @@
   },
   {
     "desc": "Must: separate A5 acceptance evidence and validation readiness by phase (K-ACC)",
-    "done_when": "The acceptance_evidence.go file key and the loadDeclaredAcceptanceInput and prepareValidationPreflight keys are absent from area_a5_test.go; new internal/oracle/a5/supplement goldens for uncovered acceptance and readiness refusals precede the production edit and every delivered golden is unchanged; K1-E5 to E7 stay in their transactions; all canonical commands pass",
+    "done_when": "The acceptance_evidence.go file key and the loadDeclaredAcceptanceInput and prepareValidationPreflight keys are absent from area_a5_test.go; new internal/oracle/a5/supplement goldens for uncovered acceptance and readiness refusals precede the production edit and every delivered golden is unchanged; K1-E5 stays in its transaction and the K1 Transaction Trace count stays at most 14; all canonical commands pass",
     "scope": "The eight K-ACC files in internal/ops, new private K-ACC files, their white-box tests, the new internal/oracle/a5/supplement package, area_a5_test.go key removals, X2 conversions in internal/agent, invalidated A5 references in INVARIANTS.md and chain docs, its manifest. Out: behaviour changes, C1-C6 edits, delivered oracle files, other areas' logic, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
@@ -297,7 +297,7 @@
   },
   {
     "desc": "Must: separate A5 submission preconditions, Git work, admission and final transaction (K-SUB)",
-    "done_when": "The submit_review.go file key and the prepareSubmitForReview key are absent; new supplement goldens for the deterministic pre-effect submission refusals and the rebase-conflict INTEGRATION_FAILED route precede the production edit and every older golden is unchanged; K1-E7 stays in the final transaction; all canonical commands pass",
+    "done_when": "The submit_review.go file key and the prepareSubmitForReview key are absent; new supplement goldens for the deterministic pre-effect submission refusals and the rebase-conflict INTEGRATION_FAILED route precede the production edit and every older golden is unchanged; K1-E7 and K1-E11 stay in the final transaction; all canonical commands pass",
     "scope": "The seven K-SUB files in internal/ops, new private K-SUB files, white-box tests, new supplement case/fixture/adapter/golden files, area_a5_test.go key removals, X2 conversions in internal/commands, invalidated A5 references, its manifest. Out: behaviour changes (issue-clean-worktree stays as is), C1-C6 edits, delivered oracle files, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
@@ -418,7 +418,7 @@
   },
   {
     "desc": "Must: separate A5 verdict validation, transition and failure projection (K-VER)",
-    "done_when": "The submit_verdict.go file key and the submitVerdict and submitVerdictLifecycle keys are absent; a supplement pending-verdict replay golden precedes the production edit and every older golden is unchanged; quorum and diversity behaviour is unchanged; all canonical commands pass",
+    "done_when": "The submit_verdict.go file key and the submitVerdict and submitVerdictLifecycle keys are absent; a supplement pending-verdict replay golden precedes the production edit and every older golden is unchanged; K1-E12 to E14 stay in their transactions; quorum and diversity behaviour is unchanged; all canonical commands pass",
     "scope": "The seven K-VER files in internal/ops, new private K-VER files, white-box tests, new supplement files, area_a5_test.go key removals, X2 conversions in internal/commands and cmd/liza, invalidated A5 references, its manifest. Out: behaviour changes (issue-verdict-diversity stays as is), C1-C6 edits, delivered oracle files, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
@@ -781,7 +781,7 @@
   },
   {
     "desc": "Must: separate A5 reviewer-claim selection, candidate checks and claim effects (K-OWN)",
-    "done_when": "The claim_reviewer_task.go file key and the claimReviewerTask, ClearStaleReviewClaims and updateReviewCommitLocked keys are absent, leaving the A5 Ratchet empty; supplement orphaned-base heal goldens precede the production edit and every older golden (RC1-RC5, UR, CS) is unchanged; C2 diversity comparisons stay in their selection functions; K1-E1, E2, E8, E9 stay in their transactions; all canonical commands pass",
+    "done_when": "The claim_reviewer_task.go file key and the claimReviewerTask, ClearStaleReviewClaims and updateReviewCommitLocked keys are absent, leaving the A5 Ratchet empty; supplement orphaned-base heal goldens precede the production edit and every older golden (RC1-RC5, UR, CS) is unchanged; C2 diversity comparisons stay in their selection functions; K1-E1, E2, E8, E9, E10 stay in their transactions; all canonical commands pass",
     "scope": "The seven K-OWN files in internal/ops, new private claim selection/candidate files, white-box tests, new supplement files, area_a5_test.go key removals, X2 conversions in internal/agent, invalidated A5 references, its manifest. Out: C2 diversity logic change, C1 lease change, a second review-claim class type, behaviour changes, delivered oracle files, shims",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
@@ -1004,7 +1004,7 @@
   },
   {
     "desc": "Must: record A5 closure evidence and the A5 concern-layout ADR",
-    "done_when": "TestAreaA5RatchetIsEmpty in area_a5_test.go passes; one new ADR with exactly one README index row records the A5 concern layout, rejected alternatives, retained exported surface, vocabulary ownership, the shim and exported-API audit and the K1 inventory with a count not above the starting commit's; every chain-document citation of A5 code resolves or is recorded as drift; git diff --check is clean",
+    "done_when": "TestAreaA5RatchetIsEmpty in area_a5_test.go passes; one new ADR with exactly one README index row records the A5 concern layout, rejected alternatives, retained exported surface, vocabulary ownership, the shim and exported-API audit and the K1 inventory with a count not above the starting commit's; every chain-document citation of A5 code resolves or is recorded as drift; git diff --check is clean and make test, make lint, make test-e2e and go test -race ./internal/ops/ pass",
     "scope": "internal/testguard/archguard/area_a5_test.go (emptiness test), one new ADR and its README row, residual A5 code references in INVARIANTS.md and chain docs, its manifest. Out: production code, historical ADRs, overview.md, architectural-issues.md (A5 closures belong to the A6 boundary)",
     "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
@@ -1012,8 +1012,10 @@
     "validation": [
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 138e4d4edcba4a0494df10bb3f29005b0e4bc79b HEAD -- INVARIANTS.md specs/architecture specs/protocols lessons internal/testguard/archguard/area_a5_test.go specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-14-cp-0-closure.json",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/"
     ],
     "validation_prerequisites": [
       {
@@ -1053,6 +1055,26 @@
         ]
       },
       {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
         "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
         "executables": [
           "env",
@@ -1074,10 +1096,29 @@
         ]
       },
       {
-        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
         "executables": [
           "env",
           "make",
+          "go",
+          "git",
+          "bash"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+        "executables": [
+          "env",
           "go",
           "git",
           "bash"
