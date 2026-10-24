@@ -1,0 +1,5 @@
+# before
+
+# after
+agent-outputs/coder-2-<STAMP>.txt
+agent-prompts/coder-2-<STAMP>.txt

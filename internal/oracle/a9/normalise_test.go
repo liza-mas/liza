@@ -17,6 +17,7 @@ func TestOracleA9Normaliser(t *testing.T) {
 		{"fractions", "2020-01-01T00:00:00.123456789Z 2020-01-01T00:00:00.12345678Z", "<T1:fZ> <T2:fZ>"},
 		{"equality", "generation: alpha\nrequest_id: alpha\npid: 123\nowner_pid: 123\n", "generation: <V1>\nrequest_id: <V1>\npid: <V2>\nowner_pid: <V2>\n"},
 		{"json", `{"generation":"abc","request_id":"abc","pid":123,"lease_duration":1800}`, `{"generation":"<V1>","request_id":"<V1>","pid":"<V2>","lease_duration":1800}`},
+		{"prose pids", "pid 123; matching pids [4 5 123]", "pid <V1>; matching pids [<V2> <V3> <V1>]"},
 		{"sha", fixed + " 2234567890123456789012345678901234567890", fixed + " <V1>"},
 		{"names", "coder-1-20261024-003906.txt records-2026-10-24.jsonl state.yaml.liveness-abcdef123456", "coder-1-<STAMP>.txt records-<DATE>.jsonl state.yaml.liveness-<V1>"},
 	}

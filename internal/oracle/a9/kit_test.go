@@ -152,9 +152,9 @@ func newScenario(t *testing.T, name string) *scenario {
 	if err := os.Symlink(git, filepath.Join(p.bin, "git")); err != nil {
 		t.Fatal("A9 setup: git symlink")
 	}
-	// Supervisors run under the configured binary name with "agent" as the first
-	// argument, the identity `liza delete agent --force` verifies before signalling.
-	// The link lives outside bin, so no CLI is reachable through the child PATH.
+	// The configured binary name with "agent" as first argument is the identity
+	// `liza delete agent --force` verifies before signalling (startNamed). The
+	// link lives outside bin, so no CLI is reachable through the child PATH.
 	if err := os.Mkdir(filepath.Join(p.root, "launch"), 0o755); err != nil {
 		t.Fatal("A9 setup: create launch directory")
 	}
@@ -313,8 +313,21 @@ func (p *scenario) records(t testing.TB) []stubRecord {
 
 func (p *scenario) start(t *testing.T, args ...string) *runningAgent {
 	t.Helper()
+	return p.launch(t, p.cli, append([]string{"-C", p.dir}, args...))
+}
+
+// startNamed runs the supervisor under the canonical binary name. Process scans
+// match supervisors by that name, so a scenario using it must not overlap
+// another supervisor: its test is not parallel.
+func (p *scenario) startNamed(t *testing.T, args ...string) *runningAgent {
+	t.Helper()
+	return p.launch(t, p.named, args)
+}
+
+func (p *scenario) launch(t *testing.T, bin string, args []string) *runningAgent {
+	t.Helper()
 	a := &runningAgent{done: make(chan error, 1)}
-	a.cmd, a.cancel = p.command(p.named, args...)
+	a.cmd, a.cancel = p.command(bin, args...)
 	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)

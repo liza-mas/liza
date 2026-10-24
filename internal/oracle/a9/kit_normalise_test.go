@@ -8,9 +8,12 @@ import (
 )
 
 var (
-	a9TimeRE     = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?`)
-	a9StampRE    = regexp.MustCompile(`\b\d{8}-\d{6}\b`)
-	a9DateRE     = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+	a9TimeRE  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?`)
+	a9StampRE = regexp.MustCompile(`\b\d{8}-\d{6}\b`)
+	a9DateRE  = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+	// Process IDs quoted in message text ("pid 12", "pids [3 4]").
+	a9PidProseRE = regexp.MustCompile(`(?i)\b(pids?\s+)(\[[0-9 ]*\]|[0-9]+)`)
+	a9DigitsRE   = regexp.MustCompile(`[0-9]+`)
 	a9VolatileRE = regexp.MustCompile(`(?i)(?:"?\b(?:generation|agent_generation|generation_digest|transition_id|expected_transition|request_id|payload_digest|digest|record_id|supervisor_run_id|run_id|pid|owner_pid)"?\s*:\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,}\n]+)|\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b|liveness-[0-9a-f]+`)
 )
 
@@ -35,6 +38,10 @@ func (n *a9Normaliser) text(s string) string {
 	s = a9TimeRE.ReplaceAllStringFunc(s, n.timestamp)
 	s = a9StampRE.ReplaceAllString(s, "<STAMP>")
 	s = a9DateRE.ReplaceAllString(s, "<DATE>")
+	s = a9PidProseRE.ReplaceAllStringFunc(s, func(match string) string {
+		parts := a9PidProseRE.FindStringSubmatch(match)
+		return parts[1] + a9DigitsRE.ReplaceAllStringFunc(parts[2], n.value)
+	})
 	return a9VolatileRE.ReplaceAllStringFunc(s, func(match string) string {
 		if key, value, ok := strings.Cut(match, ":"); ok {
 			prefix := key + ":" + value[:len(value)-len(strings.TrimLeft(value, " \t"))]

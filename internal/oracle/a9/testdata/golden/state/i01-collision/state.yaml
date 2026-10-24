@@ -1,0 +1,108 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:sZ>
+  status: IN_PROGRESS
+tasks: []
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: <V1>
+    lease_expires: <T1+2493072000s:sZ>
+    heartbeat: <T1+2493072000s:sZ>
+    registered_at: <T1:sZ>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <V2>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: []
+    stretch: []
+  timeline:
+    started: <T1:sZ>
+    deadline: <T1+2493072000s:sZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:sZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:sZ>
+  status: IN_PROGRESS
+tasks: []
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: <V1>
+    lease_expires: <T1+2493072000s:sZ>
+    heartbeat: <T1+2493072000s:sZ>
+    registered_at: <T1:sZ>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <V2>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: []
+    stretch: []
+  timeline:
+    started: <T1:sZ>
+    deadline: <T1+2493072000s:sZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:sZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING

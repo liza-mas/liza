@@ -1,0 +1,193 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:sZ>
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 lifecycle fixture
+    done_when: A9 oracle records supervisor behavior
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <T1:sZ>
+    iteration: 0
+    history: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: <T1:sZ>
+    deadline: <T1+2493072000s:sZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:sZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
+  exit42_restart_threshold: 1
+# after
+## state.yaml
+version: 1
+pipeline_version: 3
+mutation_sequence: 7
+goal:
+    id: goal-1
+    description: A9 oracle fixture
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <T1:sZ>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: A9 lifecycle fixture
+      status: IMPLEMENTING_CODE
+      priority: 1
+      assigned_to: coder-1
+      worktree: .worktrees/task-1
+      base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
+      iteration: 1
+      exit42_restart_count: 1
+      lease_expires: <T3:fZ>
+      spec_ref: specs/vision.md
+      done_when: A9 oracle records supervisor behavior
+      scope: ""
+      lifecycle:
+        revision: 3
+        completion_sequence: 2
+        receipts:
+            - operation: claim-task
+              actor: coder-1
+              generation_digest: <V1>
+              expected_transition: <V2>
+              payload_digest: <V3>
+              sequence: 1
+              transition_id: <V4>
+              projection:
+                base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
+                lease_expires: "<T4:fZ>"
+                source_status: DRAFT_CODE
+                attempt: 1
+                iteration: 1
+            - operation: claim-task
+              actor: coder-1
+              generation_digest: <V1>
+              expected_transition: <V5>
+              payload_digest: <V3>
+              sequence: 2
+              transition_id: <V6>
+              projection:
+                base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
+                lease_expires: "<T3:fZ>"
+                source_status: DRAFT_CODE
+                attempt: 1
+                iteration: 1
+      attempt: 1
+      created: <T1:sZ>
+      history:
+        - time: <T5:fZ>
+          event: claimed
+          agent: coder-1
+        - time: <T6:fZ>
+          event: claim_released
+          agent: coder-1
+          reason: agent interrupted
+        - time: <T7:fZ>
+          event: claimed
+          agent: coder-1
+          continuation: true
+          preserved_worktree: true
+agents:
+    coder-1:
+        role: coder
+        status: WORKING
+        generation: <V7>
+        current_task: task-1
+        lease_expires: <T3:fZ>
+        heartbeat: <T7:fZ>
+        registered_at: <T8:fZ>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <V8>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - task-1
+        stretch: []
+    timeline:
+        started: <T1:sZ>
+        deadline: <T1+2493072000s:sZ>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <T1:sZ>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 0
+    max_review_cycles: 0
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    exit42_restart_threshold: 1
+    integration_branch: integration
+    mode: RUNNING

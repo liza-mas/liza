@@ -1,0 +1,13 @@
+# before
+
+# after
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt
+agent-prompts/coder-1-<STAMP>.txt

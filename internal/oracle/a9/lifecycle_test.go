@@ -106,10 +106,11 @@ func TestOracleA9DoerClaimRefused(t *testing.T) {
 	p.check(t, r)
 }
 
+// TestOracleA9AuthorityLost is not parallel: its supervisor carries the
+// canonical binary name, which process scans of other scenarios would match.
 func TestOracleA9AuthorityLost(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i05-authority-lost")
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := p.startNamed(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "held provider launch", func() bool {
 		_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 		return err == nil
@@ -188,7 +189,7 @@ func TestOracleA9SpinBlock(t *testing.T) {
 		}
 		stamp := a9StampRE.FindString(filepath.Base(prompts[len(prompts)-1]))
 		p.await(t, "next prompt second", func() bool {
-			return time.Now().In(time.FixedZone("fixture", 2*60*60)).Format("20060102-150405") != stamp
+			return time.Now().UTC().Format("20060102-150405") != stamp
 		})
 		p.write(t, fmt.Sprintf(".liza/oracle-release-%d", i), []byte("release\n"))
 	}
