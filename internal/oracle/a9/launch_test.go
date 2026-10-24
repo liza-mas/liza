@@ -640,6 +640,10 @@ type launchOwner struct {
 
 // newLaunchOwner returns an owner that follows no process until told to.
 func newLaunchOwner(root string) *launchOwner {
+	// Before any process of the scenario starts, so none can be orphaned to init.
+	if err := launchSubreaper(); err != nil {
+		panic("A9 launch: child subreaper unavailable")
+	}
 	return &launchOwner{root: root, members: map[int]bool{}, groups: map[int]bool{}}
 }
 
@@ -720,7 +724,10 @@ func (o *launchOwner) scan() ([]launchProc, error) {
 // launchReap stops tracking, waits briefly for the scenario's processes to leave
 // on their own, then kills the survivors and waits until none is left. It returns
 // how many had to be killed and fails the test if any process remains at the
-// deadline.
+// deadline. The waits are exits collected through launchAwaitExit, not polls: the
+// test process adopts the scenario's orphans (launchSubreaper), so each one is a
+// child it can wait for. Where it cannot wait (see reap_other_test.go), the
+// survivors are killed at once and their exit is not asserted.
 func launchReap(t testing.TB, o *launchOwner) int {
 	t.Helper()
 	if o.stop != nil {
@@ -730,6 +737,7 @@ func launchReap(t testing.TB, o *launchOwner) int {
 	killed := map[int]bool{}
 	grace := time.Now().Add(2 * time.Second)
 	deadline := time.Now().Add(20 * time.Second)
+	killing := false
 	for {
 		live, err := o.scan()
 		if err != nil {
@@ -739,11 +747,15 @@ func launchReap(t testing.TB, o *launchOwner) int {
 		if len(live) == 0 {
 			return len(killed)
 		}
-		if time.Now().After(deadline) {
+		now := time.Now()
+		if now.After(deadline) {
 			t.Errorf("A9 cleanup: %d scenario process(es) survived the kill", len(live))
 			return len(killed)
 		}
-		if time.Now().After(grace) {
+		if now.After(grace) {
+			killing = true
+		}
+		if killing {
 			for _, p := range live {
 				if proc, err := os.FindProcess(p.pid); err == nil {
 					_ = proc.Kill()
@@ -751,7 +763,26 @@ func launchReap(t testing.TB, o *launchOwner) int {
 				}
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		until := grace
+		if killing {
+			until = deadline
+		}
+		pids := make([]int, len(live))
+		for i, p := range live {
+			pids[i] = p.pid
+		}
+		if launchAwaitExit(pids, until.Sub(now)) > 0 {
+			continue
+		}
+		// Nothing was collected: the limit expired or no live member is a child.
+		if !killing {
+			killing = true
+			continue
+		}
+		if launchAwaitsExit {
+			t.Errorf("A9 cleanup: %d scenario process(es) survived the kill", len(live))
+		}
+		return len(killed)
 	}
 }
 
