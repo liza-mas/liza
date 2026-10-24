@@ -35,7 +35,6 @@ var areaA2 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/embedded/embedded.go"}, Ceiling: 1842},
 		{Key: Key{File: "internal/pairingindex/hooks.go"}, Ceiling: 1210},
 		{Key: Key{File: "internal/providers/catalog.go"}, Ceiling: 804},
 		{Key: Key{File: "internal/scipsearch/scipsearch.go"}, Ceiling: 1564},
