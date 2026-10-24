@@ -133,8 +133,8 @@ func boundedTail(s string) string {
 	return s
 }
 
-// RunOptions tunes Run; the zero value runs with no input and no extra
-// environment.
+// RunOptions tunes Run and RunInProject; the zero value runs with no input and
+// no extra environment.
 type RunOptions struct {
 	// Env holds extra NAME=value pairs appended to the policy environment.
 	Env []string
@@ -169,7 +169,36 @@ func Run(t testing.TB, bin string, args []string, opts RunOptions) Result {
 			t.Fatalf("oracle: create disposable directory %s: %v", filepath.Base(d), err)
 		}
 	}
-	env, err := ChildEnv(EnvBase{Home: res.Home, Path: os.Getenv("PATH"), Tmp: res.Tmp}, opts.Env...)
+	return executeCLI(t, bin, args, res.Project, EnvBase{Home: res.Home, Path: os.Getenv("PATH"), Tmp: res.Tmp}, opts)
+}
+
+// RunInProject executes one invocation in a caller-prepared disposable project.
+// The caller owns creation, contents, sequencing and cleanup of project,
+// base.Home and base.Tmp. All three must be existing absolute directories;
+// this helper never creates, clears or replaces them. ChildEnv uses base and
+// opts.Env explicitly, without inheriting the host environment.
+func RunInProject(t testing.TB, bin string, args []string, project string, base EnvBase, opts RunOptions) Result {
+	t.Helper()
+	for _, dir := range []struct{ name, path string }{
+		{"project", project}, {"HOME", base.Home}, {"TMPDIR", base.Tmp},
+	} {
+		if !filepath.IsAbs(dir.path) {
+			t.Fatalf("oracle: %s must be an existing absolute directory", dir.name)
+		}
+		info, err := os.Stat(dir.path)
+		if err != nil || !info.IsDir() {
+			t.Fatalf("oracle: %s must be an existing absolute directory", dir.name)
+		}
+	}
+	return executeCLI(t, bin, args, project, base, opts)
+}
+
+// executeCLI is shared so both runners retain the same environment, timeout,
+// output, exit-code and normaliser behavior.
+func executeCLI(t testing.TB, bin string, args []string, project string, base EnvBase, opts RunOptions) Result {
+	t.Helper()
+	res := Result{Project: project, Home: base.Home, Tmp: base.Tmp}
+	env, err := ChildEnv(base, opts.Env...)
 	if err != nil {
 		t.Fatal(err)
 	}
