@@ -147,102 +147,30 @@ func (preservedInitialClaimStrategy) requiresDependencyRecheck() bool {
 	return true
 }
 
+// handleWorktree validates the preserved artifact, adopts uncommitted work,
+// moves the branch onto the captured integration commit, and records the head
+// the final assignment must still find. Each step feeds the next the current
+// head; every refusal after the artifact checks is a recorded recovery block.
 func (preservedInitialClaimStrategy) handleWorktree(
 	bb *db.Blackboard,
 	gitWrapper *git.Git,
 	ctx *claimContext,
 ) (claimWorktreePhaseResult, error) {
 	result := claimWorktreePhaseResult{}
-	if err := gitWrapper.ValidateWorktreeHealth(ctx.taskID); err != nil {
-		return result, &PreconditionError{Reason: fmt.Sprintf("preserved worktree not healthy: %v", err)}
-	}
-	branch, err := gitWrapper.GetWorktreeBranch(ctx.worktreeDir)
+	head, err := verifyPreservedArtifact(bb, gitWrapper, ctx)
 	if err != nil {
 		return result, err
 	}
-	expectedBranch := paths.TaskBranchPrefix + ctx.taskID
-	if branch != expectedBranch {
-		return result, &PreconditionError{Reason: fmt.Sprintf("preserved worktree branch = %q, want %q", branch, expectedBranch)}
-	}
-	head, err := gitWrapper.GetWorktreeHEAD(ctx.taskID)
-	if err != nil {
+	if head, err = adoptDirtyPreservedWorktree(bb, gitWrapper, ctx, head); err != nil {
 		return result, err
 	}
-	if _, err := gitWrapper.GetCommitSHA(ctx.preservedBaseCommit + "^{commit}"); err != nil {
-		return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s does not resolve: %v", ctx.preservedBaseCommit, err))
-	}
-	ancestor, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, head)
-	if err != nil {
+	if head, err = anchorPreservedBaseOnIntegration(bb, gitWrapper, ctx, head); err != nil {
 		return result, err
 	}
-	if !ancestor {
-		return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s is not an ancestor of worktree HEAD %s", ctx.preservedBaseCommit, head))
-	}
-
-	status, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
-	if err != nil {
+	if head, err = rebasePreservedOntoIntegration(bb, gitWrapper, ctx, head); err != nil {
 		return result, err
 	}
-	if strings.TrimSpace(status) != "" {
-		if err := adoptPreservedWIP(bb, gitWrapper, ctx, status); err != nil {
-			return result, err
-		}
-		if head, err = gitWrapper.GetWorktreeHEAD(ctx.taskID); err != nil {
-			return result, err
-		}
-	}
-
-	baseOnIntegration, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, ctx.baseCommit)
-	if err != nil {
-		return result, err
-	}
-	if !baseOnIntegration {
-		if head != ctx.preservedBaseCommit {
-			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s no longer belongs to captured integration %s; task commits require manual repair", ctx.preservedBaseCommit, ctx.baseCommit))
-		}
-		operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
-		if err != nil {
-			return result, err
-		}
-		if operation != "" {
-			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved worktree has an interrupted %s; cannot replace its removed integration base", operation))
-		}
-		// HEAD == recorded base and the clean worktree has no task commits.
-		// Reset only this task branch; rebasing would replay removed integration.
-		if err := git.New(ctx.worktreeDir).ResetHard(ctx.baseCommit); err != nil {
-			return result, blockPreservedClaimBase(bb, ctx, fmt.Sprintf("could not move zero-work preserved branch to captured integration %s: %v", ctx.baseCommit, err))
-		}
-		head = ctx.baseCommit
-	}
-
-	targetAncestor, err := gitWrapper.IsAncestor(ctx.baseCommit, head)
-	if err != nil {
-		return result, err
-	}
-	if !targetAncestor {
-		if err := gitWrapper.RebaseOnto(ctx.worktreeDir, ctx.baseCommit); err != nil {
-			kind := "retry_preserved_claim_rebase"
-			reason := fmt.Sprintf("preserved worktree rebase failed onto %s: %v", ctx.baseCommit, err)
-			var conflict *git.RebaseConflictError
-			if stderrors.As(err, &conflict) {
-				kind = "resolve_preserved_claim_rebase_conflict"
-				reason = fmt.Sprintf("preserved worktree rebase conflict onto %s: %v", ctx.baseCommit, err)
-			}
-			if abortErr := gitWrapper.AbortRebase(ctx.worktreeDir); abortErr != nil {
-				reason = fmt.Sprintf("%s; abort failed: %v", reason, abortErr)
-			}
-			if markErr := markPreservedInitialClaimRecovery(bb, ctx, kind, reason, err.Error()); markErr != nil {
-				return result, fmt.Errorf("%s; failed to record recovery state: %w", reason, markErr)
-			}
-			return result, &PreconditionError{Reason: reason}
-		}
-		head, err = gitWrapper.GetWorktreeHEAD(ctx.taskID)
-		if err != nil {
-			return result, err
-		}
-	}
-
-	ancestor, err = gitWrapper.IsAncestor(ctx.baseCommit, head)
+	ancestor, err := gitWrapper.IsAncestor(ctx.baseCommit, head)
 	if err != nil {
 		return result, err
 	}
@@ -254,6 +182,112 @@ func (preservedInitialClaimStrategy) handleWorktree(
 	}
 	ctx.worktreeHead = head
 	return result, nil
+}
+
+// verifyPreservedArtifact proves the worktree is the task's healthy branch and
+// that its recorded base is still part of its history, returning its head.
+func verifyPreservedArtifact(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext) (string, error) {
+	if err := gitWrapper.ValidateWorktreeHealth(ctx.taskID); err != nil {
+		return "", &PreconditionError{Reason: fmt.Sprintf("preserved worktree not healthy: %v", err)}
+	}
+	branch, err := gitWrapper.GetWorktreeBranch(ctx.worktreeDir)
+	if err != nil {
+		return "", err
+	}
+	expectedBranch := paths.TaskBranchPrefix + ctx.taskID
+	if branch != expectedBranch {
+		return "", &PreconditionError{Reason: fmt.Sprintf("preserved worktree branch = %q, want %q", branch, expectedBranch)}
+	}
+	head, err := gitWrapper.GetWorktreeHEAD(ctx.taskID)
+	if err != nil {
+		return "", err
+	}
+	if _, err := gitWrapper.GetCommitSHA(ctx.preservedBaseCommit + "^{commit}"); err != nil {
+		return "", blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s does not resolve: %v", ctx.preservedBaseCommit, err))
+	}
+	ancestor, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, head)
+	if err != nil {
+		return "", err
+	}
+	if !ancestor {
+		return "", blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s is not an ancestor of worktree HEAD %s", ctx.preservedBaseCommit, head))
+	}
+	return head, nil
+}
+
+// adoptDirtyPreservedWorktree commits uncommitted preserved work, returning the
+// head after adoption; a clean worktree keeps its head.
+func adoptDirtyPreservedWorktree(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext, head string) (string, error) {
+	status, err := gitWrapper.WorktreeStatusShort(ctx.worktreeDir)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(status) == "" {
+		return head, nil
+	}
+	if err := adoptPreservedWIP(bb, gitWrapper, ctx, status); err != nil {
+		return "", err
+	}
+	return gitWrapper.GetWorktreeHEAD(ctx.taskID)
+}
+
+// anchorPreservedBaseOnIntegration handles a recorded base that the captured
+// integration no longer contains. Only a zero-work branch can be moved to the
+// captured integration; task commits require manual repair.
+func anchorPreservedBaseOnIntegration(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext, head string) (string, error) {
+	baseOnIntegration, err := gitWrapper.IsAncestor(ctx.preservedBaseCommit, ctx.baseCommit)
+	if err != nil {
+		return "", err
+	}
+	if baseOnIntegration {
+		return head, nil
+	}
+	if head != ctx.preservedBaseCommit {
+		return "", blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved base_commit %s no longer belongs to captured integration %s; task commits require manual repair", ctx.preservedBaseCommit, ctx.baseCommit))
+	}
+	operation, err := gitWrapper.InterruptedOperation(ctx.worktreeDir)
+	if err != nil {
+		return "", err
+	}
+	if operation != "" {
+		return "", blockPreservedClaimBase(bb, ctx, fmt.Sprintf("preserved worktree has an interrupted %s; cannot replace its removed integration base", operation))
+	}
+	// HEAD == recorded base and the clean worktree has no task commits.
+	// Reset only this task branch; rebasing would replay removed integration.
+	if err := git.New(ctx.worktreeDir).ResetHard(ctx.baseCommit); err != nil {
+		return "", blockPreservedClaimBase(bb, ctx, fmt.Sprintf("could not move zero-work preserved branch to captured integration %s: %v", ctx.baseCommit, err))
+	}
+	return ctx.baseCommit, nil
+}
+
+// rebasePreservedOntoIntegration rebases a head that does not yet contain the
+// captured integration commit. A failed rebase is aborted and recorded as a
+// recovery block.
+func rebasePreservedOntoIntegration(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext, head string) (string, error) {
+	targetAncestor, err := gitWrapper.IsAncestor(ctx.baseCommit, head)
+	if err != nil {
+		return "", err
+	}
+	if targetAncestor {
+		return head, nil
+	}
+	if err := gitWrapper.RebaseOnto(ctx.worktreeDir, ctx.baseCommit); err != nil {
+		kind := "retry_preserved_claim_rebase"
+		reason := fmt.Sprintf("preserved worktree rebase failed onto %s: %v", ctx.baseCommit, err)
+		var conflict *git.RebaseConflictError
+		if stderrors.As(err, &conflict) {
+			kind = "resolve_preserved_claim_rebase_conflict"
+			reason = fmt.Sprintf("preserved worktree rebase conflict onto %s: %v", ctx.baseCommit, err)
+		}
+		if abortErr := gitWrapper.AbortRebase(ctx.worktreeDir); abortErr != nil {
+			reason = fmt.Sprintf("%s; abort failed: %v", reason, abortErr)
+		}
+		if markErr := markPreservedInitialClaimRecovery(bb, ctx, kind, reason, err.Error()); markErr != nil {
+			return "", fmt.Errorf("%s; failed to record recovery state: %w", reason, markErr)
+		}
+		return "", &PreconditionError{Reason: reason}
+	}
+	return gitWrapper.GetWorktreeHEAD(ctx.taskID)
 }
 
 // Invalid preserved ancestry needs an operator decision; repeatedly claiming

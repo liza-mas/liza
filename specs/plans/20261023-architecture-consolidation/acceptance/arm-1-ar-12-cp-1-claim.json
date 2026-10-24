@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-flow",
+      "file": "internal/ops/claim_task_assignment_test.go",
+      "assertion": "TestClaimTask_ReleasesDormantAssignments, TestClaimTask_FailedClaimPreservesDormantAssignments and TestClaimTask_ConcurrentClaimsKeepSingleAssignment run unchanged against the extracted admission, worktree and assignment concerns, with TestClaimTask_PreservedInitialIntegrationMoveBeforeCriticalSectionFailsClosed and TestClaimTask_PreservedInitialIntegrationMoveAfterEqualityWaitsForAssignment in claim_task_test.go.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a3/lifecycle/claim_task_variants_test.go",
+      "assertion": "TestOracleClaimTask (fresh success, not-claimable refusal; unchanged) and TestOracleClaimTaskVariants compare the claim --json, human and state.yaml/git effects of integration-fix, preserved-initial and rejected claims against committed goldens; existing claim goldens are unchanged.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-oracle",
+      "file": "internal/oracle/a3/lifecycle/claim_task_variants_test.go",
+      "assertion": "TestOracleClaimTaskVariants goldens (json, human, state under claim-task/) were written by regen write-new before any structural edit (commit e53abbba7); regen -mode check reproduces them and every earlier A3 lifecycle golden from the provenance ledger.",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-race",
+      "file": "internal/ops/claim_task_phases_test.go",
+      "assertion": "TestClaimTask_GenerationReplacedBeforeAssignmentRemovesCreatedWorktree, TestClaimTask_BoundaryChangedBeforeAssignmentRefusesAndRemovesCreatedWorktree, TestClaimTask_WinningClaimantKeepsWorktreeWhenLoserFails and TestClaimTask_PreservedClaimRefusedBeforeAssignmentKeepsPreexistingWork fire the beforePhase3Modify hook between worktree creation and assignment and assert refusal, persisted ownership and physical worktree/branch/commit state; claim_task_test.go keeps both preserved integration-movement schedules around the completion fence.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard runs under make lint with area_a3_test.go no longer listing claim_task.go (file), claim_task.go:claimTask, claim_task.go:completeClaimTaskAfterValidation or claim_task_strategy.go:preservedInitialClaimStrategy.handleWorktree; all four original declarations remain in place and are under 100 lines / 800 lines, and every new function meets S1.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-layout",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target (go test ./...) runs the A3, A9 and testguard suites; lint, test-e2e, the ops race run and regen check are mandatory with it.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "a3-proof"
+    },
+    {
+      "obligation_id": "AC-sequence",
+      "approved_reference_id": "a3-proof"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}
