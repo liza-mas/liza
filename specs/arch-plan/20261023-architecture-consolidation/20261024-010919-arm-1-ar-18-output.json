@@ -1,0 +1,30 @@
+[
+  {
+    "desc": "C4: delete ops.InitProject with its tests and ratchet entry; run the init branch Git subprocesses through gitenv timed runners in the project root",
+    "done_when": "internal/ops/init_project.go, its test file and the A7 InitProject ratchet entry are gone and nothing references InitProject; the await integration fixture uses the CLI init entry; the four init helper Git subprocesses run through gitenv timed runners in the project root, a timeout is never read as a negative answer, and error text and precedence are otherwise unchanged; P1-P3 pass and fail on pre-C4 code; A7 install and present oracle goldens unchanged; E1 plus race on touched packages pass.",
+    "scope": "Delete the two init_project files and the A7 ratchet key; the four init helper subprocesses and MAS init root-discovery ordering (wherever Scope 17 placed them); focused tests in internal/commands; the await integration fixture. Out: other init behaviour and Git sites, launch --cwd, gitenv/paths/git code, start snapshot, windows-weights.json, ADRs, architectural-issues.md, chain docs.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-010919-arm-1-ar-18.md#Scope 1: C4 single init implementation on the CLI path",
+    "rca_required": false,
+    "decomposition": {
+      "owned_modules": [
+        "internal/commands (init concern)",
+        "internal/ops/init_project.go"
+      ],
+      "owned_files": [
+        "internal/ops/init_project.go",
+        "internal/ops/init_project_test.go",
+        "internal/testguard/archguard/area_a7_test.go",
+        "internal/integration/await_verdict_test.go"
+      ],
+      "interfaces_consumed": [
+        "gitenv timed runners",
+        "paths project-root discovery",
+        "SI-2",
+        "SI-3"
+      ],
+      "coverage_notes": "Must; one C-change, one coding unit. Default inheritance holds the code plan on arm-1-ar-17's code plan and the coding unit on every Scope 17 coding unit. Sites named behaviourally; the coding unit resolves them at its HEAD and marks BLOCKED naming the A7 Preserved Sites if a C4 site was changed. Expected golden delta empty: oracle init runs at the project root."
+    },
+    "coverage_notes": "Must; one C-change, one coding unit. Default inheritance holds the code plan on arm-1-ar-17's code plan and the coding unit on every Scope 17 coding unit. Sites named behaviourally; the coding unit resolves them at its HEAD and marks BLOCKED naming the A7 Preserved Sites if a C4 site was changed. Expected golden delta empty: oracle init runs at the project root."
+  }
+]
