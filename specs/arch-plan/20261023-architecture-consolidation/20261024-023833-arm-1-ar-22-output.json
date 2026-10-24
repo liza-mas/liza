@@ -1,0 +1,16 @@
+[
+  {
+    "desc": "Plan C1 configured lease duration at all five consumers and the unchanged terminal constant",
+    "done_when": "Focused tests prove registration, heartbeat, reviewer claim, re-review reclaim and pool-repair projection use 600 s when configured and 1800 s by default; stored terminal-1 comes from a named constant; C6 ownership and other frozen surfaces remain intact.",
+    "scope": "One C1 coding task across agent, ops and commands: shared duration resolution, five sites, terminal constant, focused tests, acceptance manifest and affected current lease docs. Excludes other timeouts, new config fields, C2-C6 behavior and general lease redesign.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-023833-arm-1-ar-22.md#Scope 1: C1 configured leases and terminal constant",
+    "rca_required": false,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -timeout 30m -p 2 ./internal/agent/ ./internal/ops/ ./internal/commands/"
+    ]
+  }
+]
