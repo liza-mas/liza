@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"testing"
@@ -97,10 +98,8 @@ func runCase(t *testing.T, c caseSpec) {
 			t.Fatalf("%s: precondition refusal changed state", stem)
 		}
 		if kind == oracle.JSON {
-			var document any
-			decoder := json.NewDecoder(bytes.NewReader(o.stdout))
-			decoder.UseNumber()
-			if err := decoder.Decode(&document); err != nil {
+			document, err := oneJSONDocument(o.stdout)
+			if err != nil {
 				t.Fatalf("%s: stdout is not a JSON document: %v\n%s", stem, err, o.stdout)
 			}
 			wrapped, err := json.Marshal(map[string]any{"exit_code": o.exit, "stdout": document})
@@ -122,5 +121,30 @@ func runCase(t *testing.T, c caseSpec) {
 				t.Fatalf("%s: fresh human-mode state differs from json-mode state", stem)
 			}
 		}
+	}
+}
+
+func oneJSONDocument(data []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var document, trailing any
+	if err := decoder.Decode(&document); err != nil {
+		return nil, err
+	}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("expected end of JSON document, got %v", err)
+	}
+	return document, nil
+}
+
+func TestA6JSONCaptureRejectsTrailingContent(t *testing.T) {
+	for _, data := range []string{`{"ok":true} {"extra":true}`, `{"ok":true} garbage`} {
+		if _, err := oneJSONDocument([]byte(data)); err == nil {
+			t.Fatal("JSON capture accepted trailing content")
+		}
+	}
+	document, err := oneJSONDocument([]byte("{\"number\":9007199254740993}\n"))
+	if err != nil || document.(map[string]any)["number"] != json.Number("9007199254740993") {
+		t.Fatal("single JSON document lost numeric precision")
 	}
 }

@@ -22,6 +22,7 @@ var (
 	durationRE = regexp.MustCompile(`\b\d+(?:\.\d+)?(?:ns|µs|ms|s|m)(?:\d+(?:\.\d+)?s)?\b`)
 	pidRE      = regexp.MustCompile(`\b(pid[=: ]+|PID[=: ]+)\d+\b`)
 	logRE      = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} `)
+	gitTextRE  = regexp.MustCompile(`(?m)^(?:Auto-merging [^\n]*|CONFLICT \([^\n]*|Automatic merge failed;[^\n]*|Switched to (?:a new )?branch [^\n]*|Already on [^\n]*|Preparing worktree [^\n]*)$`)
 )
 
 func platformGate(t testing.TB) {
@@ -57,6 +58,12 @@ func (ids *identities) register(sha, name string) {
 }
 
 func (ids *identities) text(s string) string {
+	s = gitTextRE.ReplaceAllString(s, "<GIT_MESSAGE>")
+	// The CLI prints merge commits with seven characters. Preserve the same
+	// identity as their full form without hiding unrelated short hex strings.
+	for sha, name := range ids.values {
+		s = strings.ReplaceAll(s, "Merge commit: "+sha[:7], "Merge commit: "+name)
+	}
 	s = instantRE.ReplaceAllStringFunc(s, func(instant string) string {
 		if strings.HasSuffix(instant, "Z") {
 			return "<TIME:Z>"
@@ -78,6 +85,16 @@ func (ids *identities) text(s string) string {
 	})
 	s = durationRE.ReplaceAllString(s, "<DURATION>")
 	return pidRE.ReplaceAllString(s, "${1}<PID>")
+}
+
+func TestA6GitTextNormalizationIsNarrow(t *testing.T) {
+	ids := identities{}
+	ids.register(strings.Repeat("a", 40), "REVIEW")
+	got := ids.text("Auto-merging conflict.txt\nCONFLICT (content): Merge conflict in conflict.txt\nSwitched to branch 'integration'\nError: merge conflict\nMerge commit: aaaaaaa\nvalue: aaaaaaa")
+	want := "<GIT_MESSAGE>\n<GIT_MESSAGE>\n<GIT_MESSAGE>\nError: merge conflict\nMerge commit: <SHA:REVIEW>\nvalue: aaaaaaa"
+	if got != want {
+		t.Fatalf("Git text normalization changed application content: got %q want %q", got, want)
+	}
 }
 
 // Only stdlib log records are free; arbitrary stderr remains observable.

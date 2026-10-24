@@ -10,5 +10,5 @@ completed_transition_id: <ID>
 current_assignee: coder-1
 ✓ Fast-forward merge successful
 ✓ Task task-1 merged successfully
-Merge commit: ac67177
+Merge commit: <SHA:REVIEW>
 stderr:
