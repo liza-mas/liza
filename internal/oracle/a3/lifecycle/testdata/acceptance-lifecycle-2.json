@@ -4,43 +4,43 @@
     {
       "obligation_id": "AC-L8",
       "file": "internal/oracle/a3/lifecycle/assess_blocked_test.go",
-      "assertion": "TestOracleAssessBlocked: blocked success and executing refusal, orchestrator caller; JSON/human/state goldens",
+      "assertion": "TestOracleAssessBlocked: registered live orchestrator; blocked success versus valid executing fixture refusing with already_transitioned and IMPLEMENTING_CODE. Exact JSON/human/state goldens distinguish the BLOCKED precondition from unrelated failures",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L9",
       "file": "internal/oracle/a3/lifecycle/assess_hypothesis_exhausted_test.go",
-      "assertion": "TestOracleAssessHypothesisExhausted: two failed_by entries succeed, one entry refuses; JSON/human/state goldens",
+      "assertion": "TestOracleAssessHypothesisExhausted: valid blocked fixtures differ by one versus two failed_by entries; refusal golden names the 2+ threshold and has 1, while success records assessment. JSON/human/state equality cannot pass on another refusal",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L10",
       "file": "internal/oracle/a3/lifecycle/unblock_task_test.go",
-      "assertion": "TestOracleUnblockTask: operator unblocks blocked task; executing refusal; JSON/human/state goldens",
+      "assertion": "TestOracleUnblockTask: operator unblocks blocked task; valid executing fixture refuses with already_transitioned and IMPLEMENTING_CODE. JSON/human/state goldens guard the BLOCKED precondition without a caller-authority failure",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L11",
       "file": "internal/oracle/a3/lifecycle/release_blocked_chain_test.go",
-      "assertion": "TestOracleReleaseBlockedChain: operator releases two-recovery lineage; zero-recovery refusal; JSON/human/state goldens",
+      "assertion": "TestOracleReleaseBlockedChain: valid capped lineage releases; valid blocked fixture with no recoveries refuses with 0 of 2 blocked recoveries. JSON/human/state goldens distinguish the recovery-cap precondition from malformed lineage",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L12",
       "file": "internal/oracle/a3/lifecycle/recover_task_test.go",
-      "assertion": "TestOracleRecoverTask: dead assignee recovery and live assignee refusal; JSON/human/state goldens and Git effects",
+      "assertion": "TestOracleRecoverTask: matching executing fixtures with dead versus test-process PID; no --force. Exact refusal names the live PID and still running; JSON/human/state goldens and Git effects guard process-liveness refusal",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L13",
       "file": "internal/oracle/a3/lifecycle/recover_agent_test.go",
-      "assertion": "TestOracleRecoverAgent: dead agent recovery and live agent refusal; JSON/human/state goldens and Git effects",
+      "assertion": "TestOracleRecoverAgent: matching executing fixtures with dead versus test-process PID; no --force. Exact refusal names the live PID and still running; JSON/human/state goldens and Git effects guard process-liveness refusal",
       "command_index": 0
     },
     {
       "obligation_id": "AC-L14",
       "file": "internal/oracle/a3/lifecycle/provision_test.go",
-      "assertion": "TestOracleProvision: declared tok succeeds with fresh envelope and HOME; undeclared nope refuses; JSON/human/state goldens",
+      "assertion": "TestOracleProvision: same valid executing-runtime-input fixture and synthetic envelope; declared tok succeeds with fresh HOME, undeclared nope refuses with declares no runtime input nope. JSON/human/state goldens distinguish input declaration from file or key failures; TestLifecycleRuntimeIdentityMask preserves full-key/prefix equality and stable or undeclared digits",
       "command_index": 0
     },
     {
