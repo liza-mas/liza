@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "pipeline_version": 3,
+  "goal": {
+    "id": "goal",
+    "description": "Fixture goal",
+    "spec_ref": "specs/goal.md",
+    "entry_point": "functional-spec",
+    "status": "IN_PROGRESS",
+    "created": "2026-01-02T03:04:05Z",
+    "base_commit": "<base>",
+    "integration": {
+      "contributing_set": {
+        "scopes": []
+      },
+      "global_generations": [
+        {
+          "generation": 1,
+          "analysis_task_id": "global-1",
+          "analysis_key": "global:1",
+          "verdict": "clean",
+          "source_commit": "<review>",
+          "report_commit": "<review>"
+        }
+      ],
+      "closure": {
+        "status": "clean",
+        "generation": 1,
+        "analysis_key": "global:1",
+        "source_commit": "<review>"
+      }
+    }
+  },
+  "tasks": [
+    {
+      "id": "global-1",
+      "role_pair": "integration-pair",
+      "status": "MERGED",
+      "description": "Fixture global-1",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [],
+      "iteration": 1,
+      "integration_analysis": {
+        "key": "global:1",
+        "phase": "global",
+        "generation": 1,
+        "source_commit": "<review>"
+      }
+    }
+  ],
+  "agents": {},
+  "discovered": [],
+  "human_notes": [],
+  "spec_changes": [],
+  "anomalies": [],
+  "sprint": {
+    "id": "sprint-1",
+    "number": 1,
+    "status": "IN_PROGRESS",
+    "scope": {
+      "planned": [
+        "global-1"
+      ]
+    }
+  },
+  "config": {
+    "integration_branch": "fixture-integration",
+    "scip_search": [
+      "go"
+    ],
+    "default_doer_cli": "claude",
+    "default_reviewer_cli": "codex",
+    "agent_tools": {
+      "claude": {
+        "validation_execution": "local"
+      },
+      "codex": {
+        "validation_execution": "local"
+      }
+    },
+    "runtime_input_registry": "config/runtime-inputs.yaml"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "T05",
+  "role": "us-writer",
+  "role_pair": "us-writing-pair",
+  "agent_id": "us-writer-1",
+  "task_id": "task",
+  "expected_wake_trigger": "",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "specs/epic.md",
+    "Feature section"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

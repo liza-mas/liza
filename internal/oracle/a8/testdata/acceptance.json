@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "A8-inventory",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePrompt: exact fixture ID, role and pair allocation plus branch markers",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-fixtures",
+      "file": "internal/oracle/a8/fixtures_test.go",
+      "assertion": "loadFixtures manifest checks and renderFixture committed trees/label substitution",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-render",
+      "file": "internal/oracle/a8/adapter_test.go",
+      "assertion": "renderPrompt frozen pipeline, blackboard Write/ReadSnapshot and NewRoleStrategy.BuildPrompt exercised by TestOraclePrompt",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-determinism",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePromptDistinctRoots compares all 30 renders from distinct roots using ReplaceRoot only",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-byte-identity",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePrompt raw Prompt comparisons T01-T20/W01-W10; TestOraclePromptMissingGolden checks live refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-provenance",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePrompt is regenerated through the real filtered regen entry point at starting commit 96c9ad69a",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "A8-altered-byte",
+      "file": "internal/oracle/a8/mutation_test.go",
+      "assertion": "TestOraclePromptAlteredGolden requires nonzero live/regen outcomes specifically identifying T01 byte mismatch",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "A8-environment",
+      "file": "internal/oracle/a8/fixtures_test.go",
+      "assertion": "renderFixture explicit git/feature-gate environment and isolated roots; TestOraclePromptDistinctRoots",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "A8-proof",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePrompt all 30 prompts under scoped race",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "A8-adapter",
+      "approved_reference_id": "harness-contract"
+    },
+    {
+      "obligation_id": "A8-boundary",
+      "approved_reference_id": "a8-scope"
+    },
+    {
+      "obligation_id": "A8-immutability",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "A8-budget",
+      "approved_reference_id": "oracle-budget"
+    }
+  ]
+}

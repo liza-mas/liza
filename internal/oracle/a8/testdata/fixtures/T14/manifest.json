@@ -1,0 +1,19 @@
+{
+  "id": "T14",
+  "role": "code-plan-reviewer",
+  "role_pair": "code-planning-pair",
+  "agent_id": "code-plan-reviewer-1",
+  "task_id": "task",
+  "expected_wake_trigger": "",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "DOER VALIDATION PLAN:",
+    "Fixture checkpoint validation"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

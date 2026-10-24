@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "pipeline_version": 3,
+  "goal": {
+    "id": "goal",
+    "description": "Fixture goal",
+    "spec_ref": "specs/goal.md",
+    "entry_point": "functional-spec",
+    "status": "IN_PROGRESS",
+    "created": "2026-01-02T03:04:05Z",
+    "base_commit": "<base>"
+  },
+  "tasks": [
+    {
+      "id": "task",
+      "role_pair": "coding-pair",
+      "status": "IMPLEMENTING_CODE",
+      "description": "Fixture task",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [
+        {
+          "time": "2026-01-02T03:04:05Z",
+          "event": "unblocked",
+          "agent": "orchestrator-1",
+          "reason": "Fixture unblock resolution"
+        }
+      ],
+      "iteration": 2,
+      "assigned_to": "coder-1",
+      "worktree": ".",
+      "base_commit": "<base>",
+      "review_commit": "<review>",
+      "rejection_reason": "Fixture prior rejection",
+      "validation": [
+        "fixture-check"
+      ],
+      "validation_notes": [
+        {
+          "parent_task": "plan",
+          "output_index": 0,
+          "message": "Fixture validation note"
+        }
+      ],
+      "provider_dependencies": [
+        {
+          "provider_task": "provider",
+          "transition": "architecture-to-code-plan",
+          "outputs": [
+            0
+          ]
+        }
+      ],
+      "descendant_dependencies": [
+        {
+          "at_transition": "code-plan-to-coding",
+          "provider_dependencies": [
+            {
+              "provider_task": "provider",
+              "transition": "architecture-to-code-plan",
+              "outputs": [
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "handoff_events": [
+        {
+          "timestamp": "2026-01-02T03:04:05Z",
+          "agent": "coder-previous",
+          "trigger": "context_exhaustion",
+          "succeeded": [
+            "Fixture completed step"
+          ],
+          "failed": [
+            "Fixture unsuccessful step"
+          ],
+          "hypothesis": "Fixture hypothesis",
+          "next_step": "Fixture next step",
+          "key_files": [
+            "fixture.go"
+          ],
+          "dead_ends": [
+            "Fixture dead end"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "provider",
+      "role_pair": "architecture-pair",
+      "status": "MERGED",
+      "description": "Fixture provider",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [],
+      "iteration": 1
+    }
+  ],
+  "agents": {},
+  "discovered": [],
+  "human_notes": [
+    {
+      "timestamp": "2026-01-02T03:04:05Z",
+      "for": "task",
+      "message": "Fixture operator note",
+      "source": "operator_cli",
+      "operation": "add-human-note"
+    }
+  ],
+  "spec_changes": [],
+  "anomalies": [],
+  "sprint": {
+    "id": "sprint-1",
+    "number": 1,
+    "status": "IN_PROGRESS",
+    "scope": {
+      "planned": [
+        "task"
+      ]
+    }
+  },
+  "config": {
+    "integration_branch": "fixture-integration",
+    "scip_search": [
+      "go"
+    ],
+    "default_doer_cli": "claude",
+    "default_reviewer_cli": "codex",
+    "agent_tools": {
+      "claude": {
+        "validation_execution": "local"
+      },
+      "codex": {
+        "validation_execution": "local"
+      }
+    },
+    "runtime_input_registry": "config/runtime-inputs.yaml"
+  }
+}
