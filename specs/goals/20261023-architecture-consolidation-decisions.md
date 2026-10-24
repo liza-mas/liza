@@ -625,6 +625,29 @@ starting behaviour that a prompt refactor could break.
   unpinned); changing the embedded pipeline (a production behaviour change). Kind: oracle-contract
   (fixture configuration). Revert: a D26-style marker reselection.
 
+### D40 — Oracle A9 case I-06 pins the starting behaviour of two exit-42 restarts (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T02:38Z. `arm-1-ar-9-cp-0-code-0` blocked with AWAITING HUMAN. Case I-06 expects
+BLOCKED (restart loop) after two exit-42 calls at threshold 1. At the starting commit `96c9ad69a`,
+`supervisor.go` calls `releaseAgentAfterExit` before `exit42Tracker.Handle`, `registration.go` returns an
+ordinary coder claim to its initial state, and `supervisor_restart.go` blocks only an executing or
+reviewing task still owned by that agent. The plain recipe therefore never reaches BLOCKED; baseline
+regeneration timed out on `TestOracleA9Restart42Limit`. Orchestrator assessment: the conflict is
+verified; a handoff recipe is unproven.
+- Ruling: the oracle pins starting behaviour, as in D26. I-06 keeps its recipe (two plain exit-42
+  calls at threshold 1) and records the outcome the starting binary actually produces (claim released
+  per `registration.go`, no restart-loop block), with byte-exact goldens from write-new at the
+  starting commit. The coder may additionally pin the BLOCKED branch through another recipe only if
+  that recipe is demonstrated at the starting commit, needs no production change, and changes no
+  progress-signature fields. Otherwise the branch stays unpinned. All other A9 rows are unchanged.
+- Intent relied on: goal Test Policy (oracles freeze starting behaviour; E5) and D26. Expected
+  outcomes that the starting code cannot produce are architecture predictions, not frozen behaviour.
+- Note for after the run (not fixed here, outside C1–C6): the restart-loop protection appears
+  unreachable for an ordinary coder exiting 42 (release precedes tracking). This is a candidate
+  production defect for the next run.
+- Rejected: weakening the observation into a timeout-tolerant check (an oracle that cannot fail);
+  dropping I-06 (coverage loss). Kind: oracle-contract (expected outcome). Revert: a reviewed A9
+  correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
