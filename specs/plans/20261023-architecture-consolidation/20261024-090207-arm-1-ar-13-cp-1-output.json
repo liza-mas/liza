@@ -1,0 +1,97 @@
+[
+  {
+    "desc": "Must: separate transition child generation, cohort resolution and crash recovery within ops",
+    "done_when": "proceedInner, proceedManyToOneInner and recoverCrashedTransition ratchet keys are absent and proceed.go is at or below its lowered ceiling; an oracle-only commit adds the seven Task 1 proceed goldens before the production edit; fresh and recovery generation share builders and older goldens are unchanged; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/proceed.go generation/recovery code, new private generation/cohort/recovery/inherited-deps files, colocated tests, additive a4 oracle driver/fixtures/goldens, area_a4_test.go, invalidated INVARIANTS.md and blackboard-schema.md references, manifest. No Proceed/pass, plan_replacement.go or exported API change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-090207-arm-1-ar-13-cp-1.md#Task 1: Separate transition child generation and crash recovery",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 2: Transition expansion and output construction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate transition entry orchestration from pass collection, ordering and reporting within ops",
+    "done_when": "Proceed and ExecuteTransitionsReportWith ratchet keys and the proceed.go file key are absent with every file and function within S1; an oracle-only commit adds five pass goldens (partial pass, cycle, reviewed skip, recovery pass, base-commit snapshot) before the production edit and older goldens are unchanged; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/proceed.go entry and pass code, new private transition-pass file, colocated tests, additive a4 oracle driver/helper/fixtures/goldens, area_a4_test.go, invalidated INVARIANTS.md references, manifest. No generation/recovery, plan_replacement.go, pipeline_ops.go, mode_change.go, agent or exported signature change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-090207-arm-1-ar-13-cp-1.md#Task 2: Separate transition entry, pass ordering and reporting",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 2: Transition expansion and output construction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["0"],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate add-tasks batch delivery grouping from single-task construction within ops",
+    "done_when": "The add_tasks.go file key and planDeliveryUnits key are absent with both files and all functions within S1; an oracle-only commit adds add-tasks delivery_group and delivery_refused goldens before the production edit and older goldens are unchanged; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/add_tasks.go, one new private batch-delivery file, colocated tests, additive a4 add-tasks driver/fixtures/inputs/goldens, area_a4_test.go, manifest. No single-task construction semantics, commands, cmd/liza or exported type/signature change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-090207-arm-1-ar-13-cp-1.md#Task 3: Separate add-tasks delivery grouping from task construction",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 2: Transition expansion and output construction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["1"],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate set-task-output schema and state checks from output persistence within ops",
+    "done_when": "The setTaskOutputWithOptionalAuthority key is absent with every touched file and function within S1; check order, error text, --json codes and lifecycle results are unchanged under the live set-task-output oracle and older goldens are unchanged; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/set_task_output.go, optional new private checks file, colocated tests, area_a4_test.go, INVARIANTS.md references only if a cited check moves file, manifest. No commands, cmd/liza, payloadschema, statevalidate, existing oracle file or exported type/signature change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-090207-arm-1-ar-13-cp-1.md#Task 4: Separate set-task-output checks from persistence",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 2: Transition expansion and output construction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["2"],
+    "inherit_inputs": {"mode": "all"}
+  }
+]
