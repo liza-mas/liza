@@ -952,6 +952,30 @@ human limited the change to new plans.
   (under review at this ruling, D-21) keeps its own. The goal text is not edited, to avoid content-pin drift (D52 precedent).
 - Kind: proof scope. Revert: plans resume listing scoped race commands.
 
+### D56 — D24 extended: C tasks may flip in-driver assertions and delete goldens; regen must reproduce both (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T17:27Z. `arm-1-ar-24-cp-0` (C3) blocked AWAITING HUMAN at 17:26Z. Under C3, A9 case
+`i21-unavailable-codex-run` must flip from not blocked to blocked: `internal/oracle/a9/signals_test.go:215` asserts `blocked=false`,
+and golden `…/state/i21-unavailable-codex-run/files/usage-records-1.jsonl` stops being produced. Verified in the harness at
+`79e22369a`: (H-A) the baseline overlays the *working* oracle drivers on starting-tree production and requires write-mode `go test`
+to exit 0 (`internal/testhelpers/oracle/cmd/regen/materialise.go`, `regenerate.go:82`), so a C-edited driver fails there; (H-B)
+`compare.go` reports `missing` for a golden absent at HEAD before consulting its chain. D24 covers changed golden blobs only.
+- Ruling (requirements; mechanism left to the correction plan):
+  - R1: the owning C1–C6 task may change an oracle driver assertion that encodes the behaviour the C change alters, and may delete a golden
+    that the changed behaviour no longer produces (goal Test Policy: behaviour-change tests change only inside the C task). Both are
+    C change points under D24.
+  - R2: regeneration reproduces each such scenario's pre-C state from the starting baseline, using the drivers in force before its first C
+    change, and reproduces every C change at its commit, including a deletion, which is a reproducible terminal "absent".
+  - R3: a golden absent at HEAD is accepted only when its chain ends in a deletion reproduced at a C commit; otherwise it is `missing`, as
+    ADR-0219 §6 already requires. `extra` is unchanged.
+- Allocation: the orchestrator commissions a harness correction in the Scope 0 / `arm-1-ar-0-cp-2` lineage, amending ADR-0219 to match.
+  It lands before the first C coding task that flips a driver assertion or deletes a golden (C3 at least; the planner checks C6, C1 and C2).
+  It is not on the current critical path. The C3 plan proceeds now and cites D56.
+- Disproof: if the drivers in force before a C change cannot run against starting-tree production (for example, they depend on refactored
+  test helpers), the correction planner stops and reports with evidence; no other harness mechanism is to be designed.
+- Rejected: a starting-tree backport of each C behaviour (D24 rejected it); exempting C-touched scenarios from regen (removes their
+  provenance).
+- Kind: oracle provenance (D24 family). Revert: C3 keeps the old assertion and the golden (the C change becomes unprovable).
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
