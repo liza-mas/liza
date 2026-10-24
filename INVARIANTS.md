@@ -73,7 +73,7 @@ Non-DRAFT tasks must have `done_when` and `spec_ref` (both non-empty). `spec_ref
 
 Contract-level (agent state machine): ANALYSIS → EXECUTION (skipping gate), READY → DONE, EXECUTION → DONE (skipping validation).
 
-**Enforced:** spec (`state-machines.md`), code (`models/task.go` transition map), contract (CORE.md)
+**Enforced:** spec (`state-machines.md`), code (`models/task_status.go`: `Task.TransitionWith` and `TaskStatus.CanPipelineTransition`, using the map built by `pipeline.Resolver.TransitionMap`), contract (CORE.md)
 
 ### 3.3 Claimability
 

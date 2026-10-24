@@ -33,7 +33,6 @@ var areaA1 = Area{
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/db/yaml_write.go", Func: "projectedWriteType"}, Ceiling: 101},
-		{Key: Key{File: "internal/models/task.go"}, Ceiling: 1375},
 		{Key: Key{File: "internal/pipeline/config.go", Func: "validate"}, Ceiling: 122},
 		{Key: Key{File: "internal/pipeline/resolver.go"}, Ceiling: 1075},
 		{Key: Key{File: "internal/referencecontract/contract.go", Func: "Parse"}, Ceiling: 112},
