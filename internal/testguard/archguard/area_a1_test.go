@@ -36,9 +36,6 @@ var areaA1 = Area{
 		{Key: Key{File: "internal/referencecontract/contract.go", Func: "Parse"}, Ceiling: 112},
 		{Key: Key{File: "internal/referencecontract/render.go", Func: "RenderCarriers"}, Ceiling: 169},
 		{Key: Key{File: "internal/referencecontract/resolve.go", Func: "ResolveDirectReferences"}, Ceiling: 104},
-		{Key: Key{File: "internal/statevalidate/validate_task.go"}, Ceiling: 1058},
-		{Key: Key{File: "internal/statevalidate/validate_task.go", Func: "validateStatusFields"}, Ceiling: 117},
-		{Key: Key{File: "internal/statevalidate/validate_task.go", Func: "validateTaskInvariants"}, Ceiling: 154},
 	},
 	S2: []S2Entry{},
 }
