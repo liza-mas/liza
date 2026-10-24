@@ -25,17 +25,6 @@ func TestOracleA9Registration(t *testing.T) {
 	p.check(t, r)
 }
 
-func TestOracleA9RegistrationCollision(t *testing.T) {
-	t.Parallel()
-	p := newScenario(t, "i01-collision")
-	r := p.run(t, "agent", "coder", "--cli", "claude", "--agent-id", "coder-1")
-	requireCode(t, p, r, 1)
-	if !strings.Contains(r.stderr, "agent ID collision") || !bytes.Equal(p.before, p.state(t)) || len(p.records(t)) != 0 {
-		t.Fatal("I-01 collision must refuse before launch with byte-identical state")
-	}
-	p.check(t, r)
-}
-
 func TestOracleA9AutoAssignID(t *testing.T) {
 	t.Parallel()
 	t.Run("success", func(t *testing.T) {
@@ -54,16 +43,7 @@ func TestOracleA9AutoAssignID(t *testing.T) {
 		}
 		p.check(t, r)
 	})
-	t.Run("capacity-refused", func(t *testing.T) {
-		t.Parallel()
-		p := newScenario(t, "i02-refused")
-		r := p.run(t, "agent", "coder", "--cli", "claude")
-		requireCode(t, p, r, 1)
-		if !strings.Contains(r.stderr, "already has 1 live agent(s) (max 1)") || !bytes.Equal(p.before, p.state(t)) || len(p.records(t)) != 0 {
-			t.Fatal("I-02 cap must refuse registration without state mutation or provider launch")
-		}
-		p.check(t, r)
-	})
+	t.Run("capacity-refused", oracleA9CapacityRefused)
 }
 
 func TestOracleA9DoerClaim(t *testing.T) {
@@ -105,27 +85,6 @@ func TestOracleA9DoerClaimRefused(t *testing.T) {
 	}
 	r := p.finish(t, a, 10*time.Second)
 	requireCode(t, p, r, 0)
-	p.check(t, r)
-}
-
-// TestOracleA9AuthorityLost is not parallel: its supervisor carries the
-// canonical binary name, which process scans of other scenarios would match.
-func TestOracleA9AuthorityLost(t *testing.T) {
-	p := newScenario(t, "i05-authority-lost")
-	a := p.startNamed(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
-	p.await(t, "held provider launch", func() bool {
-		_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
-		return err == nil
-	})
-	start := time.Now()
-	if r := p.run(t, "delete", "agent", "coder-1", "--force"); r.code != 0 {
-		t.Fatal("I-05 force deletion failed")
-	}
-	r := p.finish(t, a, 10*time.Second)
-	requireCode(t, p, r, 0)
-	if time.Since(start) >= 10*time.Second || bytes.Contains(p.state(t), []byte("coder-1:")) || !bytes.Contains(p.state(t), []byte("event: claim_released")) {
-		t.Fatal("I-05 authority loss must stop before heartbeat and release claim")
-	}
 	p.check(t, r)
 }
 

@@ -85,7 +85,11 @@ func TestOracleA9Stub(t *testing.T) {
 	if last.code != 97 || len(records) != 3 || !records[2].Deadline || records[2].Error != "wait deadline: never-created" {
 		t.Fatal("stub deadline did not refuse missing barrier")
 	}
-	if records[0].Executable != "claude" || !reflect.DeepEqual(records[0].Args, []string{"argument"}) || records[0].Directory != p.dir {
+	// The record keeps the process's own working directory (launch goldens embed it);
+	// a symlinked TMPDIR makes that and p.dir differ in form, so compare resolved paths.
+	recorded, recordedErr := filepath.EvalSymlinks(records[0].Directory)
+	expected, expectedErr := filepath.EvalSymlinks(p.dir)
+	if records[0].Executable != "claude" || !reflect.DeepEqual(records[0].Args, []string{"argument"}) || recordedErr != nil || expectedErr != nil || recorded != expected {
 		t.Fatal("invocation record lost executable/argv/cwd")
 	}
 	if _, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml")); err != nil {
