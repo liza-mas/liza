@@ -732,6 +732,27 @@ routed to the source owner).
 - Blocker 4 (the `i15-consumed` mid-run snapshot) is mechanical and needs no ruling.
 - Kind: oracle-contract (reachability and provenance). Revert: a reviewed A9 correction.
 
+### D45 — D43 reaping: a subreaper defines the bar (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T04:27Z. `arm-1-ar-9-cp-0-code-1` and `arm-1-ar-9-cp-0-code-4` both reached review cycle
+3/5 on the single D43 ruling 2 blocker. The reviewer found successive gaps in `ps`-based process tracking:
+the provider group was missed, the deadline path killed only part of the tree, and a descendant was
+reparented before any snapshot once its leader had exited. Production `internal/process/spawn.go` starts
+providers in a detached group, so they leave the supervisor's group.
+- Ruling: on Linux, each A9 test process that starts supervisors calls
+  `unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)` (`golang.org/x/sys`, already a dependency)
+  before its first start, so every orphaned descendant reparents to the test process. Cleanup
+  (`t.Cleanup`, also on deadline and failure paths) signals every remaining child and its process
+  group, reaps them, and asserts that the test process has no remaining children. That assertion is
+  complete regardless of leader exit timing and replaces `ps`-scan tracking. On non-Linux hosts,
+  best-effort group termination is acceptable and must be documented in the test. Reviewers judge D43
+  ruling 2 by this bar.
+- Placement: each task may implement it in its own A9 test files now (no kit edit), and must keep the
+  helper small and identical in shape. Debt: consolidate into the kit (`internal/oracle/a9`) during
+  the A9 refactor scope. Payback trigger: the first A9-area refactor task.
+- Rejected: continuing `ps`-scan refinements (racy by construction; risks the review cycle cap);
+  editing the merged kit from two concurrent tasks (writer conflict). Kind: test hygiene. Revert:
+  a reviewed A9 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
