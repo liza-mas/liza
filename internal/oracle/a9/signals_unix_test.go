@@ -3,6 +3,7 @@
 package a9
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -12,21 +13,28 @@ import (
 )
 
 // signalIsolate puts the command in its own process group, makes context
-// cancellation kill that whole group, and bounds the wait for inherited output
-// handles that a surviving descendant could hold open.
+// cancellation (the kit's command deadline included) reap the command with
+// everything it started while the parent relationship still identifies it, and
+// bounds the wait for output handles a surviving descendant could hold open.
 func signalIsolate(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.Cancel = func() error {
+		if !signalReap(cmd.Process.Pid) {
+			return errors.New("scenario processes survived cancellation")
+		}
+		return nil
+	}
 	cmd.WaitDelay = 2 * time.Second
 }
 
 type signalProc struct{ pid, ppid, pgid int }
 
-// signalProcesses lists the live (non-zombie) processes of the host.
-func signalProcesses() []signalProc {
+// signalProcesses lists the live (non-zombie) processes of the host. A failed
+// observation is an error: it never reads as an empty host.
+func signalProcesses() ([]signalProc, error) {
 	out, err := exec.Command("ps", "-axo", "pid=,ppid=,pgid=,stat=").Output()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var procs []signalProc
 	for _, line := range strings.Split(string(out), "\n") {
@@ -41,7 +49,7 @@ func signalProcesses() []signalProc {
 			procs = append(procs, signalProc{pid, ppid, pgid})
 		}
 	}
-	return procs
+	return procs, nil
 }
 
 // signalGrow adds to members the processes below them or in a group they use,
@@ -64,12 +72,16 @@ func signalGrow(procs []signalProc, members, groups map[int]bool) {
 
 // signalReap kills the process rooted at pid, everything below it, and every
 // group those use (a provider runs in a group of its own), until none is left.
-// It reports whether the host was free of them before the deadline.
+// It reports whether the host was observed free of them before the deadline;
+// a failed observation reports false.
 func signalReap(root int) bool {
 	members, groups := map[int]bool{root: true}, map[int]bool{root: true}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		procs := signalProcesses()
+		procs, err := signalProcesses()
+		if err != nil {
+			return false
+		}
 		signalGrow(procs, members, groups)
 		var live []int
 		for _, p := range procs {
@@ -96,7 +108,10 @@ func signalReap(root int) bool {
 // signalDescendants returns the live processes below root or in its group.
 func signalDescendants(root int) []signalProc {
 	members, groups := map[int]bool{root: true}, map[int]bool{root: true}
-	procs := signalProcesses()
+	procs, err := signalProcesses()
+	if err != nil {
+		return nil
+	}
 	signalGrow(procs, members, groups)
 	var below []signalProc
 	for _, p := range procs {
@@ -107,8 +122,14 @@ func signalDescendants(root int) []signalProc {
 	return below
 }
 
+// signalPidLive reports whether pid is live; when the host cannot be observed
+// it stays true, since absence is not proven.
 func signalPidLive(pid int) bool {
-	for _, p := range signalProcesses() {
+	procs, err := signalProcesses()
+	if err != nil {
+		return true
+	}
+	for _, p := range procs {
 		if p.pid == pid {
 			return true
 		}

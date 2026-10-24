@@ -294,33 +294,66 @@ func TestSignalGroupReap(t *testing.T) {
 
 // TestSignalProviderReap holds a real scenario stub provider, which the
 // supervisor runs in a process group of its own, and ends the scenario while it
-// is held. The cleanup must terminate supervisor and provider with no survivor.
+// is held: through the scenario cleanup, and through the cancellation the
+// kit's command deadline performs before any cleanup. Supervisor and provider
+// must be gone either way.
 func TestSignalProviderReap(t *testing.T) {
 	unixOnly(t)
-	var started []int
-	t.Run("held", func(t *testing.T) {
-		p := newScenario(t, "i19-held")
-		a := signalStart(t, p, signalCoderArgs("claude")...)
-		p.await(t, "held provider", func() bool {
-			_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
-			return err == nil
-		})
-		supervisor := a.cmd.Process.Pid
-		started = append(started, supervisor)
-		for _, proc := range signalDescendants(supervisor) {
-			started = append(started, proc.pid)
-			if proc.pgid != supervisor {
-				return
-			}
+	for _, cancelled := range []bool{false, true} {
+		name := "cleanup"
+		if cancelled {
+			name = "cancelled"
 		}
-		t.Fatal("I-19 the held provider must run in a group of its own")
-	})
-	if len(started) < 2 {
-		t.Fatal("A9 signal provider: no provider observed")
+		var started []int
+		t.Run(name, func(t *testing.T) {
+			p := newScenario(t, "i19-held")
+			a := signalStart(t, p, signalCoderArgs("claude")...)
+			p.await(t, "held provider", func() bool {
+				_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
+				return err == nil
+			})
+			supervisor := a.cmd.Process.Pid
+			started = append(started, supervisor)
+			separate := false
+			for _, proc := range signalDescendants(supervisor) {
+				started = append(started, proc.pid)
+				separate = separate || proc.pgid != supervisor
+			}
+			if !separate {
+				t.Fatal("I-19 the held provider must run in a group of its own")
+			}
+			if cancelled {
+				a.cancel()
+				select {
+				case <-a.done:
+				case <-time.After(10 * time.Second):
+					t.Fatal("I-19 cancelled supervisor did not exit")
+				}
+				signalAwaitGone(t, started)
+			}
+		})
+		if len(started) < 2 {
+			t.Fatalf("A9 signal provider %s: no provider observed", name)
+		}
+		signalAwaitGone(t, started)
 	}
-	for _, pid := range started {
-		if signalPidLive(pid) {
+}
+
+// signalAwaitGone fails the test unless none of the processes is live within a bound.
+func signalAwaitGone(t *testing.T, pids []int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		live := false
+		for _, pid := range pids {
+			live = live || signalPidLive(pid)
+		}
+		if !live {
+			return
+		}
+		if time.Now().After(deadline) {
 			t.Fatal("A9 signal provider: a started process outlived its scenario")
 		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
