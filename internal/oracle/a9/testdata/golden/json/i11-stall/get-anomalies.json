@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "result": [
+    {
+      "age": "<AGE>",
+      "details": {
+        "agent_id": "code-reviewer-1",
+        "impact": "an approved task this reviewer owns has not merged; downstream work stays gated until it does",
+        "role": "code-reviewer",
+        "rounds": 21
+      },
+      "reporter": "code-reviewer-1",
+      "task": "",
+      "timestamp": "<T1:sZ>",
+      "type": "pending_merge_stalled"
+    }
+  ]
+}

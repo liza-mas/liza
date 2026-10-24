@@ -1,0 +1,24 @@
+{
+  "executables": {
+    "claude": [
+      {
+        "args": [
+          "--version"
+        ],
+        "reply": "2.1.300 (Claude Code)"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "wait_file": ".liza/state.yaml.liveness-*",
+      "deadline_seconds": 120,
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}

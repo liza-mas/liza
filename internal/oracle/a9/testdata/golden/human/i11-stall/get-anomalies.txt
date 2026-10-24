@@ -1,0 +1,5 @@
+exit_code: 0
+[stdout]
+[stderr]
+AGE TYPE TASK REPORTER TIMESTAMP DETAILS
+<AGE> ago pending_merge_stalled code-reviewer-1 <T1:sN> agent_id=code-reviewer-1, impact=an approved task this reviewer owns has not merged; downstream work stays gated until it does, role=code-reviewer, rounds=21

@@ -1,0 +1,3 @@
+{"executables":{"claude":[{"args":["--version"],"reply":"2.1.300 (Claude Code)"}]},
+ "calls":[{"wait_file":".liza/oracle-release",
+ "commands":[["write-checkpoint","task-1","--agent-id","coder-1","--intent","derive review fixture","--validation-plan","none","--tdd-not-required","fixture derivation"],["submit-for-review","task-1","--agent-id","coder-1"],["stop"]],"exit_code":0}]}
