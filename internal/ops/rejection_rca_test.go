@@ -269,7 +269,7 @@ func TestRecordRejectionRCA(t *testing.T) {
 		}
 
 		task := fixture.readTask(t)
-		if got := task.RejectionRCA.Contributions[1].Categories; !reflect.DeepEqual(got, []string{"flaky_ci"}) {
+		if got := task.RejectionRCA.Contributions[1].Categories; !reflect.DeepEqual(got, []models.RejectionCause{"flaky_ci"}) {
 			t.Fatalf("stored categories = %v, want the verbatim unknown cause", got)
 		}
 		entries := historyEntries(task, models.TaskEventRejectionRCARecorded)
