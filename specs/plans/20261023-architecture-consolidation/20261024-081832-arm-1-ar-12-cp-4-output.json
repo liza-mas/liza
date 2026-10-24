@@ -1,7 +1,7 @@
 [
   {
     "desc": "Must: separate resume decision from post-commit transition reporting and empty the A3 ratchet",
-    "done_when": "The mode_change.go resume ratchet key is absent, resume and its new concern code are within S1 and areaA3.Ratchet is empty with layer data unchanged; an oracle-only commit adds resume-path goldens before the production edit and older goldens are unchanged; C0-C4 pass; the acceptance manifest maps every allocated obligation.",
+    "done_when": "The mode_change.go resume ratchet key is absent, resume and its new concern code are within S1 and areaA3.Ratchet is empty with layer data unchanged; an oracle-only commit adds eight mandatory resume goldens, including transition-checkpoint execution, completed-sprint advance and transition-failure reporting, before the production edit and older goldens are unchanged; C0-C4 pass; the acceptance manifest maps every allocated obligation.",
     "scope": "internal/ops/mode_change.go resume section, one new resume concern file if cohesive, colocated tests, additive a3/control resume driver/fixtures/goldens, area_a3_test.go, INVARIANTS.md references invalidated by the move, acceptance manifest. No A4 completion/advance/transition policy, C5 site, commands/resume.go or agent/systemctl.go edit; no exported signature change.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-081832-arm-1-ar-12-cp-4.md#Task 1: Separate resume decision from post-commit transition reporting",
@@ -14,13 +14,137 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control"
     ],
     "validation_prerequisites": [
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
     ],
-    "inherit_inputs": {"mode": "all"}
+    "inherit_inputs": {
+      "mode": "all"
+    }
   },
   {
     "desc": "Must: type lifecycle safe-action and effect decisions in the ops kernel with complete X2 caller conformance",
@@ -36,17 +160,120 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/ ./internal/commands/ ./cmd/liza/"
     ],
     "validation_prerequisites": [
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/ ./internal/commands/ ./cmd/liza/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/ ./internal/commands/ ./cmd/liza/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
     ],
-    "inherit_inputs": {"mode": "all"}
+    "inherit_inputs": {
+      "mode": "all"
+    }
   },
   {
     "desc": "Must: complete the A3 K7 occurrence inventory with typed internal decisions, A1 adoption and named magic values",
-    "done_when": "Committed inventory evidence classifies every A3 vocabulary and magic-value occurrence, including Scope 2-5 concern files, as adopted or dynamic with no deferral; held-slot admit goldens are committed before admission edits and older goldens are unchanged; spelling and boundary tests and C0-C4 pass; the acceptance manifest maps every allocated obligation.",
-    "scope": "Every A3 production file of the area list plus concern files created by Scopes 2-5, colocated tests, additive a3/control held-slot admit driver/fixtures/goldens, acceptance manifest. No exported A3 signature or exported constant type change, no models/pipeline/roles edit, no edit outside A3 except a conversion compilation requires.",
+    "done_when": "Committed inventory evidence classifies every A3 vocabulary and magic-value occurrence, including Scope 2-5 concern files, as adopted or dynamic with no deferral; review-claim classes and degradation reasons are typed with X2 consumers conformed; held-slot admit goldens are committed before admission edits and older goldens are unchanged; spelling and boundary tests and C0-C4 pass; the acceptance manifest maps every allocated obligation.",
+    "scope": "Every A3 production file of the area list plus concern files created by Scopes 2-5, colocated tests, additive a3/control held-slot admit driver/fixtures/goldens, acceptance manifest. Exported type changes only for review-claim classes and degradation reasons, with X2 conformance in internal/agent claim-breaker/reviewer-strategy code and A5 claim_reviewer_task.go; no models/pipeline/roles edit and no caller logic change.",
     "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-081832-arm-1-ar-12-cp-4.md#Task 3: Complete the A3 K7 inventory",
     "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 5: Kernel vocabulary and run control",
@@ -54,18 +281,145 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
-      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/ ./internal/agent/",
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control"
     ],
     "validation_prerequisites": [
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/ ./internal/agent/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/control",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
     ],
-    "depends_on": ["0", "1"],
-    "inherit_inputs": {"mode": "all"}
+    "depends_on": [
+      "0",
+      "1"
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
   },
   {
     "desc": "Must: record the A3 concern layout and vocabulary ownership in one ADR with its index row",
@@ -81,12 +435,113 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 8d42753eee6acd41e195bc69dc873e23b88e360a HEAD -- 'specs/architecture/ADR/*-a3-ops-kernel-concerns-and-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-4-adr.json", "executables": ["env", "git"], "env": ["HOME", "PATH"], "probes": [["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 8d42753eee6acd41e195bc69dc873e23b88e360a HEAD -- 'specs/architecture/ADR/*-a3-ops-kernel-concerns-and-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-4-adr.json",
+        "executables": [
+          "env",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
     ],
-    "depends_on": ["0", "1", "2"],
-    "inherit_inputs": {"mode": "all"}
+    "depends_on": [
+      "0",
+      "1",
+      "2"
+    ],
+    "inherit_inputs": {
+      "mode": "all"
+    }
   }
 ]
