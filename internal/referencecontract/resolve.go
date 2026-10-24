@@ -151,104 +151,11 @@ func LoadDiffCarriers(repo ReviewRepository, root, base, review, head string, cl
 func ResolveDirectReferences(repo ReviewRepository, head, localBase, localReview string, contract *Contract, refuses func(referenceID string) bool) ([]Reference, error) {
 	refs := make([]Reference, 0, len(contract.DirectReferences))
 	for _, ref := range contract.DirectReferences {
-		pin := ref.EffectiveRevision(contract.SourceRevision)
-		revision, err := repo.ResolveCommit(pin)
-		if err != nil {
-			// Probed only on this error path: a pin naming no commit in the
-			// repository is the author's to fix; a failed probe, or a commit
-			// that would not resolve, stays a Git failure (D-235).
-			if objectType, present, probeErr := repo.ObjectType(pin); probeErr == nil {
-				switch {
-				case !present:
-					return nil, invalidCarrier(fmt.Errorf("direct reference %q: pinned revision %s does not exist in this repository; pin a commit that contains %q", ref.ID, pin, ref.Path))
-				case objectType != "commit":
-					return nil, invalidCarrier(fmt.Errorf("direct reference %q: pinned revision %s is a %s, not a commit; pin a commit that contains %q", ref.ID, pin, objectType, ref.Path))
-				}
-			}
-			return nil, err
-		}
-		content, err := repo.ReadBlob(revision, ref.Path)
-		if err != nil {
-			if _, present, probeErr := repo.TreePathMode(revision, ref.Path); probeErr == nil && !present {
-				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is not present at its pinned revision %s; pin a commit that contains it — a file added in this submission must be committed before the commit that pins it", ref.ID, ref.Path, revision))
-			}
-			return nil, err
-		}
-		pinnedOID, err := repo.BlobOID(revision, ref.Path)
+		resolved, err := resolveDirectReference(repo, head, localBase, localReview, contract.SourceRevision, ref, refuses)
 		if err != nil {
 			return nil, err
 		}
-		pinned := Reference{ID: ref.ID, Path: ref.Path, Heading: ref.Heading, Revision: revision, BlobOID: pinnedOID}
-		// unresolvable keeps the pinned text when the section cannot be read
-		// at the fresh revision, or refuses with err.
-		unresolvable := func(reason string, err error) error {
-			if refuses(ref.ID) {
-				return err
-			}
-			pinned.PinnedRevision, pinned.Unresolved = revision, reason
-			refs = append(refs, pinned)
-			return nil
-		}
-		_, presentAtHead, err := repo.TreePathMode(head, ref.Path)
-		if err != nil {
-			return nil, err
-		}
-		freshRevision, where := head, "integration HEAD"
-		if !presentAtHead && localReview != "" {
-			_, presentAtBase, baseErr := repo.TreePathMode(localBase, ref.Path)
-			if baseErr != nil {
-				return nil, baseErr
-			}
-			if presentAtBase {
-				return nil, invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))
-			}
-			_, presentAtReview, reviewErr := repo.TreePathMode(localReview, ref.Path)
-			if reviewErr != nil {
-				return nil, reviewErr
-			}
-			if !presentAtReview {
-				return nil, invalidCarrier(fmt.Errorf("direct reference %q: %q is absent at integration HEAD, the range base and the review commit (pin %s); cite a file integration HEAD carries, or commit this one in the submission and re-pin the reference to that commit", ref.ID, ref.Path, revision))
-			}
-			freshRevision, where = localReview, "review commit"
-		}
-		pinned.Span, err = ExtractSection(content, ref.Heading)
-		if err != nil {
-			return nil, invalidCarrier(err)
-		}
-		if !presentAtHead && localReview == "" {
-			if err := unresolvable("path deleted", invalidCarrier(fmt.Errorf("direct reference %q was deleted at integration HEAD", ref.ID))); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		freshOID, err := repo.BlobOID(freshRevision, ref.Path)
-		if err != nil {
-			return nil, err
-		}
-		if pinnedOID != freshOID {
-			freshContent, readErr := repo.ReadBlob(freshRevision, ref.Path)
-			if readErr != nil {
-				return nil, readErr
-			}
-			freshSpan, spanErr := ExtractSection(freshContent, ref.Heading)
-			if spanErr != nil {
-				if err := unresolvable(spanErr.Error(), invalidCarrier(fmt.Errorf("direct reference %q is stale at %s: %w", ref.ID, where, spanErr))); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			if freshSpan != pinned.Span {
-				if refuses(ref.ID) {
-					return nil, invalidCarrier(fmt.Errorf("direct reference %q is stale at %s", ref.ID, where))
-				}
-				refs = append(refs, Reference{
-					ID: ref.ID, Path: ref.Path, Heading: ref.Heading, Revision: freshRevision, BlobOID: freshOID,
-					Span: freshSpan, PinnedRevision: revision,
-				})
-				continue
-			}
-		}
-		refs = append(refs, pinned)
+		refs = append(refs, resolved)
 	}
 	return refs, nil
 }

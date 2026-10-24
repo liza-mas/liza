@@ -2,7 +2,6 @@ package referencecontract
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -95,168 +94,21 @@ func RenderCarriers(observations []Carrier) (string, error) {
 	if len(observations) == 0 {
 		return "", nil
 	}
-	sort.SliceStable(observations, func(i, j int) bool {
-		if observations[i].Path != observations[j].Path {
-			return observations[i].Path < observations[j].Path
-		}
-		return observations[i].Class > observations[j].Class
-	})
-	winners := make(map[string]Carrier)
-	for _, observation := range observations {
-		if existing, ok := winners[observation.Path]; ok {
-			if existing.Class == observation.Class && (existing.BlobOID != observation.BlobOID || existing.Span != observation.Span) {
-				return "", fmt.Errorf("conflicting carrier provenance for %q", observation.Path)
-			}
-			continue
-		}
-		winners[observation.Path] = observation
+	winners, err := selectCarrierWinners(observations)
+	if err != nil {
+		return "", err
 	}
-	for path, carrier := range winners {
-		if carrier.PointerOnly {
-			continue
-		}
-		if carrier.AssignedHeading == "" {
-			continue
-		}
-		if carrier.SectionOnly {
-			span, err := ExtractSection(carrier.Span, carrier.AssignedHeading)
-			if err != nil {
-				return "", err
-			}
-			carrier.Span = span
-		} else {
-			carrier.Span = elideAssignedPeers(carrier)
-		}
-		winners[path] = carrier
+	if err := narrowAssignedSections(winners); err != nil {
+		return "", err
 	}
-	paths := make([]string, 0, len(winners))
-	for path := range winners {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	// Identity is the rendered section, not the file blob: freshness admits a
-	// reference whose section is unchanged while the rest of its file moved
-	// (ADR-0133), so blob equality would miss real duplicates.
-	containedIn := func(ref Reference) bool {
-		inlined, ok := winners[ref.Path]
-		return ok && !inlined.PointerOnly && strings.Contains(inlined.Span, ref.Span)
-	}
-	// Which carrier emits each reference in full, decided before rendering so
-	// an elided carrier that sorts earlier can point at it.
-	emittedBy := make(map[string]string)
-	for _, path := range paths {
-		carrier := winners[path]
-		if carrier.PointerOnly || carrier.ElideRefs {
-			continue
-		}
-		for _, ref := range carrier.Refs {
-			if carrier.InlineReferenceIDs != nil && !carrier.InlineReferenceIDs[ref.ID] {
-				continue
-			}
-			key := refKey(ref)
-			if _, done := emittedBy[key]; done {
-				continue
-			}
-			if containedIn(ref) {
-				continue
-			}
-			emittedBy[key] = path
-		}
-	}
+	paths := sortedCarrierPaths(winners)
+	emitter := newReferenceEmitter(winners)
+	emitter.planEmission(paths)
 	var out strings.Builder
-	seenRefs := make(map[string]bool)
-	seenPointers := make(map[string]bool)
-	// The text slot is keyed on content, but a drifted reference owes its
-	// disclosure even when another carrier pinned the same text at a current
-	// revision; seenNotes tracks those disclosures separately so neither
-	// emission swallows the other.
-	seenNotes := make(map[string]bool)
 	for _, path := range paths {
 		carrier := winners[path]
-		if carrier.PointerOnly {
-			fmt.Fprintf(&out, "CARRIER %s @ %s — inherited context; not inlined; read with git show %s if needed\n",
-				strconv.Quote(path), carrier.Revision, shellQuote(carrier.Revision+":"+path))
-		} else {
-			fmt.Fprintf(&out, "CARRIER %s @ %s\n%s", strconv.Quote(path), carrier.Revision, carrier.Span)
-			if !strings.HasSuffix(carrier.Span, "\n") {
-				out.WriteByte('\n')
-			}
-		}
-		if carrier.SectionOnly {
-			fmt.Fprintf(&out, "OTHER SECTIONS AND REFERENCES %s @ %s — shared and sibling context; read Source References and exact headings with git show %s if needed\n",
-				strconv.Quote(path), carrier.Revision, shellQuote(carrier.Revision+":"+path))
-		}
-		var unselectedIDs []string
-		for _, ref := range carrier.Refs {
-			key := refKey(ref)
-			note := driftNote(ref)
-			noteKey := key + "\x00" + ref.PinnedRevision
-			target := strconv.Quote(ref.Path + "#" + ref.Heading)
-			// Compact navigation routes unselected spans through their carrier's
-			// declaration. It does not consume a full-emission slot, and each
-			// freshness disclosure still names the reference and its real pin.
-			if carrier.PointerOnly || carrier.InlineReferenceIDs != nil && !carrier.InlineReferenceIDs[ref.ID] {
-				if carrier.SectionOnly {
-					unselectedIDs = append(unselectedIDs, strconv.Quote(ref.ID))
-				}
-				if note != "" && !seenNotes[noteKey] {
-					pointerNote := strings.Replace(note, "pinned text shown", "pinned section available via pointer", 1)
-					pointerNote = strings.Replace(pointerNote, "current text shown", "current section available via pointer", 1)
-					fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — not inlined; read with git show %s if needed; %s\n",
-						target, ref.Revision, shellQuote(ref.Revision+":"+ref.Path), pointerNote)
-					seenNotes[noteKey] = true
-				}
-				continue
-			}
-			if seenRefs[key] {
-				if note != "" && !seenNotes[noteKey] {
-					seenNotes[noteKey] = true
-					var where string
-					switch emitter, emitted := emittedBy[key]; {
-					case containedIn(ref):
-						where = withNote("inlined in this context as CARRIER "+strconv.Quote(ref.Path), note)
-					case emitted:
-						where = note + "; same text inlined in this context under CARRIER " + strconv.Quote(emitter)
-					default:
-						where = withNote("not inlined; read with git show "+shellQuote(ref.Revision+":"+ref.Path)+" if needed", note)
-					}
-					fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision, where)
-				}
-				continue
-			}
-			if containedIn(ref) {
-				seenRefs[key], seenNotes[noteKey] = true, true
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
-					withNote("inlined in this context as CARRIER "+strconv.Quote(ref.Path), note))
-				continue
-			}
-			if carrier.ElideRefs {
-				if emitter, ok := emittedBy[key]; ok {
-					if !seenPointers[noteKey] {
-						seenPointers[noteKey], seenNotes[noteKey] = true, true
-						fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
-							withNote("inlined in this context under CARRIER "+strconv.Quote(emitter), note))
-					}
-					continue
-				}
-				seenRefs[key], seenNotes[noteKey] = true, true
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n", target, ref.Revision,
-					withNote("not inlined; read with git show "+shellQuote(ref.Revision+":"+ref.Path)+" if needed", note))
-				continue
-			}
-			seenRefs[key], seenNotes[noteKey] = true, true
-			if note != "" {
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s — %s\n%s", target, ref.Revision, note, ref.Span)
-			} else {
-				fmt.Fprintf(&out, "DIRECT REFERENCE %s @ %s\n%s", target, ref.Revision, ref.Span)
-			}
-			if !strings.HasSuffix(ref.Span, "\n") {
-				out.WriteByte('\n')
-			}
-		}
-		if len(unselectedIDs) > 0 {
-			fmt.Fprintf(&out, "UNSELECTED DIRECT REFERENCE IDS: %s — pointers via this carrier's Source References above\n", strings.Join(unselectedIDs, ", "))
-		}
+		writeCarrierBody(&out, path, carrier)
+		emitter.writeCarrierReferences(&out, carrier)
 	}
 	return strings.TrimRight(out.String(), "\n"), nil
 }

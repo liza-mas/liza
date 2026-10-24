@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard: live production tree has no unlisted file >800 lines or function >100 lines, including Parse, RenderCarriers and ResolveDirectReferences and the new contract_parse.go, render_carriers.go, render_references.go and resolve_reference.go, with the three referencecontract ratchet keys removed from area_a1_test.go.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC1",
+      "file": "internal/referencecontract/contract_test.go",
+      "assertion": "TestParseStrictContract, TestParseLegacyMarkerDetection, TestParseRejectsMalformedStrictContract (exact line-numbered parser diagnostics and first-error precedence) and TestParseRejectsUnsafeReferencePaths assert the parse behavior; render_test.go TestRenderCarriersUndriftedOutputIsUnchanged, TestRenderCarriersDisclosesDriftedReference, TestRenderCarriersKeepsDriftNoteWhenSameSectionIsCurrentElsewhere and the other TestRenderCarriers* cases plus section_render_test.go assert exact rendered bytes and pointer/note ordering; resolve_test.go TestResolveDirectReferences* (written against and passing on the unsplit resolve.go) assert repository call order, error wrapping, refusal/disclosure and nil-on-error. All prior fixtures and assertions are untouched; extraction order is traced in review.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a8/oracle_test.go",
+      "assertion": "TestOraclePrompt (including T09/T10 resolved reference context) and the remaining A1 oracles run live under command 3 with goldens unchanged, proving rendered prompt bytes are identical.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-api",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-cohesion",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-ratchet",
+      "approved_reference_id": "arch-size"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target: existing ci-prepare and test-nosync execute the complete Go suite through go test ./... under the declared isolated environment; receipt additionally requires lint, referencecontract race, archguard, all live oracles and test-e2e.",
+      "command_index": 4
+    }
+  ]
+}
