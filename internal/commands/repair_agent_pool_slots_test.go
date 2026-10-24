@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -65,8 +66,10 @@ type slotPoolResolver struct {
 	max int
 }
 
-func (r slotPoolResolver) MaxInstances(string) (int, error)                 { return r.max, nil }
-func (r slotPoolResolver) ProviderDiversity(string, string) (string, error) { return "", nil }
+func (r slotPoolResolver) MaxInstances(string) (int, error) { return r.max, nil }
+func (r slotPoolResolver) ProviderDiversity(string, pipeline.ReviewImpact) (pipeline.ProviderDiversityMode, error) {
+	return "", nil
+}
 
 // A fresh task and a half-approved one need slots 1 and 2: pool repair starts
 // one reviewer per item, under distinct IDs from the role's shared allocator,

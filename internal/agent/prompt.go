@@ -355,7 +355,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		// Identity
 		Role:                 config.Role,
 		AgentID:              config.AgentID,
-		RoleType:             roleType,
+		RoleType:             string(roleType),
 		CLIName:              config.CLIName,
 		AwaitIntervalSeconds: int(providers.AwaitInterval(config.CLIName) / time.Second),
 
@@ -516,7 +516,7 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 			return nil, fmt.Errorf("reference context topology for task %q: %w", task.ID, err)
 		}
 	}
-	resolvedContext, legacyReferences, err := buildReferenceContext(task, state, config, roleType, decompositionRoot)
+	resolvedContext, legacyReferences, err := buildReferenceContext(task, state, config, string(roleType), decompositionRoot)
 	if err != nil {
 		return nil, fmt.Errorf("reference context for task %q: %w: %w", task.ID, precommit.ErrContextBuild, err)
 	}

@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "V1",
+      "file": "internal/roles/roles_test.go",
+      "assertion": "TestClaimAndRoleTypeConstantValues asserts the three claim-type bytes; TestClaimTypeAndRoleTypeAreDistinct keeps the two vocabularies separate types; the existing internal/ops release_claim_test.go boundary tests run through the string conversions.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V2",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "TestRoleTypeValidatorAcceptsExactlyTheConstants (accepts each roles.RoleType constant, exact unknown and empty-type errors) and TestVocabularyCarriersDecodeFromPipelineYAML (Resolver.RoleType returns the declared type); internal/agent/role_models_test.go TestRoleTypesOfResolverReachesStringConsumers and internal/rolemodels TestForCoversEveryRoleTypeConstant cover the string consumers.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V3",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "TestTransitionHeaderValidatorAcceptsExactlyTheConstants accepts every cardinality constant and reports the exact unknown-cardinality error; internal/models/transition_vocabulary_test.go TestTransitionVocabularyConstantValues asserts the constant bytes.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V4",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "TestTransitionHeaderValidatorAcceptsExactlyTheConstants accepts both trigger constants and reports the exact unknown-trigger error; TestTransitionVocabularyConstantValues asserts the constant bytes.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V5",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "TestTransitionHeaderValidatorAcceptsExactlyTheConstants accepts both route constants and the exact unknown-route and per-subtask errors; TestTransitionAppliesRoutesByAllocationConstant preserves the empty-route legacy semantics.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V11",
+      "file": "internal/payloadschema/submit_verdict_test.go",
+      "assertion": "TestSubmitVerdictPayloadBoxesImpactAsString and TestSubmitVerdictSchemaRefusesUnboxedImpact exercise payload construction and the string-kind check; internal/statevalidate/validate_task_test.go TestValidateVerdictPayloadShapeDiagnostics accepts each impact constant and keeps the unknown-impact diagnostic; internal/pipeline TestEffectiveQuorumAndDiversityByImpactConstant preserves the empty-impact fallback.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "V12",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "TestProviderDiversityValidatorAcceptsExactlyTheConstants (accepts empty and preferred at base and override, exact unknown-value errors) and TestEffectiveQuorumAndDiversityByImpactConstant (empty diversity and base fallthrough).",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC1",
+      "file": "internal/pipeline/vocabulary_test.go",
+      "assertion": "The exact-error assertions of TestRoleTypeValidatorAcceptsExactlyTheConstants, TestTransitionHeaderValidatorAcceptsExactlyTheConstants and TestProviderDiversityValidatorAcceptsExactlyTheConstants, with the unchanged config_test.go TestLoad_* diagnostics and statevalidate TestValidateVerdictPayloadShapeDiagnostics, show unknown values load and are refused with the same messages.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC2",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC3",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC4",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC5",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a1/cli/rbac_test.go",
+      "assertion": "TestOraclePipelineRBAC: live role-capability refusal under a frozen pipeline matches its golden with goldens, fixtures, twins and PROVENANCE unchanged; the same command runs the remaining A1 oracles and the A8 prompt goldens live.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-guards",
+      "file": "internal/testguard/archguard/k4_guard_test.go",
+      "assertion": "TestK4ImportDirectionGuard and TestS1SizeGuard run under make lint: no new layer crossing from the pipeline, roles or models imports and no new size offender.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    }
+  ]
+}

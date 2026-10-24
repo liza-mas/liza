@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // Entry selects the CLI, and optionally the model, an agent launches with.
@@ -175,15 +176,15 @@ func Parse(data []byte) (File, error) {
 
 // For returns the selection covering a role: its own, else the default for
 // its type. Orchestrators use the doer default, as for CLI defaults.
-func (f File) For(role, roleType string) (Selection, bool) {
+func (f File) For(role string, roleType roles.RoleType) (Selection, bool) {
 	if s, ok := f.Roles[role]; ok {
 		return s, true
 	}
 	var s *Selection
 	switch roleType {
-	case "doer", "orchestrator":
+	case roles.RoleTypeDoer, roles.RoleTypeOrchestrator:
 		s = f.Defaults.Doer
-	case "reviewer":
+	case roles.RoleTypeReviewer:
 		s = f.Defaults.Reviewer
 	}
 	if s == nil {
@@ -195,7 +196,7 @@ func (f File) For(role, roleType string) (Selection, bool) {
 // ReviewSlots returns the list binding a reviewer role's review slots, or
 // false when the role's selection is absent or a single entry.
 func (f File) ReviewSlots(role string) (Selection, bool) {
-	s, ok := f.For(role, "reviewer")
+	s, ok := f.For(role, roles.RoleTypeReviewer)
 	if !ok || !s.List {
 		return Selection{}, false
 	}

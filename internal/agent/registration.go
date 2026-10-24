@@ -101,7 +101,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 			if err == nil {
 				maxInst := models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances)
 				roleType, _ := resolver.RoleType(role)
-				occupiedDetails := occupiedRolePeers(state, resolver, role, roleType, agentID, now, livenessWindow)
+				occupiedDetails := occupiedRolePeers(state, resolver, role, string(roleType), agentID, now, livenessWindow)
 				occupiedCount := len(occupiedDetails)
 				if occupiedCount >= maxInst {
 					if roleType == "orchestrator" {
@@ -223,7 +223,7 @@ func poolSurplus(state *models.State, resolver *pipeline.Resolver, agentID strin
 	}
 	// Count peers first: it is the cheap test, and waiting agents evaluate
 	// this on every state read.
-	peers := occupiedRolePeers(state, resolver, agent.Role, roleType, agentID, now, models.AgentLivenessWindow(state.Config))
+	peers := occupiedRolePeers(state, resolver, agent.Role, string(roleType), agentID, now, models.AgentLivenessWindow(state.Config))
 	if len(peers) < models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) {
 		return false
 	}
@@ -391,7 +391,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 	roleType := ""
 	if resolver != nil {
 		if rt, err := resolver.RoleType(role); err == nil {
-			roleType = rt
+			roleType = string(rt)
 		}
 	}
 

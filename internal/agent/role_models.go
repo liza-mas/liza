@@ -9,12 +9,13 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RoleTypeSource exposes the pipeline roles models.yaml is validated against.
 type RoleTypeSource interface {
 	AllRoleNames() []string
-	RoleType(role string) (string, error)
+	RoleType(role string) (roles.RoleType, error)
 }
 
 // RoleTypesOf maps each pipeline role to its type.
@@ -22,7 +23,7 @@ func RoleTypesOf(src RoleTypeSource) map[string]string {
 	types := make(map[string]string)
 	for _, role := range src.AllRoleNames() {
 		if roleType, err := src.RoleType(role); err == nil {
-			types[role] = roleType
+			types[role] = string(roleType)
 		}
 	}
 	return types

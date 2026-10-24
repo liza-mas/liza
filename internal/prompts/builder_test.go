@@ -324,7 +324,7 @@ func TestPayloadPreflightGuidance_AllRoles(t *testing.T) {
 							if err != nil {
 								t.Fatal(err)
 							}
-							data := &RoleContextData{Role: role, RoleType: roleType, AgentID: role + "-1", TaskID: "task-1", Worktree: "/project/.worktrees/task-1", ProjectRoot: "/project"}
+							data := &RoleContextData{Role: role, RoleType: string(roleType), AgentID: role + "-1", TaskID: "task-1", Worktree: "/project/.worktrees/task-1", ProjectRoot: "/project"}
 							data.DecompositionRoot, err = resolver.IsDecompositionRoot(pairName)
 							if err != nil {
 								t.Fatal(err)
@@ -2270,7 +2270,7 @@ func TestRenderedCLIFailureRecoveryMatchesEffectiveCapabilities(t *testing.T) {
 			output, err := BuildRoleContext(roleName, sections, &RoleContextData{
 				Role:     roleName,
 				AgentID:  roleName + "-1",
-				RoleType: capabilities.RoleType,
+				RoleType: string(capabilities.RoleType),
 				TaskID:   "task-1",
 			})
 			if err != nil {
@@ -2344,7 +2344,7 @@ func TestRenderedCollectivePlanScopingMatchesEffectiveCapabilities(t *testing.T)
 			output, err := BuildRoleContext(roleName, sections, &RoleContextData{
 				Role:           roleName,
 				AgentID:        roleName + "-1",
-				RoleType:       capabilities.RoleType,
+				RoleType:       string(capabilities.RoleType),
 				TaskID:         "task-2",
 				TotalPlanTasks: 2,
 				TaskOrdinal:    2,
@@ -3228,7 +3228,7 @@ func TestBuildRoleContext_AwaitToolGuidance(t *testing.T) {
 				if cli == "claude" {
 					cap = 540
 				}
-				data := &RoleContextData{Role: role, AgentID: role + "-1", RoleType: roleType,
+				data := &RoleContextData{Role: role, AgentID: role + "-1", RoleType: string(roleType),
 					CLIName: cli, AwaitIntervalSeconds: cap, TaskID: "task-await-tool", ProjectRoot: projectRoot,
 					Worktree: projectRoot + "/.worktrees/task-await-tool", IntegrationBranch: "integration",
 					BaseCommit: "abc1234", ReviewCommit: "def5678", GoalBaseCommit: "abc1234"}

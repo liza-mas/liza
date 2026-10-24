@@ -3,6 +3,8 @@ package models
 import (
 	"fmt"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // claimTestResolver is a minimal PipelineResolver for IsClaimable tests.
@@ -17,12 +19,12 @@ type claimTestResolver struct {
 
 func (r *claimTestResolver) DoerRole(string) (string, error)     { return r.doer, nil }
 func (r *claimTestResolver) ReviewerRole(string) (string, error) { return r.reviewer, nil }
-func (r *claimTestResolver) RoleType(role string) (string, error) {
+func (r *claimTestResolver) RoleType(role string) (roles.RoleType, error) {
 	switch role {
 	case r.doer:
-		return "doer", nil
+		return roles.RoleTypeDoer, nil
 	case r.reviewer:
-		return "reviewer", nil
+		return roles.RoleTypeReviewer, nil
 	default:
 		return "", fmt.Errorf("unknown role %q", role)
 	}

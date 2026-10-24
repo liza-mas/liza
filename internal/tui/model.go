@@ -11,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // InputMode represents the current input mode of the TUI.
@@ -293,7 +294,7 @@ func (m Model) roleLaunchDefault(role string) (cli string, fromConfig bool, ok b
 	}
 	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
 		// A reviewer list starts with item 1, like an agent started without flags.
-		if selection, covered := roleModels.For(role, roleType); covered {
+		if selection, covered := roleModels.For(role, roles.RoleType(roleType)); covered {
 			return selection.First().CLI, true, true
 		}
 	}

@@ -434,7 +434,7 @@ func resolveRepairCLI(sel RepairCLI, role string, state *models.State, pr models
 	}
 	selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
 		Role:       role,
-		RoleType:   roleType,
+		RoleType:   string(roleType),
 		Config:     state.Config,
 		RoleModels: sel.RoleModels,
 	})
@@ -444,7 +444,7 @@ func resolveRepairCLI(sel RepairCLI, role string, state *models.State, pr models
 	if selection.Source == agent.SelectionSourceModelsFile {
 		cliName = selection.CLI
 	} else {
-		cliName = agent.ResolveDefaultCLIForRole(roleType, agent.CLIResolutionConfig{
+		cliName = agent.ResolveDefaultCLIForRole(string(roleType), agent.CLIResolutionConfig{
 			DefaultCLI:         state.Config.DefaultCLI,
 			DefaultDoerCLI:     state.Config.DefaultDoerCLI,
 			DefaultReviewerCLI: state.Config.DefaultReviewerCLI,

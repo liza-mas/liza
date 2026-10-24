@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
@@ -119,4 +120,37 @@ func TestSubmitVerdictSchemaRegistered(t *testing.T) {
 	if !slices.Contains(List(), Descriptor{Operation: SubmitVerdictOperation, Version: 1}) {
 		t.Errorf("List() = %+v, want a {%s, 1} row", List(), SubmitVerdictOperation)
 	}
+}
+
+// A typed impact is boxed as a plain string, so the string-kind parser that
+// precedes the shared validator keeps accepting it.
+func TestSubmitVerdictPayloadBoxesImpactAsString(t *testing.T) {
+	t.Parallel()
+
+	for _, impact := range []pipeline.ReviewImpact{"", pipeline.ReviewImpactStandard, pipeline.ReviewImpactSignificant, pipeline.ReviewImpactArchitecture} {
+		payload := SubmitVerdictPayload("task-1", "REJECTED", "the fix misses the boundary case", "reviewer-1", impact, strings.Repeat("ab", 20))
+		boxed, isString := payload["impact"].(string)
+		if !isString || boxed != string(impact) {
+			t.Fatalf("payload impact = %#v, want plain string %q", payload["impact"], impact)
+		}
+		_, diagnostics, err := Validate(SubmitVerdictOperation, payload)
+		if err != nil {
+			t.Fatalf("Validate() error = %v", err)
+		}
+		requireDiagnostics(t, diagnostics, nil)
+	}
+}
+
+// A defined-type member smuggled into the object is still refused as a wrong
+// type, exactly as a non-string member is: the parser asserts string kind.
+func TestSubmitVerdictSchemaRefusesUnboxedImpact(t *testing.T) {
+	t.Parallel()
+
+	payload := validVerdictPayload()
+	payload["impact"] = pipeline.ReviewImpactStandard
+	_, diagnostics, err := Validate(SubmitVerdictOperation, payload)
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	requireDiagnostics(t, diagnostics, []models.FieldDiagnostic{correctInput("/impact", "must be a string", models.FieldValueClassWrongType)})
 }

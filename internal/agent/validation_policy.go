@@ -5,6 +5,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ValidationExecutionLocal is the only validation_execution value under which
@@ -20,7 +21,7 @@ type RoleCLI struct {
 
 // RoleTyper resolves a pipeline role's type.
 type RoleTyper interface {
-	RoleType(name string) (string, error)
+	RoleType(name string) (roles.RoleType, error)
 }
 
 // DefaultRoleCLIs resolves each role's default launch CLI through
@@ -35,7 +36,7 @@ func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, role
 		if err != nil {
 			return nil, fmt.Errorf("role %s: %w", role, err)
 		}
-		sel, err := ResolveLaunchSelection(LaunchSelectionRequest{Role: role, RoleType: roleType, Config: config, RoleModels: roleModels})
+		sel, err := ResolveLaunchSelection(LaunchSelectionRequest{Role: role, RoleType: string(roleType), Config: config, RoleModels: roleModels})
 		if err != nil {
 			return nil, fmt.Errorf("role %s: %w", role, err)
 		}

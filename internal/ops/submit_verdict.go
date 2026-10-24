@@ -18,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
+	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
@@ -232,8 +233,7 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 // the cause of the lifecycle error, so a caller reading prose sees no change
 // while a caller reading result.diagnostics now gets the field-level detail.
 func validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit string, authority *models.AgentAuthority) error {
-	version, diagnostics, err := payloadschema.Validate(payloadschema.SubmitVerdictOperation,
-		payloadschema.SubmitVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit))
+	version, diagnostics, err := payloadschema.Validate(payloadschema.SubmitVerdictOperation, payloadschema.SubmitVerdictPayload(taskID, verdict, reason, agentID, pipeline.ReviewImpact(impact), reviewCommit))
 	if err != nil {
 		return err
 	}
@@ -436,7 +436,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 	var cleanSourceVerification *cleanIntegrationSourceVerification
 	if verdict == "APPROVED" && task.IntegrationAnalysis != nil &&
 		task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseGlobal && len(task.Output) == 0 {
-		effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
+		effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
 		if qErr != nil {
 			return nil, fmt.Errorf("failed to resolve quorum: %w", qErr)
 		}
@@ -536,7 +536,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 			task.History = append(task.History, historyEntry)
 
 			// Evaluate quorum: determine if more approvals are needed.
-			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
+			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
 			if qErr != nil {
 				return fmt.Errorf("failed to resolve quorum: %w", qErr)
 			}

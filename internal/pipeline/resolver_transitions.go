@@ -70,18 +70,18 @@ func (r *Resolver) PipelineTransitionsSuppressed() bool {
 // AvailableManualTransitions returns manual transition names available for a task at
 // the given status, excluding transitions already executed.
 func (r *Resolver) AvailableManualTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
-	return r.availableTransitionsByTrigger("manual", status, transitionsExecuted)
+	return r.availableTransitionsByTrigger(models.TransitionTriggerManual, status, transitionsExecuted)
 }
 
 // AvailableAutoTransitions returns auto transition names available for a task at
 // the given status, excluding transitions already executed.
 func (r *Resolver) AvailableAutoTransitions(status models.TaskStatus, transitionsExecuted map[string]bool) []string {
-	return r.availableTransitionsByTrigger("auto", status, transitionsExecuted)
+	return r.availableTransitionsByTrigger(models.TransitionTriggerAuto, status, transitionsExecuted)
 }
 
 // availableTransitionsByTrigger returns transition names matching the given trigger
 // type that are available for a task at the given status, excluding already-executed.
-func (r *Resolver) availableTransitionsByTrigger(trigger string, status models.TaskStatus, transitionsExecuted map[string]bool) []string {
+func (r *Resolver) availableTransitionsByTrigger(trigger models.TransitionTrigger, status models.TaskStatus, transitionsExecuted map[string]bool) []string {
 	var available []string
 	for _, sp := range r.config.Pipeline.SubPipelines {
 		for _, t := range sp.Transitions {
@@ -165,9 +165,9 @@ func (r *Resolver) TransitionApplies(name string, output []models.OutputEntry) b
 func (t TransitionDef) AppliesTo(output []models.OutputEntry) bool {
 	direct := models.HasCodingAllocation(output)
 	switch t.When {
-	case "coding-allocation":
+	case models.AllocationRouteCodingAllocation:
 		return direct
-	case "scope-decomposition", "":
+	case models.AllocationRouteScopeDecomposition, models.AllocationRouteNone:
 		return !direct
 	default:
 		return false
@@ -180,7 +180,7 @@ func (r *Resolver) outputConsumerRolePairs(sourceRolePair string, output []model
 	}
 	var consumers []string
 	for _, t := range r.AllTransitions() {
-		if t.Cardinality != "per-subtask" {
+		if t.Cardinality != models.CardinalityPerSubtask {
 			continue
 		}
 		if selected && !r.TransitionApplies(t.Name, output) {

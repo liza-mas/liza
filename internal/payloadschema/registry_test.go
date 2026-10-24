@@ -277,9 +277,12 @@ func TestRegistryConcurrentLookup(t *testing.T) {
 func TestRegistryImportBoundary(t *testing.T) {
 	// Structural validation means no state read, no lock file and no Git, so
 	// every non-test file of this package may import the standard library and
-	// these two pure-validation packages only.
+	// these pure-validation packages only. pipeline owns the review-impact
+	// vocabulary the verdict payload is typed with; statevalidate already
+	// depends on it.
 	allowedImports := []string{
 		"github.com/liza-mas/liza/internal/models",
+		"github.com/liza-mas/liza/internal/pipeline",
 		"github.com/liza-mas/liza/internal/statevalidate",
 	}
 	// The no-Register assertion is scoped to the files this package's registry

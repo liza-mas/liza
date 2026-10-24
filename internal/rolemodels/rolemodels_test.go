@@ -3,6 +3,8 @@ package rolemodels
 import (
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 func TestParseSingleEntryAndList(t *testing.T) {
@@ -105,5 +107,28 @@ func TestForAndReviewSlots(t *testing.T) {
 	}
 	if _, ok := (File{}).ReviewSlots("code-reviewer"); ok {
 		t.Error("ReviewSlots on an empty file bound")
+	}
+}
+
+func TestForCoversEveryRoleTypeConstant(t *testing.T) {
+	doer := Selection{Items: []Entry{{CLI: "claude"}}}
+	reviewer := Selection{Items: []Entry{{CLI: "codex"}}}
+	f := File{Defaults: Defaults{Doer: &doer, Reviewer: &reviewer}}
+
+	tests := []struct {
+		roleType roles.RoleType
+		want     string
+	}{
+		{roles.RoleTypeDoer, "claude"},
+		{roles.RoleTypeOrchestrator, "claude"},
+		{roles.RoleTypeReviewer, "codex"},
+	}
+	for _, tt := range tests {
+		if s, ok := f.For("any-role", tt.roleType); !ok || s.First().CLI != tt.want {
+			t.Errorf("For(%q) = %+v, %v; want default CLI %q", tt.roleType, s, ok, tt.want)
+		}
+	}
+	if s, ok := f.For("any-role", "planner"); ok {
+		t.Errorf("For(unknown type) = %+v, true; want no default", s)
 	}
 }

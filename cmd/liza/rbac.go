@@ -8,6 +8,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // afterRBACAdmissionTestHook is a deterministic test seam for replacing an
@@ -98,7 +99,7 @@ func validateRoleType(resolver *pipeline.Resolver, agentID string, allowedTypes 
 		}
 	}
 	for _, allowed := range allowedTypes {
-		if actualType == allowed {
+		if actualType == roles.RoleType(allowed) {
 			runAfterRBACAdmissionTestHook(agentID)
 			return nil
 		}

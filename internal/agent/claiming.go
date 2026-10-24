@@ -325,7 +325,7 @@ func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Bl
 // propagating errors. Used in supervisor recovery paths for transient failures
 // where blockReviewerTask was NOT called.
 func releaseReviewerClaimQuietly(projectRoot, taskID string, authority models.AgentAuthority) error {
-	_, err := ops.ReleaseClaimWithAuthority(projectRoot, taskID, roles.ClaimReviewer, true, "supervisor: worktree check transient failure", authority)
+	_, err := ops.ReleaseClaimWithAuthority(projectRoot, taskID, string(roles.ClaimReviewer), true, "supervisor: worktree check transient failure", authority)
 	if err != nil {
 		GetLogger().Warn("Failed to release reviewer claim during recovery",
 			"task_id", taskID, "error", err)
@@ -435,7 +435,7 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 
 			// Resolve effective impact and quorum for merge gate
 			effectiveImpact := ops.ResolveEffectiveImpact(task.History)
-			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, effectiveImpact)
+			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
 			if qErr != nil {
 				logger.Warn("Failed to resolve quorum, skipping merge",
 					"task_id", task.ID, "error", qErr)
@@ -443,7 +443,7 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 			}
 
 			// Get provider diversity config for this impact level
-			diversity, dErr := resolver.ProviderDiversity(task.RolePair, effectiveImpact)
+			diversity, dErr := resolver.ProviderDiversity(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
 			if dErr != nil {
 				logger.Warn("Failed to resolve diversity policy, skipping merge",
 					"task_id", task.ID, "error", dErr)
@@ -463,7 +463,7 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 				task:              task,
 				agents:            state.Agents,
 				effectiveQuorum:   effectiveQuorum,
-				providerDiversity: diversity,
+				providerDiversity: string(diversity),
 				reviewerRole:      reviewerRole,
 			})
 

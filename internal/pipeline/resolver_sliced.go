@@ -3,6 +3,8 @@ package pipeline
 import (
 	"fmt"
 	"slices"
+
+	"github.com/liza-mas/liza/internal/models"
 )
 
 // SlicedIntegrationCapability reports whether the configured pipeline has the
@@ -80,7 +82,7 @@ func hasIntegrationFindingTransition(transitions []TransitionDef, name, from str
 		return transition.Name == name &&
 			transition.From == from &&
 			transition.To == "coding-pair.initial" &&
-			transition.Trigger == "auto" &&
-			transition.Cardinality == "per-subtask"
+			transition.Trigger == models.TransitionTriggerAuto &&
+			transition.Cardinality == models.CardinalityPerSubtask
 	})
 }

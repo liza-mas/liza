@@ -285,7 +285,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		}
 
 		// Wait while PAUSE/CHECKPOINT
-		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, roleType, checkHeartbeat); stop {
+		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, string(roleType), checkHeartbeat); stop {
 			return err
 		}
 
@@ -331,7 +331,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 		// Work can become available after a pause while WaitForWork is parked.
 		// Recheck the role-aware gate before claiming; existing providers are
 		// unaffected, and transition checkpoints retain their role exceptions.
-		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, roleType, checkHeartbeat); stop {
+		if stop, err := awaitRoleGate(supervisorCtx, config.ProjectRoot, string(roleType), checkHeartbeat); stop {
 			return err
 		}
 		if supervisorCtx.Err() != nil {

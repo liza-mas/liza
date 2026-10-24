@@ -6,6 +6,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // Launch selection sources, reported by --explain-launch.
@@ -50,7 +51,7 @@ type LaunchSelection struct {
 //  5. The default profile and CLI chain (as before).
 func ResolveLaunchSelection(req LaunchSelectionRequest) (LaunchSelection, error) {
 	model := strings.TrimSpace(req.Model)
-	selection, covered := req.RoleModels.For(req.Role, req.RoleType)
+	selection, covered := req.RoleModels.For(req.Role, roles.RoleType(req.RoleType))
 	var entry rolemodels.Entry
 	if covered {
 		entry = selection.First()

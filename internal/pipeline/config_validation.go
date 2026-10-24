@@ -1,6 +1,10 @@
 package pipeline
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/liza-mas/liza/internal/roles"
+)
 
 // validateRoleDefs checks the optional roles section.
 func validateRoleDefs(p *Pipeline) error {
@@ -26,15 +30,15 @@ func validateRolePairDefs(p *Pipeline) error {
 		if !ok {
 			return fmt.Errorf("role-pair %q: doer %q not found in roles", name, rp.Doer)
 		}
-		if doer.Type != "doer" {
-			return fmt.Errorf("role-pair %q: doer role %q has type %q, expected %q", name, rp.Doer, doer.Type, "doer")
+		if doer.Type != roles.RoleTypeDoer {
+			return fmt.Errorf("role-pair %q: doer role %q has type %q, expected %q", name, rp.Doer, doer.Type, roles.RoleTypeDoer)
 		}
 		reviewer, ok := p.Roles[rp.Reviewer]
 		if !ok {
 			return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
 		}
-		if reviewer.Type != "reviewer" {
-			return fmt.Errorf("role-pair %q: reviewer role %q has type %q, expected %q", name, rp.Reviewer, reviewer.Type, "reviewer")
+		if reviewer.Type != roles.RoleTypeReviewer {
+			return fmt.Errorf("role-pair %q: reviewer role %q has type %q, expected %q", name, rp.Reviewer, reviewer.Type, roles.RoleTypeReviewer)
 		}
 		if err := validateReviewPolicy(name, rp.ReviewPolicy); err != nil {
 			return err

@@ -9,13 +9,14 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 type fakeRoleTypes map[string]string
 
-func (f fakeRoleTypes) RoleType(name string) (string, error) {
+func (f fakeRoleTypes) RoleType(name string) (roles.RoleType, error) {
 	if t, ok := f[name]; ok {
-		return t, nil
+		return roles.RoleType(t), nil
 	}
 	return "", fmt.Errorf("unknown role %q", name)
 }

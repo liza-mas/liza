@@ -75,7 +75,7 @@ type ProviderTransition struct {
 	SourceRolePair string
 	TargetRolePair string
 	TaskSlug       string
-	Cardinality    string
+	Cardinality    TransitionCardinality
 }
 
 // ProviderTransitionResolver is optional for legacy PipelineResolver callers.
@@ -258,7 +258,7 @@ func ProviderDependencyChildren(dep ProviderDependency, pr PipelineResolver) (Pr
 	if err != nil {
 		return ProviderTransition{}, nil, err
 	}
-	if td.Cardinality != "per-subtask" || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
+	if td.Cardinality != CardinalityPerSubtask || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
 		return ProviderTransition{}, nil, fmt.Errorf("provider transition %q must identify a per-subtask source, target and task slug", dep.Transition)
 	}
 	children := make([]string, len(dep.Outputs))

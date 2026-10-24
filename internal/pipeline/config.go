@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,22 +55,22 @@ type Pipeline struct {
 
 // RoleDef defines a role's properties declaratively.
 type RoleDef struct {
-	Type              string      `yaml:"type"`
-	DisplayName       string      `yaml:"display-name"`
-	Description       string      `yaml:"description,omitempty"`
-	MaxInstances      int         `yaml:"max-instances,omitempty"`
-	Timeouts          *TimeoutDef `yaml:"timeouts,omitempty"`
-	ContextSections   []string    `yaml:"context-sections,omitempty"`
-	AllowedOperations []string    `yaml:"allowed-operations,omitempty"`
-	Skills            []string    `yaml:"skills,omitempty"`
-	MandatoryDocs     []string    `yaml:"mandatory-docs,omitempty"`
+	Type              roles.RoleType `yaml:"type"`
+	DisplayName       string         `yaml:"display-name"`
+	Description       string         `yaml:"description,omitempty"`
+	MaxInstances      int            `yaml:"max-instances,omitempty"`
+	Timeouts          *TimeoutDef    `yaml:"timeouts,omitempty"`
+	ContextSections   []string       `yaml:"context-sections,omitempty"`
+	AllowedOperations []string       `yaml:"allowed-operations,omitempty"`
+	Skills            []string       `yaml:"skills,omitempty"`
+	MandatoryDocs     []string       `yaml:"mandatory-docs,omitempty"`
 }
 
 // EffectiveRoleCapabilities is a resolver-owned projection of a role's
 // declarative authorization configuration. AllowedOperations is cloned when
 // the projection is created so callers cannot mutate the resolver config.
 type EffectiveRoleCapabilities struct {
-	RoleType          string
+	RoleType          roles.RoleType
 	AllowedOperations []string
 }
 
@@ -86,30 +87,30 @@ type TimeoutDef struct {
 }
 
 // validRoleTypes lists the allowed values for RoleDef.Type.
-var validRoleTypes = map[string]bool{
-	"doer":         true,
-	"reviewer":     true,
-	"orchestrator": true,
+var validRoleTypes = map[roles.RoleType]bool{
+	roles.RoleTypeDoer:         true,
+	roles.RoleTypeReviewer:     true,
+	roles.RoleTypeOrchestrator: true,
 }
 
 // ReviewPolicyOverrideDef defines quorum overrides for a specific impact level.
 type ReviewPolicyOverrideDef struct {
-	Quorum            int    `yaml:"quorum"`
-	ProviderDiversity string `yaml:"provider-diversity,omitempty"`
+	Quorum            int                   `yaml:"quorum"`
+	ProviderDiversity ProviderDiversityMode `yaml:"provider-diversity,omitempty"`
 }
 
 // ReviewPolicyDef defines the review quorum policy for a role-pair.
 type ReviewPolicyDef struct {
 	Quorum             int                      `yaml:"quorum"`
-	ProviderDiversity  string                   `yaml:"provider-diversity,omitempty"`
+	ProviderDiversity  ProviderDiversityMode    `yaml:"provider-diversity,omitempty"`
 	SignificantChange  *ReviewPolicyOverrideDef `yaml:"significant-change,omitempty"`
 	ArchitectureImpact *ReviewPolicyOverrideDef `yaml:"architecture-impact,omitempty"`
 }
 
 // validProviderDiversity lists the allowed values for provider-diversity.
-var validProviderDiversity = map[string]bool{
-	"":          true, // omitted / not configured
-	"preferred": true,
+var validProviderDiversity = map[ProviderDiversityMode]bool{
+	ProviderDiversityNone:      true, // omitted / not configured
+	ProviderDiversityPreferred: true,
 }
 
 var validDecompositionOutputRefs = map[string]bool{
@@ -162,13 +163,13 @@ type SubPipeline struct {
 
 // TransitionDef describes a cross-pair transition within a sub-pipeline.
 type TransitionDef struct {
-	When        string `yaml:"when,omitempty"` // empty (legacy), scope-decomposition, or coding-allocation
-	Name        string `yaml:"name"`
-	TaskSlug    string `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
-	From        string `yaml:"from"`                // e.g., "code-planning-pair.approved"
-	To          string `yaml:"to"`                  // e.g., "coding-pair.initial"
-	Trigger     string `yaml:"trigger"`             // "manual" or "auto"
-	Cardinality string `yaml:"cardinality"`         // "per-subtask", "one-to-one", or "many-to-one"
+	When        models.AllocationRoute       `yaml:"when,omitempty"` // empty (legacy), scope-decomposition, or coding-allocation
+	Name        string                       `yaml:"name"`
+	TaskSlug    string                       `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
+	From        string                       `yaml:"from"`                // e.g., "code-planning-pair.approved"
+	To          string                       `yaml:"to"`                  // e.g., "coding-pair.initial"
+	Trigger     models.TransitionTrigger     `yaml:"trigger"`             // "manual" or "auto"
+	Cardinality models.TransitionCardinality `yaml:"cardinality"`         // "per-subtask", "one-to-one", or "many-to-one"
 }
 
 // TaskSlugOrName returns TaskSlug if set, otherwise Name.
@@ -331,10 +332,10 @@ func decompositionRootTransitionTargets(p *Pipeline, rootRolePair string) ([]str
 			if fromPhase != "approved" {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: from phase must be approved, got %q", rootRolePair, t.Name, fromPhase)
 			}
-			if t.Trigger != "auto" {
+			if t.Trigger != models.TransitionTriggerAuto {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: trigger must be auto, got %q", rootRolePair, t.Name, t.Trigger)
 			}
-			if t.Cardinality != "per-subtask" {
+			if t.Cardinality != models.CardinalityPerSubtask {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: cardinality must be per-subtask, got %q", rootRolePair, t.Name, t.Cardinality)
 			}
 
@@ -449,10 +450,10 @@ var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 // validateTransitionHeader checks the common fields shared by all transition types:
 // non-empty name, valid trigger, and valid cardinality.
 func validateTransitionHeader(t TransitionDef) error {
-	if t.When != "" && t.When != "scope-decomposition" && t.When != "coding-allocation" {
+	if t.When != models.AllocationRouteNone && t.When != models.AllocationRouteScopeDecomposition && t.When != models.AllocationRouteCodingAllocation {
 		return fmt.Errorf("when must be scope-decomposition or coding-allocation, got %q", t.When)
 	}
-	if t.When != "" && t.Cardinality != "per-subtask" {
+	if t.When != models.AllocationRouteNone && t.Cardinality != models.CardinalityPerSubtask {
 		return fmt.Errorf("conditional allocation routes require per-subtask cardinality")
 	}
 	if t.Name == "" {
@@ -461,11 +462,11 @@ func validateTransitionHeader(t TransitionDef) error {
 	if t.TaskSlug != "" && !kebabCaseRe.MatchString(t.TaskSlug) {
 		return fmt.Errorf("task-slug %q must be lowercase kebab-case (e.g. %q)", t.TaskSlug, "code-planning")
 	}
-	if t.Trigger != "manual" && t.Trigger != "auto" {
-		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
+	if t.Trigger != models.TransitionTriggerManual && t.Trigger != models.TransitionTriggerAuto {
+		return fmt.Errorf("trigger must be %q or %q, got %q", models.TransitionTriggerManual, models.TransitionTriggerAuto, t.Trigger)
 	}
-	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" && t.Cardinality != "many-to-one" {
-		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", "per-subtask", "one-to-one", "many-to-one", t.Cardinality)
+	if t.Cardinality != models.CardinalityPerSubtask && t.Cardinality != models.CardinalityOneToOne && t.Cardinality != models.CardinalityManyToOne {
+		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", models.CardinalityPerSubtask, models.CardinalityOneToOne, models.CardinalityManyToOne, t.Cardinality)
 	}
 	return nil
 }
@@ -485,24 +486,24 @@ func validateAllocationRoutes(p *Pipeline) error {
 		groups[pair] = append(groups[pair], t)
 	}
 	for source, transitions := range groups {
-		conditional := slices.ContainsFunc(transitions, func(t TransitionDef) bool { return t.When != "" })
+		conditional := slices.ContainsFunc(transitions, func(t TransitionDef) bool { return t.When != models.AllocationRouteNone })
 		if !conditional {
 			continue
 		}
 		if len(transitions) != 2 || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
 			return fmt.Errorf("role-pair %q requires exactly two exclusive architecture allocation routes", source)
 		}
-		seen := make(map[string]bool)
+		seen := make(map[models.AllocationRoute]bool)
 		for _, t := range transitions {
-			if t.When == "" || seen[t.When] {
+			if t.When == models.AllocationRouteNone || seen[t.When] {
 				return fmt.Errorf("role-pair %q requires one scope-decomposition and one coding-allocation route", source)
 			}
 			seen[t.When] = true
 			target, _ := transitionToRolePair(t)
-			if t.When == "coding-allocation" && (t.Trigger != "manual" || models.TaskTypeForRole(p.RolePairs[target].Doer) != models.TaskTypeCoding) {
+			if t.When == models.AllocationRouteCodingAllocation && (t.Trigger != models.TransitionTriggerManual || models.TaskTypeForRole(p.RolePairs[target].Doer) != models.TaskTypeCoding) {
 				return fmt.Errorf("transition %q coding-allocation must be a manual route to coding", t.Name)
 			}
-			if targetType := models.TaskTypeForRole(p.RolePairs[target].Doer); t.When == "scope-decomposition" && targetType != models.TaskTypeArchitecture && targetType != models.TaskTypePlanning {
+			if targetType := models.TaskTypeForRole(p.RolePairs[target].Doer); t.When == models.AllocationRouteScopeDecomposition && targetType != models.TaskTypeArchitecture && targetType != models.TaskTypePlanning {
 				return fmt.Errorf("transition %q scope-decomposition must retain architecture or code planning", t.Name)
 			}
 			fromParts, toParts := strings.Split(t.From, "."), strings.Split(t.To, ".")

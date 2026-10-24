@@ -143,7 +143,7 @@ func TestPeerScopePayload(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			measure(role, roleType, pair, "")
+			measure(role, string(roleType), pair, "")
 			measured[role] = true
 		}
 	}
@@ -161,11 +161,11 @@ func TestPeerScopePayload(t *testing.T) {
 			t.Fatal(err)
 		}
 		if roleType != "orchestrator" {
-			measure(role, roleType, "", "")
+			measure(role, string(roleType), "", "")
 			continue
 		}
 		for _, wake := range prompts.WakeTriggers {
-			measure(role, roleType, "", wake)
+			measure(role, string(roleType), "", wake)
 		}
 	}
 

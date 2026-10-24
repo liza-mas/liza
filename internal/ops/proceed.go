@@ -1667,7 +1667,7 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 		sourceRolePair:  sourcePair,
 		requiredStatus:  fromStatus,
 		targetStatus:    toStatus,
-		cardinality:     td.Cardinality,
+		cardinality:     string(td.Cardinality),
 		targetRolePair:  targetPair,
 		doerDisplayName: doerDisplay,
 		taskType:        childTaskType,

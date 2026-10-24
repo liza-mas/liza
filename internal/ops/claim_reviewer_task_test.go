@@ -12,6 +12,8 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1632,8 +1634,10 @@ func (r *diversityTestResolver) PartiallyApprovedStatus(string) (models.TaskStat
 
 // Unused interface methods — return errors.
 func (r *diversityTestResolver) DoerRole(string) (string, error) { return "", fmt.Errorf("unused") }
-func (r *diversityTestResolver) RoleType(string) (string, error) { return "", fmt.Errorf("unused") }
-func (r *diversityTestResolver) AllRoleNames() []string          { return nil }
+func (r *diversityTestResolver) RoleType(string) (roles.RoleType, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) AllRoleNames() []string { return nil }
 func (r *diversityTestResolver) InitialStatus(string) (models.TaskStatus, error) {
 	return "", fmt.Errorf("unused")
 }
@@ -1944,16 +1948,16 @@ type doerDiversityResolver struct {
 	reviewerRole   string
 }
 
-func (r *doerDiversityResolver) ProviderDiversity(_ string, impact string) (string, error) {
+func (r *doerDiversityResolver) ProviderDiversity(_ string, impact pipeline.ReviewImpact) (pipeline.ProviderDiversityMode, error) {
 	if r.diversityErr != nil {
 		return "", r.diversityErr
 	}
 	if r.impactOverride != nil {
-		if v, ok := r.impactOverride[impact]; ok {
-			return v, nil
+		if v, ok := r.impactOverride[string(impact)]; ok {
+			return pipeline.ProviderDiversityMode(v), nil
 		}
 	}
-	return r.diversity, nil
+	return pipeline.ProviderDiversityMode(r.diversity), nil
 }
 
 func (r *doerDiversityResolver) ReviewerRole(string) (string, error) {

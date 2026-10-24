@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // PipelineResolver provides pipeline state resolution for tasks with role-pairs.
 // Implemented by pipeline.Resolver.
 type PipelineResolver interface {
-	RoleType(role string) (string, error)
+	RoleType(role string) (roles.RoleType, error)
 	AllRoleNames() []string
 	DoerRole(rolePair string) (string, error)
 	ReviewerRole(rolePair string) (string, error)
@@ -102,7 +104,7 @@ func IsOrchestratorAgent(agent Agent, pr PipelineResolver) bool {
 		return false
 	}
 	roleType, err := pr.RoleType(agent.Role)
-	return err == nil && roleType == "orchestrator"
+	return err == nil && roleType == roles.RoleTypeOrchestrator
 }
 
 // IsResumableOwnedTask is the shared state predicate for a doer supervisor

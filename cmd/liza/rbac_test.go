@@ -153,7 +153,7 @@ func TestIntegrationReviewerRenderedCLIFailureRecovery(t *testing.T) {
 		}
 		rendered, err := prompts.BuildRoleContext(roleName, sections, &prompts.RoleContextData{
 			Role:         roleName,
-			RoleType:     capabilities.RoleType,
+			RoleType:     string(capabilities.RoleType),
 			AgentID:      reviewerID,
 			TaskID:       taskID,
 			ReviewCommit: reviewCommit,
