@@ -1,0 +1,584 @@
+[
+  {
+    "desc": "Must: separate sprint checkpoint admission, trigger resolution, report preparation, completion authorization and locked sprint update, removing the last A4 ratchet key under added checkpoint oracle coverage",
+    "done_when": "the sprintCheckpoint ratchet key is absent, TestAreaA4RatchetIsEmpty in area_a4_test.go passes (empty A4 Ratchet; every S2 entry carries a ruling and rationale) and every touched file and function is within S1; the seven added checkpoint- oracle cases' goldens precede the production edit and older goldens are unchanged; report bytes, local timestamp, trigger detection, refusals and SPRINT_COMPLETE completion authorization behave as before; the five canonical commands pass and the manifest maps every allocated obligation",
+    "scope": "internal/ops/sprint_checkpoint.go, one new private report-rendering file, colocated sprint checkpoint and summary tests, new internal/oracle/a4/checkpoint_paths_test.go plus a helperOps adapter file with checkpoint- fixtures and goldens, area_a4_test.go key removal and TestAreaA4RatchetIsEmpty, acceptance manifest; no pipeline_ops.go, advance_sprint.go, analyze.go, foundation guard, CLI, commands, agent, tui, exported signature or existing oracle edit",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-105657-arm-1-ar-13-cp-5.md#Task 1: Separate sprint checkpoint preparation, authorization and locked update",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 6: Sprint coordination and A4 closure readiness",
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "desc": "Must: complete the A4 K7 inventory over every A4 file and concern file, adopting A1/A3/sibling owner constants, typing finite ops-owned sets and naming owned values under added analyze, disposition, note and metrics oracle coverage",
+    "done_when": "specs/architecture/consolidation-run/a4-k7-inventory.md classifies every A4 occurrence as adopted, named, typed or dynamic/literal data with no deferral and records owner gaps, later-area adoption sites and the verified sibling K7 commitments, and the A3 mode_change.go completion-code sites use the A4 constants; the seven added vocab- oracle cases' goldens precede the substitutions and older goldens are unchanged; spelling and boundary tests pass; the five canonical commands pass and the manifest maps every allocated obligation",
+    "scope": "every A4 production file of the area partition plus concern files created by Scopes 2-6, constant-substitution conformance sites in A3 ops files, colocated tests, new internal/oracle/a4/vocabulary_paths_test.go with vocab- fixtures and goldens, new specs/architecture/consolidation-run/a4-k7-inventory.md evidence document, acceptance manifest with mappings only; no package outside ops, area_a4_test.go, pipelineBundle, C2 provider-audit grouping, exported signature or existing oracle edit",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-105657-arm-1-ar-13-cp-5.md#Task 2: Complete the A4 K7 inventory",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 6: Sprint coordination and A4 closure readiness",
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "depends_on": [
+      "0"
+    ],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+        "executables": [
+          "env",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "desc": "Must: reconcile chain-document code references to A4 and commit the G1-G3 closure evidence for the A5 boundary unit",
+    "done_when": "every INVARIANTS.md, state-machines, blackboard-schema, supervision-model, specs/protocols and lessons citation of A4 code resolves at coding HEAD or is recorded as pre-existing drift in specs/architecture/consolidation-run/a4-closure-readiness.md, which commits A4 guard data (empty ratchet, layers, allowlist; S2 rulings if any), the shim audit, the exported-API comparison and the archguard and regen results; TestAreaA4RatchetIsEmpty passes; git diff --check is clean and the manifest maps every allocated obligation",
+    "scope": "code-location references to A4 files and symbols in INVARIANTS.md, specs/architecture/state-machines.md, blackboard-schema.md, supervision-model.md, specs/protocols and lessons, the new specs/architecture/consolidation-run/a4-closure-readiness.md evidence document and the closure acceptance manifest with mappings only; no code, test, guard data, ADR, overview, architectural-issues.md, goal, contract or skill edit and no semantic rewrite",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-105657-arm-1-ar-13-cp-5.md#Task 3: Reconcile A4 references and closure evidence",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 6: Sprint coordination and A4 closure readiness",
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "depends_on": [
+      "0",
+      "1"
+    ],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 768d4e16babc01e7bae769ec9f2c76333ad6e4d8 HEAD -- INVARIANTS.md specs/architecture/state-machines.md specs/architecture/blackboard-schema.md specs/architecture/supervision-model.md specs/protocols lessons specs/architecture/consolidation-run/a4-closure-readiness.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-5-closure.json",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 768d4e16babc01e7bae769ec9f2c76333ad6e4d8 HEAD -- INVARIANTS.md specs/architecture/state-machines.md specs/architecture/blackboard-schema.md specs/architecture/supervision-model.md specs/protocols lessons specs/architecture/consolidation-run/a4-closure-readiness.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-5-closure.json",
+        "executables": [
+          "env",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "desc": "Must: record the A4 ops concern layout and vocabulary ownership in one new ADR with its index row",
+    "done_when": "one new next-free-number ADR covering the delivered A4 concern layout, rejected sub-packages and engine, retained exported surface and J1-J22 vocabulary ownership exists with exactly one README index row linking to it; no historical ADR, overview or issue entry changed; git diff --check is clean and the manifest maps both obligations",
+    "scope": "one new specs/architecture/ADR/NNNN-a4-ops-planning-concerns-and-vocabulary.md, its single specs/architecture/ADR/README.md row and the ADR acceptance manifest; no code, historical ADR, overview or architectural-issues.md edit",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-105657-arm-1-ar-13-cp-5.md#Task 4: Record A4 concern layout and vocabulary ownership",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 6: Sprint coordination and A4 closure readiness",
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "depends_on": [
+      "0",
+      "1"
+    ],
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 768d4e16babc01e7bae769ec9f2c76333ad6e4d8 HEAD -- 'specs/architecture/ADR/*-a4-ops-planning-concerns-and-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-5-adr.json",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp git diff --check 768d4e16babc01e7bae769ec9f2c76333ad6e4d8 HEAD -- 'specs/architecture/ADR/*-a4-ops-planning-concerns-and-vocabulary.md' specs/architecture/ADR/README.md specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-5-adr.json",
+        "executables": [
+          "env",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git",
+          "gcc",
+          "sh",
+          "gofmt",
+          "find",
+          "grep"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      }
+    ]
+  }
+]
