@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AT-terminal",
+      "file": "internal/ops/await_verdict_test.go",
+      "assertion": "TestAwaitVerdict_Terminal prompt setup and slow setup subtests: AwaitVerdict returns TERMINAL with the non-awaitable reason, BLOCKED status, stop safe action and guidance, and releases ownership, with the block written only after the real watcher built through the newAwaitVerdictWatcher seam has registered",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AT-reclaim",
+      "file": "internal/ops/await_verdict_test.go",
+      "assertion": "TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent prompt setup and slow setup subtests: AwaitVerdict surfaces ErrAgentDegraded and records the worktree-setup-failed agent health with a single-line diagnostic, with the rejection written only after the real watcher has registered",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AT-package",
+      "file": "internal/ops/await_verdict_test.go",
+      "assertion": "whole internal/ops package passes under race, including the other WaitForAsyncSetup tests and TestAwaitVerdict_Rejected_NewAttempt unchanged",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AT-sleep",
+      "file": "internal/ops/await_verdict_test.go",
+      "assertion": "TestSleepUsageBudget passes with maxSleepCallsInTests unchanged at 16: the change adds no time.Sleep call",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AT-lint",
+      "file": "internal/ops/await_verdict_test.go",
+      "assertion": "make lint passes on the changed Go test file",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AT-preserve",
+      "approved_reference_id": "d41"
+    },
+    {
+      "obligation_id": "AT-red",
+      "approved_reference_id": "d41"
+    },
+    {
+      "obligation_id": "AT-load",
+      "approved_reference_id": "d41"
+    }
+  ]
+}

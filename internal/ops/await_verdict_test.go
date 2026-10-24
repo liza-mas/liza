@@ -633,73 +633,118 @@ func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
 	}
 }
 
+// awaitSetupCases are the watcher set-up durations the seam-swapping await
+// tests run under: a prompt set-up, and a slow one that a sleep cannot order.
+var awaitSetupCases = []struct {
+	name       string
+	setupDelay time.Duration
+}{
+	{name: "prompt setup"},
+	{name: "slow setup", setupDelay: time.Second},
+}
+
+// installReadyAwaitVerdictWatcher swaps newAwaitVerdictWatcher for a wrapper
+// that waits setupDelay, builds the real watcher and then closes the returned
+// channel, so a test writes state only once the watcher has registered. The
+// seam is restored on cleanup; callers register their await-goroutine wait
+// after this call so it runs before the restore.
+func installReadyAwaitVerdictWatcher(t *testing.T, setupDelay time.Duration) <-chan struct{} {
+	t.Helper()
+	ready := make(chan struct{})
+	original := newAwaitVerdictWatcher
+	newAwaitVerdictWatcher = func(bb *db.Blackboard) (awaitVerdictWatcher, error) {
+		if setupDelay > 0 {
+			<-time.After(setupDelay)
+		}
+		watcher, err := original(bb)
+		close(ready)
+		return watcher, err
+	}
+	t.Cleanup(func() { newAwaitVerdictWatcher = original })
+	return ready
+}
+
+// The block is written only after the real watcher has registered, so an event
+// exists whatever the set-up duration. This test swaps a package seam, so
+// neither it nor its subtests run in parallel.
 func TestAwaitVerdict_Terminal(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range awaitSetupCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			watcherReady := installReadyAwaitVerdictWatcher(t, tc.setupDelay)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = models.Agent{
-		Role:   "coder",
-		Status: models.AgentStatusWaiting,
-	}
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = models.Agent{
+				Role:   "coder",
+				Status: models.AgentStatusWaiting,
+			}
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitVerdictResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			var result *AwaitVerdictResult
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
 
-	testhelpers.WaitForAsyncSetup()
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusBlocked
-		reason := "Spec ambiguity"
-		tk.BlockedReason = &reason
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusBlocked
+				reason := "Spec ambiguity"
+				tk.BlockedReason = &reason
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
 
-	<-done
-	if awaitErr != nil {
-		t.Fatalf("AwaitVerdict error: %v", awaitErr)
-	}
-	if result.Verdict != VerdictTerminal {
-		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
-	}
-	if !strings.Contains(result.Reason, "non-awaitable status") {
-		t.Errorf("Reason = %q, want to contain 'non-awaitable status'", result.Reason)
-	}
-	if result.TaskStatus != models.TaskStatusBlocked {
-		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
-	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
-	}
-	if !strings.Contains(result.Guidance, "Stop this session") {
-		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
-	}
+			<-done
+			if awaitErr != nil {
+				t.Fatalf("AwaitVerdict error: %v", awaitErr)
+			}
+			if result.Verdict != VerdictTerminal {
+				t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
+			}
+			if !strings.Contains(result.Reason, "non-awaitable status") {
+				t.Errorf("Reason = %q, want to contain 'non-awaitable status'", result.Reason)
+			}
+			if result.TaskStatus != models.TaskStatusBlocked {
+				t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
+			}
+			if result.SafeAction != SafeActionStop {
+				t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+			}
+			if !strings.Contains(result.Guidance, "Stop this session") {
+				t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
+			}
 
-	// Verify ownership released.
-	s, readErr := bb.Read()
-	if readErr != nil {
-		t.Fatalf("Failed to read state: %v", readErr)
-	}
-	agent := s.Agents["coder-1"]
-	if agent.CurrentTask != nil {
-		t.Errorf("expected CurrentTask=nil after terminal, got %q", *agent.CurrentTask)
+			// Verify ownership released.
+			s, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatalf("Failed to read state: %v", readErr)
+			}
+			agent := s.Agents["coder-1"]
+			if agent.CurrentTask != nil {
+				t.Errorf("expected CurrentTask=nil after terminal, got %q", *agent.CurrentTask)
+			}
+		})
 	}
 }
 
@@ -1613,78 +1658,89 @@ func (*delayedErrorWatcher) Close() error { return nil }
 // command must degrade the agent there too — otherwise this path retries the
 // failing worktree without a bound (ADR-0117).
 func TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmpDir)
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range awaitSetupCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			watcherReady := installReadyAwaitVerdictWatcher(t, tc.setupDelay)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	state.Config.MaxCoderIterations = 10
-	state.Config.MaxReviewCycles = 5
-	postCmd := "exit 1"
-	state.Config.PostWorktreeCmd = &postCmd
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			state.Config.MaxCoderIterations = 10
+			state.Config.MaxReviewCycles = 5
+			postCmd := "exit 1"
+			state.Config.PostWorktreeCmd = &postCmd
 
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.Iteration = 1
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.Iteration = 1
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
 
-	testhelpers.WaitForAsyncSetup()
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusRejected
-		reason := "Missing error handling"
-		tk.RejectionReason = &reason
-		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
-		tk.LeaseExpires = &leaseExpires
-		reviewer := "code-reviewer-1"
-		tk.History = append(tk.History, models.TaskHistoryEntry{
-			Time:  time.Now().UTC(),
-			Event: models.TaskEventRejected,
-			Agent: &reviewer,
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusRejected
+				reason := "Missing error handling"
+				tk.RejectionReason = &reason
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				tk.LeaseExpires = &leaseExpires
+				reviewer := "code-reviewer-1"
+				tk.History = append(tk.History, models.TaskHistoryEntry{
+					Time:  time.Now().UTC(),
+					Event: models.TaskEventRejected,
+					Agent: &reviewer,
+				})
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
+
+			<-done
+
+			if awaitErr == nil {
+				t.Fatal("AwaitVerdict() error = nil, want the setup failure surfaced")
+			}
+			// Bounded: the caller can distinguish "stop, health recorded" from an
+			// ordinary retryable reclaim failure.
+			if !stderrors.Is(awaitErr, ErrAgentDegraded) {
+				t.Fatalf("AwaitVerdict() error = %v, want ErrAgentDegraded", awaitErr)
+			}
+
+			after, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatalf("Read() error = %v", readErr)
+			}
+			health, ok := after.AgentHealth["coder-1"]
+			if !ok {
+				t.Fatal("AgentHealth missing entry, want degraded record for the auto-reclaim failure")
+			}
+			if health.Reason != AgentDegradedWorktreeSetupFailed {
+				t.Errorf("health.Reason = %q, want %q", health.Reason, AgentDegradedWorktreeSetupFailed)
+			}
+			if strings.Contains(health.LastError, "\n") {
+				t.Errorf("health.LastError = %q, want a single-line persisted diagnostic", health.LastError)
+			}
 		})
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
-
-	<-done
-
-	if awaitErr == nil {
-		t.Fatal("AwaitVerdict() error = nil, want the setup failure surfaced")
-	}
-	// Bounded: the caller can distinguish "stop, health recorded" from an
-	// ordinary retryable reclaim failure.
-	if !stderrors.Is(awaitErr, ErrAgentDegraded) {
-		t.Fatalf("AwaitVerdict() error = %v, want ErrAgentDegraded", awaitErr)
-	}
-
-	after, readErr := bb.Read()
-	if readErr != nil {
-		t.Fatalf("Read() error = %v", readErr)
-	}
-	health, ok := after.AgentHealth["coder-1"]
-	if !ok {
-		t.Fatal("AgentHealth missing entry, want degraded record for the auto-reclaim failure")
-	}
-	if health.Reason != AgentDegradedWorktreeSetupFailed {
-		t.Errorf("health.Reason = %q, want %q", health.Reason, AgentDegradedWorktreeSetupFailed)
-	}
-	if strings.Contains(health.LastError, "\n") {
-		t.Errorf("health.LastError = %q, want a single-line persisted diagnostic", health.LastError)
 	}
 }
