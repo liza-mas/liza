@@ -67,17 +67,19 @@ func orchChildren() []orchChild {
 }
 
 // orchReap signals every child of the test process and its process group, reaps
-// it, and fails the test if one remains after the deadline. The supervisor has
-// already been waited for by its own cleanup.
+// it with a blocking wait bounded by a deadline, and repeats the enumeration
+// until no child remains; it fails the test if one outlives the deadline. The
+// supervisor has already been waited for by its own cleanup.
 func orchReap(t testing.TB) {
 	t.Helper()
 	ourGroup := syscall.Getpgrp()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.After(10 * time.Second)
 	for {
 		children := orchChildren()
 		if len(children) == 0 {
 			return
 		}
+		reaped := make(chan struct{}, len(children))
 		for _, child := range children {
 			if !child.zombie {
 				if child.pgrp != ourGroup {
@@ -85,14 +87,20 @@ func orchReap(t testing.TB) {
 				}
 				_ = syscall.Kill(child.pid, syscall.SIGKILL)
 			}
-			var status syscall.WaitStatus
-			_, _ = syscall.Wait4(child.pid, &status, syscall.WNOHANG, nil)
+			go func(pid int) {
+				var status syscall.WaitStatus
+				_, _ = syscall.Wait4(pid, &status, 0, nil)
+				reaped <- struct{}{}
+			}(child.pid)
 		}
-		if time.Now().After(deadline) {
-			t.Errorf("A9 cleanup: %d children of the test process outlive the test", len(orchChildren()))
-			return
+		for range children {
+			select {
+			case <-reaped:
+			case <-deadline:
+				t.Errorf("A9 cleanup: %d children of the test process outlive the test", len(orchChildren()))
+				return
+			}
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 
