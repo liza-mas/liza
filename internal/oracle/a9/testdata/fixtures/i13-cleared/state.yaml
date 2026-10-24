@@ -1,0 +1,57 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00.5Z
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 orchestrator fixture
+    done_when: A9 oracle records orchestrator behavior
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00.5Z
+    iteration: 0
+    history: []
+agents: {}
+discovered: []
+human_notes:
+  - timestamp: 2020-01-01T00:00:00.5Z
+    message: Orchestrator, please review the goal scope.
+    for: all
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00.5Z
+    deadline: 2099-01-01T00:00:00.5Z
+    checkpoint_at: 2020-01-01T00:00:01.5Z
+  status: IN_PROGRESS
+  checkpoint_trigger: PLANNING_COMPLETE
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00.5Z
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING

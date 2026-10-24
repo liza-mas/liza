@@ -1,0 +1,136 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:fZ>
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 orchestrator fixture
+    done_when: A9 oracle records orchestrator behavior
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <T1:fZ>
+    iteration: 0
+    history: []
+agents: {}
+discovered: []
+human_notes:
+  - timestamp: <T1:fZ>
+    message: Orchestrator, please review the goal scope.
+    for: all
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: <T1:fZ>
+    deadline: <T1+2493072000s:fZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:fZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 5
+goal:
+    id: goal-1
+    description: A9 oracle fixture
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <T1:fZ>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: A9 orchestrator fixture
+      status: DRAFT_CODE
+      priority: 1
+      spec_ref: specs/vision.md
+      done_when: A9 oracle records orchestrator behavior
+      scope: ""
+      created: <T1:fZ>
+      history: []
+agents: {}
+discovered: []
+human_notes:
+    - timestamp: <T1:fZ>
+      message: Orchestrator, please review the goal scope.
+      for: all
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - task-1
+        stretch: []
+    timeline:
+        started: <T1:fZ>
+        deadline: <T1+2493072000s:fZ>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <T1:fZ>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 0
+    max_review_cycles: 0
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: STOPPED
+    mode_changed_at: <T3:fO>
+    mode_changed_by: orchestrator-1
