@@ -14,7 +14,7 @@ import (
 
 func validateTerminalArchiveShape(v *violations, task *models.Task) {
 	if ref := task.TerminalArchive; ref != nil {
-		if raw, err := hex.DecodeString(ref.SHA256); err != nil || len(raw) != 32 || strings.ToLower(ref.SHA256) != ref.SHA256 || ref.ArchivedAt.IsZero() {
+		if raw, err := hex.DecodeString(ref.SHA256); err != nil || len(raw) != sha256Bytes || strings.ToLower(ref.SHA256) != ref.SHA256 || ref.ArchivedAt.IsZero() {
 			v.add(fmt.Errorf("task %s terminal_archive requires a lowercase SHA-256 digest and archived_at", task.ID))
 		}
 	}
@@ -22,7 +22,7 @@ func validateTerminalArchiveShape(v *violations, task *models.Task) {
 
 func validateStateLockHoldShape(v *violations, task *models.Task) {
 	if hold := task.StateLockHold; hold != nil {
-		if raw, err := hex.DecodeString(hold.BlockerDigest); err != nil || len(raw) != 32 || strings.ToLower(hold.BlockerDigest) != hold.BlockerDigest || hold.EpisodeAt.IsZero() || hold.AfterSequence == 0 {
+		if raw, err := hex.DecodeString(hold.BlockerDigest); err != nil || len(raw) != sha256Bytes || strings.ToLower(hold.BlockerDigest) != hold.BlockerDigest || hold.EpisodeAt.IsZero() || hold.AfterSequence == 0 {
 			v.add(fmt.Errorf("task %s state_lock_hold requires an episode, lowercase blocker digest and nonzero publication sequence", task.ID))
 		}
 		if (hold.RefusedFingerprint == "") != (hold.RefusedReason == "") {
@@ -137,11 +137,11 @@ func validateParentTasks(v *violations, task *models.Task, taskIDs map[string]bo
 // validateAttempt requires attempt to be 0 (unset/legacy), 1, or 2, and an
 // attempt-2 task in an initial status to have reset counters.
 func validateAttempt(v *violations, task *models.Task, sc *statusClassifier) {
-	if task.Attempt < 0 || task.Attempt > 2 {
+	if task.Attempt < 0 || task.Attempt > models.MaxTaskAttempt {
 		v.add(fmt.Errorf("task %s has invalid attempt value %d", task.ID, task.Attempt))
 	}
 
-	if task.Attempt == 2 && sc.IsInitial(task.Status) {
+	if task.Attempt == models.MaxTaskAttempt && sc.IsInitial(task.Status) {
 		if task.Iteration != 0 {
 			v.add(fmt.Errorf("task %s at attempt 2 in initial status has non-zero iteration %d", task.ID, task.Iteration))
 		}

@@ -8,6 +8,16 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// Persisted digest shapes and acceptance-receipt bounds.
+const (
+	gitSHA1HexLen            = 40
+	sha256HexLen             = 64
+	sha256Bytes              = 32
+	maxAcceptanceMappings    = 256
+	maxAcceptanceCommands    = 64
+	maxAcceptanceOutputBytes = 1024 * 1024
+)
+
 // Admission performs repository checks. State validation only checks persisted
 // shape, leaving missing receipts repairable through update-review-commit.
 func validateAcceptanceState(v *violations, task *models.Task) {
@@ -30,7 +40,7 @@ func validateAcceptanceState(v *violations, task *models.Task) {
 		{"blob", source.Blob},
 		{"parent_review_commit", source.ParentReviewCommit},
 	} {
-		if _, err := hex.DecodeString(id.value); err != nil || len(id.value) != 40 || strings.ToLower(id.value) != id.value {
+		if _, err := hex.DecodeString(id.value); err != nil || len(id.value) != gitSHA1HexLen || strings.ToLower(id.value) != id.value {
 			v.add(fmt.Errorf("task %s acceptance_source requires immutable lowercase object IDs (%s)", task.ID, id.field))
 		}
 	}
@@ -55,14 +65,14 @@ func validateAcceptanceState(v *violations, task *models.Task) {
 		broken bool
 	}{
 		{"manifest_path", receipt.ManifestPath == ""},
-		{"mappings", len(receipt.Mappings) == 0 || len(receipt.Mappings) > 256},
-		{"commands", len(receipt.Commands)+len(receipt.Deferred) > 64},
+		{"mappings", len(receipt.Mappings) == 0 || len(receipt.Mappings) > maxAcceptanceMappings},
+		{"commands", len(receipt.Commands)+len(receipt.Deferred) > maxAcceptanceCommands},
 	} {
 		if check.broken {
 			v.add(fmt.Errorf("task %s acceptance_receipt has invalid manifest or result bounds (%s)", task.ID, check.name))
 		}
 	}
-	if _, err := hex.DecodeString(receipt.ManifestBlob); err != nil || len(receipt.ManifestBlob) != 40 {
+	if _, err := hex.DecodeString(receipt.ManifestBlob); err != nil || len(receipt.ManifestBlob) != gitSHA1HexLen {
 		v.add(fmt.Errorf("task %s acceptance_receipt requires manifest blob identity", task.ID))
 	}
 	totalOutput := 0
@@ -83,17 +93,17 @@ func validateAcceptanceState(v *violations, task *models.Task) {
 					v.add(fmt.Errorf("task %s acceptance_receipt contains unsuccessful execution (command %d %s)", task.ID, i, check.name))
 				}
 			}
-			if _, err := hex.DecodeString(command.CommandSHA256); err != nil || len(command.CommandSHA256) != 64 {
+			if _, err := hex.DecodeString(command.CommandSHA256); err != nil || len(command.CommandSHA256) != sha256HexLen {
 				v.add(fmt.Errorf("task %s acceptance_receipt requires canonical command identity (command %d)", task.ID, i))
 			}
 		})
 	}
-	if totalOutput > 1024*1024 {
+	if totalOutput > maxAcceptanceOutputBytes {
 		v.add(fmt.Errorf("task %s acceptance_receipt output exceeds 1 MiB", task.ID))
 	}
 	for i, deferral := range receipt.Deferred {
 		ordered := i == 0 || deferral.Index > receipt.Deferred[i-1].Index
-		if _, err := hex.DecodeString(deferral.CommandSHA256); err != nil || len(deferral.CommandSHA256) != 64 ||
+		if _, err := hex.DecodeString(deferral.CommandSHA256); err != nil || len(deferral.CommandSHA256) != sha256HexLen ||
 			deferral.Index < 0 || !ordered || deferral.TimeoutSeconds < 1 || !deferral.Authority.IsValid() {
 			v.add(fmt.Errorf("task %s acceptance_receipt has an invalid deferred command (deferred %d)", task.ID, i))
 		}
@@ -120,7 +130,7 @@ func validateArchivedFields(v *violations, task *models.Task) {
 			v.add(fmt.Errorf("task %s has more than one archived %s", task.ID, ref.Field))
 		}
 		seen[ref.Field] = true
-		if _, err := hex.DecodeString(ref.SHA256); err != nil || len(ref.SHA256) != 64 || strings.ToLower(ref.SHA256) != ref.SHA256 {
+		if _, err := hex.DecodeString(ref.SHA256); err != nil || len(ref.SHA256) != sha256HexLen || strings.ToLower(ref.SHA256) != ref.SHA256 {
 			v.add(fmt.Errorf("task %s archived %s requires a lowercase SHA-256 digest", task.ID, ref.Field))
 		}
 		if ref.ArchivedAt.IsZero() {

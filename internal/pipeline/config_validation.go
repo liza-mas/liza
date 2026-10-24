@@ -56,19 +56,19 @@ func validateRolePairStates(p *Pipeline) error {
 	stateOwner := make(map[string]string) // state name → role-pair name
 	for name, rp := range p.RolePairs {
 		states := []struct {
-			phase    string
+			phase    StateCategory
 			value    string
 			required bool
 		}{
-			{"initial", rp.States.Initial, true},
-			{"executing", rp.States.Executing, true},
-			{"submitted", rp.States.Submitted, true},
-			{"reviewing", rp.States.Reviewing, true},
-			{"approved", rp.States.Approved, true},
-			{"rejected", rp.States.Rejected, true},
-			{"partially-approved", rp.States.PartiallyApproved, false},
-			{"reviewing-2", rp.States.Reviewing2, false},
-			{"clean", rp.States.Clean, false},
+			{StateCategoryInitial, rp.States.Initial, true},
+			{StateCategoryExecuting, rp.States.Executing, true},
+			{StateCategorySubmitted, rp.States.Submitted, true},
+			{StateCategoryReviewing, rp.States.Reviewing, true},
+			{StateCategoryApproved, rp.States.Approved, true},
+			{StateCategoryRejected, rp.States.Rejected, true},
+			{StateCategoryPartiallyApproved, rp.States.PartiallyApproved, false},
+			{StateCategoryReviewing2, rp.States.Reviewing2, false},
+			{StateCategoryClean, rp.States.Clean, false},
 		}
 		for _, s := range states {
 			if s.required && s.value == "" {

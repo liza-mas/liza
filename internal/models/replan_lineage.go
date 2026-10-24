@@ -7,6 +7,10 @@ import "slices"
 // replacement_committed entries.
 const ReplacementTaskIDExtra = "replacement_task_id"
 
+// ReplannedTransition is the TransitionsExecuted marker replan sets on the
+// original task. It is a marker key, not a pipeline transition name.
+const ReplannedTransition = "replanned"
+
 // ReplanSuccessor follows replan lineage from id to the task that now carries
 // its work. Replan marks the original "replanned" and creates one replacement
 // whose Supersedes names it, with the same role_pair and parents; the walk
@@ -49,7 +53,7 @@ func SelectedChildSuccessor(state *State, id string, pr PipelineResolver) (*Task
 }
 
 func providerChildStep(state *State, task *Task) (*Task, bool) {
-	if task.TransitionsExecuted["replanned"] {
+	if task.TransitionsExecuted[ReplannedTransition] {
 		return replanStep(state, task)
 	}
 	return replacementStep(state, task)
@@ -88,7 +92,7 @@ func followLineage(state *State, id string, step lineageStep) (*Task, bool) {
 }
 
 func replanStep(state *State, task *Task) (*Task, bool) {
-	if !task.TransitionsExecuted["replanned"] {
+	if !task.TransitionsExecuted[ReplannedTransition] {
 		return nil, false
 	}
 	var next *Task

@@ -15,6 +15,7 @@ import (
 const (
 	defaultTailReadBytes int64 = 64 * 1024
 	maxTailReadBytes     int64 = 256 * 1024
+	logFileMode                = 0644
 )
 
 // Entry represents a single log entry
@@ -76,7 +77,7 @@ func (l *Logger) Append(entry Entry) error {
 	}
 
 	return l.fileLock.WithLockOperation("append", func() error {
-		file, err := os.OpenFile(l.logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+		file, err := os.OpenFile(l.logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, logFileMode)
 		if err != nil {
 			return fmt.Errorf("failed to open log file for append: %w", err)
 		}

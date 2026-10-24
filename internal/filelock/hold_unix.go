@@ -13,12 +13,15 @@ import (
 	"syscall"
 )
 
+// holdLockFileMode is the permission of a lock file created for a held lock.
+const holdLockFileMode = 0o600
+
 // tryHold opens the lock file itself, rather than through gofrs/flock, because
 // the caller needs the locked descriptor to hand to a child process and
 // gofrs/flock keeps it private. Both use flock(2) on the same path, so they
 // exclude each other.
 func tryHold(lockPath string) (*Held, bool, error) {
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, holdLockFileMode)
 	if err != nil {
 		return nil, false, err
 	}

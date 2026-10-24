@@ -27,6 +27,18 @@ import (
 // archived tasks (TECH_DEBT: terminal archive cache sized to working set).
 var terminalArchiveCacheMaxBytes = 128 << 20
 
+// Terminal-archive object envelope and stub-scan bounds.
+const (
+	terminalArchiveFormatVersion = 2
+	// terminalMapEntryOverheadBytes approximates per-entry map bookkeeping in
+	// the retained-size estimate.
+	terminalMapEntryOverheadBytes = 32
+	// terminalDigestSearchWindow bounds how far after a terminal_archive key
+	// the sha256 key is searched; terminalDigestHexLen is the digest read.
+	terminalDigestSearchWindow = 256
+	terminalDigestHexLen       = 64
+)
+
 func setTerminalArchiveCacheMaxBytesForTest(limit int) func() {
 	previous := terminalArchiveCacheMaxBytes
 	terminalArchiveCacheMaxBytes = limit
@@ -109,7 +121,7 @@ func EncodeTerminalTask(task *models.Task) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := json.Marshal(terminalArchiveObject{FormatVersion: 2, TaskID: task.ID, Field: "terminal_task", ValueYAML: string(yamlBytes)})
+	data, err := json.Marshal(terminalArchiveObject{FormatVersion: terminalArchiveFormatVersion, TaskID: task.ID, Field: "terminal_task", ValueYAML: string(yamlBytes)})
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +170,7 @@ func terminalRetainedBytes(value reflect.Value) int {
 	case reflect.Map:
 		iter := value.MapRange()
 		for iter.Next() {
-			size += terminalRetainedBytes(iter.Key()) + terminalRetainedBytes(iter.Value()) + 32
+			size += terminalRetainedBytes(iter.Key()) + terminalRetainedBytes(iter.Value()) + terminalMapEntryOverheadBytes
 		}
 	case reflect.Struct:
 		if hasUnexportedFields(value.Type()) {
@@ -236,12 +248,12 @@ func (bb *Blackboard) needsTerminalArchiveWarmup(data []byte) bool {
 		if _, rest, found = bytes.Cut(rest, terminalArchiveKey); !found {
 			break
 		}
-		_, value, hasDigest := bytes.Cut(rest[:min(len(rest), 256)], terminalDigestKey)
+		_, value, hasDigest := bytes.Cut(rest[:min(len(rest), terminalDigestSearchWindow)], terminalDigestKey)
 		if !hasDigest {
 			continue
 		}
 		value = bytes.TrimLeft(value, " \"'")
-		digest := string(value[:min(len(value), 64)])
+		digest := string(value[:min(len(value), terminalDigestHexLen)])
 		if !archiveobject.IsDigest(digest) {
 			return true
 		}
@@ -354,7 +366,7 @@ func (bb *Blackboard) verifiedTerminalTask(stub *models.Task) (*models.Task, err
 		if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 			return fail("trailing data after object")
 		}
-		if object.FormatVersion != 2 || object.Field != "terminal_task" || object.TaskID != stub.ID || object.ValueYAML == "" {
+		if object.FormatVersion != terminalArchiveFormatVersion || object.Field != "terminal_task" || object.TaskID != stub.ID || object.ValueYAML == "" {
 			return fail("unsupported envelope or task identity")
 		}
 		var task models.Task

@@ -476,17 +476,17 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 	var errs []error
 	for i, deferral := range ledger.Deferrals {
 		field := fmt.Sprintf("deferred_validation.deferrals[%d]", i)
-		if deferral.TaskID == "" || !isHexDigest(deferral.MergeCommit, 40) || len(deferral.Commands) == 0 {
+		if deferral.TaskID == "" || !isHexDigest(deferral.MergeCommit, gitSHA1HexLen) || len(deferral.Commands) == 0 {
 			errs = append(errs, fmt.Errorf("%s: requires task_id, a full merge_commit and at least one command", field))
 		}
 		for j, command := range deferral.Commands {
-			if strings.TrimSpace(command.Command) == "" || !isHexDigest(command.CommandSHA256, 64) || command.TimeoutSeconds < 1 || !command.Authority.IsValid() {
+			if strings.TrimSpace(command.Command) == "" || !isHexDigest(command.CommandSHA256, sha256HexLen) || command.TimeoutSeconds < 1 || !command.Authority.IsValid() {
 				errs = append(errs, fmt.Errorf("%s.commands[%d]: requires command, 64-hex command_sha256, positive timeout_seconds and a valid authority", field, j))
 			}
 		}
 	}
 	for i, retirement := range ledger.Retirements {
-		if !isHexDigest(retirement.CommandSHA256, 64) || strings.TrimSpace(retirement.Ruling) == "" || retirement.CoversDeferrals < 1 || retirement.CoversDeferrals > len(ledger.Deferrals) {
+		if !isHexDigest(retirement.CommandSHA256, sha256HexLen) || strings.TrimSpace(retirement.Ruling) == "" || retirement.CoversDeferrals < 1 || retirement.CoversDeferrals > len(ledger.Deferrals) {
 			errs = append(errs, fmt.Errorf("deferred_validation.retirements[%d]: requires command_sha256, a ruling and covers_deferrals within 1..%d", i, len(ledger.Deferrals)))
 		}
 	}
@@ -495,15 +495,15 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 		if batch.ID < 1 || (i > 0 && batch.ID <= ledger.Batches[i-1].ID) {
 			errs = append(errs, fmt.Errorf("%s: ids must be positive and strictly increasing", field))
 		}
-		if !isHexDigest(batch.Commit, 40) || !batch.Status.IsValid() || batch.FinishedAt.Before(batch.StartedAt) {
+		if !isHexDigest(batch.Commit, gitSHA1HexLen) || !batch.Status.IsValid() || batch.FinishedAt.Before(batch.StartedAt) {
 			errs = append(errs, fmt.Errorf("%s: requires a full commit, a valid status and finished_at >= started_at", field))
 		}
 		for j, result := range batch.Results {
-			if !isHexDigest(result.CommandSHA256, 64) || !result.Status.IsValid() {
+			if !isHexDigest(result.CommandSHA256, sha256HexLen) || !result.Status.IsValid() {
 				errs = append(errs, fmt.Errorf("%s.results[%d]: requires command_sha256 and a valid status", field, j))
 			}
 			if result.Status.ReusesExecution() != (result.CarriedFrom != "") ||
-				(result.CarriedFrom != "" && !isHexDigest(result.CarriedFrom, 40)) {
+				(result.CarriedFrom != "" && !isHexDigest(result.CarriedFrom, gitSHA1HexLen)) {
 				errs = append(errs, fmt.Errorf("%s.results[%d]: a carried_forward or known_red result, and only one, requires a full carried_from commit", field, j))
 			}
 			if (result.Status == DeferredValidationResultKnownRed) != (result.OwnedBy != "") ||
@@ -512,7 +512,7 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 			}
 		}
 		for j, culprit := range batch.Culprits {
-			if !isHexDigest(culprit.CommandSHA256, 64) || (culprit.TaskID == "") != culprit.Unattributed {
+			if !isHexDigest(culprit.CommandSHA256, sha256HexLen) || (culprit.TaskID == "") != culprit.Unattributed {
 				errs = append(errs, fmt.Errorf("%s.culprits[%d]: requires command_sha256 and exactly one of task_id or unattributed", field, j))
 			}
 		}
@@ -520,7 +520,7 @@ func DeferredValidationLedgerViolations(ledger *DeferredValidationLedger) []erro
 	if n := len(ledger.Batches); n > 0 && ledger.LastBatchID != 0 && ledger.Batches[n-1].ID > ledger.LastBatchID {
 		errs = append(errs, fmt.Errorf("deferred_validation.last_batch_id: must not be below a stored batch id"))
 	}
-	if runner := ledger.Runner; runner != nil && (runner.Token == "" || !isHexDigest(runner.Commit, 40)) {
+	if runner := ledger.Runner; runner != nil && (runner.Token == "" || !isHexDigest(runner.Commit, gitSHA1HexLen)) {
 		errs = append(errs, fmt.Errorf("deferred_validation.runner: requires token and a full commit"))
 	}
 	if runner := ledger.Runner; runner != nil && runner.Abort != nil && strings.TrimSpace(runner.Abort.Ruling) == "" {
@@ -538,6 +538,12 @@ func SortedDeferredCommandSHAs(commands []DeferredValidationCommand) []string {
 	sort.Strings(shas)
 	return shas
 }
+
+// Hex lengths of the object IDs and digests this ledger stores.
+const (
+	gitSHA1HexLen = 40
+	sha256HexLen  = 64
+)
 
 func isHexDigest(value string, length int) bool {
 	if len(value) != length {

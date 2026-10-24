@@ -66,7 +66,7 @@ func WriteLivenessRecord(statePath string, record LivenessRecord) error {
 		return fmt.Errorf("create liveness record: %w", err)
 	}
 	tmpPath := f.Name()
-	if err := f.Chmod(0644); err != nil {
+	if err := f.Chmod(stateFileMode); err != nil {
 		f.Close()
 		os.Remove(tmpPath)
 		return fmt.Errorf("set liveness record permissions: %w", err)

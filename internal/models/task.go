@@ -173,6 +173,10 @@ func (t *Task) EffectiveType() TaskType {
 	return t.Type
 }
 
+// MaxTaskAttempt is the highest attempt number a task carries: a task starts a
+// fresh attempt once and then blocks.
+const MaxTaskAttempt = 2
+
 // EffectiveAttempt returns the task's attempt number, defaulting to 1 when
 // Attempt is 0 (unset) for backward compatibility with existing tasks.
 // When Attempt is unset and legacy Extra["attempted"] exists, derives the
@@ -182,7 +186,7 @@ func (t *Task) EffectiveAttempt() int {
 		return t.Attempt
 	}
 	if attempted, ok := t.legacyAttemptedList(); ok && len(attempted) > 0 {
-		return min(len(attempted)+1, 2)
+		return min(len(attempted)+1, MaxTaskAttempt)
 	}
 	return 1
 }
@@ -208,7 +212,7 @@ func (t *Task) MigrateAttemptedField() bool {
 		return true
 	}
 	if len(list) > 0 {
-		t.Attempt = min(len(list)+1, 2)
+		t.Attempt = min(len(list)+1, MaxTaskAttempt)
 	}
 	delete(t.Extra, "attempted")
 	return true
@@ -236,9 +240,12 @@ func (t *Task) ApprovalCount() int {
 	return len(t.Approvals)
 }
 
+// minDiverseApprovals is the approval count below which diversity cannot hold.
+const minDiverseApprovals = 2
+
 // HasProviderDiversity returns true if approvals come from at least 2 distinct providers.
 func (t *Task) HasProviderDiversity() bool {
-	if len(t.Approvals) < 2 {
+	if len(t.Approvals) < minDiverseApprovals {
 		return false
 	}
 	first := t.Approvals[0].Provider

@@ -329,7 +329,7 @@ func decompositionRootTransitionTargets(p *Pipeline, rootRolePair string) ([]str
 			if fromPair != rootRolePair {
 				continue
 			}
-			if fromPhase != "approved" {
+			if StateCategory(fromPhase) != StateCategoryApproved {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: from phase must be approved, got %q", rootRolePair, t.Name, fromPhase)
 			}
 			if t.Trigger != models.TransitionTriggerAuto {
@@ -418,10 +418,18 @@ func validateQuorumStates(rpName string, rp RolePairDef) error {
 	return nil
 }
 
+// Dotted state reference arities, and the exclusive routes of an architecture
+// role-pair's allocation (scope decomposition and coding allocation).
+const (
+	twoPartRefLen        = 2
+	threePartRefLen      = 3
+	allocationRouteCount = 2
+)
+
 // parseRef splits a dotted reference like "role-pair.phase" into its components.
 func parseRef(ref string) (string, string, error) {
-	parts := strings.SplitN(ref, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	parts := strings.SplitN(ref, ".", twoPartRefLen)
+	if len(parts) != twoPartRefLen || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid reference %q: expected format <name>.<phase>", ref)
 	}
 	return parts[0], parts[1], nil
@@ -430,8 +438,8 @@ func parseRef(ref string) (string, string, error) {
 // parse3PartRef splits a dotted reference like "sub-pipeline.role-pair.phase" into its components.
 // Used for pipeline-transitions that reference states across sub-pipeline boundaries.
 func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) {
-	parts := strings.SplitN(ref, ".", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	parts := strings.SplitN(ref, ".", threePartRefLen)
+	if len(parts) != threePartRefLen || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return "", "", "", fmt.Errorf("invalid 3-part reference %q: expected format <sub-pipeline>.<role-pair>.<phase>", ref)
 	}
 	return parts[0], parts[1], parts[2], nil
@@ -439,10 +447,15 @@ func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) 
 
 // validPhases lists the allowed phase names for role-pair state references.
 var validPhases = map[string]bool{
-	"initial": true, "executing": true, "submitted": true,
-	"reviewing": true, "approved": true, "rejected": true,
-	"partially-approved": true, "reviewing-2": true,
-	"clean": true,
+	string(StateCategoryInitial):           true,
+	string(StateCategoryExecuting):         true,
+	string(StateCategorySubmitted):         true,
+	string(StateCategoryReviewing):         true,
+	string(StateCategoryApproved):          true,
+	string(StateCategoryRejected):          true,
+	string(StateCategoryPartiallyApproved): true,
+	string(StateCategoryReviewing2):        true,
+	string(StateCategoryClean):             true,
 }
 
 var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
@@ -490,7 +503,7 @@ func validateAllocationRoutes(p *Pipeline) error {
 		if !conditional {
 			continue
 		}
-		if len(transitions) != 2 || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
+		if len(transitions) != allocationRouteCount || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
 			return fmt.Errorf("role-pair %q requires exactly two exclusive architecture allocation routes", source)
 		}
 		seen := make(map[models.AllocationRoute]bool)
@@ -507,7 +520,7 @@ func validateAllocationRoutes(p *Pipeline) error {
 				return fmt.Errorf("transition %q scope-decomposition must retain architecture or code planning", t.Name)
 			}
 			fromParts, toParts := strings.Split(t.From, "."), strings.Split(t.To, ".")
-			if fromParts[len(fromParts)-1] != "approved" || toParts[len(toParts)-1] != "initial" {
+			if StateCategory(fromParts[len(fromParts)-1]) != StateCategoryApproved || StateCategory(toParts[len(toParts)-1]) != StateCategoryInitial {
 				return fmt.Errorf("transition %q allocation routes require approved to initial", t.Name)
 			}
 		}

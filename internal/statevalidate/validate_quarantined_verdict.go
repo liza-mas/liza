@@ -77,7 +77,7 @@ func validateQuarantinedVerdict(v *violations, state *models.State, prefix strin
 	for j, fingerprint := range finding.GenerationFingerprints {
 		// Shape and uniqueness are separate: a malformed entry can still
 		// repeat another.
-		if _, err := hex.DecodeString(fingerprint); len(fingerprint) != 64 || err != nil {
+		if _, err := hex.DecodeString(fingerprint); len(fingerprint) != sha256HexLen || err != nil {
 			add(fmt.Sprintf(" requires unique SHA-256 generation fingerprints (fingerprint %d malformed)", j))
 		}
 		if fingerprints[fingerprint] {

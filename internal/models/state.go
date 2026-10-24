@@ -2,6 +2,8 @@ package models
 
 import (
 	"fmt"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // State represents the complete Liza state.yaml structure
@@ -71,7 +73,7 @@ func (s *State) FindTaskIndex(taskID string) int {
 func (s *State) FindOrchestratorID() (string, error) {
 	var found string
 	for id, agent := range s.Agents {
-		if agent.Role == "orchestrator" {
+		if agent.Role == roles.Orchestrator {
 			if found != "" {
 				return "", fmt.Errorf("multiple orchestrators registered (%s, %s); pass --agent-id explicitly", found, id)
 			}

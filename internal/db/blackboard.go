@@ -202,6 +202,10 @@ func (bb *Blackboard) ReadContext(ctx context.Context) (*models.State, error) {
 	return bb.decodeLiveState(data, "state read")
 }
 
+// stateFileMode is the permission of published state and liveness files;
+// CreateTemp would otherwise leave them 0600.
+const stateFileMode = 0644
+
 // patientReadLockTimeout bounds the lock wait of Patient instances, including
 // ReadContextPatient.
 var patientReadLockTimeout = 60 * time.Second
@@ -408,7 +412,7 @@ func (bb *Blackboard) writeStateData(data []byte) error {
 	tmpPath := f.Name()
 
 	// CreateTemp uses 0600; match the target file permissions
-	if err := f.Chmod(0644); err != nil {
+	if err := f.Chmod(stateFileMode); err != nil {
 		f.Close()
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to set temporary file permissions: %w", err)

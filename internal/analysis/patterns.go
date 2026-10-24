@@ -11,6 +11,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Circuit-breaker pattern thresholds: the anomaly counts at which each pattern
+// triggers, and the excerpt lengths of the report evidence.
+const (
+	planningRejectionThreshold = 4
+	retryClusterMinAnomalies   = 3
+	retryClusterMinSimilar     = 2
+	debtAccumulationThreshold  = 3
+	groupedAnomalyThreshold    = 2
+	workaroundPatternThreshold = 2
+	externalOutageThreshold    = 2
+	detailExcerptLimit         = 240
+	messageExcerptLimit        = 500
+	eventFieldExcerptLimit     = 80
+)
+
 // PatternResult represents the result of pattern detection
 type PatternResult struct {
 	Triggered      bool
@@ -170,7 +185,7 @@ func checkPlanningReviewChurn(state *models.State) PatternResult {
 		if rejectionCount == 0 {
 			rejectionCount = historyCount
 		}
-		if rejectionCount < 4 || cleared && !latestRejection.After(watermark) {
+		if rejectionCount < planningRejectionThreshold || cleared && !latestRejection.After(watermark) {
 			continue
 		}
 
@@ -242,14 +257,14 @@ func planningRejectionHistory(history []models.TaskHistoryEntry) (int, time.Time
 
 func checkRetryCluster(anomalies []models.Anomaly) PatternResult {
 	retryLoops := filterByType(anomalies, models.AnomalyTypeRetryLoop)
-	if len(retryLoops) < 3 {
+	if len(retryLoops) < retryClusterMinAnomalies {
 		return PatternResult{Triggered: false}
 	}
 
 	// Count similar error patterns
 	groups := groupByField(retryLoops, "error_pattern")
 	for _, group := range groups {
-		if len(group) >= 2 {
+		if len(group) >= retryClusterMinSimilar {
 			// At least 2 anomalies share the same error pattern
 			return PatternResult{
 				Triggered: true,
@@ -273,7 +288,7 @@ func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 		}
 	}
 
-	if debtCount >= 3 {
+	if debtCount >= debtAccumulationThreshold {
 		return PatternResult{
 			Triggered: true,
 			Pattern:   "debt_accumulation",
@@ -286,7 +301,7 @@ func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, models.AnomalyTypeAssumptionViolated, "assumption", 2, PatternResult{
+	return checkGroupedThreshold(anomalies, models.AnomalyTypeAssumptionViolated, "assumption", groupedAnomalyThreshold, PatternResult{
 		Pattern:  "assumption_cascade",
 		Severity: "SPEC_FLAW",
 		Evidence: "Same assumption violated across multiple tasks",
@@ -294,7 +309,7 @@ func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkSpecGapCluster(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, models.AnomalyTypeSpecAmbiguity, "spec_ref", 2, PatternResult{
+	return checkGroupedThreshold(anomalies, models.AnomalyTypeSpecAmbiguity, "spec_ref", groupedAnomalyThreshold, PatternResult{
 		Pattern:  "spec_gap_cluster",
 		Severity: "SPEC_FLAW",
 		Evidence: "Multiple tasks hitting same spec ambiguity",
@@ -309,7 +324,7 @@ func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 		}
 	}
 
-	if len(workarounds) < 2 {
+	if len(workarounds) < workaroundPatternThreshold {
 		return PatternResult{Triggered: false}
 	}
 
@@ -329,7 +344,7 @@ func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 	}
 
 	for _, group := range groups {
-		if len(group) >= 2 {
+		if len(group) >= workaroundPatternThreshold {
 			return PatternResult{
 				Triggered: true,
 				Pattern:   "workaround_pattern",
@@ -346,7 +361,7 @@ func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 	externals := filterByType(anomalies, models.AnomalyTypeExternalBlocker)
 	groups := groupByField(externals, "blocker_service")
 	for service, group := range groups {
-		if len(group) >= 2 {
+		if len(group) >= externalOutageThreshold {
 			return PatternResult{
 				Triggered: true,
 				Pattern:   "external_service_outage",
@@ -611,7 +626,7 @@ func writeTrimmedDetail(sb *strings.Builder, key string, details map[string]any)
 	if !ok || value == "" {
 		return
 	}
-	fmt.Fprintf(sb, "   - %s: `%s`\n", key, compactText(value, 240))
+	fmt.Fprintf(sb, "   - %s: `%s`\n", key, compactText(value, detailExcerptLimit))
 }
 
 func writeTrimmedMessage(sb *strings.Builder, details map[string]any) {
@@ -623,7 +638,7 @@ func writeTrimmedMessage(sb *strings.Builder, details map[string]any) {
 	if writeProviderMessageSummary(sb, message) {
 		return
 	}
-	fmt.Fprintf(sb, "   - message_excerpt: `%s`\n", compactText(message, 500))
+	fmt.Fprintf(sb, "   - message_excerpt: `%s`\n", compactText(message, messageExcerptLimit))
 }
 
 func writeProviderMessageSummary(sb *strings.Builder, message string) bool {
@@ -643,11 +658,11 @@ func writeProviderMessageSummary(sb *strings.Builder, message string) bool {
 
 	wrote := false
 	if event.Type != "" || event.Item.Type != "" {
-		fmt.Fprintf(sb, "   - provider_event: `%s / %s`\n", compactText(event.Type, 80), compactText(event.Item.Type, 80))
+		fmt.Fprintf(sb, "   - provider_event: `%s / %s`\n", compactText(event.Type, eventFieldExcerptLimit), compactText(event.Item.Type, eventFieldExcerptLimit))
 		wrote = true
 	}
 	if event.Item.Command != "" {
-		fmt.Fprintf(sb, "   - command: `%s`\n", compactText(event.Item.Command, 240))
+		fmt.Fprintf(sb, "   - command: `%s`\n", compactText(event.Item.Command, detailExcerptLimit))
 		wrote = true
 	}
 	if event.Item.Status != "" || event.Item.ExitCode != nil {
@@ -655,7 +670,7 @@ func writeProviderMessageSummary(sb *strings.Builder, message string) bool {
 		if event.Item.ExitCode != nil {
 			exitCode = fmt.Sprintf("%d", *event.Item.ExitCode)
 		}
-		fmt.Fprintf(sb, "   - status: `%s`, exit_code: `%s`\n", compactText(event.Item.Status, 80), exitCode)
+		fmt.Fprintf(sb, "   - status: `%s`, exit_code: `%s`\n", compactText(event.Item.Status, eventFieldExcerptLimit), exitCode)
 		wrote = true
 	}
 	if event.Item.AggregatedOutput != "" {

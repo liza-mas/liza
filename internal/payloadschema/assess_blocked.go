@@ -129,7 +129,7 @@ func validateAssessBlocked(payload any) []models.FieldDiagnostic {
 	switch {
 	case len(questions) == 0:
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/questions", "at least 1 question is required in reconcile mode", models.FieldValueClassMissing))
-	case len(questions) > 3:
+	case len(questions) > maxBlockedQuestions:
 		diagnostics = append(diagnostics, scalarPayloadDiagnostic("/questions", "must contain at most 3 questions", models.FieldValueClassOutOfRange))
 	}
 	for i, question := range questions {

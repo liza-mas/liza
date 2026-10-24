@@ -12,6 +12,9 @@ import (
 // MarkBlockedOperation names the blocking lifecycle operation on the registry.
 const MarkBlockedOperation = "mark-blocked"
 
+// maxBlockedQuestions is the blocking protocol's cap on questions per block.
+const maxBlockedQuestions = 3
+
 // markBlockedStructuredEvidence states what a repair request's evidence must
 // record. The command example names no distribution binary (this package
 // cannot reach the brand presentation) and the whole text fits the
@@ -58,7 +61,7 @@ func validateMarkBlocked(payload any) []models.FieldDiagnostic {
 	switch {
 	case len(decoded.Questions) == 0:
 		diagnostics = append(diagnostics, markBlockedDiagnostic("/questions", "at least 1 question is required", models.FieldValueClassMissing))
-	case len(decoded.Questions) > 3:
+	case len(decoded.Questions) > maxBlockedQuestions:
 		diagnostics = append(diagnostics, markBlockedDiagnostic("/questions", "maximum 3 questions allowed per blocking protocol", models.FieldValueClassOutOfRange))
 	}
 	diagnostics = append(diagnostics, ValidateMarkBlockedDependsOn(decoded.DependsOn)...)

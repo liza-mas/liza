@@ -50,7 +50,7 @@ func validateTaskLifecycle(v *violations, task *models.Task) {
 			fail := func(reason string) { v.add(fmt.Errorf("task %s lifecycle: %s", task.ID, reason)) }
 			preparation := lifecycle.Preparation
 			validateLifecycleIdentity(preparation.LifecycleIdentity, fail)
-			if !validLifecycleDigest(preparation.Boundary, 64) {
+			if !validLifecycleDigest(preparation.Boundary, sha256HexLen) {
 				fail("invalid preparation boundary")
 			}
 			if err := validateLifecycleSize(preparation); err != nil {
@@ -87,7 +87,7 @@ func validateLifecycleReceipt(receipt models.LifecycleReceipt, lifecycle *models
 		fail("duplicate receipt identity")
 	}
 	keys[key] = true
-	if !validLifecycleDigest(receipt.TransitionID, 64) {
+	if !validLifecycleDigest(receipt.TransitionID, sha256HexLen) {
 		fail("invalid receipt transition_id")
 	}
 	validateLifecycleProjection(receipt.Operation, receipt.Projection, fail)
@@ -106,13 +106,13 @@ func validateLifecycleIdentity(identity models.LifecycleIdentity, fail func(stri
 	if identity.RequestID != "" && !validLifecycleIdentifier(identity.RequestID) {
 		fail("invalid request_id")
 	}
-	if !validLifecycleDigest(identity.ExpectedTransition, 64) {
+	if !validLifecycleDigest(identity.ExpectedTransition, sha256HexLen) {
 		fail("invalid expected_transition")
 	}
-	if !validLifecycleDigest(identity.PayloadDigest, 64) {
+	if !validLifecycleDigest(identity.PayloadDigest, sha256HexLen) {
 		fail("invalid payload_digest")
 	}
-	if identity.GenerationDigest != "" && !validLifecycleDigest(identity.GenerationDigest, 64) {
+	if identity.GenerationDigest != "" && !validLifecycleDigest(identity.GenerationDigest, sha256HexLen) {
 		fail("invalid generation_digest")
 	}
 }
@@ -146,7 +146,7 @@ func validateLifecycleProjection(operation string, projection models.LifecyclePr
 		commits = append(commits, struct{ field, value string }{"review_commit", projection.ReviewCommit})
 	}
 	for _, commit := range commits {
-		if commit.value != "" && !validLifecycleDigest(commit.value, 40) && !validLifecycleDigest(commit.value, 64) {
+		if commit.value != "" && !validLifecycleDigest(commit.value, gitSHA1HexLen) && !validLifecycleDigest(commit.value, sha256HexLen) {
 			fail(fmt.Sprintf("projection commit must be a full lowercase Git object ID (%s)", commit.field))
 		}
 	}

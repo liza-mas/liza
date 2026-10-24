@@ -13,6 +13,12 @@ import (
 	"runtime"
 )
 
+// Permissions of installed archive directories and objects.
+const (
+	objectDirMode  = 0o755
+	objectFileMode = 0o644
+)
+
 // ErrConflict means an existing digest-named object has different bytes.
 var ErrConflict = errors.New("archive object conflict: existing object differs")
 
@@ -60,7 +66,7 @@ func Write(archiveDir string, data []byte, syncDir func(string) error) (string, 
 			return "", fmt.Errorf("%w: %s", ErrConflict, path)
 		}
 	case errors.Is(err, os.ErrNotExist):
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, objectDirMode); err != nil {
 			return "", fmt.Errorf("create archive directory: %w", err)
 		}
 		if err := install(dir, path, data); err != nil {
@@ -90,7 +96,7 @@ func install(dir, path string, data []byte) error {
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
-	if err := f.Chmod(0o644); err != nil {
+	if err := f.Chmod(objectFileMode); err != nil {
 		f.Close()
 		return fmt.Errorf("set archive object permissions: %w", err)
 	}

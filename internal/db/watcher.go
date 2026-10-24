@@ -49,6 +49,9 @@ func (bb *Blackboard) WatchForChanges() (*stateWatcher, error) {
 	return sw, nil
 }
 
+// stateWatchDebounce coalesces a burst of state-file events into one.
+const stateWatchDebounce = 50 * time.Millisecond
+
 // processEvents handles fsnotify events and coalesces them
 func (sw *stateWatcher) processEvents(statePath string) {
 	defer close(sw.events)
@@ -56,7 +59,7 @@ func (sw *stateWatcher) processEvents(statePath string) {
 
 	// Debounce timer to coalesce rapid events
 	var debounceTimer *time.Timer
-	debounceDuration := 50 * time.Millisecond
+	debounceDuration := stateWatchDebounce
 
 	for {
 		select {

@@ -116,7 +116,7 @@ func ParseAcceptance(markdown, heading string) (*AcceptanceContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	contract := &AcceptanceContract{TimeoutSeconds: 600}
+	contract := &AcceptanceContract{TimeoutSeconds: defaultAcceptanceTimeoutSeconds}
 	if err := decodeAcceptanceJSON(data, contract); err != nil {
 		return nil, fmt.Errorf("acceptance: %w", err)
 	}
@@ -411,8 +411,14 @@ func decodeAcceptanceJSON(data string, target any) error {
 	return decoder.Decode(target)
 }
 
+// Acceptance contract defaults and bounds.
+const (
+	defaultAcceptanceTimeoutSeconds = 600
+	maxAcceptanceJSONDepth          = 16
+)
+
 func checkAcceptanceJSONValue(decoder *json.Decoder, depth int) error {
-	if depth > 16 {
+	if depth > maxAcceptanceJSONDepth {
 		return fmt.Errorf("JSON nesting exceeds acceptance schema limit")
 	}
 	token, err := decoder.Token()

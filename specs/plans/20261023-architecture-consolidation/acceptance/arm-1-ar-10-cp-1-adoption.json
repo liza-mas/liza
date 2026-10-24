@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-existing",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-magic",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-literals",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC1",
+      "file": "internal/statevalidate/acceptance_bounds_test.go",
+      "assertion": "TestAcceptanceReceiptBoundEdges and TestAcceptanceDigestLengthEdges assert the exact diagnostic text at the literal 256/257 mapping, 64/65 command, 1048576/1048577 output-byte and digest-length edges; internal/models/named_values_test.go TestValidationPrerequisiteBoundEdges and TestValidationPrerequisiteCountAndByteEdges assert the unchanged prerequisite messages at their literal edges; the existing statevalidate and payloadschema diagnostic tests (mark_blocked_test.go, assess_blocked_test.go, validate_task_order_test.go) pass unchanged.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC3",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC5",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "TestOracleStateRoundTrip and the other A1 and A8 oracles run live against unchanged goldens, fixtures, twins and PROVENANCE.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-guards",
+      "file": "internal/testguard/archguard/k4_guard_test.go",
+      "assertion": "TestK4ImportDirectionGuard and TestS1SizeGuard run under make lint: models now imports roles in state.go, an existing models-to-roles edge, so no new layer crossing and no new size offender.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ type referencesSection struct {
 // locateSourceReferences finds the Source References marker. It returns
 // (nil, nil) when no eligible marker exists and an error unless exactly one does.
 func locateSourceReferences(scan markdownScan) (*referencesSection, error) {
-	markers := headingsMatching(scan.headings, 2, sourceReferencesHeading)
+	markers := headingsMatching(scan.headings, sourceReferencesHeadingLevel, sourceReferencesHeading)
 	if len(markers) == 0 {
 		return nil, nil
 	}
@@ -97,7 +97,7 @@ func (p *contractParser) consumeSourceRevision(lineIndex int, line string, headi
 }
 
 func (p *contractParser) consumeDirectHeading(lineIndex int, heading atxHeading, isHeading bool) error {
-	if !isHeading || heading.level != 3 || heading.text != "Direct References" {
+	if !isHeading || heading.level != contractHeadingLevel || heading.text != "Direct References" {
 		return parseLineError(lineIndex, "expected level-3 Direct References heading")
 	}
 	p.state = parseDirectEntries
@@ -106,7 +106,7 @@ func (p *contractParser) consumeDirectHeading(lineIndex int, heading atxHeading,
 
 func (p *contractParser) consumeDirectEntry(lineIndex int, line string, heading atxHeading, isHeading bool) error {
 	if isHeading {
-		if heading.level != 3 || heading.text != "Obligation Coverage" {
+		if heading.level != contractHeadingLevel || heading.text != "Obligation Coverage" {
 			return parseLineError(lineIndex, "expected level-3 Obligation Coverage heading")
 		}
 		if len(p.contract.DirectReferences) == 0 {

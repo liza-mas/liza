@@ -244,24 +244,24 @@ func (r *Resolver) resolvePhase(rolePair, phase string) models.TaskStatus {
 	if !ok {
 		return ""
 	}
-	switch phase {
-	case "initial":
+	switch StateCategory(phase) {
+	case StateCategoryInitial:
 		return models.TaskStatus(rp.States.Initial)
-	case "executing":
+	case StateCategoryExecuting:
 		return models.TaskStatus(rp.States.Executing)
-	case "submitted":
+	case StateCategorySubmitted:
 		return models.TaskStatus(rp.States.Submitted)
-	case "reviewing":
+	case StateCategoryReviewing:
 		return models.TaskStatus(rp.States.Reviewing)
-	case "approved":
+	case StateCategoryApproved:
 		return models.TaskStatus(rp.States.Approved)
-	case "rejected":
+	case StateCategoryRejected:
 		return models.TaskStatus(rp.States.Rejected)
-	case "partially-approved":
+	case StateCategoryPartiallyApproved:
 		return models.TaskStatus(rp.States.PartiallyApproved)
-	case "reviewing-2":
+	case StateCategoryReviewing2:
 		return models.TaskStatus(rp.States.Reviewing2)
-	case "clean":
+	case StateCategoryClean:
 		return models.TaskStatus(rp.States.Clean)
 	default:
 		return ""

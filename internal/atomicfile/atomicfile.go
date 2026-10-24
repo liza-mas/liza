@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 )
 
+// dirMode is the permission of a destination directory Write creates.
+const dirMode = 0755
+
 // Write publishes data at dst through a temporary file in dst's directory,
 // creating that directory if needed. A concurrent reader of dst sees either
 // the previous file or the complete data.
 func Write(dst string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), dirMode); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-")

@@ -181,7 +181,7 @@ func validateMarkdownPath(value string) error {
 	if strings.HasPrefix(value, "/") || pathpkg.IsAbs(value) {
 		return fmt.Errorf("reference path must be repository-relative")
 	}
-	if len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && value[2] == '/' {
+	if len(value) >= windowsDriveRootLen && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && value[2] == '/' {
 		return fmt.Errorf("reference path must be repository-relative")
 	}
 	if strings.ContainsAny(value, "\\#") {
@@ -213,8 +213,15 @@ func validateID(value, kind string) error {
 	return nil
 }
 
+// Path and object-ID shapes the contract checks.
+const (
+	// windowsDriveRootLen is the length of a drive root such as "C:/".
+	windowsDriveRootLen = 3
+	gitOIDHexLen        = 40
+)
+
 func validOID(value string) bool {
-	if len(value) != 40 {
+	if len(value) != gitOIDHexLen {
 		return false
 	}
 	for _, char := range value {
