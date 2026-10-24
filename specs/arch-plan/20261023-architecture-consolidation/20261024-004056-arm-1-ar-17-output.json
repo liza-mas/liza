@@ -1,0 +1,34 @@
+[
+  {
+    "desc": "Close A6 (with C5) at its area boundary, then separate A7 presentation by concern and remove jsonout -> ops in ordered coding units",
+    "done_when": "boundary-a6.md records G1-G7 passing at a checked integration SHA and the maintainer's green G8; then the A7 ratchet holds only the InitProject key, the A7 allowlist is empty and jsonout no longer imports ops, no shim remains, K7 is reconciled, C1/C4/C6 sites and agent imports are kept, and E1 plus race on touched packages pass with oracle goldens unchanged except reviewed exceptions.",
+    "scope": "A6 boundary record and A6 issue closures; A7 production files except ops/init_project.go, new files in the 5 A7 packages, tests, additive oracle coverage, A7 guard data, X3 additions to errors and alerts, ops error-type capability methods, X2 callers, A7 doc references, one ADR. Out: behaviour changes, C1-C6 edits, new packages, mutation moves, InitProject, A7 issue closures.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-004056-arm-1-ar-17.md#Scope 1: A6 boundary and A7 presentation consolidation",
+    "rca_required": false,
+    "decomposition": {
+      "owned_files": [
+        "specs/architecture/consolidation-run/boundary-a6.md",
+        "internal/testguard/archguard/area_a7_test.go"
+      ],
+      "owned_modules": [
+        "cmd/liza",
+        "internal/commands",
+        "internal/tui",
+        "internal/interactive",
+        "internal/jsonout"
+      ],
+      "interfaces_owned": [
+        "SI-5 jsonout->ops"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "Area-Boundary Checkpoint Contract",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning. Coding unit 0 is the A6 boundary unit (with C5); the seven concern units (recommended K-ERR, K-CLI, K-INIT, K-INS, K-POOL, K-WATCH, K-TUI) each depend on it and form a serial chain, because they share the A7 guard literal, the commands namespace and the chain-serialized docs. Default inheritance retains the A6-refactor, C5 and A7-oracle coding holds. ops.InitProject stays for C4 (Scope 18). The chain-serialized docs are edited only during A7's period."
+    }
+  }
+]
