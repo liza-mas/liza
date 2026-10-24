@@ -1,95 +1,135 @@
 version: 1
 pipeline_version: 3
+mutation_sequence: 1
 goal:
-  id: goal-1
-  description: A4 oracle
-  spec_ref: specs/vision.md
-  entry_point: technical-spec
-  created: 2020-01-01T00:00:00Z
-  status: IN_PROGRESS
+    id: goal-1
+    description: A4 oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: 2020-01-01T00:00:00Z
+    status: IN_PROGRESS
+    alignment_history: []
 tasks:
-  - id: p1
-    type: planning
-    role_pair: code-planning-pair
-    description: Fixture p1
-    done_when: Observable outcome
-    scope: Bounded oracle scope
-    status: SUPERSEDED
-    priority: 1
-    spec_ref: specs/vision.md
-    created: 2020-01-01T00:00:00Z
-    iteration: 1
-    history: []
-    depends_on: [t3]
-    superseded_by: p2
-  - id: p2
-    type: planning
-    role_pair: code-planning-pair
-    description: Fixture p2
-    done_when: Observable outcome
-    scope: Bounded oracle scope
-    status: DRAFT_CODING_PLAN
-    priority: 1
-    spec_ref: specs/vision.md
-    created: 2020-01-01T00:00:00Z
-    iteration: 1
-    history: []
-    supersedes: p1
-  - id: t3
-    type: coding
-    role_pair: coding-pair
-    description: Fixture t3
-    done_when: Observable outcome
-    scope: Bounded oracle scope
-    status: DRAFT_CODE
-    priority: 1
-    spec_ref: specs/vision.md
-    created: 2020-01-01T00:00:00Z
-    iteration: 1
-    history: []
+    - id: p1
+      type: planning
+      role_pair: code-planning-pair
+      description: Fixture p1
+      status: SUPERSEDED
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      depends_on:
+        - t3
+      superseded_by:
+        - p2
+      rescope_reason: Rescoped
+      lifecycle:
+        revision: 2
+        completion_sequence: 1
+        receipts:
+            - operation: supersede-task
+              actor: orchestrator-1
+              generation_digest: 5ee4e1f377a36f1489546d826bd3fc87ffe4461d3b2d5c17557701f1def2a342
+              expected_transition: da98bf346ff8ca31d2ff4fbd177c7d973bad43d300936bc5535e800389bcf24b
+              payload_digest: 66d29e5aa4c0ae0c125f5fb9c2c2af164ae457d5d512ba8317ef6485f769c079
+              sequence: 1
+              transition_id: 973731bcdf13ee3fc5167634ad6fb05f2081d502499245d3c181902add241b28
+              projection:
+                source_status: DRAFT_CODING_PLAN
+      created: 2020-01-01T00:00:00Z
+      history:
+        - time: 2020-01-01T00:00:00Z
+          event: superseded
+          agent: orchestrator-1
+          reason: Rescoped
+          note: 'replaced by: p2'
+          removed_dependencies:
+            - t3
+    - id: p2
+      type: planning
+      role_pair: code-planning-pair
+      description: Fixture p2
+      status: DRAFT_CODING_PLAN
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      created: 2020-01-01T00:00:00Z
+      history: []
+    - id: t3
+      type: coding
+      role_pair: coding-pair
+      description: Fixture t3
+      status: DRAFT_CODE
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      created: 2020-01-01T00:00:00Z
+      history: []
 agents:
-  orchestrator-1:
-    role: orchestrator
-    status: IDLE
-    generation: gen-1
-    heartbeat: 2020-01-01T00:00:00Z
-    terminal: terminal-1
-    provider: fixture-provider
-    iterations_total: 0
-    context_percent: 0
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        heartbeat: 2020-01-01T00:00:00Z
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
 discovered: []
 human_notes: []
 spec_changes: []
 anomalies: []
 sprint:
-  id: sprint-1
-  number: 1
-  goal_ref: goal-1
-  scope:
-    planned: [p1, p2, t3]
-    stretch: []
-  timeline:
-    started: 2020-01-01T00:00:00Z
-    deadline: 2099-01-01T00:00:00Z
-  status: IN_PROGRESS
-  metrics:
-    tasks_done: 0
-    tasks_in_progress: 0
-    tasks_blocked: 0
-    iterations_total: 0
-    review_cycles_total: 0
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - p1
+            - p2
+            - t3
+        stretch: []
+    timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
 circuit_breaker:
-  last_check: 2020-01-01T00:00:00Z
-  status: OK
-  history: []
+    last_check: 2020-01-01T00:00:00Z
+    status: OK
+    history: []
 config:
-  max_coder_iterations: 10
-  max_review_cycles: 5
-  heartbeat_interval: 60
-  lease_duration: 1800
-  coder_poll_interval: 30
-  orchestrator_poll_interval: 60
-  orchestrator_max_wait: 1800
-  reviewer_poll_interval: 30
-  integration_branch: integration
-  mode: RUNNING
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING
