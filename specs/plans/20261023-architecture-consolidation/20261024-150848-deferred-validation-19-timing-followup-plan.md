@@ -9,6 +9,7 @@ Source revision: "01cf6c30decf85192ab594cf20f656bc6538f91a"
 - "d41": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
 - "d46": "specs/goals/20261023-architecture-consolidation-decisions.md#D46 — Remove the time.Sleep calls merged by A9 oracle rows; the sleep budget stays (run, 2026-10-24)" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
 - "d51": "specs/goals/20261023-architecture-consolidation-decisions.md#D51 — Started successor `arm-1-ar-10-cp-1-code-1` runs before the D41 follow-up correction; bounded resubmission for the named flakes (run, 2026-10-24)" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
+- "d53": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
 - "d41-rules": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Common Rules (all outputs)" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
 - "d41-task2": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Task 2: Synchronize the rejected new-attempt await test on watcher registration" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
 - "d41-placement": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Placement" @ "01cf6c30decf85192ab594cf20f656bc6538f91a"
@@ -38,7 +39,12 @@ Based on: the task JSON (orchestrator assessment of the operator note of
 2026-10-24T14:40:18.918841977Z), the three named logs under
 `.omni-ee/tool-results/` (read-only), source at `01cf6c30d`, the D41 plan and its
 merged children, D41/D46/D51, the A4 placement rule, live task state read with
-`omni-ee get`, and the probes below.
+`omni-ee get`, and the probes below. Revision 2 (after the D53 unblock,
+15:43Z): the human placement ruling D53 (`6ef124d3e`, reference `d53`) and the
+operator relay note of 15:43:29Z replace the held Placement, and RP12-RP14
+re-probe at `068906c29` (named sources identical to `01cf6c30d` and to
+integration head `140b951f1`). The RCA, traceability, done_when and Acceptance
+Contracts are unchanged.
 
 **Lineage.** This plan is a sibling of the D41 family, not a correction to any
 of it. It plans only the three signatures the D41 children do not own:
@@ -282,10 +288,10 @@ widened.
 
 ## Task 1: Make the idle-orchestrator checkpoint test independent of its context deadline
 
-**Priority:** Must (task priority 1). **Depends on:** pending the Placement
-ruling; under the recommended option A,
-`task_depends_on: ["arm-1-ar-11-cp-0-code-0"]` (orders only; supplies no
-input). The earliest input is merged source at `01cf6c30d`; the seams
+**Priority:** Must (task priority 1). **Depends on:** nothing (no
+`depends_on`, `task_depends_on` or provider wait). Every predecessor writer is
+merged, and the A1 boundary is a successor under D53 (Placement). The earliest
+input is merged source at `01cf6c30d`; the seams
 `orchestratorWaitForWorkDetector` and `withFakeCheckpointSummaryRunner`
 already exist.
 **Files:** `internal/agent/checkpoint_summary_gate_test.go` and the declared
@@ -342,9 +348,8 @@ change.
 
 ## Task 2: Synchronize the terminal and rejected auto-reclaim await tests on watcher registration
 
-**Priority:** Must (task priority 1). **Depends on:** pending the Placement
-ruling; under option A, `task_depends_on: ["arm-1-ar-11-cp-0-code-0"]`. The
-earliest input is merged source: the seam `newAwaitVerdictWatcher`
+**Priority:** Must (task priority 1). **Depends on:** nothing, as Task 1
+(Placement). The earliest input is merged source: the seam `newAwaitVerdictWatcher`
 (`await_verdict.go:60`) and code-1's merged precedent
 (`await_verdict_test.go:531-634`).
 **Files:** `internal/ops/await_verdict_test.go` and the declared manifest.
@@ -422,7 +427,8 @@ Deferred indexes 4-6 map to no obligation; the integration batch runs them.
 
 ## Ownership, Dependencies and Shared Files
 
-Current writer and proof ownership (`omni-ee get`, 15:00Z):
+Current writer and proof ownership (`omni-ee get`, 15:00Z; rechecked 15:52Z,
+RP13: unchanged, code-0 MERGED):
 
 | Item | Owner | State |
 |---|---|---|
@@ -445,8 +451,9 @@ interface is frozen.
 Correction case: the A4 correction placement rule (a4-proof; A3 and A2 state
 the same rule, as applied in d41-placement). A correction waits for every
 started or merged writer, precedes every unstarted consumer that requires it,
-and takes the earliest legal slot. **A started required successor needs a human
-ruling.** One exists, so this plan is held for that ruling (status below).
+and takes the earliest legal slot. A started required successor needs a human
+ruling. **Ruling: D53** (reference `d53`, commit `6ef124d3e`, relayed by the
+operator note of 2026-10-24T15:43:29Z, which unblocked this task at 15:43:30Z).
 
 **Required successor test** (d41-placement R1/R2, for these three tests): R1 —
 it edits `checkpoint_summary_gate_test.go`'s idle test, the ops tests or the
@@ -455,83 +462,89 @@ it edits `checkpoint_summary_gate_test.go`'s idle test, the ops tests or the
 no excluding `-run`), or its done_when needs boundary green evidence. Exposure is
 not limited to `-race`: the measured margin is similar without it (RCA b., d.).
 
-**Predecessors.** Merged writer `…-code-1` (satisfied). No started writer: the
-only started task is `arm-1-ar-11-cp-0-code-0`, whose scope excludes test files.
+**Predecessors (declared waits).** None remain open. The only task writer of
+either file, `…-code-1`, is MERGED; `checkpoint_summary_gate_test.go` has no
+task writer (direct commits only). No writer of either file is started
+(RP13): the in-progress tasks are planning tasks (`arm-1-ar-21-cp-0`,
+`d53-oracle-portability-plan` and this one) plus the BLOCKED A1 boundary, whose
+scope excludes test files and which is a successor (below). Both outputs therefore carry no
+`depends_on`, `task_depends_on` or provider wait.
 
-**Started required successor.** `arm-1-ar-11-cp-0-code-0` (A1 boundary,
-IMPLEMENTING_CODE, claimed 14:52:13Z by coder-3) is R2: its C1
-`make test` (index 1) is undeferred and runs all three tests, and its G8
-maintainer CI runs them on Linux/Windows. D51 covers neither this task nor these
-signatures. Options for the human:
+**Started required successor: `arm-1-ar-11-cp-0-code-0` (A1 boundary).** It is
+BLOCKED with committed G1-G7 work, and R2 holds: its undeferred `make test`
+(index 1) runs all three tests, and its G8 CI runs them on three platforms.
+D53 rules it (verbatim from the operator relay): "The started A1 boundary
+arm-1-ar-11-cp-0-code-0 will NOT keep its current proofs. Its G8 CI is red
+(D53), so it will be rebased after the D53 corrections and this follow-up
+merge, and it will rerun G1-G7, including make test, at the new integration
+SHA." and "Place this follow-up's children BEFORE that boundary rerun, exactly
+as for an unstarted consumer: the boundary waits on them. No bounded-resubmission
+rule (D51 style) is needed for the three signatures, because the boundary
+reruns its proofs after the fix." The D53 entry says the same: "The pending
+timing follow-up (`deferred-validation-19-timing-followup-plan`) also lands
+before that rerun; because the boundary reruns its proofs, it does not need the
+bounded-resubmission rule of D51." The earlier options A-C and the
+`task_depends_on: ["arm-1-ar-11-cp-0-code-0"]` wait are withdrawn: with the
+boundary waiting on these children, that wait would be a cycle.
 
-- **A (recommended, D51 shape):** the boundary keeps running; both children
-  wait on it (`task_depends_on`) and take the slot before the reserved A2
-  consumers below. The ruling should state how the boundary treats a C1 or G8
-  failure only on these three signatures (for example D51's bounded
-  resubmission with names and lines recorded); its plan otherwise blocks on a
-  failed G4. Cost: none on the critical path, because every A2 unit already
-  waits on the boundary.
-- **B:** hand the boundary back until both children merge; its evidence then
-  includes the corrections. Cost: its in-progress G1-G7 work.
-- **C:** children run now with no wait. Cost: a merge during the boundary's run
-  moves its integration revision, which its plan answers by refreshing G1-G7.
+**Earliest legal slot.** Now: both children may start as soon as they are
+generated, in parallel with each other and with the D53 portability children.
+The slot precedes the A1 boundary rerun and, through it, every A2-A5 unit. No
+fixed or merged slot is crossed: the boundary's existing G1-G7 record at
+`92d39398e` is not reused (D53), and every A2-A5 coding unit is DRAFT_CODE.
 
-**Status: held for the ruling.** This plan is committed in its task worktree
-and the task is marked BLOCKED with a human action. The output JSON encodes
-option A (`task_depends_on: ["arm-1-ar-11-cp-0-code-0"]`); a B or C ruling drops
-that wait. The plan is submitted for review only after the ruling is recorded
-here.
-
-**Earliest legal slot under A.** After `arm-1-ar-11-cp-0-code-0` merges and
-before the first unstarted R2 consumers of A2. `arm-1-ar-11-cp-1-code-0`
-through `cp-3-code-3`, `cp-4-code-1`…`-5` and `-9` defer `make test` and run no
-agent/ops command, so they are not consumers and may run in parallel (RP7).
-`arm-1-ar-11-cp-4-code-0`, `-6` and `-7` run an undeferred, unfiltered race over
-`./internal/agent/` and `./internal/ops/` at index 1. No fixed or merged slot is
-crossed: all A2-A5 coding units are DRAFT_CODE.
-
-**Successor reservations (orchestrator, after the ruling).** Provider
+**Successor reservation.** One: provider
 `deferred-validation-19-timing-followup-plan`, transition `code-plan-to-coding`
-(per-subtask), outputs `[0, 1]`, reserved onto `arm-1-ar-11-cp-4-code-0`,
-`arm-1-ar-11-cp-4-code-6` and `arm-1-ar-11-cp-4-code-7`:
+(per-subtask), outputs `[0, 1]`, onto `arm-1-ar-11-cp-0-code-0`:
 
 ```json
 {"provider_task": "deferred-validation-19-timing-followup-plan", "transition": "code-plan-to-coding", "outputs": [0, 1]}
 ```
 
-Every later R1/R2 consumer descends from those three through recorded edges
-(RP7): `cp-4-code-8` and the A2 boundary `arm-1-ar-12-cp-0-code-0` list them;
-`arm-1-ar-13-cp-0-code-0` lists the A2 boundary; `arm-1-ar-14-cp-0-code-0`
-lists A3 units; `arm-1-ar-14-cp-0-code-4` (R1) descends through `code-3`…`code-1`
-to `code-0`. A dependency repair that removes such a path must re-check this
-section.
+The boundary's `waiting_on` already lists this task (`unsatisfied_pending`,
+"provider task is not MERGED"), and its blocked reason states that provider
+reservations hold A1 until every generated child merges (RP13). The
+orchestrator confirms that hold selects both outputs, and adds it if it does
+not.
+
+The earlier reservations onto `arm-1-ar-11-cp-4-code-0`, `-6` and `-7` are not
+needed: every A2 unit descends from the boundary through recorded edges (RP14:
+`cp-4-code-0/6/7` → `cp-3-code-0…3` → `cp-2-code-0` → `cp-1-code-0` →
+`arm-1-ar-11-cp-0-code-0`; the A2 boundary `arm-1-ar-12-cp-0-code-0` lists the
+A1 boundary directly). `arm-1-ar-13-cp-0-code-0`, `arm-1-ar-14-cp-0-code-0` and
+the R1 writer `arm-1-ar-14-cp-0-code-4` descend from A2 (RP7). A dependency
+repair that removes such a path must re-check this section.
 
 **Seam re-weigh.** Task 2 adds one test helper beside code-1's inline wrapper;
 A5 code-4 moves both with `await_verdict.go` under the white-box rule. Task 1
 changes one test function. Neither justifies an additive seam; the chain wins.
 
-**Cycle and unborn-child analysis.** This planning root has no `depends_on`.
-Under A the children wait only on `arm-1-ar-11-cp-0-code-0`, whose `depends_on`
-lists A0-A1 and `arm-1-ar-2` units, none a reserved successor or this provider
-(RP7), so no cycle exists. The children are unborn until the
-`code-plan-to-coding` transition; until they merge, the reserved successors
-hold. Unborn A9/C6 children that may later move the agent test descend from
-later area chains; their descent from the reserved A2 units is UNVERIFIED and is
-the residual: if one moves the test first, submit-time rebase routes the
-conflict to that coder, who keeps both subtests under the white-box rule.
+**D53 portability children.** They are unborn and land before the same rerun
+(D53). D53 scopes them to oracle scenario files (build constraints, generic
+portability fixes); both files here are white-box tests, not oracle files. Their
+plan is not yet written (RP13), so non-overlap is UNVERIFIED. If one edits
+either file, the shared-file rule applies to it as the later writer, and
+submit-time rebase routes any conflict to its coder.
+
+**Cycle and unborn-child analysis.** This planning root has no `depends_on`,
+and its children wait on nothing, so no cycle can form through them. The
+children are unborn until `code-plan-to-coding`; the boundary reservation holds
+until both merge. Unborn A9/C6 children that may later move the agent test
+descend from later area chains, and therefore from the A1 boundary.
 
 **Residual exposure (RP9).** One unfiltered `internal/ops` race at load 36
 failed on a test this session could not name. It may be one of Task 2's
 signatures or an uncovered one. Task 2's index 2 runs the same command, so an
 uncovered ops flake under load would refuse its admission. In that case the
 coder records the failing names and lines and stops for routing; that failure
-is not Task 2 scope, and retrying until green is not allowed.
+is not Task 2 scope, and retrying until green is not allowed. The boundary
+rerun's `make test` would surface the same residual.
 
-**Orchestrator order.** 1. Human ruling (A, B or C). 2. Resume this task: record
-the ruling in this section and in `task_depends_on`, then submit for review.
-3. After merge, recheck that the three reserved successors are unstarted; if one
-has started, stop for a ruling. 4. `reserve-provider` each. 5. Fire
-`code-plan-to-coding`.
+**Orchestrator order.** 1. Review and merge this plan. 2. Confirm the boundary
+hold selects outputs `[0, 1]` (add it with `reserve-provider` if absent).
+3. Fire `code-plan-to-coding`; both children are claimable at once. 4. After
+both merge (and the D53 corrections), rebase-unblock the boundary as D53
+states.
 
 ## Reality Probes
 
@@ -553,6 +566,9 @@ run, and deleted before any commit (`git status --short` empty after each).
 | RP9 | index 2 of both tasks, 15:05-15:21Z: `go test -race -count=1 -timeout 30m ./internal/ops/` then `./internal/agent/`; rerun of ops 15:24-15:28Z with full output kept | ops at load 36.3: `FAIL internal/ops 646.141s`; **failing test not attributed**: the probe kept only `tail -3`, so the names were lost (probe defect, not evidence either way). agent at load 27.5: `ok 304.570s`. ops rerun at load 9.6: `ok 256.369s`. See Residual exposure. |
 | RP10 | index 3: `go test -count=1 -run '^TestSleepUsageBudget$' -v ./internal/testguard/` | PASS 0.22 s; `maxSleepCallsInTests = 16` (`sleep_usage_test.go:20`) |
 | RP11 | index 0 and deferred targets: `make -n lint-nosync test-nosync test-e2e-nosync test-race-nosync` (the public targets add `ci-prepare` sync) | gofmt; `go vet ./...` for linux, windows, darwin; archguard; `go test ./...`; `go test -race -tags e2e -run '^(TestFullSprintSequence\|TestTerminalDependencyRecovery)$' ./internal/integration/ -count=1`; `go test -race -timeout 30m -p 2 ./...` |
+| RP12 | revision 2, 15:47-15:49Z at `068906c29`, load 1.2: overlay-only (`go test -overlay`, two new `zz_probe_dv19_test.go` files mapped from `/tmp`; worktree untouched, `git status --short` empty) `env -i HOME PATH TMPDIR=/tmp go test -race -count=1 -v -run '^TestProbe' ./internal/agent/ ./internal/ops/` | agent: 300 ms ctx + 350 ms late entry `hasWork=false err=context deadline exceeded called=false`; cancel-only + 350 ms `hasWork=false err=<nil> called=true waitDur=246ms`; `LoadDetectionContext` 24.8 ms. ops, 1 s watcher-setup wrapper: Terminal sleep-ordered `verdict="TIMEOUT" status="CODE_TO_REVIEW" safe=""` 10.05 s, ready-ordered `TERMINAL BLOCKED stop` 1.09 s; auto-reclaim sleep-ordered `errNil=true verdict="TIMEOUT" healthOK=false` 10.05 s, ready-ordered `degraded=true reason="claim_worktree_setup_failed"` 3.18 s. Confirms RP4/RP6 independently |
+| RP13 | 15:51-15:53Z: `omni-ee get` for this task, the A1 boundary, `…-code-0/1/2`, `arm-1-ar-10-cp-1-code-1`, A2-A5 boundaries, `arm-1-ar-13-cp-5-code-0`, `arm-1-ar-14-cp-0-code-4`, `d53-oracle-portability-plan`; `omni-ee get tasks --active --summary`; `git diff --stat 01cf6c30d 140b951f1` over the ten named source files; D53 entry (`decisions.md:899-927` at `6ef124d3e`) | D41 code-0/1/2 and `arm-1-ar-10-cp-1-code-1` MERGED; A1 boundary BLOCKED, `waiting_on.heads` = `d53-oracle-portability-plan` and this task (`provider task is not MERGED`); A2-A5 boundaries, `cp-5-code-0`, `code-4` DRAFT_CODE; started: `arm-1-ar-21-cp-0`, `d53-oracle-portability-plan` (both CODE_PLANNING) and this task; source diff empty; D53 plan worktree has no plan naming either file |
+| RP14 | `omni-ee get <id> --json` depends_on for `arm-1-ar-11-cp-4-code-0/6/7`, `cp-3-code-0…3`, `cp-2-code-0`, `cp-1-code-0`, `arm-1-ar-12-cp-0-code-0` | chain to `arm-1-ar-11-cp-0-code-0` as stated in Placement |
 
 **Budget basis (estimate from RP2, RP8 and the D41 plan's measured lint).**
 Task 1: index 1 ≈ 20 × 0.8 s (two subtests, the late one 0.4 s longer) + build
@@ -583,7 +599,7 @@ admission.
 | 13 | Must: production unchanged; defect evidence returned, not implemented | task DONE WHEN | RCA b. production assessment; scopes; Common Rules | Covered |
 | 14 | Must: no skip, known-red, budget-only widening, oracle edit, suppression | task SCOPE OUT; d41 | Common Rules; Traceability "Changed, not asserted" | Covered |
 | 15 | Must: no correction of code-2, no overlap with code-0 or code-1 scope | task DONE WHEN | Intent and Authority; Task 2 leaves code-1's test unchanged | Covered |
-| 16 | Must: writer/proof ownership and legal placement documented before emission | task DONE WHEN; a4-proof | Ownership table; Placement (held for ruling) | Covered |
+| 16 | Must: writer/proof ownership and legal placement documented before emission | task DONE WHEN; a4-proof | Ownership table; Placement (D53) | Covered |
 | 17 | Must: proof only in task worktrees under env -i | task SCOPE; goal-proof E4 | validation commands; Common Rules | Covered |
 | E2E | e2e test coverage for new behavior | Cross-cutting | N/A: test-only change with no behavior change; `make test-e2e` stays a deferred regression | N/A |
 | DOC | Documentation updates for changed behavior | Cross-cutting | N/A: no behavior change; this plan is the RCA record | N/A |

@@ -171,9 +171,6 @@
           ]
         ]
       }
-    ],
-    "task_depends_on": [
-      "arm-1-ar-11-cp-0-code-0"
     ]
   },
   {
@@ -348,9 +345,6 @@
           ]
         ]
       }
-    ],
-    "task_depends_on": [
-      "arm-1-ar-11-cp-0-code-0"
     ]
   }
 ]
