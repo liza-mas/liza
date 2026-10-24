@@ -4,7 +4,7 @@
     {
       "obligation_id": "D56-record",
       "file": "internal/testhelpers/oracle/cmd/regen/ledger_test.go",
-      "assertion": "TestLedgerRecordPaths accepts golden, driver, fixture and nested-package record paths and rejects an unknown golden kind, a golden directory, traversal, PROVENANCE, a path outside a package, a path outside internal/oracle, whitespace and a trailing slash, each naming line 2; TestPackageDir fixes package ownership for nested packages; TestRegenD56LaterPoints/each_point_is_regenerated_at_its_own_commit commits a driver-only C2 point carrying a driver-path record.",
+      "assertion": "TestLedgerRecordPaths accepts golden, driver, fixture and nested-package record paths and rejects an unknown golden kind, a golden directory, traversal, PROVENANCE, a path outside a package, a path outside internal/oracle, whitespace and a trailing slash, each naming line 2; TestPackageDir fixes package ownership for nested packages; TestRegenD56LaterPoints/each_point_is_regenerated_at_its_own_commit commits a driver-only C2 point carrying a driver-path record. TestRegenD56FiltersSelectDriverRecords: exact and recursive -pkg filters select driver records by their owning package, so a driver-only first C point is chained and an unchanged-driver record fails with record without change; recorded mutation (selected() splitting only at /testdata/golden/) turns the two exact-filter subtests red (the recursive ones pass either way).",
       "command_index": 0
     },
     {

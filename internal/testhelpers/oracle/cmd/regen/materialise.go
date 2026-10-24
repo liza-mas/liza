@@ -137,8 +137,8 @@ func (e *engine) values(ctx context.Context, source string, baseline bool, packa
 
 // Package patterns follow Go's path convention: ... matches any substring;
 // exact package paths do not select child packages.
-func selected(golden string, packages []string) bool {
-	dir, _, _ := strings.Cut(golden, "/testdata/golden/")
+func selected(name string, packages []string) bool {
+	dir := packageDir(name)
 	for _, pattern := range packages {
 		pattern = strings.TrimPrefix(pattern, "./")
 		suffix := ""

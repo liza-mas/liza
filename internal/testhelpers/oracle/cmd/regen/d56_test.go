@@ -334,3 +334,27 @@ func TestRegenD56PackageScope(t *testing.T) {
 		}
 	})
 }
+
+// Exact and recursive filters select a record by the package owning its path,
+// whether it names a golden, a driver or a fixture.
+func TestRegenD56FiltersSelectDriverRecords(t *testing.T) {
+	for _, pattern := range []string{demoPattern, demoPattern + "/..."} {
+		t.Run("driver-only first point "+pattern, func(t *testing.T) {
+			s, pre := newD56(t)
+			s.put(driverPath, "expects:old\n")
+			s.recordPath(driverPath, "C1")
+			c1 := s.commit("driver-only C1")
+			var rec recorder
+			s.run(rec.regen(true), 0, []string{"-pkg", pattern},
+				"ok "+sampleGolden+" chain pre "+pre+"\n", "ok "+demoDir+" package pre "+pre+" C1 "+c1+"\n")
+		})
+		t.Run("driver record without change "+pattern, func(t *testing.T) {
+			s, _ := newD56(t)
+			s.c1()
+			s.recordPath(driverPath, "C2")
+			s.commit("record for an unchanged driver")
+			var rec recorder
+			s.run(rec.regen(true), 1, []string{"-pkg", pattern}, "unexplained "+driverPath+": record without change")
+		})
+	}
+}
