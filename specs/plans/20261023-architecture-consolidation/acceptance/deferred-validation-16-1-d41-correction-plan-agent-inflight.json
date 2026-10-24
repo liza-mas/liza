@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AG-unadmitted",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback prompt start and stalled preparation subtests: failing submit errs, session live at submit return, hand-back >= 400ms, exit 0, BLOCKED with no longer observable and no claim_released (held marker)",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AG-publish",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks prompt start and stalled preparation subtests: not cancelled before submit or publication, receipt at review commit, submitted_for_review last, no claim_released/blocked, exit 1, session end within 1.5s of submit return, no markers left (held marker)",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AG-d41-retained",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestExecuteAgentProgressWatchdogStillBlocksDuringHandback and TestExecuteAgentBlocksSubmitStillRunningWhenGraceEnds keep every assertion; the watchdog test only passes the zero stall",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AG-package",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "whole internal/agent package passes under race",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AG-sleep",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "TestSleepUsageBudget passes at maxSleepCallsInTests 16: the stall helper waits on a timer channel, not time.Sleep",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AG-lint",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "make lint passes on the changed Go test file",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AG-preserve",
+      "approved_reference_id": "d41"
+    },
+    {
+      "obligation_id": "AG-red",
+      "approved_reference_id": "d41"
+    }
+  ]
+}
