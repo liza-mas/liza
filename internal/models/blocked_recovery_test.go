@@ -203,7 +203,7 @@ func TestBlockedRecoveryCapped_OperatorRelease(t *testing.T) {
 	capped := func() *State {
 		return chainState(recoveryTask("a", TaskStatusSuperseded, 0, true), recoveryTask("b", TaskStatusSuperseded, 2, true), recoveryTask("c", TaskStatusBlocked, 4, false))
 	}
-	at := func(minute int, event string) TaskHistoryEntry {
+	at := func(minute int, event TaskEventName) TaskHistoryEntry {
 		return TaskHistoryEntry{Time: recoveryEpoch.Add(time.Duration(minute) * time.Minute), Event: event}
 	}
 

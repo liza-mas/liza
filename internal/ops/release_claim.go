@@ -30,7 +30,7 @@ type claimRelease struct {
 	leaseFieldFn            func(*models.Task) *time.Time
 	activeStatus            models.TaskStatus
 	releasedStatus          models.TaskStatus
-	eventName               string
+	eventName               models.TaskEventName
 	clearFn                 func(*models.Task)
 	missingLeaseMsg         string
 	activeLeaseMsg          string
@@ -43,7 +43,7 @@ var reviewerRelease = claimRelease{
 	leaseFieldFn:    func(t *models.Task) *time.Time { return t.ReviewLeaseExpires },
 	activeStatus:    models.TaskStatusReviewing,
 	releasedStatus:  models.TaskStatusReadyForReview,
-	eventName:       "review_claim_released",
+	eventName:       models.TaskEventReviewClaimReleased,
 	clearFn:         func(t *models.Task) { t.ReviewingBy = nil; t.ReviewLeaseExpires = nil },
 	missingLeaseMsg: "review lease expires missing for task %s, use --force to clear",
 	activeLeaseMsg:  "review lease still valid until %s, use --force to clear",
@@ -55,7 +55,7 @@ var doerRelease = claimRelease{
 	leaseFieldFn:   func(t *models.Task) *time.Time { return t.LeaseExpires },
 	activeStatus:   models.TaskStatusImplementing,
 	releasedStatus: models.TaskStatusReady,
-	eventName:      "doer_claim_released",
+	eventName:      models.TaskEventDoerClaimReleased,
 	clearFn: func(t *models.Task) {
 		t.AssignedTo = nil
 		t.LeaseExpires = nil

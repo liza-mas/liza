@@ -823,7 +823,11 @@ func rcaGateEntry(gatedAt, firstRejectionAt time.Time) models.TaskHistoryEntry {
 	}
 }
 
-func rcaRecordedEntry(at, gatedAt time.Time, causes ...string) models.TaskHistoryEntry {
+func rcaRecordedEntry(at, gatedAt time.Time, causes ...models.RejectionCause) models.TaskHistoryEntry {
+	stored := make([]string, len(causes))
+	for i, cause := range causes {
+		stored[i] = string(cause)
+	}
 	return models.TaskHistoryEntry{
 		Time:  at,
 		Event: models.TaskEventRejectionRCARecorded,
@@ -832,21 +836,21 @@ func rcaRecordedEntry(at, gatedAt time.Time, causes ...string) models.TaskHistor
 			"threshold":          4,
 			"rejection_count":    4,
 			"gated_at":           gatedAt.Format(time.RFC3339),
-			"causes":             causes,
+			"causes":             stored,
 			"contribution_count": len(causes),
 			"recorded_by":        "orchestrator-1",
 		},
 	}
 }
 
-func rcaResumedEntry(at, gatedAt time.Time, recoveryPath string) models.TaskHistoryEntry {
+func rcaResumedEntry(at, gatedAt time.Time, recoveryPath models.RecoveryPath) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{
 		Time:  at,
 		Event: models.TaskEventRejectionRCAResumed,
 		Extra: map[string]any{
 			"fingerprint":       "fp",
-			"recovery_path":     recoveryPath,
-			"restore_mode":      models.RejectionRCARestoreMode(recoveryPath),
+			"recovery_path":     string(recoveryPath),
+			"restore_mode":      string(models.RejectionRCARestoreMode(recoveryPath)),
 			"actor":             "orchestrator-1",
 			"lifecycle_version": 3,
 			"decided_at":        at.Format(time.RFC3339),
@@ -951,18 +955,18 @@ func TestAnalyzeRejectionRCATelemetry(t *testing.T) {
 		GateCycles:     6,
 		CurrentlyGated: 3,
 		Causes: map[string]int{
-			models.RejectionCauseProductDefect:     2,
-			models.RejectionCauseCapabilityFailure: 2,
-			models.RejectionCauseLifecycleRetry:    1,
-			models.RejectionCauseUnknown:           2,
+			string(models.RejectionCauseProductDefect):     2,
+			string(models.RejectionCauseCapabilityFailure): 2,
+			string(models.RejectionCauseLifecycleRetry):    1,
+			string(models.RejectionCauseUnknown):           2,
 		},
 		UnrecognizedCauses:  1,
 		MedianSecondsToGate: int64((75 * time.Minute).Seconds()),
 		MaxSecondsToGate:    int64((180 * time.Minute).Seconds()),
 		RecoveryPaths: map[string]int{
-			models.RecoveryLifecycleRepair:          1,
-			models.RecoveryCapabilityReroute:        1,
-			models.RecoveryImplementationCorrection: 1,
+			string(models.RecoveryLifecycleRepair):          1,
+			string(models.RecoveryCapabilityReroute):        1,
+			string(models.RecoveryImplementationCorrection): 1,
 		},
 		ResumedThenTerminal: 1,
 		ResumedThenRegated:  1,

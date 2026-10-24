@@ -57,7 +57,7 @@ func TestValidateAnomalyReviewerClaimCircuitOpen(t *testing.T) {
 			if err == nil {
 				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
-			if !strings.Contains(err.Error(), models.AnomalyTypeReviewerClaimCircuitOpen) {
+			if !strings.Contains(err.Error(), string(models.AnomalyTypeReviewerClaimCircuitOpen)) {
 				t.Errorf("error = %q, want it to name the anomaly type", err)
 			}
 			if !strings.Contains(err.Error(), field) {
@@ -117,7 +117,7 @@ func TestValidateAnomalyObligationContentDrifted(t *testing.T) {
 			if err == nil {
 				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
-			if !strings.Contains(err.Error(), models.AnomalyTypeObligationContentDrifted) {
+			if !strings.Contains(err.Error(), string(models.AnomalyTypeObligationContentDrifted)) {
 				t.Errorf("error = %q, want it to name the anomaly type", err)
 			}
 			if !strings.Contains(err.Error(), field) {
@@ -188,7 +188,7 @@ func TestValidateAnomalyPendingMergeStalled(t *testing.T) {
 			if err == nil {
 				t.Fatalf("anomaliesErr() = nil, want rejection for missing %q", field)
 			}
-			if !strings.Contains(err.Error(), models.AnomalyTypePendingMergeStalled) || !strings.Contains(err.Error(), field) {
+			if !strings.Contains(err.Error(), string(models.AnomalyTypePendingMergeStalled)) || !strings.Contains(err.Error(), field) {
 				t.Errorf("error = %q, want it to name the anomaly type and the missing detail %q", err, field)
 			}
 		})

@@ -91,7 +91,7 @@ func DeferProviderDependency(projectRoot, taskID, providerTask, transition, reas
 		note := fmt.Sprintf("provider wait on %s %s outputs %v deferred to the outputs generated at %s", providerTask, transition, dep.Outputs, atTransition)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  string(models.TaskEventDependencyDeferred),
+			Event:  models.TaskEventDependencyDeferred,
 			Reason: &reason,
 			Note:   &note,
 			Extra: map[string]any{

@@ -833,7 +833,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 }
 
 func TestDiscoverySeverity(t *testing.T) {
-	validSeverities := []string{"critical", "high", "medium", "low"}
+	validSeverities := []DiscoverySeverity{"critical", "high", "medium", "low"}
 	for _, sev := range validSeverities {
 		d := Discovery{Severity: sev}
 		if !d.IsValidSeverity() {
@@ -848,7 +848,7 @@ func TestDiscoverySeverity(t *testing.T) {
 }
 
 func TestDiscoveryUrgency(t *testing.T) {
-	validUrgencies := []string{"immediate", "deferred"}
+	validUrgencies := []DiscoveryUrgency{"immediate", "deferred"}
 	for _, urg := range validUrgencies {
 		d := Discovery{Urgency: urg}
 		if !d.IsValidUrgency() {
@@ -863,7 +863,7 @@ func TestDiscoveryUrgency(t *testing.T) {
 }
 
 func TestAnomalyTypes(t *testing.T) {
-	validTypes := []string{
+	validTypes := []AnomalyType{
 		"retry_loop",
 		"trade_off",
 		"spec_ambiguity",

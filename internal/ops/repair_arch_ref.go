@@ -102,7 +102,7 @@ func RepairArchRef(projectRoot, taskID, archRef, reason string) (*RepairArchRefR
 		note := fmt.Sprintf("arch_ref set to %s (validated at %s %s)", archRef, branch, shortSHA(integration))
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  string(models.TaskEventArchRefRepaired),
+			Event:  models.TaskEventArchRefRepaired,
 			Reason: &reason,
 			Note:   &note,
 			Extra: map[string]any{

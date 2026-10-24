@@ -172,7 +172,7 @@ func InitProject(projectRoot string, params InitProjectParams) error {
 			AlignmentHistory: []models.AlignmentHistory{
 				{
 					Timestamp: timestamp,
-					Event:     models.TaskEventInitialization,
+					Event:     string(models.TaskEventInitialization),
 					Summary:   "Initial goal. No tasks defined yet.",
 				},
 			},

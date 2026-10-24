@@ -55,21 +55,27 @@ type OutputEntry struct {
 	InheritInputs *InheritInputs `yaml:"inherit_inputs,omitempty" json:"inherit_inputs,omitempty"`
 }
 
+// InheritMode selects how a generated child inherits upstream phase outputs.
+// Authoring validation (ValidateInheritInputs) refuses any value outside the
+// set; a defined string type still holds one, so unknown input loads and is
+// refused there.
+type InheritMode string
+
 // Inherit-input modes. Omitting inherit_inputs entirely is equivalent to
 // InheritModeAll and remains the default.
 const (
 	// InheritModeAll waits for every child of every upstream dependency —
 	// the phase-gate barrier described by ADR-0048.
-	InheritModeAll = "all"
+	InheritModeAll InheritMode = "all"
 	// InheritModeSelected waits only for the upstream outputs named in
 	// Selections.
-	InheritModeSelected = "selected"
+	InheritModeSelected InheritMode = "selected"
 	// InheritModeNone waits for no upstream phase output at all: the child's
 	// cross-phase ordering is fully expressed by its sibling and
 	// task_depends_on edges. It is the explicit spelling of "external
 	// prerequisites: none added", which mode "selected" cannot express because
 	// it requires at least one selection.
-	InheritModeNone = "none"
+	InheritModeNone InheritMode = "none"
 )
 
 // InheritInputs expresses a planner's dependency intent for one generated
@@ -81,7 +87,7 @@ const (
 // dependency set. Dropping a prerequisite silently is the failure this
 // distinction exists to prevent.
 type InheritInputs struct {
-	Mode       string           `yaml:"mode" json:"mode"`
+	Mode       InheritMode      `yaml:"mode" json:"mode"`
 	Selections []InputSelection `yaml:"selections,omitempty" json:"selections,omitempty"`
 }
 

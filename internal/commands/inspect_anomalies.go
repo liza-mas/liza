@@ -61,7 +61,7 @@ func buildAnomalyInfo(anomaly models.Anomaly) anomalyInfo {
 		Timestamp: anomaly.Timestamp,
 		Task:      anomaly.Task,
 		Reporter:  anomaly.Reporter,
-		Type:      anomaly.Type,
+		Type:      string(anomaly.Type),
 		Details:   anomaly.Details,
 	}
 
@@ -78,7 +78,7 @@ func filterAnomalies(anomalies []models.Anomaly, opts inspectAnomaliesOptions) [
 
 	for _, anomaly := range anomalies {
 		// Apply type filter
-		if opts.TypeFilter != "" && anomaly.Type != opts.TypeFilter {
+		if opts.TypeFilter != "" && string(anomaly.Type) != opts.TypeFilter {
 			continue
 		}
 

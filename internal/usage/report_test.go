@@ -19,7 +19,7 @@ func rpTask(id string, entries ...models.TaskHistoryEntry) models.Task {
 	return models.Task{ID: id, Lifecycle: &models.TaskLifecycle{Revision: 7}, History: entries}
 }
 
-func rpEv(hours int, event string) models.TaskHistoryEntry {
+func rpEv(hours int, event models.TaskEventName) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{Time: rpAt(hours), Event: event}
 }
 

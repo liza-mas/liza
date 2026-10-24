@@ -209,7 +209,7 @@ func usageE2ETask(id string, status models.TaskStatus, created time.Time, histor
 	return task
 }
 
-func usageE2EEvent(at time.Time, event string) models.TaskHistoryEntry {
+func usageE2EEvent(at time.Time, event models.TaskEventName) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{Time: at, Event: event}
 }
 

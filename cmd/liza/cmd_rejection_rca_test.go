@@ -45,8 +45,8 @@ func setupRejectionRCACLI(t *testing.T) (string, string, map[string][]string) {
 			"schema_version": models.RejectionRCASchemaVersion,
 			"summary":        "One product defect and one lifecycle retry.",
 			"contributions": []any{
-				map[string]any{"rejection_index": 1, "categories": []string{models.RejectionCauseProductDefect}, "evidence": []string{"verdict 1: missing check"}},
-				map[string]any{"rejection_index": 2, "categories": []string{models.RejectionCauseLifecycleRetry}, "evidence": []string{"STALE_CALLER after reclaim"}},
+				map[string]any{"rejection_index": 1, "categories": []string{string(models.RejectionCauseProductDefect)}, "evidence": []string{"verdict 1: missing check"}},
+				map[string]any{"rejection_index": 2, "categories": []string{string(models.RejectionCauseLifecycleRetry)}, "evidence": []string{"STALE_CALLER after reclaim"}},
 			},
 		})},
 		"resume-rejection-rca": {"--disposition-file", writeRejectionRCAFile(t, "disposition.json", map[string]any{

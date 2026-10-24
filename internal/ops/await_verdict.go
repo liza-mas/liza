@@ -617,7 +617,7 @@ type submittedReview struct {
 }
 
 type recoveredVerdict struct {
-	event    string
+	event    models.TaskEventName
 	reason   string
 	reviewer string
 	commit   string
@@ -736,7 +736,7 @@ func recoveredVerdictAfterReclaimFailure(bb *db.Blackboard, taskID, agentID stri
 	return recoveredVerdictFromHistory(currentTask, agentID)
 }
 
-func safeActionForRecoveredVerdict(task *models.Task, agentID, verdictEvent string) string {
+func safeActionForRecoveredVerdict(task *models.Task, agentID string, verdictEvent models.TaskEventName) string {
 	if verdictEvent == models.TaskEventApproved {
 		return SafeActionStop
 	}

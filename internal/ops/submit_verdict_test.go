@@ -3060,7 +3060,7 @@ func TestSubmitVerdictValidPayloadUnchanged(t *testing.T) {
 		verdict    string
 		reason     string
 		wantStatus models.TaskStatus
-		wantEvent  string
+		wantEvent  models.TaskEventName
 	}{
 		{
 			name: "approved", verdict: "APPROVED",
@@ -3409,7 +3409,7 @@ func resumedRejectionRCACycle(gatedAt time.Time) func(*models.State, *models.Tas
 	return func(state *models.State, task *models.Task) {
 		actor := "orchestrator-1"
 		request := models.RejectionRCARequest{SchemaVersion: models.RejectionRCASchemaVersion, Summary: "first cycle",
-			Contributions: []models.RejectionRCAContribution{{RejectionIndex: 1, Categories: []string{models.RejectionCauseProductDefect}}}}
+			Contributions: []models.RejectionRCAContribution{{RejectionIndex: 1, Categories: []models.RejectionCause{models.RejectionCauseProductDefect}}}}
 		recordedAt := gatedAt.Add(time.Minute)
 		decidedAt := gatedAt.Add(2 * time.Minute)
 		task.RejectionRCA = &models.RejectionRCARecord{
@@ -3483,7 +3483,7 @@ func TestSubmitVerdictGateReFire(t *testing.T) {
 	if recorded := historyEntries(task, models.TaskEventRejectionRCARecorded); len(recorded) != 1 || fmt.Sprint(recorded[0].Extra["fingerprint"]) != firstCycle.Fingerprint {
 		t.Fatalf("rejection_rca_recorded entries = %+v, want the first cycle's", recorded)
 	}
-	if resumed := historyEntries(task, models.TaskEventRejectionRCAResumed); len(resumed) != 1 || fmt.Sprint(resumed[0].Extra["recovery_path"]) != models.RecoveryImplementationCorrection {
+	if resumed := historyEntries(task, models.TaskEventRejectionRCAResumed); len(resumed) != 1 || fmt.Sprint(resumed[0].Extra["recovery_path"]) != string(models.RecoveryImplementationCorrection) {
 		t.Fatalf("rejection_rca_resumed entries = %+v, want the first cycle's", resumed)
 	}
 	if len(historyEntries(task, models.TaskEventRejected)) != 8 {

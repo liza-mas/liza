@@ -241,7 +241,7 @@ func planningRejectionHistory(history []models.TaskHistoryEntry) (int, time.Time
 }
 
 func checkRetryCluster(anomalies []models.Anomaly) PatternResult {
-	retryLoops := filterByType(anomalies, "retry_loop")
+	retryLoops := filterByType(anomalies, models.AnomalyTypeRetryLoop)
 	if len(retryLoops) < 3 {
 		return PatternResult{Triggered: false}
 	}
@@ -264,7 +264,7 @@ func checkRetryCluster(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
-	tradeOffs := filterByType(anomalies, "trade_off")
+	tradeOffs := filterByType(anomalies, models.AnomalyTypeTradeOff)
 
 	debtCount := 0
 	for _, a := range tradeOffs {
@@ -286,7 +286,7 @@ func checkDebtAccumulation(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, "assumption_violated", "assumption", 2, PatternResult{
+	return checkGroupedThreshold(anomalies, models.AnomalyTypeAssumptionViolated, "assumption", 2, PatternResult{
 		Pattern:  "assumption_cascade",
 		Severity: "SPEC_FLAW",
 		Evidence: "Same assumption violated across multiple tasks",
@@ -294,7 +294,7 @@ func checkAssumptionCascade(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkSpecGapCluster(anomalies []models.Anomaly) PatternResult {
-	return checkGroupedThreshold(anomalies, "spec_ambiguity", "spec_ref", 2, PatternResult{
+	return checkGroupedThreshold(anomalies, models.AnomalyTypeSpecAmbiguity, "spec_ref", 2, PatternResult{
 		Pattern:  "spec_gap_cluster",
 		Severity: "SPEC_FLAW",
 		Evidence: "Multiple tasks hitting same spec ambiguity",
@@ -304,7 +304,7 @@ func checkSpecGapCluster(anomalies []models.Anomaly) PatternResult {
 func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 	var workarounds []models.Anomaly
 	for _, a := range anomalies {
-		if a.Type == "workaround" || a.Type == "trade_off" {
+		if a.Type == models.AnomalyTypeWorkaround || a.Type == models.AnomalyTypeTradeOff {
 			workarounds = append(workarounds, a)
 		}
 	}
@@ -343,7 +343,7 @@ func checkWorkaroundPattern(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
-	externals := filterByType(anomalies, "external_blocker")
+	externals := filterByType(anomalies, models.AnomalyTypeExternalBlocker)
 	groups := groupByField(externals, "blocker_service")
 	for service, group := range groups {
 		if len(group) >= 2 {
@@ -359,7 +359,7 @@ func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkProviderAuditDegradation(anomalies []models.Anomaly) PatternResult {
-	auditDegraded := filterByType(anomalies, "provider_audit_degraded")
+	auditDegraded := filterByType(anomalies, models.AnomalyTypeProviderAuditDegraded)
 	groups := groupByField(auditDegraded, "provider")
 	for provider, group := range groups {
 		agentCount, qualifies := providerAuditThreshold(group)
@@ -378,7 +378,7 @@ func checkProviderAuditDegradation(anomalies []models.Anomaly) PatternResult {
 }
 
 func checkProviderAuditEvidence(state *models.State, watermark time.Time, hasWatermark bool) (PatternResult, []models.Anomaly) {
-	groups := groupByField(filterByType(state.Anomalies, "provider_audit_degraded"), "provider")
+	groups := groupByField(filterByType(state.Anomalies, models.AnomalyTypeProviderAuditDegraded), "provider")
 	var selected PatternResult
 	var selectedEvidence []models.Anomaly
 	selectedProvider := ""
@@ -491,7 +491,7 @@ func providerAuditThreshold(group []models.Anomaly) (int, bool) {
 // checkGroupedThreshold detects patterns where anomalies of a given type share a field value
 // at or above a threshold count. The result template is returned with Triggered set to true
 // when the threshold is met.
-func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType, field string, threshold int, result PatternResult) PatternResult {
+func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType models.AnomalyType, field string, threshold int, result PatternResult) PatternResult {
 	filtered := filterByType(anomalies, anomalyType)
 	groups := groupByField(filtered, field)
 	for _, group := range groups {
@@ -503,7 +503,7 @@ func checkGroupedThreshold(anomalies []models.Anomaly, anomalyType, field string
 	return PatternResult{Triggered: false}
 }
 
-func filterByType(anomalies []models.Anomaly, anomalyType string) []models.Anomaly {
+func filterByType(anomalies []models.Anomaly, anomalyType models.AnomalyType) []models.Anomaly {
 	var result []models.Anomaly
 	for _, a := range anomalies {
 		if a.Type == anomalyType {

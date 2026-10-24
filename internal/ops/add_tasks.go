@@ -342,7 +342,7 @@ func insertTaskInState(state *models.State, projectRoot string, task models.Task
 	// size-limited alignment summary.
 	alignmentEntry := models.AlignmentHistory{
 		Timestamp: task.Created,
-		Event:     models.TaskEventPlanning,
+		Event:     string(models.TaskEventPlanning),
 		Summary:   fmt.Sprintf("Added task %s", task.ID),
 	}
 	state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, alignmentEntry)

@@ -168,8 +168,8 @@ func resumeRejectionRCA(projectRoot, taskID string, payload any, agentID string,
 			Agent: &actor,
 			Extra: map[string]any{
 				"fingerprint":       record.Fingerprint,
-				"recovery_path":     request.RecoveryPath,
-				"restore_mode":      restoreMode,
+				"recovery_path":     string(request.RecoveryPath),
+				"restore_mode":      string(restoreMode),
 				"actor":             actor,
 				"lifecycle_version": lifecycleVersion,
 				"decided_at":        now.Format(time.RFC3339),
@@ -334,12 +334,19 @@ func highestRejectionIndex(contributions []models.RejectionRCAContribution) int 
 // rejectionRCACauses is the sorted distinct union of every contribution's
 // categories, unrecognized values included verbatim.
 func rejectionRCACauses(contributions []models.RejectionRCAContribution) []string {
-	var causes []string
+	var causes []models.RejectionCause
 	for _, contribution := range contributions {
 		causes = append(causes, contribution.Categories...)
 	}
 	slices.Sort(causes)
-	return slices.Compact(causes)
+	causes = slices.Compact(causes)
+	// History Extra is read back through string assertions, so the causes
+	// are stored as plain strings.
+	var stored []string
+	for _, cause := range causes {
+		stored = append(stored, string(cause))
+	}
+	return stored
 }
 
 func cloneRejectionRCARecord(record *models.RejectionRCARecord) *models.RejectionRCARecord {

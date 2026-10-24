@@ -438,7 +438,7 @@ func TestAddTask_LongDescription(t *testing.T) {
 				t.Fatal("task description was lost or altered")
 			}
 			entry := updated.Goal.AlignmentHistory[len(initial.Goal.AlignmentHistory)]
-			if entry.Event != models.TaskEventPlanning || entry.Summary != "Added task task-1" {
+			if entry.Event != string(models.TaskEventPlanning) || entry.Summary != "Added task task-1" {
 				t.Fatalf("alignment entry = %+v, want planning event identifying task-1", entry)
 			}
 			if err := statehygiene.ValidateState(updated); err != nil {

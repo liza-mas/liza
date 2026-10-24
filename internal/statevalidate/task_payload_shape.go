@@ -50,7 +50,7 @@ func ValidateRejectionRCADispositionRequest(request models.RejectionRCADispositi
 	diagnostics := validateRejectionRCASchemaVersion(request.SchemaVersion)
 
 	switch {
-	case strings.TrimSpace(request.RecoveryPath) == "":
+	case strings.TrimSpace(string(request.RecoveryPath)) == "":
 		diagnostics = append(diagnostics, payloadDiagnostic("/recovery_path",
 			"a non-empty value is required", models.FieldValueClassMissing))
 	case !models.IsRecoveryPath(request.RecoveryPath):
@@ -145,7 +145,7 @@ func validateRejectionIndex(prefix string, index int, seen map[int]bool) []model
 // validateBoundedPayloadList enforces the cardinality of a string list and the
 // bounds of each entry, reporting the cardinality defect alone when it applies
 // so one malformed list yields one diagnostic.
-func validateBoundedPayloadList(field string, values []string, maxEntries, maxBytes int, required bool) []models.FieldDiagnostic {
+func validateBoundedPayloadList[T ~string](field string, values []T, maxEntries, maxBytes int, required bool) []models.FieldDiagnostic {
 	switch {
 	case required && len(values) == 0:
 		return []models.FieldDiagnostic{payloadDiagnostic(field,
@@ -157,7 +157,7 @@ func validateBoundedPayloadList(field string, values []string, maxEntries, maxBy
 	var diagnostics []models.FieldDiagnostic
 	for i, value := range values {
 		diagnostics = append(diagnostics, validateBoundedPayloadText(
-			fmt.Sprintf("%s/%d", field, i), value, maxBytes, true)...)
+			fmt.Sprintf("%s/%d", field, i), string(value), maxBytes, true)...)
 	}
 	return diagnostics
 }

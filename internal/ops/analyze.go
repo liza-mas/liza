@@ -195,9 +195,9 @@ func deriveRejectionRCATelemetry(tasks []models.Task) *RejectionRCATelemetry {
 		}
 		for _, causes := range cycleCauses {
 			for _, cause := range causes {
-				if !models.IsKnownRejectionCause(cause) {
+				if !models.IsKnownRejectionCause(models.RejectionCause(cause)) {
 					telemetry.UnrecognizedCauses++
-					cause = models.RejectionCauseUnknown
+					cause = string(models.RejectionCauseUnknown)
 				}
 				telemetry.Causes = countInto(telemetry.Causes, cause)
 			}

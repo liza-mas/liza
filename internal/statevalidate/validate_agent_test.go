@@ -446,7 +446,7 @@ func TestValidateAgentInvariants_WaitingDoerVerdictHandoffGrace(t *testing.T) {
 	resolver := loadTestResolver(t)
 	now := time.Now().UTC()
 
-	waitingDoerAfterVerdict := func(status models.TaskStatus, event string, verdictAt time.Time) *models.State {
+	waitingDoerAfterVerdict := func(status models.TaskStatus, event models.TaskEventName, verdictAt time.Time) *models.State {
 		state, doerID := activeDoerOwnershipState(now)
 		state.Tasks[0].Status = status
 		state.Tasks[0].History = append(state.Tasks[0].History, models.TaskHistoryEntry{

@@ -305,7 +305,7 @@ func anomaliesSection(anomalies []models.Anomaly) string {
 
 	anomaliesByType := make(map[string]int)
 	for _, anomaly := range anomalies {
-		anomaliesByType[anomaly.Type]++
+		anomaliesByType[string(anomaly.Type)]++
 	}
 
 	s += "| Type | Count |\n"

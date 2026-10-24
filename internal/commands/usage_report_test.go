@@ -19,7 +19,7 @@ var urT0 = time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 
 func urAt(hours int) time.Time { return urT0.Add(time.Duration(hours) * time.Hour) }
 
-func urEv(hours int, event string) models.TaskHistoryEntry {
+func urEv(hours int, event models.TaskEventName) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{Time: urAt(hours), Event: event}
 }
 

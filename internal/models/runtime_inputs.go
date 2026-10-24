@@ -37,7 +37,7 @@ const (
 // writes when a declared runtime input has no usable instance. It is a
 // provisioning request, not an agent failure pattern: the circuit breaker does
 // not count it.
-const AnomalyTypeRuntimeInputUnavailable = "runtime_input_unavailable"
+const AnomalyTypeRuntimeInputUnavailable AnomalyType = "runtime_input_unavailable"
 
 // RuntimeInput declares one live-validation input a task's canonical commands
 // read (ADR-0169). Env holds variable names only; values come from an

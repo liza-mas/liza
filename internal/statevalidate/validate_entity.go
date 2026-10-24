@@ -12,7 +12,7 @@ import (
 // by the scheduler.
 func validateDiscovered(v *violations, state *models.State) {
 	for i, disc := range state.Discovered {
-		if disc.Urgency != "" && disc.Urgency != "deferred" && disc.Urgency != "immediate" {
+		if disc.Urgency != "" && disc.Urgency != models.DiscoveryUrgencyDeferred && disc.Urgency != models.DiscoveryUrgencyImmediate {
 			v.add(fmt.Errorf("discovered item %d has invalid urgency '%s' (must be 'deferred' or 'immediate')", i, disc.Urgency))
 		}
 	}

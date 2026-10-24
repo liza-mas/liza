@@ -14,17 +14,21 @@ import (
 // request payloads and of the stored record.
 const RejectionRCASchemaVersion = 1
 
-// Rejection cause vocabulary. Unrecognized values are stored verbatim and
-// reported under "unknown" by telemetry; they are never silently dropped.
+// RejectionCause classifies why a rejection happened. The set is open on read:
+// unrecognized values are stored verbatim and reported under "unknown" by
+// telemetry; they are never silently dropped.
+type RejectionCause string
+
+// Rejection cause vocabulary.
 const (
-	RejectionCauseProductDefect     = "product_defect"
-	RejectionCauseCapabilityFailure = "capability_failure"
-	RejectionCauseLifecycleRetry    = "lifecycle_retry"
-	RejectionCauseUnknown           = "unknown"
+	RejectionCauseProductDefect     RejectionCause = "product_defect"
+	RejectionCauseCapabilityFailure RejectionCause = "capability_failure"
+	RejectionCauseLifecycleRetry    RejectionCause = "lifecycle_retry"
+	RejectionCauseUnknown           RejectionCause = "unknown"
 )
 
 // IsKnownRejectionCause reports whether a cause is one this vocabulary names.
-func IsKnownRejectionCause(cause string) bool {
+func IsKnownRejectionCause(cause RejectionCause) bool {
 	switch cause {
 	case RejectionCauseProductDefect, RejectionCauseCapabilityFailure,
 		RejectionCauseLifecycleRetry, RejectionCauseUnknown:
@@ -33,28 +37,36 @@ func IsKnownRejectionCause(cause string) bool {
 	return false
 }
 
-// Recovery vocabulary. Unlike causes this is a closed enum: an unrecognized
-// path cannot be mapped to a restore form and is invalid input.
+// RecoveryPath names how a gated task is recovered. Unlike causes this is a
+// closed enum: an unrecognized path cannot be mapped to a restore form and is
+// invalid input.
+type RecoveryPath string
+
+// Recovery vocabulary.
 const (
-	RecoveryImplementationCorrection = "implementation_correction"
-	RecoveryCapabilityReroute        = "capability_reroute"
-	RecoveryLifecycleRepair          = "lifecycle_repair"
-	RecoveryRescope                  = "rescope"
-	RecoveryHumanOverride            = "human_override"
+	RecoveryImplementationCorrection RecoveryPath = "implementation_correction"
+	RecoveryCapabilityReroute        RecoveryPath = "capability_reroute"
+	RecoveryLifecycleRepair          RecoveryPath = "lifecycle_repair"
+	RecoveryRescope                  RecoveryPath = "rescope"
+	RecoveryHumanOverride            RecoveryPath = "human_override"
 )
+
+// RestoreMode is the restore form a recorded disposition authorizes for
+// unblock-task.
+type RestoreMode string
 
 // Restore modes a recorded disposition authorizes for unblock-task.
 const (
-	RestoreModeAssign    = "assign"
-	RestoreModeClaimable = "claimable"
-	RestoreModeNone      = "none"
+	RestoreModeAssign    RestoreMode = "assign"
+	RestoreModeClaimable RestoreMode = "claimable"
+	RestoreModeNone      RestoreMode = "none"
 )
 
 // restoreModeByRecoveryPath backs both IsRecoveryPath and
 // RejectionRCARestoreMode so the closed enum and the restore mapping cannot
 // drift apart. "assign" is the non-incrementing restore, which is how
 // capability and lifecycle causes avoid consuming a product iteration.
-var restoreModeByRecoveryPath = map[string]string{
+var restoreModeByRecoveryPath = map[RecoveryPath]RestoreMode{
 	RecoveryCapabilityReroute:        RestoreModeAssign,
 	RecoveryLifecycleRepair:          RestoreModeAssign,
 	RecoveryImplementationCorrection: RestoreModeClaimable,
@@ -63,14 +75,14 @@ var restoreModeByRecoveryPath = map[string]string{
 }
 
 // IsRecoveryPath reports whether a recovery path is one this vocabulary names.
-func IsRecoveryPath(path string) bool {
+func IsRecoveryPath(path RecoveryPath) bool {
 	_, ok := restoreModeByRecoveryPath[path]
 	return ok
 }
 
 // RejectionRCARestoreMode returns the restore form a recovery path authorizes,
 // or an empty mode for an unknown path.
-func RejectionRCARestoreMode(path string) string {
+func RejectionRCARestoreMode(path RecoveryPath) RestoreMode {
 	return restoreModeByRecoveryPath[path]
 }
 
@@ -83,9 +95,9 @@ const BlockedReasonRejectionRCARequired = "rejection_rca_required"
 // to the causes it exhibited. Categories is a set: gh-161 classifies a
 // contribution as one or more causes, so mixed cases need no other encoding.
 type RejectionRCAContribution struct {
-	RejectionIndex int      `yaml:"rejection_index" json:"rejection_index"`
-	Categories     []string `yaml:"categories" json:"categories"`
-	Evidence       []string `yaml:"evidence,omitempty" json:"evidence,omitempty"`
+	RejectionIndex int              `yaml:"rejection_index" json:"rejection_index"`
+	Categories     []RejectionCause `yaml:"categories" json:"categories"`
+	Evidence       []string         `yaml:"evidence,omitempty" json:"evidence,omitempty"`
 }
 
 // RejectionRCARequest is the complete set of fields a caller of
@@ -100,22 +112,22 @@ type RejectionRCARequest struct {
 // RejectionRCADispositionRequest is the complete set of fields a caller of
 // resume-rejection-rca may send.
 type RejectionRCADispositionRequest struct {
-	SchemaVersion int    `yaml:"schema_version" json:"schema_version"`
-	RecoveryPath  string `yaml:"recovery_path" json:"recovery_path"`
-	Rationale     string `yaml:"rationale,omitempty" json:"rationale,omitempty"`
+	SchemaVersion int          `yaml:"schema_version" json:"schema_version"`
+	RecoveryPath  RecoveryPath `yaml:"recovery_path" json:"recovery_path"`
+	Rationale     string       `yaml:"rationale,omitempty" json:"rationale,omitempty"`
 }
 
 // RejectionRCADisposition records the authorized decision that closed a gate.
 // Only RecoveryPath and Rationale come from the caller; the rest is derived
 // from the invocation and the transaction clock.
 type RejectionRCADisposition struct {
-	RecoveryPath     string    `yaml:"recovery_path" json:"recovery_path"`
-	RestoreMode      string    `yaml:"restore_mode" json:"restore_mode"`
-	Actor            string    `yaml:"actor" json:"actor"`
-	LifecycleVersion uint64    `yaml:"lifecycle_version,omitempty" json:"lifecycle_version,omitempty"`
-	DecidedAt        time.Time `yaml:"decided_at" json:"decided_at"`
-	Rationale        string    `yaml:"rationale,omitempty" json:"rationale,omitempty"`
-	IterationExempt  bool      `yaml:"iteration_exempt,omitempty" json:"iteration_exempt,omitempty"`
+	RecoveryPath     RecoveryPath `yaml:"recovery_path" json:"recovery_path"`
+	RestoreMode      RestoreMode  `yaml:"restore_mode" json:"restore_mode"`
+	Actor            string       `yaml:"actor" json:"actor"`
+	LifecycleVersion uint64       `yaml:"lifecycle_version,omitempty" json:"lifecycle_version,omitempty"`
+	DecidedAt        time.Time    `yaml:"decided_at" json:"decided_at"`
+	Rationale        string       `yaml:"rationale,omitempty" json:"rationale,omitempty"`
+	IterationExempt  bool         `yaml:"iteration_exempt,omitempty" json:"iteration_exempt,omitempty"`
 }
 
 // RejectionRCARecord is the durable classified root-cause analysis of one
@@ -195,11 +207,11 @@ func collapseRejectionRCAText(value string) string {
 
 // normalizeRejectionRCAList collapses each entry and drops empty ones,
 // preserving order.
-func normalizeRejectionRCAList(values []string) []string {
-	var normalized []string
+func normalizeRejectionRCAList[T ~string](values []T) []T {
+	var normalized []T
 	for _, value := range values {
-		if collapsed := collapseRejectionRCAText(value); collapsed != "" {
-			normalized = append(normalized, collapsed)
+		if collapsed := collapseRejectionRCAText(string(value)); collapsed != "" {
+			normalized = append(normalized, T(collapsed))
 		}
 	}
 	return normalized
@@ -207,7 +219,7 @@ func normalizeRejectionRCAList(values []string) []string {
 
 // normalizeRejectionRCASet additionally sorts and deduplicates, because a
 // category list is a set: neither its order nor a repetition carries meaning.
-func normalizeRejectionRCASet(values []string) []string {
+func normalizeRejectionRCASet(values []RejectionCause) []RejectionCause {
 	normalized := normalizeRejectionRCAList(values)
 	if len(normalized) == 0 {
 		return nil

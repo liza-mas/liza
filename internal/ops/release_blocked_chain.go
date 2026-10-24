@@ -91,7 +91,7 @@ func ReleaseBlockedChain(projectRoot, taskID, reason string) (*ReleaseBlockedCha
 	if err := log.New(lp.LogPath()).Append(log.Entry{
 		Timestamp: now,
 		Agent:     "operator",
-		Action:    models.TaskEventBlockedRecoveryReleased,
+		Action:    string(models.TaskEventBlockedRecoveryReleased),
 		Task:      &taskID,
 		Detail:    fmt.Sprintf("episode %s, lineage %s: %s", result.BlockedAt.UTC().Format(time.RFC3339Nano), strings.Join(result.Lineage, " -> "), reason),
 	}); err != nil {

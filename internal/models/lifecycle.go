@@ -223,7 +223,7 @@ func TaskTransitionID(task *Task) string {
 	var last eventIdentity
 	if len(task.History) > 0 {
 		e := task.History[len(task.History)-1]
-		last = eventIdentity{e.Time.UTC(), e.Event, e.Agent, e.Commit}
+		last = eventIdentity{e.Time.UTC(), string(e.Event), e.Agent, e.Commit}
 	}
 	var revision uint64
 	if task.Lifecycle != nil {

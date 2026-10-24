@@ -592,7 +592,7 @@ func (p *reviewClaimProject) supervisorConfig(t *testing.T) SupervisorConfig {
 	}
 }
 
-func (p *reviewClaimProject) anomaliesOfType(t *testing.T, anomalyType string) []models.Anomaly {
+func (p *reviewClaimProject) anomaliesOfType(t *testing.T, anomalyType models.AnomalyType) []models.Anomaly {
 	t.Helper()
 	state, err := p.bb.Read()
 	if err != nil {

@@ -14,12 +14,12 @@ func baseRejectionRCARequest() RejectionRCARequest {
 		Contributions: []RejectionRCAContribution{
 			{
 				RejectionIndex: 1,
-				Categories:     []string{RejectionCauseProductDefect},
+				Categories:     []RejectionCause{RejectionCauseProductDefect},
 				Evidence:       []string{"review-1: identity scalar mismatch"},
 			},
 			{
 				RejectionIndex: 2,
-				Categories:     []string{RejectionCauseCapabilityFailure, RejectionCauseLifecycleRetry},
+				Categories:     []RejectionCause{RejectionCauseCapabilityFailure, RejectionCauseLifecycleRetry},
 				Evidence:       []string{"review-2: no real Postgres available", "lease expired mid-review"},
 			},
 		},
@@ -45,12 +45,12 @@ func TestRejectionRCAFingerprint(t *testing.T) {
 				Contributions: []RejectionRCAContribution{
 					{
 						RejectionIndex: 1,
-						Categories:     []string{" product_defect "},
+						Categories:     []RejectionCause{" product_defect "},
 						Evidence:       []string{"review-1:   identity scalar mismatch  "},
 					},
 					{
 						RejectionIndex: 2,
-						Categories:     []string{"capability_failure\t", "\nlifecycle_retry"},
+						Categories:     []RejectionCause{"capability_failure\t", "\nlifecycle_retry"},
 						Evidence:       []string{" review-2: no real Postgres available", "lease expired  mid-review "},
 					},
 				},
@@ -65,7 +65,7 @@ func TestRejectionRCAFingerprint(t *testing.T) {
 					base.Contributions[0],
 					{
 						RejectionIndex: 2,
-						Categories:     []string{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure},
+						Categories:     []RejectionCause{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure},
 						Evidence:       base.Contributions[1].Evidence,
 					},
 				},
@@ -115,7 +115,7 @@ func TestRejectionRCAFingerprint(t *testing.T) {
 				Contributions: []RejectionRCAContribution{
 					{
 						RejectionIndex: 1,
-						Categories:     []string{RejectionCauseLifecycleRetry},
+						Categories:     []RejectionCause{RejectionCauseLifecycleRetry},
 						Evidence:       base.Contributions[0].Evidence,
 					},
 					base.Contributions[1],
@@ -185,9 +185,9 @@ func TestRejectionRCAFingerprint(t *testing.T) {
 
 	t.Run("normalization does not mutate its input", func(t *testing.T) {
 		input := baseRejectionRCARequest()
-		input.Contributions[1].Categories = []string{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure}
+		input.Contributions[1].Categories = []RejectionCause{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure}
 		before := baseRejectionRCARequest()
-		before.Contributions[1].Categories = []string{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure}
+		before.Contributions[1].Categories = []RejectionCause{RejectionCauseLifecycleRetry, RejectionCauseCapabilityFailure}
 
 		NormalizeRejectionRCARequest(input)
 		RejectionRCAFingerprint(input)
@@ -258,7 +258,7 @@ func TestRejectionRCAGateState(t *testing.T) {
 	})
 
 	t.Run("restore mode per recovery path", func(t *testing.T) {
-		cases := map[string]string{
+		cases := map[RecoveryPath]RestoreMode{
 			RecoveryCapabilityReroute:        RestoreModeAssign,
 			RecoveryLifecycleRepair:          RestoreModeAssign,
 			RecoveryImplementationCorrection: RestoreModeClaimable,
@@ -282,7 +282,7 @@ func TestRejectionRCAGateState(t *testing.T) {
 	})
 
 	t.Run("unrecognized causes survive round-trip", func(t *testing.T) {
-		for _, known := range []string{RejectionCauseProductDefect, RejectionCauseCapabilityFailure, RejectionCauseLifecycleRetry, RejectionCauseUnknown} {
+		for _, known := range []RejectionCause{RejectionCauseProductDefect, RejectionCauseCapabilityFailure, RejectionCauseLifecycleRetry, RejectionCauseUnknown} {
 			if !IsKnownRejectionCause(known) {
 				t.Fatalf("IsKnownRejectionCause(%q) = false, want true", known)
 			}
@@ -295,7 +295,7 @@ func TestRejectionRCAGateState(t *testing.T) {
 			Summary:       "one unrecognized cause",
 			Contributions: []RejectionRCAContribution{{
 				RejectionIndex: 1,
-				Categories:     []string{"toolchain_drift"},
+				Categories:     []RejectionCause{"toolchain_drift"},
 			}},
 		}
 		normalized := NormalizeRejectionRCARequest(request)
@@ -309,7 +309,7 @@ func TestDurableRejectionCount(t *testing.T) {
 	at := func(minute int) time.Time {
 		return time.Date(2026, 9, 18, 10, minute, 0, 0, time.UTC)
 	}
-	entry := func(event string, minute int) TaskHistoryEntry {
+	entry := func(event TaskEventName, minute int) TaskHistoryEntry {
 		return TaskHistoryEntry{Time: at(minute), Event: event}
 	}
 

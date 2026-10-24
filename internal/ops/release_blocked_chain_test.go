@@ -211,7 +211,7 @@ func TestReleaseBlockedChainRecordsMaskedReleaseWithoutPausing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(activity), models.TaskEventBlockedRecoveryReleased) || strings.Contains(string(activity), secret) {
+	if !strings.Contains(string(activity), string(models.TaskEventBlockedRecoveryReleased)) || strings.Contains(string(activity), secret) {
 		t.Fatalf("activity log missing release or leaking secret:\n%s", activity)
 	}
 }

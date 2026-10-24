@@ -438,7 +438,7 @@ func TestMigrateCommand_ScrubsOversizedAlignmentSummary(t *testing.T) {
 	state.Tasks = []models.Task{task}
 	entry := models.AlignmentHistory{
 		Timestamp: task.Created,
-		Event:     models.TaskEventPlanning,
+		Event:     string(models.TaskEventPlanning),
 		Summary:   "Added task task-1: " + task.Description,
 	}
 	state.Goal.AlignmentHistory = append(state.Goal.AlignmentHistory, entry)

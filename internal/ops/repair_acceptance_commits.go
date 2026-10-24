@@ -327,7 +327,7 @@ func applyAcceptanceRemap(parent *models.Task, mapping map[string]string, integr
 	reason := "integration branch rewritten after this parent merged; commits matched by patch id"
 	parent.History = append(parent.History, models.TaskHistoryEntry{
 		Time:   now,
-		Event:  string(models.TaskEventAcceptanceCommitsRemapped),
+		Event:  models.TaskEventAcceptanceCommitsRemapped,
 		Reason: &reason,
 		Note:   &note,
 		Extra: map[string]any{

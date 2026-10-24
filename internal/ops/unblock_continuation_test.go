@@ -27,7 +27,7 @@ func blockPreservedFixture(t *testing.T, fixture *preservedInitialClaimFixture, 
 	testhelpers.WriteInitialState(t, fixture.stateFile, state)
 }
 
-func lastHistoryEntry(t *testing.T, task *models.Task, event string) models.TaskHistoryEntry {
+func lastHistoryEntry(t *testing.T, task *models.Task, event models.TaskEventName) models.TaskHistoryEntry {
 	t.Helper()
 	for i := len(task.History) - 1; i >= 0; i-- {
 		if task.History[i].Event == event {
@@ -38,7 +38,7 @@ func lastHistoryEntry(t *testing.T, task *models.Task, event string) models.Task
 	return models.TaskHistoryEntry{}
 }
 
-func countHistoryEntries(task *models.Task, event string) int {
+func countHistoryEntries(task *models.Task, event models.TaskEventName) int {
 	count := 0
 	for _, entry := range task.History {
 		if entry.Event == event {

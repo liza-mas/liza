@@ -65,7 +65,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Timestamp: a.Timestamp,
 					Source:    "anomaly",
 					Agent:     a.Reporter,
-					Action:    a.Type,
+					Action:    string(a.Type),
 					Task:      a.Task,
 					Detail:    formatAnomalyDetails(a.Details),
 					Level:     "⚠️",
