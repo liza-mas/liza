@@ -86,9 +86,14 @@ func TestA5GoldenCoverage(t *testing.T) {
 		}
 	}
 	var got []string
-	err := filepath.Walk("testdata/golden", func(path string, info os.FileInfo, err error) error {
+	root := filepath.FromSlash("testdata/golden")
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
-			got = append(got, filepath.ToSlash(strings.TrimPrefix(path, "testdata/golden"+string(filepath.Separator))))
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				return relErr
+			}
+			got = append(got, filepath.ToSlash(rel))
 		}
 		return err
 	})
@@ -370,13 +375,13 @@ func TestA5FailureSignals(t *testing.T) {
 	missing := fails(t, func(_ oracle.Result, rec testing.TB) {
 		oracle.Check(rec, oracle.Human, "no-such-a5-case.txt", []byte("x\n"))
 	})
-	if !strings.Contains(missing, "testdata/golden/human/no-such-a5-case.txt") || !strings.Contains(missing, "is missing") {
+	if !strings.Contains(missing, filepath.FromSlash("testdata/golden/human/no-such-a5-case.txt")) || !strings.Contains(missing, "is missing") {
 		t.Errorf("missing golden signal: %q", missing)
 	}
 	differs := fails(t, func(_ oracle.Result, rec testing.TB) {
 		oracle.Check(rec, oracle.Human, "SR1.txt", []byte("not the golden\n"))
 	})
-	if !strings.Contains(differs, "testdata/golden/human/SR1.txt") || !strings.Contains(differs, "differs at line 1") {
+	if !strings.Contains(differs, filepath.FromSlash("testdata/golden/human/SR1.txt")) || !strings.Contains(differs, "differs at line 1") {
 		t.Errorf("difference signal: %q", differs)
 	}
 }
@@ -386,7 +391,7 @@ func TestA5JSONStderr(t *testing.T) {
 	liveOnly(t)
 	n := oracle.NewNormaliser()
 	lost := fails(t, func(_ oracle.Result, rec testing.TB) { checkJSONStderr(rec, n, "SR1", nil) })
-	if !strings.Contains(lost, "testdata/golden/human/SR1.json-stderr.txt") || !strings.Contains(lost, "differs at line") {
+	if !strings.Contains(lost, filepath.FromSlash("testdata/golden/human/SR1.json-stderr.txt")) || !strings.Contains(lost, "differs at line") {
 		t.Errorf("lost stderr did not fail against its golden: %q", lost)
 	}
 	appeared := fails(t, func(_ oracle.Result, rec testing.TB) { checkJSONStderr(rec, n, "SR2X", []byte("new\n")) })

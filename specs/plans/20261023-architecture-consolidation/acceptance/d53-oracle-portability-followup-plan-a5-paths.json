@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "W5-coverage",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5GoldenCoverage derives each golden name with filepath.Rel from filepath.FromSlash(testdata/golden) plus filepath.ToSlash, fails the walk on a Rel error, and keeps the exact-set rule and the json-stderr exemption.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W5-vp2",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5GoldenCoverage counts state/VP2.state.yaml as an expected, present golden: names carry '/' on every OS, so the inventory name matches the walked file.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W5-signals",
+      "file": "internal/oracle/a5/driver_test.go",
+      "assertion": "TestA5FailureSignals and TestA5JSONStderr expect the three golden path substrings through filepath.FromSlash; the 'is missing', 'differs at line 1', 'differs at line' and appeared/quiet checks are verbatim.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "W5-package",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "Package ./internal/oracle/a5/... passes, TestA5Inventory included, with the inventory unchanged.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "W5-provenance",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "regen check mode exits 0 with every A5 golden reported ok H1; no golden changed.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "W5-lint",
+      "file": "Makefile",
+      "assertion": "make lint passes, vetting the package for windows and darwin.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "W5-preserve",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "W5-windows",
+      "approved_reference_id": "d52"
+    }
+  ]
+}
