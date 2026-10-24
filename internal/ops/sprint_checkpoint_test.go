@@ -552,7 +552,15 @@ func TestCheckpointPassedPlansRefusesUnqualifiedState(t *testing.T) {
 		mutate func(*models.State)
 		refuse bool // persist a hand-off refusal before the call
 	}{
-		{name: "attempted after its pass", mutate: func(s *models.State) { s.Sprint.Timeline.TransitionsAttemptedAt = &now }},
+		{name: "attempted after its pass", mutate: func(s *models.State) {
+			attempted := s.Tasks[0].PlanCheck.At.Add(time.Minute)
+			s.Sprint.Timeline.TransitionsAttemptedAt = &attempted
+		}},
+		{name: "attempted after its pass, fixture built late", mutate: func(s *models.State) {
+			movePassRecordLater(&s.Tasks[0], 2*time.Minute)
+			attempted := s.Tasks[0].PlanCheck.At.Add(time.Minute)
+			s.Sprint.Timeline.TransitionsAttemptedAt = &attempted
+		}},
 		{name: "held", mutate: func(s *models.State) {
 			s.Tasks[0].PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckHeld, Ask: "provision the target", By: "orchestrator-1", At: now}
 		}},
@@ -582,6 +590,17 @@ func TestCheckpointPassedPlansRefusesUnqualifiedState(t *testing.T) {
 				t.Fatalf("sprint = %s, want IN_PROGRESS", state.Sprint.Status)
 			}
 		})
+	}
+}
+
+// movePassRecordLater shifts the fixture's recorded pass, PlanCheck.At and its
+// plan_check history entry, to emulate a fixture built later than its parent.
+func movePassRecordLater(task *models.Task, d time.Duration) {
+	task.PlanCheck.At = task.PlanCheck.At.Add(d)
+	for i := range task.History {
+		if task.History[i].Event == models.TaskEventPlanCheck {
+			task.History[i].Time = task.History[i].Time.Add(d)
+		}
 	}
 }
 
