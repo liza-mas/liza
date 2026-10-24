@@ -5,9 +5,11 @@ package a9
 import "os/exec"
 
 // The package skips on Windows (unixOnly), so none of this is reached.
-type signalProc struct{ pid, ppid, pgid int }
+type signalOwner struct {
+	sid  int
+	home string
+}
 
-func signalIsolate(*exec.Cmd)            {}
-func signalReap(int) bool                { return true }
-func signalDescendants(int) []signalProc { return nil }
-func signalPidLive(int) bool             { return false }
+func signalIsolate(*exec.Cmd, string) {}
+func signalSubreaper() error          { return nil }
+func signalReap(signalOwner) bool     { return true }

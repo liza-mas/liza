@@ -1,11 +1,8 @@
 package a9
 
 import (
-	"bufio"
 	"bytes"
-	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,26 +24,30 @@ func signalAlerts(p *scenario) string {
 	return string(b)
 }
 
-// signalStart launches the CLI like scenario.start, but in its own process
-// group, and registers the D43 hygiene: on every exit path, normal or failing,
-// cleanup kills the supervisor, its providers (each in a group of its own) and
-// their descendants, and fails the test if one outlives it.
+// signalStart launches the CLI like scenario.start, but in a session of its
+// own, and registers the D43/D45 hygiene: the test process is made the child
+// subreaper before the first start, and on every exit path, normal, deadline or
+// failing, cleanup kills the scenario's supervisor, providers and their
+// descendants, reaps them, and fails the test if one is left.
 func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 	t.Helper()
+	if err := signalSubreaper(); err != nil {
+		t.Fatalf("A9 %s setup: child subreaper unavailable", p.name)
+	}
 	a := &runningAgent{done: make(chan error, 1)}
 	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
-	signalIsolate(a.cmd)
+	signalIsolate(a.cmd, p.home)
 	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
 	if err := a.cmd.Start(); err != nil {
 		t.Fatalf("A9 %s run: agent start", p.name)
 	}
 	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	pid := a.cmd.Process.Pid
+	owner := signalOwner{sid: a.cmd.Process.Pid, home: p.home}
 	t.Cleanup(func() {
-		reaped := signalReap(pid)
+		signalReap(owner)
 		a.cancel()
 		<-a.done
-		if !reaped {
+		if !signalReap(owner) {
 			t.Errorf("A9 %s cleanup: a started process outlived the test", p.name)
 		}
 	})
@@ -253,107 +254,5 @@ func TestSignalCorrelationSuffix(t *testing.T) {
 		if got != want {
 			t.Fatalf("correlation suffix %q: got %q; want %q", suffix, got, want)
 		}
-	}
-}
-
-// TestSignalGroupReap shows the reap reaches a descendant that outlives its
-// group leader, which the kit's direct-child cancellation does not.
-func TestSignalGroupReap(t *testing.T) {
-	t.Parallel()
-	unixOnly(t)
-	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", "/bin/sleep 300 >/dev/null 2>&1 & echo ready; wait")
-	cmd.Env = []string{}
-	signalIsolate(cmd)
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal("A9 signal group: pipe unavailable")
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatal("A9 signal group: start failed")
-	}
-	root := cmd.Process.Pid
-	t.Cleanup(func() { signalReap(root) })
-	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
-		t.Fatal("A9 signal group: descendant not started")
-	}
-	below := signalDescendants(root)
-	if len(below) != 1 {
-		t.Fatal("A9 signal group: expected one descendant")
-	}
-	if err := cmd.Process.Kill(); err != nil {
-		t.Fatal("A9 signal group: leader kill failed")
-	}
-	_ = cmd.Wait()
-	if !signalPidLive(below[0].pid) {
-		t.Fatal("A9 signal group: killing only the leader must leave the descendant alive")
-	}
-	if !signalReap(root) || signalPidLive(below[0].pid) {
-		t.Fatal("A9 signal group: reap must remove the descendant")
-	}
-}
-
-// TestSignalProviderReap holds a real scenario stub provider, which the
-// supervisor runs in a process group of its own, and ends the scenario while it
-// is held: through the scenario cleanup, and through the cancellation the
-// kit's command deadline performs before any cleanup. Supervisor and provider
-// must be gone either way.
-func TestSignalProviderReap(t *testing.T) {
-	unixOnly(t)
-	for _, cancelled := range []bool{false, true} {
-		name := "cleanup"
-		if cancelled {
-			name = "cancelled"
-		}
-		var started []int
-		t.Run(name, func(t *testing.T) {
-			p := newScenario(t, "i19-held")
-			a := signalStart(t, p, signalCoderArgs("claude")...)
-			p.await(t, "held provider", func() bool {
-				_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
-				return err == nil
-			})
-			supervisor := a.cmd.Process.Pid
-			started = append(started, supervisor)
-			separate := false
-			for _, proc := range signalDescendants(supervisor) {
-				started = append(started, proc.pid)
-				separate = separate || proc.pgid != supervisor
-			}
-			if !separate {
-				t.Fatal("I-19 the held provider must run in a group of its own")
-			}
-			if cancelled {
-				a.cancel()
-				select {
-				case <-a.done:
-				case <-time.After(10 * time.Second):
-					t.Fatal("I-19 cancelled supervisor did not exit")
-				}
-				signalAwaitGone(t, started)
-			}
-		})
-		if len(started) < 2 {
-			t.Fatalf("A9 signal provider %s: no provider observed", name)
-		}
-		signalAwaitGone(t, started)
-	}
-}
-
-// signalAwaitGone fails the test unless none of the processes is live within a bound.
-func signalAwaitGone(t *testing.T, pids []int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		live := false
-		for _, pid := range pids {
-			live = live || signalPidLive(pid)
-		}
-		if !live {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("A9 signal provider: a started process outlived its scenario")
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }
