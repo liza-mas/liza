@@ -1,0 +1,19 @@
+{
+  "id": "W02",
+  "role": "orchestrator",
+  "role_pair": "",
+  "agent_id": "orchestrator-1",
+  "task_id": "",
+  "expected_wake_trigger": "BLOCKED_TASKS",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "WAKE TRIGGER: BLOCKED_TASKS",
+    "Fixture blocked scope"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

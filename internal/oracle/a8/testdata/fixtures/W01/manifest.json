@@ -1,0 +1,18 @@
+{
+  "id": "W01",
+  "role": "orchestrator",
+  "role_pair": "",
+  "agent_id": "orchestrator-1",
+  "task_id": "",
+  "expected_wake_trigger": "INITIAL_PLANNING",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "WAKE TRIGGER: INITIAL_PLANNING"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

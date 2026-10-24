@@ -1,0 +1,19 @@
+{
+  "id": "W05",
+  "role": "orchestrator",
+  "role_pair": "",
+  "agent_id": "orchestrator-1",
+  "task_id": "",
+  "expected_wake_trigger": "HUMAN_NOTE",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "WAKE TRIGGER: HUMAN_NOTE",
+    "Fixture human note"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "W04",
+  "role": "orchestrator",
+  "role_pair": "",
+  "agent_id": "orchestrator-1",
+  "task_id": "",
+  "expected_wake_trigger": "IMMEDIATE_DISCOVERY",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "WAKE TRIGGER: IMMEDIATE_DISCOVERY",
+    "Urgent discoveries need immediate action:",
+    "Read discovered[] entries with urgency=immediate"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

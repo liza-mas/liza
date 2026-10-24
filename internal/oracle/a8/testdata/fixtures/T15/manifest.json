@@ -1,0 +1,37 @@
+{
+  "id": "T15",
+  "role": "coder",
+  "role_pair": "coding-pair",
+  "agent_id": "coder-1",
+  "task_id": "task",
+  "expected_wake_trigger": "",
+  "gates": true,
+  "initial_task": "task",
+  "markers": [
+    "=== PRIOR REJECTION FEEDBACK ===",
+    "Fixture prior rejection",
+    "=== TASK CORRECTIVE CONTEXT ===",
+    "Fixture unblock resolution",
+    "OPERATOR INPUT",
+    "Fixture operator note",
+    "CANONICAL VALIDATION:",
+    "fixture-check",
+    "ADVISORY VALIDATION NOTES:",
+    "Fixture validation note",
+    "PROVIDER DEPENDENCIES (claim requires provider and selected children MERGED):",
+    "DESCENDANT DEPENDENCIES",
+    "=== HANDOFF RESUME CONTEXT ===",
+    "Fixture completed step",
+    "Fixture next step",
+    "=== RESUME CONTEXT ===",
+    "SCIP-SEARCH INDEXES",
+    "STACKLIT INDEX",
+    "FUNCTIONAL CLUSTERS",
+    "SEMBLE SEARCH"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}
