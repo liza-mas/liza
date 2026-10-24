@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: create worktree: validation failed: task task-1 is not in an executing state (status: DRAFT_CODE)

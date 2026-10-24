@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "command[0] must not have leading or trailing whitespace"
+    },
+    "ok": false,
+    "result": null
+  }
+}

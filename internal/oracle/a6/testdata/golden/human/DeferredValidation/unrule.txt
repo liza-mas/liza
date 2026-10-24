@@ -1,0 +1,6 @@
+exit_code: 0
+stdout:
+action: unrule
+outcome: removed
+command: "true"
+stderr:

@@ -1,0 +1,14 @@
+exit_code: 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: MERGED
+effects: committed
+task_id: task-1
+transition_id: <ID>
+completed_transition_id: <ID>
+current_assignee: coder-1
+✓ Fast-forward merge successful
+✓ Task task-1 merged successfully
+Merge commit: ac67177
+stderr:

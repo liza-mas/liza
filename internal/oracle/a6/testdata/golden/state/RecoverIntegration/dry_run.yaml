@@ -1,0 +1,186 @@
+# before
+agents: {}
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: PAUSED
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    base_commit: '<SHA:BASE>'
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    integration:
+        contributing_set:
+            scopes: []
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned:
+            - epic
+            - integration-global-1
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - created: <TIME:Z>
+      description: Plan remaining work
+      done_when: Plan reviewed
+      history: []
+      id: epic
+      priority: 1
+      role_pair: epic-planning-pair
+      scope: planning
+      spec_ref: README.md
+      status: DRAFT_EPIC_PLAN
+      type: epic-planning
+    - base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: Premature integration analysis
+      done_when: Integration analysis reviewed
+      history:
+        - commit: '<SHA:REPORT>'
+          event: submitted_for_review
+          time: <TIME:Z>
+      id: integration-global-1
+      integration_analysis:
+        generation: 1
+        key: global:1
+        phase: global
+        source_commit: '<SHA:BASE>'
+      priority: 1
+      review_commit: '<SHA:REPORT>'
+      role_pair: integration-pair
+      scope: integration
+      spec_ref: README.md
+      status: 'INTEGRATION_ANALYSIS_TO_REVIEW'
+      type: integration
+      worktree: .worktrees/integration-global-1
+version: 1
+# after
+agents: {}
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: PAUSED
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    base_commit: '<SHA:BASE>'
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    integration:
+        contributing_set:
+            scopes: []
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned:
+            - epic
+            - integration-global-1
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - created: <TIME:Z>
+      description: Plan remaining work
+      done_when: Plan reviewed
+      history: []
+      id: epic
+      priority: 1
+      role_pair: epic-planning-pair
+      scope: planning
+      spec_ref: README.md
+      status: DRAFT_EPIC_PLAN
+      type: epic-planning
+    - base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: Premature integration analysis
+      done_when: Integration analysis reviewed
+      history:
+        - commit: '<SHA:REPORT>'
+          event: submitted_for_review
+          time: <TIME:Z>
+      id: integration-global-1
+      integration_analysis:
+        generation: 1
+        key: global:1
+        phase: global
+        source_commit: '<SHA:BASE>'
+      priority: 1
+      review_commit: '<SHA:REPORT>'
+      role_pair: integration-pair
+      scope: integration
+      spec_ref: README.md
+      status: 'INTEGRATION_ANALYSIS_TO_REVIEW'
+      type: integration
+      worktree: .worktrees/integration-global-1
+version: 1

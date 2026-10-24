@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: validation failed: no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by liza deferred-validation settle when unsettled

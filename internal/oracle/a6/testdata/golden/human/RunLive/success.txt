@@ -1,0 +1,5 @@
+exit_code: 7
+stdout:
+fixture=***
+oracle-live-marker
+stderr:

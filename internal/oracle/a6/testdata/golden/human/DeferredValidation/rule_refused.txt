@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: validation failed: command[0] must not have leading or trailing whitespace

@@ -1,0 +1,6 @@
+exit_code: 0
+stdout:
+action: rule
+outcome: set
+command: "true"
+stderr:

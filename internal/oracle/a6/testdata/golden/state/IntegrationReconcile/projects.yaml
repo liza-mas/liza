@@ -1,0 +1,459 @@
+# before
+agents: {}
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    base_commit: '<SHA:BASE>'
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned:
+            - plan-single
+            - coding-single
+            - plan-multi
+            - coding-b
+            - coding-a
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - approved_by: code-reviewer-1
+      arch_ref: README.md
+      created: <TIME:Z>
+      description: Plan single scope
+      done_when: Single plan implemented
+      handoff_events:
+        - agent: coder-1
+          timestamp: "<TIME:Z>"
+          trigger: submission
+        - agent: code-reviewer-1
+          timestamp: "<TIME:Z>"
+          trigger: completion
+      history: []
+      id: plan-single
+      merge_commit: '<SHA:BASE>'
+      output:
+        - desc: Single coding scope
+          done_when: Coded
+          scope: fixture
+          spec_ref: README.md
+      plan_ref: README.md
+      priority: 1
+      review_commit: '<SHA:BASE>'
+      role_pair: code-planning-pair
+      scope: fixture
+      spec_ref: README.md
+      status: MERGED
+      transitions_executed:
+        code-plan-to-coding: true
+      type: planning
+    - approved_by: code-reviewer-1
+      base_commit: '<SHA:B>'
+      created: <TIME:Z>
+      description: Implement single scope
+      done_when: Single coding accepted
+      handoff_events:
+        - agent: coder-1
+          timestamp: "<TIME:Z>"
+          trigger: submission
+        - agent: code-reviewer-1
+          timestamp: "<TIME:Z>"
+          trigger: completion
+      history: []
+      id: coding-single
+      merge_commit: '<SHA:HEAD>'
+      parent_task: plan-single
+      priority: 1
+      review_commit: '<SHA:HEAD>'
+      role_pair: coding-pair
+      scope: fixture
+      spec_ref: README.md
+      status: MERGED
+      type: coding
+      validation:
+        - "true"
+    - approved_by: code-reviewer-1
+      arch_ref: README.md
+      created: <TIME:Z>
+      description: Plan multiple scopes
+      done_when: Multiple plan implemented
+      handoff_events:
+        - agent: coder-1
+          timestamp: "<TIME:Z>"
+          trigger: submission
+        - agent: code-reviewer-1
+          timestamp: "<TIME:Z>"
+          trigger: completion
+      history: []
+      id: plan-multi
+      merge_commit: '<SHA:BASE>'
+      output:
+        - desc: Multiple coding scopes
+          done_when: Coded
+          scope: fixture
+          spec_ref: README.md
+      plan_ref: README.md
+      priority: 1
+      review_commit: '<SHA:BASE>'
+      role_pair: code-planning-pair
+      scope: fixture
+      spec_ref: README.md
+      status: MERGED
+      transitions_executed:
+        code-plan-to-coding: true
+      type: planning
+    - approved_by: code-reviewer-1
+      base_commit: '<SHA:A>'
+      created: <TIME:Z>
+      description: Implement scope B
+      done_when: Coding B accepted
+      handoff_events:
+        - agent: coder-1
+          timestamp: "<TIME:Z>"
+          trigger: submission
+        - agent: code-reviewer-1
+          timestamp: "<TIME:Z>"
+          trigger: completion
+      history: []
+      id: coding-b
+      merge_commit: '<SHA:B>'
+      parent_task: plan-multi
+      priority: 1
+      review_commit: '<SHA:B>'
+      role_pair: coding-pair
+      scope: fixture
+      spec_ref: README.md
+      status: MERGED
+      type: coding
+      validation:
+        - "true"
+    - approved_by: code-reviewer-1
+      base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: Implement scope A
+      done_when: Coding A accepted
+      handoff_events:
+        - agent: coder-1
+          timestamp: "<TIME:Z>"
+          trigger: submission
+        - agent: code-reviewer-1
+          timestamp: "<TIME:Z>"
+          trigger: completion
+      history: []
+      id: coding-a
+      merge_commit: '<SHA:A>'
+      parent_task: plan-multi
+      priority: 1
+      review_commit: '<SHA:A>'
+      role_pair: coding-pair
+      scope: fixture
+      spec_ref: README.md
+      status: MERGED
+      type: coding
+      validation:
+        - "true"
+version: 1
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: oracle
+    description: Oracle fixture
+    spec_ref: README.md
+    base_commit: <SHA:BASE>
+    integration:
+        contributing_set:
+            scopes:
+                - plan_task_id: plan-multi
+                  root_task_ids:
+                    - coding-a
+                    - coding-b
+                - plan_task_id: plan-single
+                  root_task_ids:
+                    - coding-single
+        coverage:
+            - plan_task_id: plan-single
+              kind: approval_attestation
+              approval_attestations:
+                - reviewed_task_id: coding-single
+                  acceptance_criteria: Single coding accepted
+                  reviewed_commit: <SHA:HEAD>
+                  approver: code-reviewer-1
+                  validation:
+                    - "true"
+                  merge_commit: <SHA:HEAD>
+    created: <TIME:Z>
+    status: IN_PROGRESS
+    alignment_history:
+        - timestamp: <TIME:Z>
+          event: initialization
+          summary: Oracle fixture
+tasks:
+    - id: plan-single
+      type: planning
+      role_pair: code-planning-pair
+      description: Plan single scope
+      status: MERGED
+      priority: 1
+      output:
+        - desc: Single coding scope
+          done_when: Coded
+          scope: fixture
+          spec_ref: README.md
+      transitions_executed:
+        code-plan-to-coding: true
+      review_commit: <SHA:BASE>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:BASE>
+      spec_ref: README.md
+      plan_ref: README.md
+      arch_ref: README.md
+      done_when: Single plan implemented
+      scope: fixture
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: completion
+      created: <TIME:Z>
+      history: []
+    - id: coding-single
+      type: coding
+      role_pair: coding-pair
+      description: Implement single scope
+      status: MERGED
+      priority: 1
+      base_commit: <SHA:B>
+      parent_task: plan-single
+      review_commit: <SHA:HEAD>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:HEAD>
+      spec_ref: README.md
+      done_when: Single coding accepted
+      validation:
+        - "true"
+      scope: fixture
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: completion
+      created: <TIME:Z>
+      history: []
+    - id: plan-multi
+      type: planning
+      role_pair: code-planning-pair
+      description: Plan multiple scopes
+      status: MERGED
+      priority: 1
+      output:
+        - desc: Multiple coding scopes
+          done_when: Coded
+          scope: fixture
+          spec_ref: README.md
+      transitions_executed:
+        code-plan-to-coding: true
+      review_commit: <SHA:BASE>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:BASE>
+      spec_ref: README.md
+      plan_ref: README.md
+      arch_ref: README.md
+      done_when: Multiple plan implemented
+      scope: fixture
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: completion
+      created: <TIME:Z>
+      history: []
+    - id: coding-b
+      type: coding
+      role_pair: coding-pair
+      description: Implement scope B
+      status: MERGED
+      priority: 1
+      base_commit: <SHA:A>
+      parent_task: plan-multi
+      review_commit: <SHA:B>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:B>
+      spec_ref: README.md
+      done_when: Coding B accepted
+      validation:
+        - "true"
+      scope: fixture
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: completion
+      created: <TIME:Z>
+      history: []
+    - id: coding-a
+      type: coding
+      role_pair: coding-pair
+      description: Implement scope A
+      status: MERGED
+      priority: 1
+      base_commit: <SHA:BASE>
+      parent_task: plan-multi
+      review_commit: <SHA:A>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:A>
+      spec_ref: README.md
+      done_when: Coding A accepted
+      validation:
+        - "true"
+      scope: fixture
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: completion
+      created: <TIME:Z>
+      history: []
+    - id: integration-slice-plan-multi
+      type: integration
+      role_pair: slice-integration-pair
+      description: Analyze integration composition for plan plan-multi.
+      status: DRAFT_SLICE_INTEGRATION_ANALYSIS
+      priority: 1
+      parent_tasks:
+        - coding-a
+        - coding-b
+      spec_ref: README.md
+      plan_ref: README.md
+      arch_ref: README.md
+      done_when: The slice analysis is reviewed and its immutable verdict is recorded.
+      scope: Frozen integration slice for plan plan-multi.
+      integration_analysis:
+        key: slice:plan-multi
+        phase: slice
+        originating_plan_task_id: plan-multi
+        root_task_ids:
+            - coding-a
+            - coding-b
+        descendant_changes:
+            - task_id: coding-a
+              commit: <SHA:A>
+            - task_id: coding-b
+              commit: <SHA:B>
+        source_commit: <SHA:HEAD>
+        affected_paths:
+            - a.txt
+            - b.txt
+        source_snapshot_paths:
+            - a.txt
+            - b.txt
+      created: <TIME:Z>
+      history: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: oracle
+    scope:
+        planned:
+            - plan-single
+            - coding-single
+            - plan-multi
+            - coding-b
+            - coding-a
+            - integration-slice-plan-multi
+        stretch: []
+    timeline:
+        started: <TIME:Z>
+        deadline: <TIME:Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME:Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    agent_progress_timeout: 600
+    integration_branch: integration
+    mode: RUNNING

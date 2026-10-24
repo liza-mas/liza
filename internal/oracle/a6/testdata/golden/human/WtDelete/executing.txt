@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: delete worktree: validation failed: cannot delete worktree for task task-1 (status: IMPLEMENTING_CODE), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED, or pipeline clean states

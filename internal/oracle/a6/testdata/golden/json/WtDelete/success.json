@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "existed": true,
+      "previous_status": "BLOCKED",
+      "task_id": "task-1",
+      "warnings": null
+    }
+  }
+}

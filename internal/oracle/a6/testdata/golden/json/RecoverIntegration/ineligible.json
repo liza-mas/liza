@@ -1,0 +1,26 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "effects": "none",
+        "operation": "recover-integration",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "recover-integration: INVALID_INPUT (safe_action=correct_input): recovery requires a submitted analysis with a worktree and report commit"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "recover-integration",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

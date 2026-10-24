@@ -1,0 +1,10 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "outcome": "skipped",
+      "reason": "runner_active"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: validation failed: task t1 declares no runtime inputs; run the command directly

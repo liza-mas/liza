@@ -1,0 +1,29 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "dry_run": false,
+      "effects": "committed",
+      "operation": "recover-integration",
+      "outcome": "COMPLETED",
+      "recovery": {
+        "analysis_task_id": "integration-global-1",
+        "at": "<TIME:Z>",
+        "preservation_ref": "refs/integration-recovery/integration-global-1",
+        "previous_contributing_set": {
+          "scopes": []
+        },
+        "reason": "premature freeze",
+        "report_commit": "<SHA:REPORT>",
+        "source_commit": "<SHA:BASE>"
+      },
+      "replayed": false,
+      "safe_action": "continue",
+      "task_id": "integration-global-1",
+      "task_status": "ABANDONED",
+      "transition_id": "<ID>"
+    }
+  }
+}

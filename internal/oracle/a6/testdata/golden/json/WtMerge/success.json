@@ -1,0 +1,24 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "current_assignee": "coder-1",
+      "effects": "committed",
+      "fast_forward": true,
+      "merge_commit": "<SHA:REVIEW>",
+      "no_test_script_found": true,
+      "operation": "wt-merge",
+      "outcome": "COMPLETED",
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "MERGED",
+      "test_output": "",
+      "tests_ran": false,
+      "transition_id": "<ID>",
+      "warnings": null
+    }
+  }
+}

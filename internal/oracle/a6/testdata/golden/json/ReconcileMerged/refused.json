@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "merge commit \"oracle-missing-ref\" could not be resolved locally; fetch the merged PR first"
+    },
+    "ok": false,
+    "result": null
+  }
+}
