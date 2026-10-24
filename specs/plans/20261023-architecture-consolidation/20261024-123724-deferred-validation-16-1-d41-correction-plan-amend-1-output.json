@@ -1,0 +1,527 @@
+[
+  {
+    "desc": "Make the unadmitted late-submit and publish-past-clocks in-flight submit tests in internal/agent deterministic with a held session marker and stalled-preparation regression subtests (D41 lineage, test-only)",
+    "done_when": "TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback and TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks each run 'prompt start' and 'stalled preparation' subtests; the stalled subtests fail on the old no-held-marker shape with 'the session was cancelled before the agent saw its submit's outcome' and 'supervisor cancelled the session before the submit published (marker=false receipt=false' (recorded in the checkpoint) and pass after the change; the four undeferred Acceptance Contract commands pass; every assertion and value in the plan's traceability table is kept; maxSleepCallsInTests stays 16; only the two declared files change. Operator constraints: keep every assertion, keep maxSleepCallsInTests at 16, and change no production code unless it is proven to be a real defect.",
+    "scope": "IN: internal/agent/inflight_submit_deadline_test.go (both named tests, lateSubmitSession, one colocated stall helper, D41 call sites mechanically); specs/plans/20261023-architecture-consolidation/acceptance/deferred-validation-16-1-d41-correction-plan-agent-inflight.json. OUT: production code, execution_deadline_test.go, internal/testhelpers, internal/testguard, oracle files, skips, known-red rulings, budget-only widening, asserted-value changes, arm-1-ar-13-cp-3.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Task 1: Make the unadmitted and publish in-flight submit tests deterministic",
+    "rca_required": true,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -timeout 30m -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/agent/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -timeout 30m -run '^TestExecuteAgent(BlocksUnadmittedLateSubmitAfterHandback|LetsLateSubmitPublishPastSupervisorClocks|ProgressWatchdogStillBlocksDuringHandback|BlocksSubmitStillRunningWhenGraceEnds)$' ./internal/agent/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/agent/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "task_depends_on": [
+      "deferred-validation-2-1-correction-plan-code-0"
+    ]
+  },
+  {
+    "desc": "Synchronize TestAwaitVerdict_Rejected_NewAttempt in internal/ops on real watcher registration with a slow-setup regression subtest (D41 lineage, test-only)",
+    "done_when": "TestAwaitVerdict_Rejected_NewAttempt is non-parallel, waits for the real watcher built through the newAwaitVerdictWatcher seam instead of testhelpers.WaitForAsyncSetup, and runs 'prompt setup' and 'slow setup' subtests; 'slow setup' fails on the old sleep-synchronized shape with 'Verdict = \"TIMEOUT\", want NEW_ATTEMPT' (recorded in the checkpoint) and passes after the change; both subtests keep the AwaitVerdict entry point, 10s budget, default poll and all four assertions; the four undeferred Acceptance Contract commands pass; maxSleepCallsInTests stays 16; only the two declared files change. Operator constraints: keep every assertion, keep maxSleepCallsInTests at 16, and change no production code unless it is proven to be a real defect.",
+    "scope": "IN: internal/ops/await_verdict_test.go (TestAwaitVerdict_Rejected_NewAttempt only, plus a colocated helper if needed); specs/plans/20261023-architecture-consolidation/acceptance/deferred-validation-16-1-d41-correction-plan-ops-await-verdict.json. OUT: production code including await_verdict.go and await_policy.go, the other WaitForAsyncSetup tests, internal/testhelpers, internal/testguard, skips, known-red rulings, budget-only widening, asserted-value changes, arm-1-ar-13-cp-3.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Task 2: Synchronize the rejected new-attempt await test on watcher registration",
+    "rca_required": true,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestAwaitVerdict_Rejected_NewAttempt$' ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestAwaitVerdict_Rejected_NewAttempt$' ./internal/ops/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "desc": "Derive the 'attempted after its pass' attempt time in TestCheckpointPassedPlansRefusesUnqualifiedState from the fixture's own pass record, with a late-fixture regression case (D41 lineage, test-only)",
+    "done_when": "The 'attempted after its pass' case sets TransitionsAttemptedAt to the fixture's PlanCheck.At plus one minute instead of the parent-captured now; a new 'attempted after its pass, fixture built late' case moves the pass record (PlanCheck.At and its plan_check history entry) two minutes later before applying the same rule; that case fails under the old rule with 'err = <nil>, want ErrNoPassedPlanCheckpoint' (recorded in the checkpoint) and passes after the change; all six cases keep their assertions and expected error; passedPlanState and the other cases are unchanged; the four undeferred Acceptance Contract commands pass; maxSleepCallsInTests stays 16; only the two declared files change. Operator constraints: keep every assertion, keep maxSleepCallsInTests at 16, and change no production code unless it is proven to be a real defect.",
+    "scope": "IN: internal/ops/sprint_checkpoint_test.go (case table of TestCheckpointPassedPlansRefusesUnqualifiedState plus at most one uniquely named colocated helper); specs/plans/20261023-architecture-consolidation/acceptance/deferred-validation-16-1-d41-correction-plan-ops-checkpoint-recency.json. OUT: production code including sprint_checkpoint.go and orchestrator_wake.go, passedPlanState, other tests, internal/testhelpers, internal/testguard, skips, known-red rulings, budget-only widening, asserted-value changes, arm-1-ar-13-cp-3.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D41 — Stabilise two inherited timing-flaky internal/agent tests (run, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-120308-deferred-validation-16-1-d41-correction-plan.md#Task 3: Derive the checkpoint recency fixture's attempt time from its own pass record",
+    "rca_required": true,
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestCheckpointPassedPlansRefusesUnqualifiedState$' ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=20 -run '^TestCheckpointPassedPlansRefusesUnqualifiedState$' ./internal/ops/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 -timeout 30m ./internal/ops/",
+        "executables": [
+          "env",
+          "sh",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard/",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race",
+        "executables": [
+          "env",
+          "sh",
+          "make",
+          "go",
+          "git",
+          "gcc"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ]
+  }
+]
