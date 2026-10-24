@@ -826,6 +826,34 @@ raised the same class earlier (`state_lock_holds.go` automatic hold gate and ref
   Debt (extends D33): inherited Git inside `Modify` at these sites. Payback trigger unchanged.
 - Kind: constraint interpretation. Revert: the human widens scope or overrides D33.
 
+### D50 — A9 refusal barrier observes the post-decision watcher; stub records are written atomically (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T08:25Z. `deferred-validation-2-1-correction-plan-code-0` round 1 was rejected with two blockers
+and blocked at 08:23Z.
+(1) In `review_test.go` (I-08 refusal), the D46 barrier observes the state-lock owner record from
+`reviewerStrategy.WaitForWork`, which is taken before the eligibility decision. A delayed wrong admission could be
+pre-empted by `stop` and go unnoticed. The starting binary exposes no portable post-decision trace: the "no work" log
+needs `DiagnosticLogging`, and enabling it would edit a fixture and golden. The one post-decision effect is the state
+watcher that `waitForWorkEventDriven` creates (`waitforwork.go`). It is created only after `checkWork` refuses, and a
+wrongly admitted claim returns before it exists.
+(2) Under the operator-required `go test -race -count=3 ./internal/oracle/a9/...`, `TestOracleA9CheckpointSummary/i15-pending`
+fails with "A9 collect: invocation record". The stub's `writeJSON` (`stub_test.go`) truncates and writes in place,
+while `scenario.records` (`kit_test.go`) reads every `call-*.json` with no tolerance, so it can read a torn file.
+- Ruling (1): on Linux, after the existing barrier, await the supervisor's inotify instance:
+  `/proc/<supervisor pid>/fd/*` → `anon_inode:inotify`, deadline-bounded with no `time.Sleep`. It is a
+  post-decision observable, and a wrong admission makes the await fail rather than pass. Other platforms keep the
+  entry barrier plus a comment naming the residual gap. The eligibility logic is platform-independent, so Linux
+  runs carry the regression coverage. Put the platform helper in the existing `reap_linux_test.go` and
+  `reap_other_test.go`. If the supervisor already holds an inotify fd before the decision, report this and stop.
+- Ruling (2): `writeJSON` writes atomically: a temp file in the same directory whose name `call-*.json` does not
+  match, then `os.Rename`. This is a determinism-only oracle edit (goal Test Policy exception): no asserted value,
+  fixture or golden changes. A retry or tolerance in `records()` is rejected because it would hide a torn record.
+- Scope: the D47 exception plus `internal/oracle/a9/stub_test.go`. Unchanged: assertions, scenarios, fixtures,
+  goldens, `maxSleepCallsInTests` (16), production code. Closure: the canonical batch plus
+  `go test -race -count=3 ./internal/oracle/a9/...` pass.
+- Rejected: restoring a 1 s dwell (sleep budget, D46); enabling `DiagnosticLogging` (fixture and golden edit);
+  accepting the entry barrier everywhere (coverage gap shown by the reviewer).
+- Kind: oracle test mechanics (D46–D48 family). Revert: drop the Linux await and keep the entry barrier.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
