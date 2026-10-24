@@ -1,0 +1,97 @@
+[
+  {
+    "desc": "Must: separate reviewed plan correction (amend-plan begin, construction, adoption) and bounded-contract comparison within ops",
+    "done_when": "AmendPlan and validateBoundedContractCorrection ratchet keys are absent and every touched file and function is within S1; an oracle-only commit adds the six Task 1 amend-plan goldens before the production edit and older goldens are unchanged; fences, holds and output identities behave as before; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/amend_plan.go and contract_amendment.go, new private amendment begin/compare files, colocated tests, additive a4 oracle driver/fixtures/goldens, area_a4_test.go, the INVARIANTS.md amendment row only if cited code moves, manifest. No cmd/liza, submit_review.go, replan.go or exported API change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-092631-arm-1-ar-13-cp-2.md#Task 1: Separate reviewed plan correction from its adoption",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 3: Plan handoff and reviewed correction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate replan eligibility, lineage resolution and replacement construction from locked adoption within ops",
+    "done_when": "The Replan ratchet key is absent and every touched file and function is within S1; an oracle-only commit adds the five Task 2 replan goldens before the production edit and older goldens are unchanged; no-children-under-lock, retargeting, selection retirement and resume behave as before; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/replan.go, an optional new private replan adoption file, colocated replan tests, additive a4 oracle driver/fixtures/goldens, area_a4_test.go, the blackboard-schema.md RCA paragraph only if construction moves, manifest. No amend_plan.go, commands/replan.go, cmd/liza or exported API change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-092631-arm-1-ar-13-cp-2.md#Task 2: Separate replan eligibility and construction from adoption",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 3: Plan handoff and reviewed correction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["0"],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate plan-check authorization and handoff classification decisions from disposition persistence within ops",
+    "done_when": "The RecordPlanCheck ratchet key is absent and every touched file and function is within S1; PlanHandoffDomain and its exported classification remain in ops with unchanged signatures; an oracle-only commit adds the six Task 3 plan-check goldens before the production edit and older goldens are unchanged; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/plan_check.go, an optional new private decision file, delivered-constant adoption in plan_handoff.go, plan_handoff_failure.go and plan_replacement.go, colocated tests, additive a4 oracle driver/fixtures/goldens, area_a4_test.go, INVARIANTS.md section 12 rows only if cited code moves, manifest. No cmd/liza, prompts, agent or exported API change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-092631-arm-1-ar-13-cp-2.md#Task 3: Separate plan-check classification from disposition persistence",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 3: Plan handoff and reviewed correction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["1"],
+    "inherit_inputs": {"mode": "all"}
+  },
+  {
+    "desc": "Must: separate obligation-drift detection by the artifacts it compares within ops",
+    "done_when": "The detectObligationDrift ratchet key is absent and every touched file and function is within S1; an oracle-only commit adds the three Task 4 drift state goldens before the production edit and older goldens are unchanged; anomaly content, dedupe and widening behave as before; C0-C4 pass; the manifest maps every allocated obligation.",
+    "scope": "internal/ops/obligation_drift.go, an optional new private carrier comparison file, colocated drift tests, additive a4 oracle driver/adapter/fixtures/goldens, area_a4_test.go, the INVARIANTS.md strict-artifact row only if cited code moves, manifest. No wt_merge.go, reference_context.go, referencecontract or RecordObligationContentDrift signature change.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-092631-arm-1-ar-13-cp-2.md#Task 4: Separate obligation-drift detection by compared artifacts",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 3: Plan handoff and reviewed correction",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race ./internal/ops/", "executables": ["env", "go", "git", "gcc"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ],
+    "depends_on": ["2"],
+    "inherit_inputs": {"mode": "all"}
+  }
+]
