@@ -1,0 +1,10 @@
+{
+  "branch": "task/task-1",
+  "worktree": ".worktrees/task-1",
+  "base_ref": "integration",
+  "files": {
+    "review-feature.txt": "A9 derived review fixture change\n"
+  },
+  "message": "feat(a9): derived review fixture change",
+  "expected_review_commit": "cec9fad9abb06470815f75c21f58e678e4a0af9d"
+}
