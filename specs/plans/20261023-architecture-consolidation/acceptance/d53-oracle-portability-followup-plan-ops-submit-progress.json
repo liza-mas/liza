@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "Q-order",
+      "file": "internal/ops/submit_progress_test.go",
+      "assertion": "TestRequireQuietAttributesPreReturnWrites: a line of at least 128 KiB written to os.Stderr before requireQuiet is attributed to the submit, not to the quiet window, in 50 runs",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "Q-late",
+      "file": "internal/ops/submit_progress_test.go",
+      "assertion": "TestRequireQuietReportsWriteAfterReturn: a line written inside the quiet window fails the helper with 'progress written after the submit returned' naming the line",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "Q-focus",
+      "file": "internal/ops/submit_progress_test.go",
+      "assertion": "TestSubmitProgressRepeatsWhileQueuedAndRunning and TestSubmitProgressWithoutAdmissionClass pass 50 times with their unchanged bodies, counts and wording checks",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "Q-package",
+      "file": "internal/ops/submit_progress_test.go",
+      "assertion": "package ./internal/ops/ passes",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "Q-sleep",
+      "file": "internal/testguard/sleep_usage_test.go",
+      "assertion": "TestSleepUsageBudget passes with the budget at 16 and no new time.Sleep call",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "Q-lint",
+      "file": "Makefile",
+      "assertion": "make lint passes on the touched test file",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "Q-preserve",
+      "approved_reference_id": "d41"
+    },
+    {
+      "obligation_id": "Q-red",
+      "approved_reference_id": "timing-rules"
+    }
+  ]
+}
