@@ -607,6 +607,24 @@ L1–L15 state case fails. The run is nondeterministic, and the mask erases genu
 - Rejected: leaving it (a flaky oracle and a falsified golden comparison); a harness change (the defect
   is package-local). Kind: oracle-contract (volatility). Revert: a reviewed A3 correction.
 
+### D39 — Oracle A8 case T01: mandatory docs reached through a fixture pipeline value (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T00:53Z. `arm-1-ar-8-cp-0-code-0` blocked: inventory row T01 (epic-planner) must
+reach "mandatory docs" (`=== MANDATORY DOCUMENTS ===`). At the starting commit `96c9ad69a`, every role in
+`internal/embedded/pipeline.yaml` declares `mandatory-docs: []`. `Resolver.MandatoryDocs` returns that
+list, and `templates/blocks/mandatory_docs.tmpl` omits the section when it is empty, so no case can reach
+the branch under the unmodified frozen pipeline. Projects configure the list, so the branch is real
+starting behaviour that a prompt refactor could break.
+- Ruling: for T01 only, the A8 adapter freezes the embedded pipeline as mandated and then sets
+  epic-planner `mandatory-docs` to a fixed list of documents committed in the T01 fixture. The render
+  path (LoadFrozen → NewResolver → NewRoleStrategy → BuildPrompt) and every other case are unchanged.
+  The other cases use the unmodified frozen pipeline. Production code is unchanged. The marker rule and
+  T01's byte-exact golden from the starting commit stand.
+- Intent relied on: goal "Rendered agent prompts | Byte-identical over a fixed fixture set"; a fixture
+  may carry configuration, as A4 does with its committed pipeline copy (A4 D4).
+- Rejected: dropping the T01 mandatory-docs entry as D26 did (leaves a configurable prompt branch
+  unpinned); changing the embedded pipeline (a production behaviour change). Kind: oracle-contract
+  (fixture configuration). Revert: a D26-style marker reselection.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
