@@ -668,6 +668,27 @@ misses.
   widening the budgets only (still load-dependent). Kind: test-stability (delivery-neutral). Revert:
   drop the task; batches stay intermittently red.
 
+### D42 — Oracle A9 case I-11: pin the stall record's observable surface, not its 10-minute trigger (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T03:15Z. `arm-1-ar-9-cp-0-code-2` blocked: the I-11 success cell (pending-merge stall
+record) has one producer, `internal/agent/strategy_reviewer.go` `recordPendingMergeStall`. It is reached
+only after 3 quick retries plus 20 wake rounds of 30 s, about 606 s at minimum, through unexported
+constants and an unexported strategy. That exceeds Go's default 10-minute package timeout, and a
+test-only fixture cannot shorten it.
+- Ruling: I-11's success cell pins the stall record's observable surface. A fixture state holds
+  exactly the anomaly record the starting producer writes, with fields and values taken from
+  `recordPendingMergeStall` at `96c9ad69a`. The case runs the starting CLI's anomaly read surfaces
+  (`get anomalies`, human and `--json`) over it, with byte-exact goldens from write-new at the
+  starting commit. The trigger path (retries, then stall rounds, then record) stays guarded by the
+  existing white-box test `TestReviewerPreWork_PendingMergeStallRecordsAnomaly`
+  (`internal/agent/strategy_reviewer_merge_wake_test.go:138`). Refactors must move that test with the
+  code and keep it passing; reviewers of A9-area refactors check this. No production seam, no
+  longer timeout, and the other A9 rows are unchanged.
+- Intent relied on: oracles pin observable behaviour within the canonical validation budget, and
+  white-box tests guard internals (goal Test Policy).
+- Rejected: a production seam for the round count or interval (a behaviour-adjacent change outside
+  oracle scope); a slow build-tagged suite with a longer timeout (10+ min on every batch); dropping
+  I-11. Kind: oracle-contract (reachability within budget). Revert: a reviewed A9 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
