@@ -29,7 +29,8 @@ func signalAlerts(p *scenario) string {
 
 // signalStart launches the CLI like scenario.start, but in its own process
 // group, and registers the D43 hygiene: on every exit path, normal or failing,
-// cleanup kills the whole group and fails the test if a member outlives it.
+// cleanup kills the supervisor, its providers (each in a group of its own) and
+// their descendants, and fails the test if one outlives it.
 func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 	t.Helper()
 	a := &runningAgent{done: make(chan error, 1)}
@@ -40,11 +41,12 @@ func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 		t.Fatalf("A9 %s run: agent start", p.name)
 	}
 	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	pgid := a.cmd.Process.Pid
+	pid := a.cmd.Process.Pid
 	t.Cleanup(func() {
+		reaped := signalReap(pid)
 		a.cancel()
 		<-a.done
-		if !signalReap(pgid) {
+		if !reaped {
 			t.Errorf("A9 %s cleanup: a started process outlived the test", p.name)
 		}
 	})
@@ -55,21 +57,6 @@ func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 func signalRun(t *testing.T, p *scenario, args ...string) invocation {
 	t.Helper()
 	return p.finish(t, signalStart(t, p, args...), 100*time.Second)
-}
-
-// signalReap kills the process group and reports whether it emptied in time.
-func signalReap(pgid int) bool {
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		signalKillGroup(pgid)
-		if !signalGroupAlive(pgid) {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 }
 
 // signalSeed copies the scenario's committed signal files into .liza and
@@ -269,7 +256,7 @@ func TestSignalCorrelationSuffix(t *testing.T) {
 	}
 }
 
-// TestSignalGroupReap shows the cleanup reaches a descendant that outlives its
+// TestSignalGroupReap shows the reap reaches a descendant that outlives its
 // group leader, which the kit's direct-child cancellation does not.
 func TestSignalGroupReap(t *testing.T) {
 	t.Parallel()
@@ -284,19 +271,56 @@ func TestSignalGroupReap(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal("A9 signal group: start failed")
 	}
-	pgid := cmd.Process.Pid
-	t.Cleanup(func() { signalKillGroup(pgid) })
+	root := cmd.Process.Pid
+	t.Cleanup(func() { signalReap(root) })
 	if line, _ := bufio.NewReader(out).ReadString('\n'); line != "ready\n" {
 		t.Fatal("A9 signal group: descendant not started")
+	}
+	below := signalDescendants(root)
+	if len(below) != 1 {
+		t.Fatal("A9 signal group: expected one descendant")
 	}
 	if err := cmd.Process.Kill(); err != nil {
 		t.Fatal("A9 signal group: leader kill failed")
 	}
 	_ = cmd.Wait()
-	if !signalGroupAlive(pgid) {
+	if !signalPidLive(below[0].pid) {
 		t.Fatal("A9 signal group: killing only the leader must leave the descendant alive")
 	}
-	if !signalReap(pgid) || signalGroupAlive(pgid) {
-		t.Fatal("A9 signal group: reap must empty the group")
+	if !signalReap(root) || signalPidLive(below[0].pid) {
+		t.Fatal("A9 signal group: reap must remove the descendant")
+	}
+}
+
+// TestSignalProviderReap holds a real scenario stub provider, which the
+// supervisor runs in a process group of its own, and ends the scenario while it
+// is held. The cleanup must terminate supervisor and provider with no survivor.
+func TestSignalProviderReap(t *testing.T) {
+	unixOnly(t)
+	var started []int
+	t.Run("held", func(t *testing.T) {
+		p := newScenario(t, "i19-held")
+		a := signalStart(t, p, signalCoderArgs("claude")...)
+		p.await(t, "held provider", func() bool {
+			_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
+			return err == nil
+		})
+		supervisor := a.cmd.Process.Pid
+		started = append(started, supervisor)
+		for _, proc := range signalDescendants(supervisor) {
+			started = append(started, proc.pid)
+			if proc.pgid != supervisor {
+				return
+			}
+		}
+		t.Fatal("I-19 the held provider must run in a group of its own")
+	})
+	if len(started) < 2 {
+		t.Fatal("A9 signal provider: no provider observed")
+	}
+	for _, pid := range started {
+		if signalPidLive(pid) {
+			t.Fatal("A9 signal provider: a started process outlived its scenario")
+		}
 	}
 }
