@@ -1,11 +1,12 @@
 # Code Plan: D53 Oracle Portability Corrections
 
 ## Source References
-Source revision: "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
+Source revision: "cefbe63b27c0c209ac882c6df905d959e91e95a8"
 
 ### Direct References
 - "d53": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
 - "d52": "specs/goals/20261023-architecture-consolidation-decisions.md#D52 — G8 boundary CI by `workflow_dispatch` on the pushed integration branch; one PR to `main` later (human, 2026-10-24)" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
+- "d55": "specs/goals/20261023-architecture-consolidation-decisions.md#D55 — E1 revised for new code plans: no per-task `go test -race` (human, 2026-10-24)" @ "c6971a1d1fb03cb178aa66964d0ab2fc99b4387e"
 - "d24": "specs/goals/20261023-architecture-consolidation-decisions.md#D24 — Provenance of goldens changed by a C task (run, 2026-10-23)" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
 - "goal-frozen": "specs/goals/20261023-architecture-consolidation.md#Frozen Surfaces" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
 - "goal-tests": "specs/goals/20261023-architecture-consolidation.md#Test Policy and Sequencing" @ "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
@@ -28,24 +29,24 @@ Source revision: "6ef124d3e78667f8bf555854e499ad81cd0f1b98"
 - "N-guard" -> "d53"
 - "N-provenance" -> "d24", "adr-0219", "goal-proof"
 - "N-doc" -> "d53", "adr-0219", "goal-docs"
-- "N-proof" -> "goal-proof", "env-safe", "d52", "boundary"
+- "N-proof" -> "goal-proof", "env-safe", "d52", "d55", "boundary"
 - "H-depth" -> "d53", "d52"
 - "H-guard" -> "d53"
 - "H-proof" -> "d53", "goal-proof", "d24"
-- "H-env" -> "goal-proof", "env-safe", "d52", "boundary"
+- "H-env" -> "goal-proof", "env-safe", "d52", "d55", "boundary"
 - "L-a9" -> "d53", "a9-arch", "goal-tests"
 - "L-select" -> "d53", "goal-nfr"
 - "L-stub" -> "d53", "goal-tests", "a9-arch"
 - "L-provenance" -> "d24", "adr-0219", "goal-proof"
 - "L-preserve" -> "d53", "goal-tests", "goal-frozen"
-- "L-proof" -> "goal-proof", "env-safe", "d52", "boundary"
+- "L-proof" -> "goal-proof", "env-safe", "d52", "d55", "boundary"
 - "A4-cause" -> "d53", "goal-frozen", "a4-arch"
 - "A4-scope" -> "d53", "a4-arch", "goal-tests"
 - "A4-select" -> "d53", "goal-nfr"
 - "A4-provenance" -> "d24", "adr-0219", "goal-proof"
 - "A4-doc" -> "d53", "a2-arch", "a3-arch", "a7-arch", "a9-arch", "a4-arch", "goal-docs"
 - "A4-preserve" -> "d53", "goal-tests", "goal-frozen"
-- "A4-proof" -> "goal-proof", "env-safe", "d52", "boundary"
+- "A4-proof" -> "goal-proof", "env-safe", "d52", "d55", "boundary"
 
 ## Intent and Allocation
 
@@ -68,7 +69,7 @@ fixture, golden content or asserted value: (1) filesystem-safe golden storage na
 history for test-running checkouts, (3) A9 off-Linux correctness, (4) the A4 difference with the
 oracle proof-scope document. Validate this plan by payload preflight, reference and Acceptance
 Contract parity, and independent plan review. Doc Impact: this plan, its output JSON, and the
-children's manifests; Task 1 owns the storage-naming doc and the ADR-0219 clause; Task 4 owns the
+children's manifests; per D55 no output lists `go test -race` or `make test-race`, and race coverage is the CI Linux race job of the D52 boundary run; Task 1 owns the storage-naming doc and the ADR-0219 clause; Task 4 owns the
 proof-scope doc; the boundary record stays with `arm-1-ar-11-cp-0-code-0`. Test Impact: none for
 planning; each child owns its regression and proof.
 
@@ -247,8 +248,10 @@ failures impossible. Residual paths, all disclosed and none claimed closed:
   dispatch, PR, installed-binary change or live runtime state.
 - **TDD.** Each task commits its failing (or, for Task 4's characterization, green-on-unchanged-tree)
   test before the edit it guards, and records the run in its checkpoint.
-- **Proof.** Pre-commit on touched files, then the canonical commands serially. Deferred commands
-  (`make test`, `make test-race`) are batched on integration. Cn names validation index n.
+- **Proof.** Pre-commit on touched files, then the canonical commands serially. The deferred
+  command (`make test`) is batched on integration. No local race command (D55): race coverage is
+  the CI Linux race job of the D52 boundary run. `make test-e2e` is not listed: no product
+  behaviour or integration path changes. Cn names validation index n.
 
 ## Assertion Traceability (original → retained)
 
@@ -267,7 +270,7 @@ failures impossible. Residual paths, all disclosed and none claimed closed:
 ## Task 1: Store oracle goldens under filesystem-safe names with a tracked-path guard
 
 **Priority:** Must (`d53` generic fix 1).
-**Direct references:** ["d53", "d24", "adr-0219", "goal-tests", "goal-proof", "goal-docs", "env-safe", "a2-arch", "d52", "boundary"]
+**Direct references:** ["d53", "d24", "adr-0219", "goal-tests", "goal-proof", "goal-docs", "env-safe", "a2-arch", "d52", "d55", "boundary"]
 
 **Owned files:** `internal/testhelpers/oracle/golden.go`, `golden_test.go`, a new harness file for
 the Windows-path predicate if preferred; new `internal/testhelpers/oracle/golden-names.md`; new
@@ -301,17 +304,22 @@ validator already accepts `%`, `ledger.go:61-78`).
 4. **Rename.** `git mv` the four A2 goldens to their mapped names in the same commit as step 3;
    no content change.
 5. **Docs.** `golden-names.md` (beside the existing harness docs) states the logical-name vs
-   storage-name rule, the escape table, that inventories and `PROVENANCE` records use storage paths,
-   and D53 as authority. In ADR-0219 item 1, qualify "Golden paths are never renamed" with one
+   storage-name rule and the escape table; that golden *file paths* — on disk, in regen output and
+   in `PROVENANCE` `changed` records — are storage paths; that golden *contents*, including A2
+   effect-inventory goldens, keep logical names (their bytes, e.g. `store/<ID>.txt`, are unchanged,
+   because `fileEffects` builds the inventory from logical keys before `Check` maps the file name,
+   `helpers_test.go:183-202`); and D53 as authority. In ADR-0219 item 1, qualify "Golden paths are never renamed" with one
    clause: storage-name-only renames that D53 requires are allowed, content unchanged. No other ADR
    edit.
-6. **Evidence.** `git diff --find-renames=100% --name-status 6ef124d3e HEAD -- internal/oracle`
-   shows exactly four `R100` lines and nothing else; `git ls-files | grep -E '[<>:"|?*\\]'` is empty;
+6. **Evidence.** Record the task's implementation base (the integration commit its worktree was
+   created or last rebased on) in the checkpoint; `git diff --find-renames=100% --name-status <base>
+   <reviewed commit> -- internal/oracle` over that range alone shows exactly four `R100` lines and no
+   other change (sibling merges before the base are excluded by construction); `git ls-files | grep -E '[<>:"|?*\\]'` is empty;
    C3 lists the four mapped names as `ok … H1`.
 
 **Done when:** `TestTrackedPathsAreWindowsSafe` failed on the four `<ID>`/`<EVENT-1>` paths
 (recorded) and passes; the harness mapping tests pass; the four goldens are R100 renames to their
-`%XX` names with no other `internal/oracle` change; C0–C6 pass; the regen check reports the four
+`%XX` names with no other `internal/oracle` change in the task's own implementation range; C0–C5 pass; the regen check reports the four
 mapped names H1; the manifest maps every allocated obligation.
 
 Mappings: N-store → `internal/testhelpers/oracle/golden_test.go`, `TestGoldenStorageNames`, index 0;
@@ -336,12 +344,10 @@ N-doc and N-proof use their `approved_reference_id`.
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a2/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testhelpers/oracle/... ./internal/testguard/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
   ],
   "timeout_seconds": 3600,
-  "deferred": [7, 8],
+  "deferred": [6],
   "approved_proofs": [
     {"obligation_id": "N-doc", "reference_id": "adr-0219", "rationale": "The storage-naming document and the ADR-0219 item 1 clause are reviewed for accuracy against the delivered mapping and D53; prose cannot be asserted by a test."},
     {"obligation_id": "N-proof", "reference_id": "goal-proof", "rationale": "Review that commands ran sanitized in disposable state, no environment value reached output, and nothing claims cross-platform acceptance before the D52 run owned by the boundary task."}
@@ -352,7 +358,7 @@ N-doc and N-proof use their `approved_reference_id`.
 ## Task 2: Fetch full history in every test-running CI checkout
 
 **Priority:** Must (`d53` generic fix 2).
-**Direct references:** ["d53", "d52", "d24", "goal-proof", "env-safe", "boundary"]
+**Direct references:** ["d53", "d52", "d24", "goal-proof", "env-safe", "d55", "boundary"]
 
 **Owned files:** `.github/workflows/ci-core.yml` (checkouts of jobs `linux`, `lint`, `macos`),
 `.github/workflows/ci.yml` (checkout of job `test-windows-shard`); new
@@ -373,7 +379,7 @@ N-doc and N-proof use their `approved_reference_id`.
    unshallowed passes) in the checkpoint. D52 CI is the final proof and is not claimed here.
 
 **Done when:** the guard failed on the four checkouts without `fetch-depth: 0` (recorded) and
-passes; the diff to the two workflows is exactly four added `fetch-depth: 0` lines; C0–C3 pass; the
+passes; the diff to the two workflows is exactly four added `fetch-depth: 0` lines; C0–C2 pass; the
 manifest maps every allocated obligation.
 
 Mappings: H-depth → `internal/testguard/ci_checkout_history_test.go`,
@@ -393,12 +399,10 @@ starting commit, index 1; H-env uses its `approved_reference_id`.
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestProviderCorrection|TestRegenNamesAlteredSampleGolden' ./internal/testhelpers/oracle/ ./internal/testhelpers/oracle/cmd/regen/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/testguard/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
   ],
   "timeout_seconds": 1800,
-  "deferred": [4, 5],
+  "deferred": [3],
   "approved_proofs": [
     {"obligation_id": "H-env", "reference_id": "goal-proof", "rationale": "Review that the shallow reproduction and all commands ran in disposable clones under a sanitized environment, that no remote push or dispatch occurred, and that green CI is left to the D52 run of the boundary task."}
   ]
@@ -408,7 +412,7 @@ starting commit, index 1; H-env uses its `approved_reference_id`.
 ## Task 3: Make the A9 oracle correct off Linux
 
 **Priority:** Must (`d53` Linux scope; generic fix 3).
-**Direct references:** ["d53", "a9-arch", "goal-tests", "goal-frozen", "goal-nfr", "d24", "adr-0219", "goal-proof", "env-safe", "d52", "boundary"]
+**Direct references:** ["d53", "a9-arch", "goal-tests", "goal-frozen", "goal-nfr", "d24", "adr-0219", "goal-proof", "env-safe", "d52", "d55", "boundary"]
 
 **Owned files:** `internal/oracle/a9/lifecycle_test.go`, new `lifecycle_linux_test.go`, new
 `lifecycle_other_test.go` (`//go:build !linux`), `stub_test.go`; manifest
@@ -436,7 +440,7 @@ starting commit, index 1; H-env uses its `approved_reference_id`.
 **Done when:** `TestOracleA9Stub` failed under a symlinked `TMPDIR` before the edit and passes after
 (both recorded), with the recorded directory value unchanged; the two whole functions and the
 `capacity-refused` body live under `//go:build linux` with a stated reason and no statement change;
-`TestOracleA9AutoAssignID/success` stays portable; C0–C4 pass; the manifest maps every allocated
+`TestOracleA9AutoAssignID/success` stays portable; C0–C3 pass; the manifest maps every allocated
 obligation.
 
 Mappings: L-a9 → `internal/oracle/a9/lifecycle_linux_test.go`, `TestOracleA9RegistrationCollision`,
@@ -458,12 +462,10 @@ L-proof use their `approved_reference_id`.
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a9/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a9/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/oracle/a9/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
   ],
   "timeout_seconds": 3600,
-  "deferred": [5, 6],
+  "deferred": [4],
   "approved_proofs": [
     {"obligation_id": "L-preserve", "reference_id": "goal-tests", "rationale": "Review the diff against the Assertion Traceability rows: moved statements are byte-identical, the stub edit changes only the comparison form, no golden or fixture changes, and no constraint is added outside internal/oracle/a9."},
     {"obligation_id": "L-proof", "reference_id": "goal-proof", "rationale": "Review sanitized execution, the recorded symlinked-TMPDIR red and green runs, and that macOS acceptance is left to the D52 run of the boundary task."}
@@ -474,7 +476,7 @@ L-proof use their `approved_reference_id`.
 ## Task 4: Scope the A4 procfs-dependent scenario and document the oracle proof scope
 
 **Priority:** Must (`d53` generic fix 3 investigated; Linux scope per C-A4).
-**Direct references:** ["d53", "a4-arch", "a2-arch", "a3-arch", "a7-arch", "a9-arch", "goal-tests", "goal-frozen", "goal-nfr", "goal-docs", "d24", "adr-0219", "goal-proof", "env-safe", "d52", "boundary"]
+**Direct references:** ["d53", "a4-arch", "a2-arch", "a3-arch", "a7-arch", "a9-arch", "goal-tests", "goal-frozen", "goal-nfr", "goal-docs", "d24", "adr-0219", "goal-proof", "env-safe", "d52", "d55", "boundary"]
 
 **Owned files:** new `internal/commands/validate_process_scan_test.go`;
 `internal/oracle/a4/dependencies_test.go`, new `dependencies_d35_linux_test.go`, new
@@ -505,7 +507,7 @@ L-proof use their `approved_reference_id`.
    (`repair-superseded-dependencies/success`), each with its process facility;
    white-box suites run on all three platforms; the D52 run at the boundary SHA is the N2 proof and
    the boundary record names the scope (`boundary`). Cite sources; do not restate rationale.
-4. **Evidence.** `GOOS=darwin`/`windows` vet (inside C3) compiles the package; C2 reproduces every
+4. **Evidence.** `GOOS=darwin`/`windows` vet (inside C4) compiles the package; C3 reproduces every
    A4 golden H1; Assertion Traceability A4 rows hold.
 
 **Done when:** `TestValidateWarnsWhenProcessScanUnavailable` passed on the unchanged tree (recorded)
@@ -515,11 +517,11 @@ oracle scope with its source; C0–C4 pass; the manifest maps every allocated ob
 contests C-A4, mark BLOCKED with its unresolved decision instead.
 
 Mappings: A4-cause → `internal/commands/validate_process_scan_test.go`,
-`TestValidateWarnsWhenProcessScanUnavailable`, index 0; A4-scope →
-`internal/oracle/a4/dependencies_d35_linux_test.go`, `TestOracleRepairSupersededDependencies/success`
-runs and passes on Linux, index 1; A4-provenance → `internal/testhelpers/oracle/cmd/regen/main.go`,
-check mode exits 0 with every A4 golden H1, index 2; A4-select → `Makefile`, `vet` target compiles A4
-for linux, windows and darwin, index 3; A4-doc, A4-preserve and A4-proof use their
+`TestValidateWarnsWhenProcessScanUnavailable`, index 0 (index 1 is the `commands` package proof);
+A4-scope → `internal/oracle/a4/dependencies_d35_linux_test.go`,
+`TestOracleRepairSupersededDependencies/success` runs and passes on Linux, index 2; A4-provenance →
+`internal/testhelpers/oracle/cmd/regen/main.go`, check mode exits 0 with every A4 golden H1, index 3;
+A4-select → `Makefile`, `vet` target compiles A4 for linux, windows and darwin, index 4; A4-doc, A4-preserve and A4-proof use their
 `approved_reference_id`.
 
 ### Acceptance Contract
@@ -531,15 +533,14 @@ for linux, windows and darwin, index 3; A4-doc, A4-preserve and A4-proof use the
   "obligations": ["A4-cause", "A4-scope", "A4-provenance", "A4-select", "A4-doc", "A4-preserve", "A4-proof"],
   "validation": [
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestValidateWarnsWhenProcessScanUnavailable$' -v ./internal/commands/",
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/commands/",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a4/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a4/...",
     "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -race -count=1 ./internal/commands/ ./internal/oracle/a4/",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
-    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-race"
+    "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
   ],
   "timeout_seconds": 3600,
-  "deferred": [5, 6],
+  "deferred": [5],
   "approved_proofs": [
     {"obligation_id": "A4-doc", "reference_id": "d53", "rationale": "The proof-scope document is reviewed for completeness against the delivered build constraints and skips and for citing each scope's source; prose cannot be asserted by a test."},
     {"obligation_id": "A4-preserve", "reference_id": "goal-tests", "rationale": "Review the diff against the A4 Assertion Traceability rows: moved statements are byte-identical, refused stays portable, and no golden, fixture or production file changes."},
@@ -605,14 +606,15 @@ Run at `6ef124d3e78667f8bf555854e499ad81cd0f1b98` (worktree HEAD) in disposable 
 | RP-7 | `go test -count=1 ./internal/testhelpers/oracle/... ./internal/testguard/ ./internal/oracle/a2/cli/`; `go test -count=1 ./internal/oracle/a9/ ./internal/oracle/a4/` | `ok` (regen 15.1 s, a2/cli 2.0 s, testguard 0.08 s); a9 141.7 s, a4 26.9 s |
 | RP-8 | `omni-ee get tasks --all --json` filtered (full read: needed for a writer audit across 86 unlisted DRAFT_CODE tasks) | statuses: 128 MERGED, 86 DRAFT_CODE, 4 DRAFT_CODING_PLAN, 2 CODE_PLANNING, 1 BLOCKED, 1 SUPERSEDED; no non-merged task names the owned files; `arm-1-ar-11-cp-0-code-0` BLOCKED on this plan and the timing plan; timing plan MERGED |
 | RP-9 | `make lint` (Tasks 1–4 C-lint) | gofmt, `go vet` for linux/windows/darwin, archguard `ok`; 1 min 11 s |
-| RP-10 | `go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...` (Task 1 C4); `go test -race -count=1 ./internal/commands/` (Task 4 C4 part); `go test -race -count=1 ./internal/oracle/a9/` (Task 3 C4) | regen exit 0, no non-`ok` line, 3 min 13 s; commands race `ok` 57.3 s (1 min 15 s wall); A9 race `ok` 208.9 s (3 min 30 s wall) |
+| RP-10 | `go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...` (Task 1 C4); `go test -count=1 ./internal/commands/` (Task 4 C1); `go test -count=1 -run '^$' -v ./internal/commands/` | regen exit 0, no non-`ok` line, 3 min 13 s; commands `ok` 48.6 s (52 s wall); selection compiles, `TestValidateWarnsWhenProcessScanUnavailable` PROSPECTIVE (Task 4). Race timings measured before D55 are not canonical evidence |
 | RP-11 | `go test -count=1 -run '^$' -v ./internal/testguard/` | `ok … [no tests to run]`: selection and package compile; `TestTrackedPathsAreWindowsSafe`, `TestCIWorkflowCheckoutsFetchFullHistory`, the harness mapping tests and `TestValidateWarnsWhenProcessScanUnavailable` are PROSPECTIVE (Tasks 1, 2, 1, 4) |
+| RP-12 | `git diff --name-only 6ef124d3e cefbe63b2` outside `specs/plans/` (revision 2 rebase) | only `internal/agent/checkpoint_summary_gate_test.go`, `internal/ops/await_verdict_test.go` (timing plan) and the decisions record (D54, D55): no owned or cited source drifted, so the probes above stand at `cefbe63b2` |
 
 **Budget.** Measured above on this host: Task 1 ≈ harness 15 s, testguard 1 s, A2 5 s, A2 regen 8 s,
-full-oracle regen 193 s, lint 71 s, race a few minutes; Task 2 under 3 min; Task 3 ≈ focused
-20 s, A9 142 s, A9 regen 132 s, lint 71 s, A9 race 209 s; Task 4 ≈ focused 10 s, A4 27 s, A4 regen
-20 s, lint 71 s, commands+A4 race about 2 min. `make test` and `make test-race` are deferred. Budgets of
-3600 s (Tasks 1, 3, 4) and 1800 s (Task 2) give at least double headroom for load.
+full-oracle regen 193 s, lint 71 s (≈ 5 min); Task 2 under 2 min; Task 3 ≈ focused 20 s, A9 142 s,
+A9 regen 132 s, lint 71 s (≈ 6 min); Task 4 ≈ focused 10 s, commands 52 s, A4 27 s, A4 regen 20 s,
+lint 71 s (≈ 3 min). `make test` is deferred; no race command is listed (D55). Budgets of 3600 s
+(Tasks 1, 3, 4) and 1800 s (Task 2) give more than double headroom for load.
 
 ## Spec Compliance Matrix
 
@@ -631,6 +633,7 @@ full-oracle regen 193 s, lint 71 s, race a few minutes; Task 2 under 3 min; Task
 | 11 | Provenance and regeneration preserved | `d24`; `adr-0219`; `goal-proof` E5 | Tasks 1, 3, 4 (regen checks) | Covered |
 | 12 | Corrections land before A1 G8; boundary reruns G1–G7 then D52 run; no backward edge | `d53` Order; `d52` | Placement | Covered |
 | 13 | No output claims final cross-platform acceptance before green D52 run | `d52`; `goal-nfr` N2 | Tasks 1–4 (proof obligations) | Covered |
+| 13a | No per-task `go test -race`/`make test-race`; race owned by the D52 boundary CI | `d55` | Tasks 1–4 (contracts) | Covered |
 | 14 | Sanitized environment, disposable state, no push/dispatch | `goal-proof` E2–E4; `env-safe` | Tasks 1–4 | Covered |
 | 15 | Production behaviour change or scoping beyond D53 returned as decision | task done_when; `goal-frozen` | C-A4 (Task 4 BLOCKED path) | Covered |
 | E2E | e2e test coverage for new behavior | Cross-cutting | N/A: no product behaviour changes; test-only and CI-configuration edits | N/A |
