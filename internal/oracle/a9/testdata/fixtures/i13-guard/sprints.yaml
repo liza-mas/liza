@@ -1,0 +1,83 @@
+# Sprint pairs for the I-13 guard adapter (TestOracleA9OrchestratorPlans/i13-guard).
+# `expected` is the sprint PreWork snapshotted when it saw the resumed
+# transition checkpoint; each case's `current` is the sprint found when the
+# clearing callback runs. Hand-authored from the models.Sprint fields the
+# exported predicate ops.SameResumedTransitionCheckpoint reads; see NOTE.md.
+expected:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope: {planned: [task-1], stretch: []}
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+    checkpoint_at: 2020-01-01T00:00:01Z
+  status: IN_PROGRESS
+  checkpoint_trigger: PLANNING_COMPLETE
+  metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}
+cases:
+  - name: same-checkpoint
+    current:
+      id: sprint-1
+      number: 1
+      goal_ref: goal-1
+      scope: {planned: [task-1], stretch: []}
+      timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+        checkpoint_at: 2020-01-01T00:00:01Z
+      status: IN_PROGRESS
+      checkpoint_trigger: PLANNING_COMPLETE
+      metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}
+  - name: newer-checkpoint-same-trigger
+    current:
+      id: sprint-1
+      number: 1
+      goal_ref: goal-1
+      scope: {planned: [task-1], stretch: []}
+      timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+        checkpoint_at: 2020-01-01T00:00:09Z
+      status: IN_PROGRESS
+      checkpoint_trigger: PLANNING_COMPLETE
+      metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}
+  - name: different-trigger
+    current:
+      id: sprint-1
+      number: 1
+      goal_ref: goal-1
+      scope: {planned: [task-1], stretch: []}
+      timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+        checkpoint_at: 2020-01-01T00:00:01Z
+      status: IN_PROGRESS
+      checkpoint_trigger: MANY_TO_ONE_READY
+      metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}
+  - name: different-sprint
+    current:
+      id: sprint-2
+      number: 2
+      goal_ref: goal-1
+      scope: {planned: [task-1], stretch: []}
+      timeline:
+        started: 2020-01-02T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+        checkpoint_at: 2020-01-01T00:00:01Z
+      status: IN_PROGRESS
+      checkpoint_trigger: PLANNING_COMPLETE
+      metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}
+  - name: checkpointed-again
+    current:
+      id: sprint-1
+      number: 1
+      goal_ref: goal-1
+      scope: {planned: [task-1], stretch: []}
+      timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+        checkpoint_at: 2020-01-01T00:00:01Z
+      status: CHECKPOINT
+      checkpoint_trigger: PLANNING_COMPLETE
+      metrics: {tasks_done: 0, tasks_in_progress: 0, tasks_blocked: 0, iterations_total: 0, review_cycles_total: 0}

@@ -1,0 +1,5 @@
+same-checkpoint: same=true
+newer-checkpoint-same-trigger: same=false
+different-trigger: same=false
+different-sprint: same=false
+checkpointed-again: same=false

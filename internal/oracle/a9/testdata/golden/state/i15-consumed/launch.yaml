@@ -54,9 +54,10 @@ config:
   integration_branch: integration
   mode: RUNNING
 # after
+## state.yaml
 version: 1
 pipeline_version: 3
-mutation_sequence: 4
+mutation_sequence: 1
 goal:
     id: goal-1
     description: A9 oracle fixture
@@ -77,7 +78,19 @@ tasks:
       scope: ""
       created: <T1:sZ>
       history: []
-agents: {}
+agents:
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: <V1>
+        lease_expires: <T4:fZ>
+        heartbeat: <T5:fZ>
+        registered_at: <T5:fZ>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <V2>
 discovered: []
 human_notes: []
 spec_changes: []
@@ -94,7 +107,7 @@ sprint:
         started: <T1:sZ>
         deadline: <T1+2493072000s:sZ>
         checkpoint_at: <T1+1s:sZ>
-    status: IN_PROGRESS
+    status: CHECKPOINT
     metrics:
         planning_changes:
             daily: []
@@ -129,6 +142,4 @@ config:
     reviewer_poll_interval: 0
     reviewer_max_wait: 0
     integration_branch: integration
-    mode: STOPPED
-    mode_changed_at: <T4:fO>
-    mode_changed_by: human
+    mode: RUNNING
