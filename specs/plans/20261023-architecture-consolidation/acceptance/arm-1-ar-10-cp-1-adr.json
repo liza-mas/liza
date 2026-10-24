@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-ADR",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    }
+  ]
+}
