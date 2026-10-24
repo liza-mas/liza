@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-layout",
+      "approved_reference_id": "scope4"
+    },
+    {
+      "obligation_id": "AC-api",
+      "approved_reference_id": "scope4"
+    },
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard, run by make lint through lint-archguard: live production tree has no unlisted file >800 lines or function >100 lines; the A2 ratchet no longer lists internal/providers/catalog.go, which the split leaves at 201 lines.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-behavior",
+      "file": "internal/providers/catalog_test.go",
+      "assertion": "TestParseCatalogRejectsUnknownFieldsAndUnsafeValues, TestLoadUsesFreshCacheWithoutNetwork, TestLoadRefreshesStaleCacheAndFallsBackOnNetworkFailure, TestLoadForcedRefreshReturnsFetchedCatalogWhenCacheWriteFails and TestLoadNotModifiedRefreshesFetchedAtAndUsesCache remain unchanged and pass under -race, together with pi_catalog_test.go.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-oracle",
+      "file": "internal/oracle/a2/cli/providers_test.go",
+      "assertion": "TestOracleA2ProvidersList, TestOracleA2ProvidersDetect and TestOracleA2ProvidersRefresh (C-1..C-3) assert providers list, detect and refresh outputs and cache files against unchanged goldens; all other live oracles pass in the same ./internal/oracle/... run.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-test-policy",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    },
+    {
+      "obligation_id": "AC-order",
+      "approved_reference_id": "arch-files"
+    }
+  ]
+}
