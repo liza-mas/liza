@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "W1-gate", "file": "internal/oracle/a1/cli/main_test.go", "assertion": "TestOracleCLIWindowsExclusion: windowsExclusion(\"windows\") is one line naming D57 and D31; linux and darwin return \"\"", "command_index": 0},
+    {"obligation_id": "W1-exclude", "file": "internal/oracle/a1/cli/boundary_test.go", "assertion": "TestOracleCLIBoundary accepts the guarded main_test.go: no build restriction, standard-library imports only", "command_index": 0},
+    {"obligation_id": "W1-cases", "file": "internal/oracle/a1/cli/usage_test.go", "assertion": "TestOracleUsageReport (7), TestOracleValidate (4), TestOracleAnalysisReport, TestOracleCLIIsolation and TestOraclePipelineRBAC pass unchanged on Linux; the whole package passes (command 1) with TestMain reaching oracle.RunMain", "command_index": 0},
+    {"obligation_id": "W1-provenance", "file": "internal/testhelpers/oracle/cmd/regen/main.go", "assertion": "regen check mode exits 0 with every A1 CLI golden reproduced (H1)", "command_index": 2},
+    {"obligation_id": "W1-lint", "file": "Makefile", "assertion": "make lint runs gofmt and vet for linux, windows and darwin over the guarded main_test.go", "command_index": 3},
+    {"obligation_id": "W1-preserve", "approved_reference_id": "d57"},
+    {"obligation_id": "W1-windows", "approved_reference_id": "d52"}
+  ]
+}
