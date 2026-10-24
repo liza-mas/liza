@@ -925,6 +925,18 @@ differs (extra element).
 - Kind: proof scope (N2 kept: CI green on all three platforms; the behaviour-preservation proof for process supervision is Linux-only).
   Revert: drop the build constraints and port the scenarios.
 
+### D54 — `make test-race` leaves the deferred-validation batch; full-suite race runs in CI (human, 2026-10-24)
+Human decision ("Drop make test-race from deferred validation"), 2026-10-24T15:53Z. The deferred `env -i … make test-race` (sha256
+`640b69fd…`) took 19–28 min per batch (8–10 min for `make test`) beside four other lanes, failed in every batch
+15–20 only on wall-clock tests that `-race` slows past their deadlines under load, and in 301 stored outputs found no data
+race. The Linux CI job runs race on every D52 boundary run.
+- Ruling: retire that exact command from the effective deferred set (`omni-ee deferred-validation retire`). A retirement covers
+  only deferrals recorded before it (`internal/models/deferred_validation.go` `EffectiveCommands`/`retired`), and a later merge
+  of a task deferring the command re-adds it. The operator re-retires it, citing D54, whenever it re-enters the effective set
+  (checked each watch round).
+- Unchanged: per-task scoped `go test -race` in acceptance contracts (E1), and race in CI at every area boundary.
+- Kind: proof scope (local full-suite race replaced by the CI boundary race). Revert: unrule nothing; let the next deferral re-add it.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
