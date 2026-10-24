@@ -261,3 +261,30 @@ and no duplicate dispatch is needed. No pull request to `main` was opened or is 
 
 Linux, Windows and macOS all passed in this one run (D52 replaces the separate `main`-push macOS check).
 The result is the maintainer's relayed observation, recorded here as supplied; this task made no provider CLI call.
+
+### Oracle platform-proof scope (D53, D57)
+
+The green jobs above do not show that every oracle scenario ran on every platform. D53 requires this record to
+name the scope; the committed inventory is
+[`internal/testhelpers/oracle/proof-scope.md`](../../../internal/testhelpers/oracle/proof-scope.md) (read at
+`265a14b3a`; authority D57, D53, D52 in `specs/goals/20261023-architecture-consolidation-decisions.md`). Its
+restrictions, as they apply to the run recorded above:
+
+- **A1 CLI oracle on Windows (D57):** the `a1/cli` package does not run on Windows. Its `TestMain` prints one
+  line naming D57/D31 and calls `os.Exit(0)` before `oracle.RunMain` (D31 git-only `PATH` isolation is unproven on
+  Windows), so the Windows jobs report that package as passing without running a scenario. It runs on Linux and
+  macOS. The A1 `a1/persist` oracle and the `sample` goldens carry no platform restriction and ran on all three.
+- **Linux-only scenarios (D53):** A9 `TestOracleA9RegistrationCollision` (I-01), the I-02 capacity refusal and
+  `TestOracleA9AuthorityLost` (I-05) are `//go:build linux` (procfs reads); the A4
+  `TestOracleRepairSupersededDependencies/success` subtest is `//go:build linux` (procfs process scan; its
+  `refused` subtest stays portable); the A9 orchestrator-reap tests need `//go:build linux` or `t.Skip` off Linux.
+  Other Linux-only scopes in the inventory: A2 `a2/artifact` and `a2/cli`, A3 `a3/control` and `a3/lifecycle`,
+  A7 `a7/install` and `a7/present`. None of these ran on Windows or macOS in the recorded run.
+- **Windows-skipped oracle suites:** A4 (all drivers), A5 (`TestOracleA5`, `TestA5Isolation`), A6 determinism
+  layer, A8 prompt oracles and A9 package (`unixOnly`) skip on Windows; they ran on Linux and macOS, except where
+  the Linux-only list above applies.
+- **White-box coverage:** suites outside `internal/oracle/**` have no such restriction and ran on Linux,
+  Windows and macOS. Opt-in sensitivity and regeneration proofs (`ORACLE_CLI_TAMPER`, `ORACLE_VERIFY_TAMPER`,
+  `oracleproof`, and the other gates listed in the inventory) did not run in the recorded run.
+
+The CI result, tested SHA and job conclusions recorded above are unchanged by this paragraph.
