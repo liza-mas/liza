@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard: live production tree has no unlisted file >800 lines or function >100 lines, including statevalidate/validate_task.go, its seven task_*.go splits, validateTaskInvariants and validateStatusFields, with the three statevalidate ratchet keys removed.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC1",
+      "file": "internal/statevalidate/validate_task_test.go",
+      "assertion": "TestValidateTaskInvariants_EnforcesStatusSpecificRequiredFields, TestValidateTaskInvariants_RejectsStaleIntegrationFailureOnReviewStates, TestValidateTaskInvariants_Reviewing2RequiresReviewMetadata, TestValidateTask_DeclarativeDependencyRepairRequest, TestValidateTaskInvariants_DuplicateFailedByUsesBrandedStatePath, TestValidateTaskInvariants_IntegrationFixHistoryLinkage, TestValidateTaskInvariants_CompletionFieldRequirements, TestValidateTaskInvariants_RejectsBrokenReferencesAndOutput, TestValidateTaskInvariants_AttemptValidation and TestValidateTaskInvariants_AcceptanceSourceRequiresObjectIDs assert exact per-task diagnostics; TestValidateRejectionRCARequestDiagnostics, TestValidateRejectionRCADispositionRequestDiagnostics, TestValidateVerdictPayloadShapeDiagnostics and TestValidateTaskRejectionRCAState assert the payload-shape and stored-RCA diagnostics. internal/statevalidate/validate_task_order_test.go TestValidateTaskInvariants_ReportsDefectsInCheckOrder, captured against the unsplit code, asserts the complete ordered diagnostic list across the lock-hold, status-class, worktree, completion, reference, history, failed_by, parent, output, attempt and duplicate-assignment seams. All prior fixtures and assertions are untouched; extraction order is traced in review.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a1/cli/validate_test.go",
+      "assertion": "TestOracleValidate and TestOracleValidatePayload (internal/oracle/a1/cli/payload_test.go): live validate and validate-payload --json and human output match their goldens with goldens unchanged. The same command runs the remaining A1 oracles and the A8 prompt goldens live.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-api",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-cohesion",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-ratchet",
+      "approved_reference_id": "arch-size"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a1-scope"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target: existing ci-prepare and test-nosync execute the complete Go suite through go test ./... under the declared isolated environment; receipt additionally requires lint, statevalidate race, archguard, all live oracles and test-e2e.",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-references",
+      "approved_reference_id": "a1-scope"
+    }
+  ]
+}
