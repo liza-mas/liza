@@ -709,6 +709,29 @@ still alive. The operator terminated them (SIGTERM, verified gone).
 - Rejected: requiring a quiet host (agents always run concurrently); pinning one variant (flaky).
   Kind: oracle-contract (volatility) and test hygiene. Revert: a reviewed A9 correction.
 
+### D44 — Oracle A9 cases I-13, I-14, I-15: reachable cells, adapter for the pure guard, fixture provenance (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T03:53Z. `arm-1-ar-9-cp-0-code-3` blocked after review iteration 2 (4 blockers, two
+routed to the source owner).
+- I-13 refusal "a different checkpoint: trigger kept": the callback guard (`strategy_orchestrator.go:144`)
+  differs from the gate (`:122`) only when a checkpoint is replaced between PreWork's snapshot and its
+  `Modify`, which no external actor can interleave, and `orchestratorStrategy` is unexported.
+  **Ruling:** keep the binary-reachable `:122` gate cell. Pin the guard's decision through an AC2 adapter
+  over the exported pure predicate `ops.SameResumedTransitionCheckpoint` (`internal/ops/mode_change.go:622`),
+  using fixture sprint pairs: same checkpoint gives true; a different checkpoint or sprint gives false,
+  so the trigger is kept. Results are byte-exact from the starting commit.
+- I-15 success: the inventory expects "pending summary and alert", but the starting code claims the
+  obligation before the CLI runs and alerts only when the CLI fails. **Ruling:** pin the observed
+  starting behaviour (pending summary, no alert), as in D40. Pin the refusal "summary already pending"
+  through the binary-reachable in-flight guard (`checkpoint_summary.go:141`), using the coder's recipe:
+  hold the first summary stub on a wait file, then `resume` and `sprint-checkpoint` to raise a second
+  obligation.
+- I-14 fixtures `i14-undecided` and `i14-decided`: hand-authored MERGED plan states are acceptable
+  committed inputs (A4 D4 precedent) when each carries a derivation note naming the starting producer
+  operation and the source of each non-trivial field, and starting-commit `validate --json` accepts it.
+  A binary derivation is preferred where one exists within budget, but not required.
+- Blocker 4 (the `i15-consumed` mid-run snapshot) is mechanical and needs no ruling.
+- Kind: oracle-contract (reachability and provenance). Revert: a reviewed A9 correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
