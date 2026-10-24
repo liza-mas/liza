@@ -1,0 +1,10 @@
+exit_code: 1
+# stdout
+
+# stderr
+outcome: FORBIDDEN
+safe_action: stop
+task_status: UNKNOWN
+effects: none
+task_id: task-1
+Error: submit-verdict: FORBIDDEN (safe_action=stop): operation "submit-verdict" not allowed for role "coder" (agent coder-1)

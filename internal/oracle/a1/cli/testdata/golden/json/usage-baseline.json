@@ -1,0 +1,265 @@
+{
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "baseline": {
+        "outcome_totals": [
+          {
+            "cache_read_tokens": 200,
+            "fresh_tokens": 600,
+            "outcome": "active",
+            "output_tokens": 75,
+            "tasks": 1
+          }
+        ],
+        "outcomes": [
+          {
+            "cache_read_tokens": {
+              "median": 200,
+              "p95": 200,
+              "total": 200
+            },
+            "fresh_tokens": {
+              "median": 600,
+              "p95": 600,
+              "total": 600
+            },
+            "outcome": "active",
+            "output_tokens": {
+              "median": 75,
+              "p95": 75,
+              "total": 75
+            },
+            "records": 1,
+            "role": "coder",
+            "tasks": 1
+          }
+        ],
+        "per_completed_task": {
+          "cache_hit_percent": 25,
+          "cache_read_tokens_per_merged_task": null,
+          "merged_tasks": 0
+        },
+        "post_transition": [
+          {
+            "category": "retry_tail",
+            "records": 1,
+            "role": "coder",
+            "tasks": [
+              {
+                "last_useful": {
+                  "event": "created",
+                  "revision": 0,
+                  "task_id": "task-1",
+                  "time": "2026-09-28T09:00:00+02:00"
+                },
+                "records": 1,
+                "task_id": "task-1",
+                "tokens": 875
+              }
+            ],
+            "tokens": 875
+          }
+        ],
+        "provenance": {
+          "conflicting": 0,
+          "conflicting_records": 0,
+          "duplicates_collapsed": 0,
+          "malformed_lines": 0,
+          "partial": 0,
+          "terminal_authoritative": 1,
+          "unknown": 0
+        },
+        "window": {
+          "as_of": "2026-09-30T00:00:00Z",
+          "since": "2026-09-29T00:00:00Z",
+          "until": "2026-09-30T00:00:00Z"
+        }
+      },
+      "deltas": [
+        {
+          "baseline": 0,
+          "change": 80,
+          "kind": "outcome",
+          "metric": "fresh_tokens",
+          "outcome": "blocked",
+          "primary": 80,
+          "role": "coder"
+        },
+        {
+          "baseline": 0,
+          "change": 20,
+          "kind": "outcome",
+          "metric": "cache_read_tokens",
+          "outcome": "blocked",
+          "primary": 20,
+          "role": "coder"
+        },
+        {
+          "baseline": 0,
+          "change": 10,
+          "kind": "outcome",
+          "metric": "output_tokens",
+          "outcome": "blocked",
+          "primary": 10,
+          "role": "coder"
+        },
+        {
+          "baseline": 600,
+          "change": 600,
+          "kind": "outcome",
+          "metric": "fresh_tokens",
+          "outcome": "active",
+          "primary": 1200,
+          "role": "coder"
+        },
+        {
+          "baseline": 200,
+          "change": 100,
+          "kind": "outcome",
+          "metric": "cache_read_tokens",
+          "outcome": "active",
+          "primary": 300,
+          "role": "coder"
+        },
+        {
+          "baseline": 75,
+          "change": 75,
+          "kind": "outcome",
+          "metric": "output_tokens",
+          "outcome": "active",
+          "primary": 150,
+          "role": "coder"
+        },
+        {
+          "baseline": 875,
+          "category": "retry_tail",
+          "change": 885,
+          "kind": "post_transition",
+          "metric": "tokens",
+          "primary": 1760,
+          "role": "coder"
+        }
+      ],
+      "outcome_totals": [
+        {
+          "cache_read_tokens": 20,
+          "fresh_tokens": 80,
+          "outcome": "blocked",
+          "output_tokens": 10,
+          "tasks": 1
+        },
+        {
+          "cache_read_tokens": 300,
+          "fresh_tokens": 1200,
+          "outcome": "active",
+          "output_tokens": 150,
+          "tasks": 1
+        }
+      ],
+      "outcomes": [
+        {
+          "cache_read_tokens": {
+            "median": 20,
+            "p95": 20,
+            "total": 20
+          },
+          "fresh_tokens": {
+            "median": 80,
+            "p95": 80,
+            "total": 80
+          },
+          "outcome": "blocked",
+          "output_tokens": {
+            "median": 10,
+            "p95": 10,
+            "total": 10
+          },
+          "records": 1,
+          "role": "coder",
+          "tasks": 1
+        },
+        {
+          "cache_read_tokens": {
+            "median": 300,
+            "p95": 300,
+            "total": 300
+          },
+          "fresh_tokens": {
+            "median": 1200,
+            "p95": 1200,
+            "total": 1200
+          },
+          "outcome": "active",
+          "output_tokens": {
+            "median": 150,
+            "p95": 150,
+            "total": 150
+          },
+          "records": 1,
+          "role": "coder",
+          "tasks": 1
+        }
+      ],
+      "per_completed_task": {
+        "cache_hit_percent": 20,
+        "cache_read_tokens_per_merged_task": null,
+        "merged_tasks": 0
+      },
+      "post_transition": [
+        {
+          "category": "retry_tail",
+          "records": 2,
+          "role": "coder",
+          "tasks": [
+            {
+              "last_useful": {
+                "event": "created",
+                "revision": 0,
+                "task_id": "task-1",
+                "time": "2026-09-28T09:00:00+02:00"
+              },
+              "records": 1,
+              "task_id": "task-1",
+              "tokens": 1650
+            },
+            {
+              "last_useful": {
+                "event": "blocked",
+                "revision": 0,
+                "task_id": "task-2",
+                "time": "2026-10-01T12:30:00.123+02:00"
+              },
+              "records": 1,
+              "task_id": "task-2",
+              "tokens": 110
+            }
+          ],
+          "tokens": 1760
+        }
+      ],
+      "provenance": {
+        "conflicting": 0,
+        "conflicting_records": 0,
+        "duplicates_collapsed": 0,
+        "malformed_lines": 0,
+        "partial": 1,
+        "terminal_authoritative": 2,
+        "unknown": 0
+      },
+      "suppressed_calls": {
+        "available": false
+      },
+      "warnings": [
+        "lifecycle counters unavailable"
+      ],
+      "window": {
+        "as_of": "2026-10-02T00:00:00Z",
+        "since": "2026-10-01T00:00:00Z",
+        "until": "2026-10-02T00:00:00Z"
+      }
+    }
+  }
+}

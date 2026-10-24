@@ -1,0 +1,8 @@
+exit_code: 0
+# stdout
+
+# stderr
+Window: 2026-10-01T00:00:00Z .. 2026-10-02T00:00:00Z (as of 2026-10-02T00:00:00Z)
+OUTCOME ROLE TASKS FRESH FRESH P50 FRESH P95 CACHE READ CACHE P50 CACHE P95 OUTPUT
+blocked coder 1 80 80 80 20 20 20 10
+active coder 1 1200 1200 1200 300 300 300 150warning: lifecycle counters unavailable

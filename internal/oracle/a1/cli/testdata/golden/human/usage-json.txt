@@ -1,0 +1,123 @@
+exit_code: 0
+# stdout
+
+# stderr
+{
+"window": {
+"since": "2026-10-01T00:00:00Z",
+"until": "2026-10-02T00:00:00Z",
+"as_of": "2026-10-02T00:00:00Z"
+},
+"outcomes": [
+{
+"outcome": "blocked",
+"role": "coder",
+"tasks": 1,
+"records": 1,
+"fresh_tokens": {
+"total": 80,
+"median": 80,
+"p95": 80
+},
+"cache_read_tokens": {
+"total": 20,
+"median": 20,
+"p95": 20
+},
+"output_tokens": {
+"total": 10,
+"median": 10,
+"p95": 10
+}
+},
+{
+"outcome": "active",
+"role": "coder",
+"tasks": 1,
+"records": 1,
+"fresh_tokens": {
+"total": 1200,
+"median": 1200,
+"p95": 1200
+},
+"cache_read_tokens": {
+"total": 300,
+"median": 300,
+"p95": 300
+},
+"output_tokens": {
+"total": 150,
+"median": 150,
+"p95": 150
+}
+}
+],
+"outcome_totals": [
+{
+"outcome": "blocked",
+"tasks": 1,
+"fresh_tokens": 80,
+"cache_read_tokens": 20,
+"output_tokens": 10
+},
+{
+"outcome": "active",
+"tasks": 1,
+"fresh_tokens": 1200,
+"cache_read_tokens": 300,
+"output_tokens": 150
+}
+],
+"per_completed_task": {
+"merged_tasks": 0,
+"cache_read_tokens_per_merged_task": null,
+"cache_hit_percent": 20
+},
+"post_transition": [
+{
+"role": "coder",
+"category": "retry_tail",
+"tokens": 1760,
+"records": 2,
+"tasks": [
+{
+"task_id": "task-1",
+"tokens": 1650,
+"records": 1,
+"last_useful": {
+"event": "created",
+"time": "2026-09-28T09:00:00+02:00",
+"revision": 0,
+"task_id": "task-1"
+}
+},
+{
+"task_id": "task-2",
+"tokens": 110,
+"records": 1,
+"last_useful": {
+"event": "blocked",
+"time": "2026-10-01T12:30:00.123+02:00",
+"revision": 0,
+"task_id": "task-2"
+}
+}
+]
+}
+],
+"provenance": {
+"terminal_authoritative": 2,
+"partial": 1,
+"unknown": 0,
+"conflicting": 0,
+"duplicates_collapsed": 0,
+"malformed_lines": 0,
+"conflicting_records": 0
+},
+"suppressed_calls": {
+"available": false
+},
+"warnings": [
+"lifecycle counters unavailable"
+]
+}

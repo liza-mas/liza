@@ -1,0 +1,12 @@
+{
+  "exit_code": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "--since must not be after --until"
+    },
+    "ok": false,
+    "result": null
+  }
+}

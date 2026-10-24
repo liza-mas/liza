@@ -1,0 +1,14 @@
+exit_code: 0
+# stdout
+add-task: version 1
+assess-blocked: version 1
+handoff: version 1
+mark-blocked: version 1
+record-rejection-rca: version 1
+replace-task: version 1
+resume-rejection-rca: version 1
+set-task-output: version 1
+submit-for-review: version 1
+submit-verdict: version 1
+# stderr
+

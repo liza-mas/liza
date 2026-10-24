@@ -1,0 +1,5 @@
+exit_code: 1
+# stdout
+
+# stderr
+Error: spec_ref file not found: README.md (task: task-1)
