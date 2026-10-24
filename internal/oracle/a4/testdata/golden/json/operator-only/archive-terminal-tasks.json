@@ -1,0 +1,26 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "permission_denied",
+      "details": {
+        "effects": "none",
+        "operation": "archive-terminal-tasks",
+        "outcome": "FORBIDDEN",
+        "safe_action": "stop",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "archive-terminal-tasks: FORBIDDEN (safe_action=stop): archive-terminal-tasks is an operator-only command; agent sessions archive terminal tasks only through authenticated merge maintenance"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "archive-terminal-tasks",
+      "outcome": "FORBIDDEN",
+      "safe_action": "stop",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

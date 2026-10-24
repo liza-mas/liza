@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "add-human-note is operator-only; agent sessions cannot author operator input"
+    },
+    "ok": false,
+    "result": null
+  }
+}

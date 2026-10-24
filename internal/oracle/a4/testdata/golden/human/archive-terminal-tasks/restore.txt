@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Restored 3 terminal tasks inline; archival disabled
+--- stderr

@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "defer-provider-dependency is operator-only; agent sessions cannot move task declarations"
+    },
+    "ok": false,
+    "result": null
+  }
+}

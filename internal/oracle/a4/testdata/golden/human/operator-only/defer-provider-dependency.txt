@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: defer-provider-dependency is operator-only; agent sessions cannot move task declarations

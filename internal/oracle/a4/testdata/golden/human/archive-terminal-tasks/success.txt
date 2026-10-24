@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Archived 3 terminal tasks in 1 batches (<BYTES> bytes)
+--- stderr

@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: validation failed: withdraw-pending is operator-only

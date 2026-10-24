@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: set discovery disposition: modification function failed: validation failed: disposition references task "t9" which does not exist
