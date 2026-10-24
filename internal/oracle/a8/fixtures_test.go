@@ -164,6 +164,10 @@ func copyTree(t *testing.T, source, target string, labels map[string]string) {
 		if err != nil {
 			return err
 		}
+		// Strict-carrier fixtures contain commit-label placeholders until this
+		// copy. Store them as templates so admission cannot mistake them for
+		// reviewed project carriers before those labels have been resolved.
+		rel = strings.TrimSuffix(rel, ".in")
 		writeFile(t, filepath.Join(target, rel), []byte(substitute(string(readFile(t, path)), labels)), 0o644)
 		return nil
 	})
