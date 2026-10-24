@@ -1,0 +1,8 @@
+{
+  "files": {
+    ".gitignore": ".liza/\n.worktrees/\n",
+    "specs/vision.md": "# A9 oracle fixture\n"
+  },
+  "message": "test(a9): fixed oracle fixture",
+  "expected_sha": "f7ac18786dbc179615fd0acab229b4a42ecca4b2"
+}

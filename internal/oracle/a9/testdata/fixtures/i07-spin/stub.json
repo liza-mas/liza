@@ -1,0 +1,58 @@
+{
+  "executables": {
+    "claude": [
+      {
+        "args": [
+          "--version"
+        ],
+        "reply": "2.1.300 (Claude Code)"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "wait_file": ".liza/oracle-release-1",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-2",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-3",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-4",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-5",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-6",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-7",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-8",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-9",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-10",
+      "exit_code": 0
+    },
+    {
+      "wait_file": ".liza/oracle-release-11",
+      "exit_code": 0
+    }
+  ]
+}
