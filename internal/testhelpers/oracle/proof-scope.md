@@ -5,10 +5,12 @@ constraint or skip and its source. Rationale lives in the source, not here.
 Enumerated at coding HEAD with:
 
 ```
-git grep -nE '^//go:build|t\.Skip\(' -- internal/oracle
+git grep -nE '^//go:build|t\.Skip\(|os\.Exit\(0\)' -- internal/oracle
 ```
 
-Authority: D53 and D52 (`specs/goals/20261023-architecture-consolidation-decisions.md`).
+An `os.Exit(0)` hit in a `TestMain` before `oracle.RunMain` is a package-level runtime guard (the package reports pass with no test run); the A4 hit (`a4/main_test.go`, `a4-helper` subprocess mode) is helper dispatch, not a scope.
+
+Authority: D57, D53 and D52 (`specs/goals/20261023-architecture-consolidation-decisions.md`).
 Opt-in sensitivity and regeneration proofs are listed last; they never run by default.
 
 ## Linux-only scopes
@@ -30,6 +32,7 @@ The `refused` subtest of `TestOracleRepairSupersededDependencies` stays portable
 
 | Suite | Scope | Mechanism | Source |
 |---|---|---|---|
+| A1 | `a1/cli` package (`TestMain` in `main_test.go`, decided by `windowsExclusion`) | runtime guard: on Windows it prints one line naming D57/D31 and calls `os.Exit(0)` before `oracle.RunMain`; no `//go:build`, because `TestOracleCLIBoundary` rejects build restrictions | D57: D31 git-only PATH isolation unproven on Windows |
 | A4 | every driver (`gate` in `main_test.go`) | `t.Skip` on Windows | D3 platform gate: Windows does not honour `TZ` (`20261023-182810-arm-1-ar-4.md#Scope 1: A4 oracle suite`) |
 | A5 | `TestOracleA5`, `TestA5Isolation` (`oracle_test.go`, `driver_test.go`) | `t.Skip` on Windows | POSIX fixtures use shell commands and paths |
 | A6 | determinism layer (`platformGate` in `determinism_test.go`) | `t.Skip` on Windows | Windows does not honour `TZ`; runner locks differ |
@@ -39,7 +42,7 @@ The `refused` subtest of `TestOracleRepairSupersededDependencies` stays portable
 ## Runs on all three platforms
 
 - White-box suites (everything outside `internal/oracle/**`) run on Linux, Windows and macOS.
-- A1 (`a1/cli`, `a1/persist`) and the `sample` goldens carry no build constraint or platform skip; A1 helpers branch on `runtime.GOOS` for Windows names and environment.
+- A1 `a1/persist` and the `sample` goldens carry no build constraint or platform skip; `a1/persist` branches on `runtime.GOOS` for Windows environment names (`tamper_test.go`). `a1/cli` runs on Linux and macOS only (see Windows-skipped scopes).
 - Non-Linux twins (`umask_other_test.go` in `a3/control` and `a7/install`, `orchreap_other_test.go`, `reap_other_test.go`, `signals_other_test.go` in `a9`) exist so each package compiles off Linux; they add no proof.
 
 ## Opt-in proofs
