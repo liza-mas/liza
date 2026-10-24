@@ -770,6 +770,21 @@ guard did not run on their admission.
   idle on exactly this and no other writer touches these files). Kind: test hygiene. Revert: drop
   the exception.
 
+### D47 — D46 extension: launchReap waits through the D45 subreaper in platform-tagged helpers (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T05:14Z. The D41/D46 task replaced two of the three A9 sleeps (`ba28e3010`). The third,
+`launchReap` in `internal/oracle/a9/launch_test.go`, waits for scenario processes that are not children of the
+test (its own probe builds a reparented orphan), so `cmd.Wait` returns ECHILD and the stdlib offers no portable
+non-child exit event.
+- Ruling: under D45, the test process is a child subreaper on Linux, so orphaned descendants reparent to it
+  and become waitable. The scope exception extends to two new files,
+  `internal/oracle/a9/reap_linux_test.go` (build tag `linux`) and `internal/oracle/a9/reap_other_test.go`
+  (`!linux`), plus the existing call site in `launch_test.go`. On Linux, the helper sets
+  `PR_SET_CHILD_SUBREAPER` (idempotent) and reaps with `syscall.Wait4` in a goroutine, using a deadline
+  select and no `time.Sleep`. On other platforms, D45's best-effort group kill applies without a wait
+  loop, documented in the file. `launchReap` keeps its assertions. The sleep budget stays at 16.
+- Rejected: weakening the orphan check; a ticker or ps poll (D46). Kind: test hygiene. Revert: drop the
+  exception.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
