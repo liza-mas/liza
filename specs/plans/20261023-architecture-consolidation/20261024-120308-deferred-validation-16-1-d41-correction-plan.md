@@ -319,9 +319,14 @@ the pass.
 
 ## Task 1: Make the unadmitted and publish in-flight submit tests deterministic
 
-**Priority:** Must (d41 lineage; task priority 1). **Depends on:** nothing.
-The earliest input is merged source at `53504b7d8`, which includes the D41
-merge `aaf2c5e33`.
+**Priority:** Must (d41 lineage; task priority 1). **Depends on:**
+`task_depends_on: ["deferred-validation-2-1-correction-plan-code-0", "arm-1-ar-10-cp-1-code-1"]`.
+The first is the merged earlier writer of this file (Placement predecessor;
+already MERGED, so the wait is satisfied at claim). The second is the started
+required successor that D51 places before the corrections (Placement
+predecessor). The earliest input is merged source at `53504b7d8`, which
+includes the D41 merge `aaf2c5e33`; the D51 wait supplies no input, it only
+orders.
 **Files:** `internal/agent/inflight_submit_deadline_test.go` and the declared
 manifest. Nothing else: no production `.go`, no `execution_deadline_test.go`,
 no `testhelpers`, no guard.
@@ -390,7 +395,10 @@ the two declared files.
 
 ## Task 2: Synchronize the rejected new-attempt await test on watcher registration
 
-**Priority:** Must (d41 lineage; task priority 1). **Depends on:** nothing.
+**Priority:** Must (d41 lineage; task priority 1). **Depends on:**
+`task_depends_on: ["arm-1-ar-10-cp-1-code-1"]`, the started required
+successor that D51 places before the corrections (Placement predecessor; it
+supplies no input, it only orders).
 The earliest input is merged source; the seam `newAwaitVerdictWatcher`
 (`await_verdict.go:60`) and its precedent (`await_verdict_test.go:443-492`)
 already exist.
@@ -444,7 +452,10 @@ traceability rows hold. Only the two declared files change.
 
 ## Task 3: Derive the checkpoint recency fixture's attempt time from its own pass record
 
-**Priority:** Must (d41 lineage; task priority 1). **Depends on:** nothing.
+**Priority:** Must (d41 lineage; task priority 1). **Depends on:**
+`task_depends_on: ["arm-1-ar-10-cp-1-code-1"]`, the started required
+successor that D51 places before the corrections (Placement predecessor; it
+supplies no input, it only orders).
 The earliest input is merged source.
 **Files:** `internal/ops/sprint_checkpoint_test.go` (only the case table of
 `TestCheckpointPassedPlansRefusesUnqualifiedState`, plus at most one
@@ -527,28 +538,164 @@ suite.
 
 ## Dependencies and Shared Files
 
-There are three outputs, with no `depends_on`, no `task_depends_on` and no
-provider wait. Each edits a different file, so the outputs run in parallel.
-There is no ordered shared-file chain, so no `## Placement` is needed.
-Provider Ask Inventory: N/A, because no interface is frozen.
+The three outputs edit three different files, so they have no `depends_on`
+between them and run in parallel. Output 0 waits for the merged earlier
+writer of its file, and all three wait for the started
+`arm-1-ar-10-cp-1-code-1` under D51 (`task_depends_on`). No output has a
+provider wait. Their order against other writers and consumers is set by `## Placement` below,
+using declared waits only: no commutativity claim and no submit-time rebase
+orders anything. Provider Ask Inventory: N/A, because no interface is frozen.
 
-- `inflight_submit_deadline_test.go` and `await_verdict_test.go` are named
-  by no other active plan (checked by grep of `specs/plans` and
-  `specs/arch-plan`).
-- `sprint_checkpoint_test.go` is also in the scope of
-  `arm-1-ar-13-cp-5-code-0` (DRAFT_CODE), as a colocated test file of the
-  checkpoint split. The edits commute, under these conditions:
-  - Task 3 changes only the case table of one test function, plus one
-    uniquely named helper.
-  - cp-5 keeps `CheckpointPassedPlans` and `ErrNoPassedPlanCheckpoint`
-    unchanged (its OUT scope excludes exported signatures). Its declared
-    test moves concern summary tests.
-  - Neither claims the other's function, name or position, and neither
-    needs the other's state.
+| File | Earlier writers | Later writers (unstarted) |
+|---|---|---|
+| `internal/agent/inflight_submit_deadline_test.go` | `deferred-validation-2-1-correction-plan-code-0` (MERGED `aaf2c5e33`) | none named by a plan; any A3–A5 writer descends from a reserved successor |
+| `internal/ops/await_verdict_test.go` | `9c685b643` (direct commit, no task) | `arm-1-ar-14-cp-0-code-4` (moves white-box tests with `await_verdict.go`, including the `newAwaitVerdictWatcher` seam Task 2 wraps) |
+| `internal/ops/sprint_checkpoint_test.go` | `1508df457` (direct commit, no task) | `arm-1-ar-13-cp-5-code-0` (colocated test of the checkpoint split) |
 
-  If cp-5 moves this function, submit-time rebase routes the textual
-  conflict to whichever coder rebases second. This cannot be verified
-  before cp-5 starts; it is recorded here.
+## Placement
+
+Correction case: the correction placement rule of A4
+(`specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Proof and Shared Ownership`),
+A3 (`…/20261023-203240-arm-1-ar-12.md`, lines 163–166) and A2
+(`…/20261023-195624-arm-1-ar-11.md`, lines 523–528). The three rules agree. A correction waits
+for every started or merged writer and precedes every unstarted consumer whose
+done_when requires it. It takes the earliest legal slot. The slot lies at the
+head of the A2 chain, and the successors span A2 to A5, so all three rules
+apply. Correction lineage: `deferred-validation-16-1-d41-correction-plan-amend-1`.
+
+**Required successor test.** A consumer requires these corrections when:
+
+- **R1:** it edits a corrected file, or a definition a correction uses: the
+  `TestCheckpointPassedPlansRefusesUnqualifiedState` case table, the
+  `newAwaitVerdictWatcher` seam or `lateSubmitSession`; or
+- **R2:** its done_when or Acceptance Contract needs one of these to pass:
+  - green undeferred `make test`;
+  - an undeferred `go test` over `./internal/agent/` or `./internal/ops/`
+    with no `-run` filter, which executes the affected tests;
+  - area-boundary green evidence recorded at an integration SHA.
+
+  Batches 15 and 16 observed all four failures under load (RCA a.). The
+  mechanisms depend on package scheduling and host latency (RCA b.), so any
+  unfiltered run of either package can hit them.
+
+A unit whose undeferred commands execute none of the four tests is not a
+consumer. For example, `arm-1-ar-10-cp-1-code-2` runs no `internal/agent`
+or `internal/ops` command.
+
+**Predecessors (declared waits).**
+
+- `deferred-validation-2-1-correction-plan-code-0` (MERGED) for output 0, as
+  `task_depends_on`.
+- The two ops files have no task writer: their last writers are direct
+  commits (table above). Outputs 1 and 2 have no writer wait.
+- Started tasks: only `arm-1-ar-10-cp-1-code-1` (IMPLEMENTING_CODE,
+  claimed 2026-10-24T12:12:50Z).
+  - It writes none of the three files, committed or uncommitted (amendment
+    RP3), so it is not a writer predecessor.
+  - Its index 1 is undeferred and runs `go test -race` over
+    `./internal/agent/` and `./internal/ops/` with no `-run` filter. Under R2
+    it is therefore a **started required successor**, which the rules route
+    to a human ruling.
+  - **Ruling: D51, option A** (heading "D51 — Started successor
+    arm-1-ar-10-cp-1-code-1 runs before the D41 follow-up correction" in
+    `specs/goals/20261023-architecture-consolidation-decisions.md`, commit
+    `ba13e745b`; amendment reference `d51`). It keeps running and is not
+    paused or handed back. The corrections are placed after it, so it
+    becomes a declared predecessor: outputs 0, 1 and 2 each list
+    `arm-1-ar-10-cp-1-code-1` in `task_depends_on`. Its own admission follows
+    D51's bounded resubmission rule for the four named signatures; this plan
+    neither restates nor changes that rule.
+
+**Earliest legal slot.** The slot opens when `arm-1-ar-10-cp-1-code-1`
+merges. It follows that task and the merged D41 writer, and it precedes
+`arm-1-ar-11-cp-0-code-0`, the first unstarted required consumer and the
+first slot of the A2 chain. That boundary unit already waits on
+`arm-1-ar-10-cp-1-code-1` (and on `-code-2`), so the new wait delays no
+successor beyond its existing barrier. No fixed or merged slot is crossed:
+every A2–A5 coding unit is DRAFT_CODE, and the six successors are
+unassigned with empty history (amendment RP4, RP10).
+The corrections may run in parallel with A1's only remaining unstarted unit,
+`arm-1-ar-10-cp-1-code-2`, which is not a consumer (`-code-3` is MERGED).
+
+**Successor reservations.** The orchestrator reserves each successor below
+onto provider `deferred-validation-16-1-d41-correction-plan`, transition
+`code-plan-to-coding` (per-subtask), outputs `[0, 1, 2]`:
+
+```json
+{"provider_task": "deferred-validation-16-1-d41-correction-plan", "transition": "code-plan-to-coding", "outputs": [0, 1, 2]}
+```
+
+| Successor | Test | Need |
+|---|---|---|
+| `arm-1-ar-11-cp-0-code-0` (A1 boundary) | R2: `make test` at index 1, undeferred; G1–G7 at the integration revision | earliest required consumer; every open A2–A5 coding unit descends from it |
+| `arm-1-ar-12-cp-0-code-0` (A2 boundary) | R2: `make test` at index 1; "Failures hold A3"; already waits on the D41 writer for the same full suite | head of every open A3–A5 coding unit |
+| `arm-1-ar-13-cp-0-code-0` (A3 boundary) | R2: `make test` at index 1 | boundary evidence |
+| `arm-1-ar-14-cp-0-code-0` (A4 boundary) | R2: `make test` at index 1 | boundary evidence |
+| `arm-1-ar-13-cp-5-code-0` | R1 on output 2 (`sprint_checkpoint_test.go`); R2: `make test` at index 0, ops race at index 3 | non-commuting writer |
+| `arm-1-ar-14-cp-0-code-4` | R1 on output 1 (`await_verdict.go` seam and white-box tests); R2: `make test` at index 0, agent/ops race at index 3 | non-commuting writer |
+
+Each successor selects all three outputs. Its undeferred full suite runs all
+four tests, and each mechanism depends on host latency, not on the race flag
+(RCA b.).
+
+Every other R2 consumer is ordered through recorded `depends_on` edges, not
+through prose. These are the A3–A5 refactor units with undeferred `make test`.
+Each of them descends from `arm-1-ar-12-cp-0-code-0` (amendment RP5). A
+dependency repair that removes such a path must re-check this section.
+
+**Seam re-weighed with the correction included.**
+
+- `sprint_checkpoint_test.go`: Task 3 runs first, then cp-5-code-0. cp-5
+  keeps every passed-plan test and moves white-box assertions with code, so
+  it carries the corrected case table.
+- `await_verdict_test.go`: Task 2 runs first, then A5 code-4. If code-4 moves
+  `newAwaitVerdictWatcher`, it moves the test's ready-wait wrapper with it,
+  under the same white-box rule.
+
+One test function's case table and one seam wrapper do not justify an
+additive seam. The chain still wins.
+
+**Cycle and unborn-child analysis.**
+
+- The outputs wait only on `deferred-validation-2-1-correction-plan-code-0`
+  (MERGED, no dependencies) and on `arm-1-ar-10-cp-1-code-1`. The provider
+  is MERGED and has no `depends_on`, so the children inherit no upstream
+  phase.
+- `arm-1-ar-10-cp-1-code-1`'s `depends_on` lists only `arm-1-ar-0` to
+  `arm-1-ar-10` units, none of them a reserved successor, the provider, this amendment or the D41 writer
+  (amendment RP10). It cannot wait on the unborn children.
+- No reserved successor is an ancestor of the provider, of this amendment,
+  of the D41 writer or of `arm-1-ar-10-cp-1-code-1` (amendment RP5, RP10).
+  Therefore no cycle exists, whether through production, inheritance or
+  provider waits.
+- The children are unborn. They are generated only after
+  `amend-plan --apply` and the manual `code-plan-to-coding` transition.
+  Until the provider's transition has executed and children 0–2 have
+  merged, every reserved successor holds. This is the intended order.
+- Indexes 0–2 exist, and this amendment appends no slot, so the selections
+  are stable.
+
+**Orchestrator order.**
+
+1. Review and merge this correction.
+2. Recheck each successor. If any has started, stop: a started required
+   successor needs a human ruling. `arm-1-ar-10-cp-1-code-1` is already
+   ruled by D51 and is a predecessor, not a reserved successor.
+3. `reserve-provider` each successor.
+4. `amend-plan deferred-validation-16-1-d41-correction-plan --apply
+   deferred-validation-16-1-d41-correction-plan-amend-1`.
+5. A human fires `code-plan-to-coding`.
+
+**Unfiltered package-race consumers in A2.** `arm-1-ar-11-cp-4-code-0/6/7/8`
+run undeferred, unfiltered agent/ops races, so they are R2 consumers. They
+descend from the reserved `arm-1-ar-11-cp-0-code-0` through recorded edges
+(amendment RP5), so they are ordered after the corrections and need no added
+wait.
+
+**Residual under D51.** If `arm-1-ar-10-cp-1-code-1` blocks under D51's
+disproof limit, the children keep waiting on it, as does the A1 boundary.
+D51's revert (option B: hand the task back) is the operator's lever; this
+plan adds no other path.
 
 ## Reality Probes
 
