@@ -569,6 +569,26 @@ only for `PerCompletedTask`, `Provenance` and `SuppressedCalls`. The committed f
   addresses in human output is a pre-existing defect. It is frozen here and not fixed (not in C1–C6).
   Kind: oracle-contract (volatility). Revert: a reviewed A1 carrier correction.
 
+### D37 — A7 install human output: box border width is volatile (run, 2026-10-24)
+Operator, auto-approved, 2026-10-24T00:20Z. `arm-1-ar-7-cp-1-code-0` blocked: the starting CLI's `setup`/`init`
+human output draws boxes (`╭─…─╮`, `╰─…─╯`) whose width follows the longest content line, which
+includes the disposable case root. Path normalisation tokenises the root but leaves the border run
+length, so `human/setup/default.txt` and the init/activation prerequisite boxes differ between runs.
+The task's scope forbids harness edits.
+- Ruling: the A7 install suite applies a package-local decoration normalisation after the harness
+  path normalisation, in its own test files with a focused test. On a line made only of box-drawing
+  corner and edge glyphs, each run of horizontal border glyphs (`─`, `═`, `━`) becomes one fixed
+  token. Every other character on every line is preserved byte for byte, including corner glyphs,
+  vertical edges, text, labels, row and token order. The harness `humanForm` is unchanged.
+  Regenerate the A7 install goldens with write-new from the starting commit under this
+  normalisation.
+- Intent relied on: border width is a function of a volatile path length, the same class as path
+  tokens (E-goal oracle volatility). The text inside the box is the behaviour that binds.
+- Rejected: a harness `humanForm` change (shared contract, other areas' goldens); fixed-length
+  case roots (not controllable through `t.TempDir`). Other areas meeting the same boxes adopt the
+  same local rule, citing D37. Kind: oracle-contract (volatility). Revert: a reviewed harness
+  correction.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
