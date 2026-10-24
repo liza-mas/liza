@@ -1,0 +1,186 @@
+[
+  {
+    "desc": "Must: C3 - provider-unavailable signals record the originating tool and match by C2 canonical keys at every unavailable consumer, preserving quota and CLI/TUI display",
+    "done_when": "Plan Task 1's Done when holds: TestC3 tests prove real codex/codex-acp raise and stop both ways, custom-key, override, legacy and evaluation-time matching, agreement of supervisor, spawn (quota first) and orchestrator wake; quota suites and goldens unedited; CLI/TUI values, order and failures unchanged with handle clearing; only listed C3 oracle edits with D24/D56 provenance; all validation commands pass; manifest maps every obligation.",
+    "scope": "Plan Task 1 Files: providersignal unavailable records, agent supervisor stop/crash and orchestrator wake sites, process spawn gate, resume and TUI resume adapters, TestC3 tests, the i21-unavailable-codex-run driver flip and goldens with ledger lines, ADR and manifest. Out: quota policy, C2 derivation, diversity, anomaly grouping, oracle harness, launch, config fields and unrelated refactoring.",
+    "spec_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-030947-arm-1-ar-24.md#Scope 1: C3 canonical provider-unavailable signals",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-030947-arm-1-ar-24.md#Scope 1: C3 canonical provider-unavailable signals",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261024-173647-arm-1-ar-24-cp-0.md#Task 1: Use C2 canonical keys for provider-unavailable signals",
+    "rca_required": false,
+    "inherit_inputs": {
+      "mode": "all"
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestC3|ProviderUnavailable|Quota|ResumeCommand|ResumeSystemCmd|SpawnAgent|HandleClassifiedProviderCrash|RevalidateOrchestratorWake|RevalidatesSelectedWake|OracleA9SignalMatch|OracleA9UnavailableRaise' ./internal/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run 'TestC3|ProviderUnavailable|Quota|ResumeCommand|ResumeSystemCmd|SpawnAgent|HandleClassifiedProviderCrash|RevalidateOrchestratorWake|RevalidatesSelectedWake|OracleA9SignalMatch|OracleA9UnavailableRaise' ./internal/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ],
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/",
+        "executables": [
+          "env",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ],
+          [
+            "go",
+            "version"
+          ]
+        ]
+      }
+    ],
+    "provider_dependencies": [
+      {
+        "provider_task": "arm-1-ar-0-cp-2-d56",
+        "transition": "code-plan-to-coding",
+        "outputs": [
+          0
+        ]
+      }
+    ]
+  }
+]
