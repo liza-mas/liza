@@ -1,0 +1,57 @@
+A6 ordinary-suite timing (H7 / OQ-001)
+
+Measured command:
+env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go test -count=1 -json ./internal/oracle/a6/...
+
+Measurement: a Python subprocess wrapper used time.monotonic around that command,
+parsed Go JSON events and counted passing TestOracle subtests. No environment
+values were printed. This was the ordinary suite, without the oracleproof tag.
+Start UTC: 2026-10-24T00:27:21Z
+End UTC: 2026-10-24T00:27:24Z
+Wall seconds, including Go build: 3.207
+Go package elapsed seconds: 2.793
+Exit code: 0
+Inventory subtests passed: 30
+Cache policy: -count=1 disables test-result caching; build caches were warm.
+
+Baseline denominator: specs/architecture/consolidation-run/baseline.md,
+measured at 96c9ad69aee983ce2b929dd681b6ba43bf920535 on the shared Linux host.
+The green warm-up was 444 seconds; the timed run was 523 seconds but failed two
+deadline-sensitive internal/agent tests under load. Neither is a quiet-host
+clean timed baseline. A6 is 0.72% of the green 444-second observation and 0.61%
+of the red 523-second observation. These ratios are indicative, not a claim
+about the aggregate oracle overhead or final make test regression.
+
+OQ-001 disposition: measured ordinary A6 time meets the estimated 30-second target.
+H7 disposition: this A6 contribution is below 15% of either recorded denominator;
+the area/integration gate still owns the aggregate +15% oracle / +25% N4 check.
+No portable pass/fail speed threshold is added.
+
+Boundary evidence: the task range adds only internal/oracle/a6 files, all Go
+files are test-only, and TestA6AdapterImportBoundary rejects sleep calls and
+non-adapter module imports. D32's StateForm check-yaml exclusion is inherited;
+this task makes no .pre-commit-config.yaml change.
+
+Negative/isolation assertion-strength review: the additive-only boundary makes
+disabling production preconditions inappropriate. Each refusal uses well-formed
+flags and an otherwise valid committed fixture; its exact first-precondition
+message and exit code are compared, and state-bearing refusals require the full
+state to remain byte-identical. W2/W5 vary task status; W9 varies the local merge
+ref; I5 varies analysis status; D2-D4 vary leading command whitespace; D5-D7 vary
+the real runner file lock with a valid batch record; D8 adds agent identity; R2
+omits declared inputs and asserts the command marker is absent. Corresponding
+success cases exercise the same boundaries. Thus an earlier unrelated refusal
+cannot satisfy their expected outputs. W7 uses real conflicting Git changes
+and retains its full persisted failure delta. Merge/reconcile isolation guards
+inspect actual effective deferred commands and filesystem runner/index artifacts
+before and after. Explicit environment name assertions reject inherited names.
+Mutation check: temporarily leaking the synthetic ORACLE_A6_UNRELATED parent
+name made TestA6ExplicitEnvironment fail at the intended unexpected-name
+assertion (exit 1); the leak was then removed and the focused test passed.
+The tagged provenance proof changes one golden byte only in a disposable clone,
+requires the real check's unexplained report to name that exact path, and checks
+that source bytes remain unchanged.
+
+Clean-code pass: resumed capture/determinism additions reviewed for duplication
+against the existing harness and for orphaned symbols. No duplication to extract
+and no orphans; no cleanup transformations applied. Generated goldens excluded.

@@ -137,6 +137,7 @@ func assertIsolated(t *testing.T, f *fixture) {
 }
 
 func TestA6ExplicitEnvironment(t *testing.T) {
+	t.Setenv("ORACLE_A6_UNRELATED", "synthetic-parent-marker")
 	f := baseFixture(t)
 	want := map[string]bool{"HOME": true, "PATH": true, "TMPDIR": true, "TZ": true, "GIT_CONFIG_NOSYSTEM": true}
 	for _, pair := range f.env {
