@@ -161,13 +161,17 @@ Not checked:
 
 ### e. Sufficiency
 
-With predecessor waits and the six reservations, no required successor can
-claim before children 0–2 merge. Every other open A2–A5 coding unit descends
-from a reserved successor through recorded edges (RP5).
+With the predecessor waits and the six reservations, no unstarted required
+successor can claim before children 0–2 merge. Every other open A2–A5
+consumer, including the unfiltered package-race units
+`arm-1-ar-11-cp-4-code-0/6/7/8`, descends from a reserved successor through
+recorded edges (RP5).
 
-Residual: A1 code-1 (started) and A2 units with focused agent/ops races
-remain exposed to the old shapes until the corrections merge. This is
-recorded in Placement.
+Residual: one started required successor, `arm-1-ar-10-cp-1-code-1`, cannot
+be preceded. Its undeferred index 1 runs unfiltered agent/ops races (RP3,
+RP6). The correction rules route that case to a human ruling, which this
+task requests through BLOCKED. Placement records the outcome before this
+correction is resubmitted.
 
 ### f. Adjacent findings (recorded, not planned)
 
@@ -187,7 +191,7 @@ None new. The original RCA f. stands unchanged.
 | 8 | Must: three output identities, test-only scopes, assertions, deadlines, acceptance commands and D41 lineage preserved | amendment reason; goal-tests | Tasks 1–3 (frozen slots); RP8 | Covered |
 | 9 | Must: reconcile prior merged correction artifacts | amendment reason | Reconciliation with prior corrections | Covered |
 | 10 | Must: seam re-weighed with the correction included | a4-proof | Placement (Seam re-weighed) | Covered |
-| 11 | Must: no started required successor overtaken; a human ruling if one exists | a4-proof; a3-proof | Placement (Predecessors, Orchestrator order step 2); RP3–RP4 | Covered |
+| 11 | Must: no started required successor overtaken; a human ruling if one exists | a4-proof; a3-proof | Placement (Predecessors: `arm-1-ar-10-cp-1-code-1`, ruling requested; Orchestrator order step 2); RP3–RP4 | GAP: ruling pending |
 | E2E | e2e test coverage for new behavior | Cross-cutting | N/A: planning correction; children stay test-only (unchanged allocation) | N/A |
 | DOC | Documentation updates for changed behavior | Cross-cutting | N/A: only plan artifacts change | N/A |
 
@@ -200,7 +204,7 @@ equals `global-refactoring`), 2026-10-24 12:00–12:40 UTC.
 |---|---|---|
 | RP1 | `omni-ee get deferred-validation-16-1-d41-correction-plan --json`; `jq -S` diff of `.result.output` against the committed output JSON | MERGED (`49595a9d7`), no depends_on. Three slots, identical to the committed JSON (`SAME`). `plan_amendment.corrections`/`pending` = this task only. No `-code-N` child exists, so the children are unborn. |
 | RP2 | `git log --first-parent --since=2026-10-22 -- <three files>`; `git log -1` per file | `aaf2c5e33` Merge deferred-validation-2-1-correction-plan-code-0 (inflight). `await_verdict_test.go` last written by `9c685b643` and `sprint_checkpoint_test.go` by `1508df457`, both direct commits with no task. |
-| RP3 | `git -C .worktrees/arm-1-ar-10-cp-1-code-1 diff --name-only global-refactoring...HEAD -- <three files>`; same without range; `status --short` | Both empty; status lists only `internal/ops/rejection_rca_test.go`. The only started task writes none of the files. Its plan defers `make test` (deferred `[3, 4]`). |
+| RP3 | `git -C .worktrees/arm-1-ar-10-cp-1-code-1 diff --name-only global-refactoring...HEAD -- <three files>`; same without range; `status --short`; its `validation[1]` | Both diffs empty; status lists only `internal/ops/rejection_rca_test.go`. The only started task writes none of the files. Its plan defers only indexes `[3, 4]`. Index 1, `go test -race -timeout 30m -p 2 -count=1 … ./internal/agent/ ./internal/ops/ …` with no `-run` filter, stays required, so the task is a started required successor. |
 | RP4 | `omni-ee get <id> --json` for the six successors; `omni-ee get tasks --all --json` statuses | Each successor is DRAFT_CODE, unassigned, with history 0 and provider_dependencies 0. Open coding units: 58 DRAFT_CODE, plus 1 IMPLEMENTING_CODE (`arm-1-ar-10-cp-1-code-1`). |
 | RP5 | Ancestry script over `depends_on` ∪ `task_depends_on` of all tasks | Units not descending from `arm-1-ar-11-cp-0-code-0`: only `arm-1-ar-10-cp-1-code-1` and `-code-2`. Units not descending from `arm-1-ar-12-cp-0-code-0`: only A1 and A2 units. The provider and the D41 writer have no dependencies, so no successor is their ancestor. |
 | RP6 | Audit script: each open unit's `validation[]`, minus the Acceptance Contract `deferred` indexes from its `plan_ref` section | Undeferred `make test`: the A1–A4 boundary units, and every A3–A5 refactor unit except `12-cp-4-code-3` and `13-cp-5-code-2/-3`, which defer it. A2 refactor units and A1 units defer `make test`. Undeferred focused agent/ops races: A1 code-1 and A2 `11-cp-4-code-0/6/7/8`. File mentions: cp-5 Task 1 names `sprint_checkpoint_test.go`, and A5 Task 5 owns `await_verdict.go` and its white-box tests (lines 333, 756-762). |

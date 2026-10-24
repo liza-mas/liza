@@ -558,16 +558,19 @@ apply. Correction lineage: `deferred-validation-16-1-d41-correction-plan-amend-1
 - **R1:** it edits a corrected file, or a definition a correction uses: the
   `TestCheckpointPassedPlansRefusesUnqualifiedState` case table, the
   `newAwaitVerdictWatcher` seam or `lateSubmitSession`; or
-- **R2:** its done_when or Acceptance Contract needs green undeferred
-  `make test`, or records area-boundary green evidence at an integration SHA.
-  Batches 15 and 16 observed all four failures in these full-suite runs
-  under load (RCA a.).
+- **R2:** its done_when or Acceptance Contract needs one of these to pass:
+  - green undeferred `make test`;
+  - an undeferred `go test` over `./internal/agent/` or `./internal/ops/`
+    with no `-run` filter, which executes the affected tests;
+  - area-boundary green evidence recorded at an integration SHA.
 
-A unit that defers `make test` and runs only focused package races is
-exposed only. The D41 round ran the unchanged unadmitted test green in
-focused proof, and the full suite of such a unit runs in the integration
-batch, as these corrections' deferred commands do. Exposure is recorded
-under Residual exposure.
+  Batches 15 and 16 observed all four failures under load (RCA a.). The
+  mechanisms depend on package scheduling and host latency (RCA b.), so any
+  unfiltered run of either package can hit them.
+
+A unit whose undeferred commands execute none of the four tests is not a
+consumer. For example, `arm-1-ar-10-cp-1-code-2` runs no `internal/agent`
+or `internal/ops` command.
 
 **Predecessors (declared waits).**
 
@@ -575,18 +578,24 @@ under Residual exposure.
   `task_depends_on`.
 - The two ops files have no task writer: their last writers are direct
   commits (table above). Outputs 1 and 2 have no wait.
-- Started tasks: only `arm-1-ar-10-cp-1-code-1` (IMPLEMENTING_CODE). It
-  writes none of the three files, committed or uncommitted (amendment RP3).
-  It defers `make test`, so it is exposed only, not a started required
-  successor. No human ruling is needed.
+- Started tasks: only `arm-1-ar-10-cp-1-code-1` (IMPLEMENTING_CODE,
+  claimed 2026-10-24T12:12:50Z).
+  - It writes none of the three files, committed or uncommitted (amendment
+    RP3), so it is not a predecessor.
+  - Its index 1 is undeferred and runs `go test -race` over
+    `./internal/agent/` and `./internal/ops/` with no `-run` filter. Under R2
+    it is therefore a **started required successor**, which the rules route
+    to a human ruling.
+  - The ruling is requested through this task's BLOCKED state and is
+    recorded here before resubmission. **Ruling: PENDING.**
 
 **Earliest legal slot.** The slot is now. It follows the merged D41 writer
 and precedes `arm-1-ar-11-cp-0-code-0`, the first required consumer and the
 first slot of the A2 chain. No fixed or merged slot is crossed: every A2–A5
 coding unit is DRAFT_CODE, and the six successors are unassigned with empty
 history (amendment RP4).
-The corrections may run in parallel with A1's remaining units, which are not
-consumers.
+Apart from the started successor above, the corrections may run in parallel
+with A1's remaining units, which are not consumers.
 
 **Successor reservations.** The orchestrator reserves each successor below
 onto provider `deferred-validation-16-1-d41-correction-plan`, transition
@@ -651,15 +660,14 @@ additive seam. The chain still wins.
    deferred-validation-16-1-d41-correction-plan-amend-1`.
 5. A human fires `code-plan-to-coding`.
 
-**Residual exposure (recorded, not reserved).** These units run focused
-races over `internal/ops` or `internal/agent` before this correction merges,
-and can still hit the old shapes there:
+**Unfiltered package-race consumers in A2.** `arm-1-ar-11-cp-4-code-0/6/7/8`
+run undeferred, unfiltered agent/ops races, so they are R2 consumers. They
+descend from the reserved `arm-1-ar-11-cp-0-code-0` through recorded edges
+(amendment RP5), so they are ordered after the corrections and need no added
+wait.
 
-- A1 `arm-1-ar-10-cp-1-code-1` (started).
-- A2 `arm-1-ar-11-cp-4-code-0/6/7/8`. They defer `make test` and already
-  descend from the reserved A1 boundary, so no wait is added to them.
-
-Owner: the operator, under the existing deferred-validation policy.
+**Open item.** The started required successor `arm-1-ar-10-cp-1-code-1`
+needs a human ruling (see Predecessors).
 
 ## Reality Probes
 
