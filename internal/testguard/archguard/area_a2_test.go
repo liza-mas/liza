@@ -37,7 +37,6 @@ var areaA2 = Area{
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/toolchain/catalog.go", Func: "Catalog"}, Ceiling: 153},
 		{Key: Key{File: "internal/toolresult/claude.go", Func: "ClaudePostToolResult"}, Ceiling: 107},
-		{Key: Key{File: "internal/updater/updater.go"}, Ceiling: 1323},
 	},
 	S2: []S2Entry{},
 }
