@@ -657,3 +657,63 @@ func TestCancelTask_DeletesBranchEvenWithoutWorktree(t *testing.T) {
 		t.Error("task branch should be deleted after cancel even when Worktree was nil")
 	}
 }
+
+// TestCancelTask_LifecycleDecisionsOfMovedSteps pins the wire spelling of the
+// safe action and effects the request check and the locked status and terminal
+// rechecks decide, with literal expectations independent of the typed constants
+// the code uses.
+func TestCancelTask_LifecycleDecisionsOfMovedSteps(t *testing.T) {
+	t.Parallel()
+	setup := func(t *testing.T, status models.TaskStatus) (projectRoot, stateFile string) {
+		t.Helper()
+		projectRoot = t.TempDir()
+		stateFile, _ = testhelpers.SetupLizaDir(t, projectRoot)
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", status, time.Now().UTC())}
+		testhelpers.WriteInitialState(t, stateFile, state)
+		return projectRoot, stateFile
+	}
+	readState := func(t *testing.T, stateFile string) string {
+		t.Helper()
+		b, err := os.ReadFile(stateFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	t.Run("malformed request asks for corrected input", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusReady)
+		before := readState(t, stateFile)
+		_, err := CancelTask(root, "task-1", "", "orchestrator-1")
+		requireLifecycleError(t, err, models.LifecycleInvalidInput, "correct_input", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("malformed request wrote state")
+		}
+	})
+	t.Run("terminal task stops without effects", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusMerged)
+		before := readState(t, stateFile)
+		_, err := CancelTask(root, "task-1", "reason", "orchestrator-1")
+		requireLifecycleError(t, err, models.LifecycleAlreadyTransitioned, "stop", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("terminal task wrote state")
+		}
+	})
+	t.Run("status change after admission requeries", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusReady)
+		pass := &cancelPass{projectRoot: root, taskID: "task-1", reason: "reason", agentID: "orchestrator-1"}
+		if err := pass.admit(); err != nil {
+			t.Fatal(err)
+		}
+		before := readState(t, stateFile)
+		pass.originalStatus = models.TaskStatusRejected
+		err := pass.bb.Modify(pass.commit)
+		requireLifecycleError(t, err, models.LifecycleStateChanged, "requery", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("status change wrote state")
+		}
+	})
+}

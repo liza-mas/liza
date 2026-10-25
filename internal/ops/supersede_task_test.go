@@ -1100,3 +1100,63 @@ func TestInTransactionCores_SupersedeTaskInStateMatchesCommand(t *testing.T) {
 		t.Fatalf("core candidate state validation failed: %v", err)
 	}
 }
+
+// TestSupersedeTask_LifecycleDecisionsOfMovedSteps pins the wire spelling of the
+// safe action and effects the request check, the eligibility decision and the
+// locked status recheck decide, with literal expectations independent of the
+// typed constants the code uses.
+func TestSupersedeTask_LifecycleDecisionsOfMovedSteps(t *testing.T) {
+	t.Parallel()
+	setup := func(t *testing.T, status models.TaskStatus) (projectRoot, stateFile string) {
+		t.Helper()
+		projectRoot = t.TempDir()
+		stateFile, _ = testhelpers.SetupLizaDir(t, projectRoot)
+		state := testhelpers.CreateValidState()
+		state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", status, time.Now().UTC())}
+		testhelpers.WriteInitialState(t, stateFile, state)
+		return projectRoot, stateFile
+	}
+	readState := func(t *testing.T, stateFile string) string {
+		t.Helper()
+		b, err := os.ReadFile(stateFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	t.Run("malformed request asks for corrected input", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusReady)
+		before := readState(t, stateFile)
+		_, err := SupersedeTask(root, "task-1", []string{"task-2"}, "", "orchestrator-1")
+		requireLifecycleError(t, err, models.LifecycleInvalidInput, "correct_input", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("malformed request wrote state")
+		}
+	})
+	t.Run("ineligible status stops without effects", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusImplementing)
+		before := readState(t, stateFile)
+		_, err := SupersedeTask(root, "task-1", []string{"task-2"}, "reason", "orchestrator-1")
+		requireLifecycleError(t, err, models.LifecycleAlreadyTransitioned, "stop", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("ineligible task wrote state")
+		}
+	})
+	t.Run("status change after admission requeries", func(t *testing.T) {
+		t.Parallel()
+		root, stateFile := setup(t, models.TaskStatusReady)
+		pass := &supersedePass{projectRoot: root, taskID: "task-1", replacementIDs: []string{"task-2"}, reason: "reason", agentID: "orchestrator-1"}
+		if replay, err := pass.admit(); replay != nil || err != nil {
+			t.Fatalf("admit = %v, %v; want admission", replay, err)
+		}
+		before := readState(t, stateFile)
+		pass.originalStatus = models.TaskStatusRejected
+		err := pass.bb.Modify(pass.commit)
+		requireLifecycleError(t, err, models.LifecycleStateChanged, "requery", "none")
+		if readState(t, stateFile) != before {
+			t.Fatal("status change wrote state")
+		}
+	})
+}
