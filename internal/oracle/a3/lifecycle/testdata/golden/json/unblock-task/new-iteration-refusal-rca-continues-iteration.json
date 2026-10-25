@@ -1,0 +1,31 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "details": {
+            "effects": "none",
+            "operation": "unblock-task",
+            "outcome": "INVALID_INPUT",
+            "safe_action": "correct_input",
+            "task_id": "",
+            "task_status": "UNKNOWN"
+          },
+          "message": "unblock-task: INVALID_INPUT (safe_action=correct_input): validation failed: task task-1 recovery path capability_reroute continues the current iteration: retry unblock-task without --new-iteration"
+        },
+        "ok": false,
+        "result": {
+          "effects": "none",
+          "operation": "unblock-task",
+          "outcome": "INVALID_INPUT",
+          "safe_action": "correct_input",
+          "task_id": "",
+          "task_status": "UNKNOWN"
+        }
+      }
+    }
+  ]
+}

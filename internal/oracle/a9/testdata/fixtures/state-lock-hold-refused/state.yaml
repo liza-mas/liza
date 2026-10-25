@@ -1,0 +1,75 @@
+version: 1
+mutation_sequence: 5
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 state lock hold fixture
+    done_when: A9 oracle records state lock hold recovery
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00.5Z
+    iteration: 1
+    blocked_reason: state acquisition timed out
+    blocked_questions: ["Resume when contention clears?"]
+    worktree: .worktrees/task-1
+    base_commit: <base-sha>
+    state_lock_hold:
+      episode_at: 2020-01-01T00:00:00.5Z
+      blocker_digest: 3845a3746b24e46bddd3840abff13721690ca159591a99dcc0646b6d8fe9ad85
+      after_sequence: 3
+    history:
+      - time: 2020-01-01T00:00:00.5Z
+        event: blocked
+        reason: state acquisition timed out
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    lease_expires: 2099-01-01T00:00:00.5Z
+    heartbeat: 2099-01-01T00:00:00.5Z
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <live-pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING

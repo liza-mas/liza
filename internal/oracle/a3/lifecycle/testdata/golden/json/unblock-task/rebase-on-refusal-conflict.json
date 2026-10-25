@@ -1,0 +1,34 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "effects": "unknown",
+            "operation": "unblock-task",
+            "outcome": "STATE_CHANGED",
+            "repair_request": true,
+            "safe_action": "requery",
+            "target_ref": "integration",
+            "target_sha": "<commit:integration>",
+            "task_id": "",
+            "task_status": "UNKNOWN"
+          },
+          "message": "unblock-task: STATE_CHANGED (safe_action=requery): unblock rebase conflict: task task-1 remains BLOCKED with repair_request"
+        },
+        "ok": false,
+        "result": {
+          "effects": "unknown",
+          "operation": "unblock-task",
+          "outcome": "STATE_CHANGED",
+          "safe_action": "requery",
+          "task_id": "",
+          "task_status": "UNKNOWN"
+        }
+      }
+    }
+  ]
+}

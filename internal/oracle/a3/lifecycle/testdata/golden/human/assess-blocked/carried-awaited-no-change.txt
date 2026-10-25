@@ -1,0 +1,23 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: BLOCKED
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+current_assignee: coder-1
+Task task-1 assessed by orchestrator
+stderr:
+exit 0
+stdout:
+outcome: NO_CHANGE
+safe_action: stop
+task_status: BLOCKED
+effects: none
+task_id: task-1
+transition_id: <id-1>
+current_assignee: coder-1
+suppressed_entry_bytes: <entry-bytes>
+stderr:

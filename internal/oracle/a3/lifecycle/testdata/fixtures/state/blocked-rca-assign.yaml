@@ -1,0 +1,139 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: Lifecycle oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: Lifecycle oracle task
+    done_when: Lifecycle oracle complete
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 3
+    review_cycles_current: 4
+    review_cycles_total: 4
+    assigned_to: coder-1
+    base_commit: '{{COMMIT:base}}'
+    worktree: .worktrees/task-1
+    blocked_reason: fixture blocked
+    blocked_questions: [fixture question]
+    rejection_rca:
+        schema_version: 1
+        threshold: 4
+        rejection_count: 4
+        gated_at: 2020-01-01T00:00:00Z
+        gating_commit: 0123456789abcdef0123456789abcdef01234567
+        fingerprint: cc01f561ee9c85800c6e7037a0488e6b25d5f07c71c62099e02c40e47aa33270
+        recorded_at: 2020-01-01T00:00:00Z
+        recorded_by: orchestrator-1
+        summary: Two product defects, one reviewer unable to run Postgres, one stale-ownership retry.
+        contributions:
+            - rejection_index: 1
+              categories:
+                - product_defect
+              evidence:
+                - 'verdict 1: identity scalar mismatch'
+            - rejection_index: 2
+              categories:
+                - capability_failure
+                - product_defect
+              evidence:
+                - 'verdict 2: reviewer could not start Postgres'
+                - 'verdict 2: concurrency defect'
+            - rejection_index: 3
+              categories:
+                - lifecycle_retry
+              evidence:
+                - submit-review STALE_CALLER after reclaim
+            - rejection_index: 4
+              categories:
+                - product_defect
+              evidence:
+                - 'verdict 4: missing migration'
+        disposition:
+            recovery_path: capability_reroute
+            restore_mode: assign
+            actor: orchestrator-1
+            lifecycle_version: 7
+            decided_at: 2020-01-01T00:00:00Z
+            rationale: disposition authorized for the unblock path under test
+            iteration_exempt: true
+    history:
+      - time: 2020-01-01T00:00:00Z
+        agent: coder-1
+        event: blocked
+        reason: fixture blocked
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: gen-1
+    heartbeat: 2099-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: '{{LIVE_PID}}'
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    lease_expires: 2099-01-01T00:00:00Z
+    heartbeat: 2099-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: '{{LIVE_PID}}'
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  history: []
+config:
+  terminal_task_archival: true
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  max_global_integration_generations: 3
+  max_instances: 3
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  doer_max_wait: 600
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 18000
+  reviewer_poll_interval: 30
+  reviewer_max_wait: 600
+  agent_progress_timeout: 1800
+  integration_branch: integration
+  mode: RUNNING
+  auto_resume: false
+  no_follow_up: false

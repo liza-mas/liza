@@ -21,6 +21,9 @@ var (
 	volatileRE  = regexp.MustCompile(`\b(?:transition_id|completed_transition_id|instance_id|key_id)"?\s*:\s*"?([0-9a-fA-F]{16,64})\b`)
 	ledgerKeyRE = regexp.MustCompile(`^[0-9a-fA-F]{64}:$`)
 	boundaryRE  = regexp.MustCompile(`expected_transition:\s*([0-9a-fA-F]{64})\b`)
+	// The suppressed assessment entry is encoded with its nanosecond clock
+	// reading, whose trimmed digit count varies the size between runs.
+	entryBytesRE = regexp.MustCompile(`(?m)\bsuppressed_entry_bytes:[ \t]*\d+`)
 )
 
 type mask struct {
@@ -145,6 +148,7 @@ func (m *mask) text(s string) string {
 		}
 		return m.identifier(value)
 	})
+	s = entryBytesRE.ReplaceAllString(s, "suppressed_entry_bytes: <entry-bytes>")
 	return m.pidRE.ReplaceAllString(s, "${1}<live-pid>")
 }
 
@@ -162,6 +166,9 @@ func (m *mask) document(value any) any {
 			item := v[key]
 			if pid, ok := item.(json.Number); key == "pid" && ok && pid.String() == strconv.Itoa(m.pid) {
 				item = "<live-pid>"
+			}
+			if _, ok := item.(json.Number); key == "suppressed_entry_bytes" && ok {
+				item = "<entry-bytes>"
 			}
 			out[m.text(key)] = m.document(item)
 		}

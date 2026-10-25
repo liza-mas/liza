@@ -1,0 +1,31 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "details": {
+            "effects": "none",
+            "operation": "unblock-task",
+            "outcome": "INVALID_INPUT",
+            "safe_action": "correct_input",
+            "task_id": "",
+            "task_status": "UNKNOWN"
+          },
+          "message": "unblock-task: INVALID_INPUT (safe_action=correct_input): validation failed: budget exceptions apply to coding tasks only; task task-1 has doer role \"epic-planner\""
+        },
+        "ok": false,
+        "result": {
+          "effects": "none",
+          "operation": "unblock-task",
+          "outcome": "INVALID_INPUT",
+          "safe_action": "correct_input",
+          "task_id": "",
+          "task_status": "UNKNOWN"
+        }
+      }
+    }
+  ]
+}
