@@ -903,14 +903,14 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if receipt != nil {
 		return &MergeResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, MergeCommit: receipt.Projection.MergeCommit}, nil
 	}
-	effects := "none"
+	effects := LifecycleEffectsNone
 	defer func() {
 		if retErr != nil {
 			task = readLifecycleTask(projectRoot, taskID, authority, opts)
-			outcome, action := models.LifecycleStateChanged, "requery"
+			outcome, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
 			var invalid *PreconditionError
-			if effects == "none" && errors.As(retErr, &invalid) {
-				outcome, action = models.LifecycleInvalidInput, "correct_input"
+			if effects == LifecycleEffectsNone && errors.As(retErr, &invalid) {
+				outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 			}
 			retErr = WrapLifecycleError(integrationOperationWTMerge, task, retErr, outcome, action, effects)
 		}
@@ -960,7 +960,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 			if err := markIntegrationFailedWithDiagnosticAuthority(bb, taskID, agentID, authority, IntegrationReasonHEADMismatch, "", pb, diagnostic); err != nil {
 				return nil, fmt.Errorf("failed to update state to INTEGRATION_FAILED: %w", err)
 			}
-			effects = "committed"
+			effects = LifecycleEffectsCommitted
 
 			return nil, &IntegrationFailedError{Reason: IntegrationReasonHEADMismatch}
 		}
@@ -1003,7 +1003,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if mergePreparedTestHook != nil {
 		mergePreparedTestHook(taskID)
 	}
-	effects = "unknown"
+	effects = LifecycleEffectsUnknown
 	casStarted := false
 	forwardRolledBack := false
 	forwardUnpublished := false
@@ -1071,7 +1071,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		lockTimeout := filelock.IsLockErrorType(err, filelock.LockErrorTimeout)
 		if errors.As(err, &unavailable) || (!casStarted && lockTimeout) {
 			forwardUnpublished = true
-			effects = "none"
+			effects = LifecycleEffectsNone
 			result := models.LifecycleStateChanged
 			if lockTimeout {
 				result = models.LifecycleRetryable
@@ -1319,7 +1319,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state to MERGED: %w", err)
 	}
-	effects = "committed"
+	effects = LifecycleEffectsCommitted
 	if postWorktreeCmdAmbiguous && !autoConfiguredPostWorktreeCmd {
 		warnings = append(warnings, fmt.Sprintf(
 			"post_worktree_cmd remains unset: detected Node projects in %s; configure manually",

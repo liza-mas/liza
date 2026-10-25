@@ -28,7 +28,7 @@ type assessedEpisode struct {
 // and otherwise records it.
 func (c *assessBlockedCall) mutate(state *models.State) (callbackErr error) {
 	defer func() {
-		callbackErr = WrapLifecycleError(assessBlockedOperation, c.observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+		callbackErr = WrapLifecycleError(assessBlockedOperation, c.observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}()
 	task := state.FindTask(c.taskID)
 	if task == nil {
@@ -50,7 +50,7 @@ func (c *assessBlockedCall) mutate(state *models.State) (callbackErr error) {
 	}
 
 	if task.Status != models.TaskStatusBlocked {
-		return WrapLifecycleError(assessBlockedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError(assessBlockedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	episode, err := c.assess(state, task)
 	if err != nil {
@@ -237,7 +237,7 @@ func (c *assessBlockedCall) record(state *models.State, task *models.Task, reque
 	var err error
 	c.result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 	if err == nil {
-		c.effects = "unknown"
+		c.effects = LifecycleEffectsUnknown
 	}
 	return err
 }

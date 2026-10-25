@@ -253,7 +253,7 @@ func checkOutputRuntimeInputs(state *models.State, resolver *pipeline.Resolver, 
 func runtimeInputAdmissionError(operation string, observed *models.Task, diagnostics []models.FieldDiagnostic, err error) error {
 	if err != nil {
 		return &LifecycleError{
-			Outcome: NewLifecycleOutcome(operation, observed, models.LifecycleRetryable, "retry", "none"),
+			Outcome: NewLifecycleOutcome(operation, observed, models.LifecycleRetryable, LifecycleSafeActionRetry, LifecycleEffectsNone),
 			Err:     fmt.Errorf("the runtime-input admission check could not run; retry: %w", err),
 		}
 	}

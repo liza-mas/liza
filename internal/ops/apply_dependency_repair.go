@@ -74,7 +74,7 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 		opts = options[0]
 	}
 	var observed *models.Task
-	effects := "none"
+	effects := LifecycleEffectsNone
 	defer func() {
 		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
 		var outcome models.LifecycleOutcome
@@ -199,7 +199,7 @@ func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reaso
 		}
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(source, lifecycleRequest, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		return err
 	})

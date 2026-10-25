@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-lifecycle-vocab",
+      "file": "internal/ops/lifecycle_result_test.go",
+      "assertion": "TestLifecycleDecisionConstantsKeepWireSpelling compares every LifecycleSafeAction and LifecycleEffects constant with an independent literal (continue, stop, requery, retry, correct_input, none, unknown, committed) and the two field-diagnostic actions with models.FieldDiagnostic*. Negative proof: changing the retry constant to 'retry_' failed it and was restored. No A3 call of WrapLifecycleError, NewLifecycleOutcome, lifecycleRequestError, retireFailedLifecyclePreparation or newDiagnosticLifecycleError passes a raw action or effects literal (AST scan of internal/ops: zero hits in the A3 file list), and no A3 file assigns one to a carrier feeding them or to a SafeAction/Effects field (grep of every quoted decision value across the A3 file list: the only remaining hits are the constant declarations and other vocabularies such as runtime-input bound, assessment dependency outcome and the mode_change.go goal-complete label).",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-x2",
+      "approved_reference_id": "moves"
+    },
+    {
+      "obligation_id": "AC-boxed",
+      "file": "internal/ops/lifecycle_result_test.go",
+      "assertion": "TestLifecycleRefusalKeepsTextAndStringSafeDetails (refusal text 'mark-blocked: STATE_CHANGED (safe_action=requery): lost race', INVALID_INPUT text, plain-string safe_action/effects/outcome in SafeDetails, JSON wire fields) and TestKernelSafeDetailsCarryPlainStrings (AgentAuthorityError and LifecycleSprintChangedError SafeDetails hold plain strings). Negative proof: dropping the string() conversion in agent_authority.go failed the latter and was restored.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a3/lifecycle/lifecycle_receipts_test.go",
+      "assertion": "The A3 lifecycle oracle (TestOracleLifecycleReceipts and the L1-L14 drivers) compares json, human and state.yaml against goldens unchanged by this task; models.LifecycleOutcome and FieldDiagnostic fields stay strings and the wire values are pinned by the spelling and SafeDetails tests.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-race",
+      "file": "internal/ops/lifecycle_receipt_test.go",
+      "assertion": "The lifecycle receipt and preparation tests (TestLifecyclePreparationRequiresAuthenticatedGenerationTurnover, TestPreparationFromRetiredGenerationDoesNotBlockAnotherActor, TestRetiredPreparationClearsCheckAndCompletionForAnotherActor, ownership_lifecycle_test.go) run unchanged under go test -race ./internal/ops/ ./internal/commands/ ./cmd/liza/.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target (go test ./...) runs the ops, commands, cmd/liza and A3 oracle suites including the new tests; lint, test-e2e and the race run are mandatory with it.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-layout",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "AC-sequence",
+      "approved_reference_id": "a3-proof"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}

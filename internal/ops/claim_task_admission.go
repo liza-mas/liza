@@ -292,7 +292,7 @@ func (op *claimOperation) enforceLimits(state *models.State, task *models.Task) 
 		}
 		op.invocation.effects = true
 		outcome := result.LifecycleOutcome
-		outcome.Operation, outcome.Outcome, outcome.SafeAction = "claim-task", models.LifecycleAlreadyTransitioned, "stop"
+		outcome.Operation, outcome.Outcome, outcome.SafeAction = "claim-task", models.LifecycleAlreadyTransitioned, string(LifecycleSafeActionStop)
 		return &LifecycleError{Outcome: outcome, Err: &PreconditionError{Reason: fmt.Sprintf(
 			"task %s exhausted limits, transitioned to attempt %d — claimable on next cycle",
 			op.taskID, result.NewAttempt,
@@ -469,7 +469,7 @@ func enforceBlockedEscalation(
 			Reason: reasonPtr,
 		})
 		for _, outcome := range outcomes {
-			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, "stop", "committed")
+			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsCommitted)
 		}
 
 		return nil

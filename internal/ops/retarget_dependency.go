@@ -72,7 +72,7 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 		opts = options[0]
 	}
 	var observed *models.Task
-	effects := "none"
+	effects := LifecycleEffectsNone
 	defer func() {
 		retErr = WrapLifecycleError(retargetDependencyOperation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
 		var outcome models.LifecycleOutcome
@@ -215,7 +215,7 @@ func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency 
 		}
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		return err
 	})

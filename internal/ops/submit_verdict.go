@@ -124,14 +124,14 @@ func SubmitVerdictWithAuthorityAndOptions(projectRoot, taskID, verdict, reason s
 func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (result *VerdictResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
 	defer func() {
-		outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+		outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 		var invalid *PreconditionError
 		if stderrors.As(retErr, &invalid) {
-			outcome, action = models.LifecycleInvalidInput, "correct_input"
+			outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 		}
 		var quarantined *QuarantinedVerdictError
 		if stderrors.As(retErr, &quarantined) {
-			effects = "committed"
+			effects = LifecycleEffectsCommitted
 		}
 		retErr = WrapLifecycleError("submit-verdict", nil, retErr, outcome, action, effects)
 		var completed models.LifecycleOutcome
@@ -198,12 +198,12 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 			// after the review lock is released, without treating it as success.
 			lp := paths.New(projectRoot)
 			recordSubmitVerdictFailure(RequestBlackboard(lp.StatePath(), authority, opts), lp.LogPath(), taskID, agentID, authority, verdict, failure)
-			failureKind, action := models.LifecycleStateChanged, "requery"
+			failureKind, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
 			if IsAgentAuthorityError(err) {
 				task = nil
-				failureKind, action = models.LifecycleStaleCaller, "stop"
+				failureKind, action = models.LifecycleStaleCaller, LifecycleSafeActionStop
 			}
-			outcome := NewLifecycleOutcome("submit-verdict", task, failureKind, action, "committed")
+			outcome := NewLifecycleOutcome("submit-verdict", task, failureKind, action, LifecycleEffectsCommitted)
 			outcome.CompletedTransitionID, outcome.RequestID = result.CompletedTransitionID, result.RequestID
 			result = nil
 			return &LifecycleError{Outcome: outcome, Err: failure}
@@ -477,7 +477,7 @@ func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authori
 
 		if !isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {
 			recordFailure = false
-			return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}, models.LifecycleStateChanged, "requery", "none")
+			return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 		}
 		if task.ReviewingBy == nil || *task.ReviewingBy != agentID {
 			recordFailure = false

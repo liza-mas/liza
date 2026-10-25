@@ -12,7 +12,7 @@ import (
 func TestReplaceTaskTextResult(t *testing.T) {
 	for _, tc := range []struct {
 		outcome string
-		action  string
+		action  ops.LifecycleSafeAction
 		fresh   bool
 	}{
 		{models.LifecycleCompleted, "continue", true},
@@ -28,7 +28,7 @@ func TestReplaceTaskTextResult(t *testing.T) {
 					t.Fatal(err)
 				}
 			})
-			for _, want := range []string{"outcome: " + tc.outcome, "safe_action: " + tc.action} {
+			for _, want := range []string{"outcome: " + tc.outcome, "safe_action: " + string(tc.action)} {
 				if !strings.Contains(output, want) {
 					t.Errorf("output %q lacks %q", output, want)
 				}

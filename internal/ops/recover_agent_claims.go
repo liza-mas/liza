@@ -28,7 +28,7 @@ func captureRecoverAgentClaims(state *models.State, agentID string, lockedIDs []
 	slices.Sort(claims)
 	claims = slices.Compact(claims)
 	if !slices.Equal(claims, lockedIDs) {
-		return recoverAgentClaims{}, WrapLifecycleError("recover-agent", nil, fmt.Errorf("agent task claims changed before recovery"), models.LifecycleStateChanged, "requery", "none")
+		return recoverAgentClaims{}, WrapLifecycleError("recover-agent", nil, fmt.Errorf("agent task claims changed before recovery"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
 	return recoverAgentClaims{agent: agent, exists: exists, doers: doerTaskIDs, reviewers: reviewerTaskIDs, all: claims}, nil
 }

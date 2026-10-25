@@ -126,15 +126,15 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 // classifyFailure wraps a failed call with the outcome the result contract
 // prescribes for it, observing the task as it now stands.
 func (c *markBlockedCall) classifyFailure(err error) error {
-	outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+	outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 	var invalid *PreconditionError
 	if stderrors.As(err, &invalid) {
-		outcome, action = models.LifecycleInvalidInput, "correct_input"
+		outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 	} else if c.mutationStarted {
-		effects = "unknown"
+		effects = LifecycleEffectsUnknown
 	}
 	if IsAgentAuthorityError(err) || filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
-		effects = "none"
+		effects = LifecycleEffectsNone
 	}
 	observed := readLifecycleTask(c.projectRoot, c.taskID, c.authority, c.opts.Request)
 	return WrapLifecycleError("mark-blocked", observed, err, outcome, action, effects)
@@ -144,7 +144,7 @@ func (c *markBlockedCall) classifyFailure(err error) error {
 // path is opened.
 func (c *markBlockedCall) normalizeInput() error {
 	if err := ValidateLifecycleRequestOptions(c.opts.Request); err != nil {
-		return WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, "correct_input", "none")
+		return WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	if c.agentID == "" {
 		return &PreconditionError{Reason: "agent ID is required"}

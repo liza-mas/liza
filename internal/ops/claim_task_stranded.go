@@ -32,7 +32,7 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 	// its identity must survive retries unchanged, so it cannot follow the
 	// takeover onto the new boundary.
 	if invocation.opts.ExpectedTransition != "" {
-		return nil, nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "none",
+		return nil, nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone,
 			"stranded claim takeover changes the task boundary; claim without an expected transition")
 	}
 	if err := requireFreeClaimant(state, agentID, runtimeRole, task.ID); err != nil {
@@ -58,11 +58,11 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 			now := time.Now().UTC()
 			reason := models.StrandedDoerClaimReason(state, live, resolver, now)
 			if reason == "" {
-				return lifecycleRequestError(live, request, models.LifecycleStateChanged, "requery", "none",
+				return lifecycleRequestError(live, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone,
 					"stranded claim changed before it could be taken over")
 			}
 			if receipt, err := checkOwnerEndingRequest(live, request); err != nil || receipt != nil {
-				return lifecycleRequestError(live, request, models.LifecycleStateChanged, "requery", "none",
+				return lifecycleRequestError(live, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone,
 					"stranded claim changed before it could be taken over")
 			}
 			if err := requireFreeClaimant(state, agentID, runtimeRole, live.ID); err != nil {

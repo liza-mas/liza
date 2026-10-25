@@ -169,7 +169,7 @@ func releaseClaimTransaction(state *models.State, bb *db.Blackboard, run release
 		return err
 	}
 	if !released.ReleasedReviewer && !released.ReleasedDoer {
-		return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, "stop", "none"), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
+		return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
 	}
 	if validateRejectedHandoff {
 		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, run.projectRoot, true, os.Stderr); err != nil {

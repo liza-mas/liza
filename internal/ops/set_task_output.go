@@ -64,12 +64,12 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 	invocation := NewLifecycleInvocation(projectRoot)
 	var outcome models.LifecycleOutcome
 	defer func() {
-		failure, action := models.LifecycleStateChanged, "requery"
+		failure, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
 		var invalid *PreconditionError
 		if errors.As(retErr, &invalid) {
-			failure, action = models.LifecycleInvalidInput, "correct_input"
+			failure, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 		}
-		retErr = WrapLifecycleError("set-task-output", nil, retErr, failure, action, "none")
+		retErr = WrapLifecycleError("set-task-output", nil, retErr, failure, action, LifecycleEffectsNone)
 		// The requested task ID remains useful when storage fails before a task
 		// observation is available; do not invent its status or ownership.
 		var lifecycleErr *LifecycleError

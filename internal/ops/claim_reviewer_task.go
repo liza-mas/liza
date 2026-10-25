@@ -213,9 +213,9 @@ func claimReviewerTask(input ClaimReviewerTaskInput, invocation *ownershipInvoca
 		if preparation == nil {
 			return
 		}
-		effects := "none"
+		effects := LifecycleEffectsNone
 		if invocation.effects {
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		resultErr = retireOrDeferFailedLifecyclePreparation(input.ProjectRoot, selected.ID, input.Authority, preparation, resultErr, effects)
 	}()
