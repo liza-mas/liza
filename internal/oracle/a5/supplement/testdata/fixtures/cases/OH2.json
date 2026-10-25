@@ -68,5 +68,9 @@
         "feature.go": "package fixture\n// integration owns this file\n"
       }
     }
-  ]
+  ],
+  "git_transcript": {
+    "path": "feature.go",
+    "copies": 2
+  }
 }

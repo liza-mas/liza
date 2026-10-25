@@ -68,8 +68,11 @@ type caseInput struct {
 	// from leaves integration (an orphaned base).
 	WorktreeAfter     []recipeStep `json:"worktree_after,omitempty"`
 	IntegrationRewind string       `json:"integration_rewind,omitempty"`
-	Step              step         `json:"step"`
-	Modes             []string     `json:"modes"`
+	// GitTranscript opts the state capture into masking Git's rebase transcript
+	// in the persisted diagnostics (see maskGitTranscript).
+	GitTranscript *gitTranscript `json:"git_transcript,omitempty"`
+	Step          step           `json:"step"`
+	Modes         []string       `json:"modes"`
 }
 
 // This allocation is independent of fixture discovery: removing a manifest or a

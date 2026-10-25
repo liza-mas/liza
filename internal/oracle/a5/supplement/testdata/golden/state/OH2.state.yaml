@@ -221,7 +221,7 @@ tasks:
       failed_by:
         - code-reviewer-1
       integration_failure:
-        detail: "base_commit <commit:orphan> is no longer on integration branch integration and the task was not healed (rebase onto integration conflicts: rebase conflict: Rebasing (1/1)\rAuto-merging feature.go\nCONFLICT (add/add): Merge conflict in feature.go\nerror: could not apply <commit:candidate>... candidate\nhint: Resolve all conflicts manually, mark them as resolved with\nhint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\".\nhint: You can instead skip this commit: run \"git rebase --skip\".\nhint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\".\nCould not apply <commit:candidate>... candidate); repair: git -C .worktrees/task-1 rebase --onto integration <commit:orphan>, then run liza update-review-commit task-1"
+        detail: "base_commit <commit:orphan> is no longer on integration branch integration and the task was not healed (rebase onto integration conflicts: rebase conflict: <git-rebase-transcript>); repair: git -C .worktrees/task-1 rebase --onto integration <commit:orphan>, then run liza update-review-commit task-1"
         operation: review-assignment
         reason: review boundary mismatch
         recovery_hint: claim the task for integration fix, verify the worktree HEAD, then resubmit for review
@@ -250,7 +250,7 @@ tasks:
           agent: code-reviewer-1
           reason: review boundary mismatch
           diagnostic:
-            detail: "base_commit <commit:orphan> is no longer on integration branch integration and the task was not healed (rebase onto integration conflicts: rebase conflict: Rebasing (1/1)\rAuto-merging feature.go\nCONFLICT (add/add): Merge conflict in feature.go\nerror: could not apply <commit:candidate>... candidate\nhint: Resolve all conflicts manually, mark them as resolved with\nhint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\".\nhint: You can instead skip this commit: run \"git rebase --skip\".\nhint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\".\nCould not apply <commit:candidate>... candidate); repair: git -C .worktrees/task-1 rebase --onto integration <commit:orphan>, then run liza update-review-commit task-1"
+            detail: "base_commit <commit:orphan> is no longer on integration branch integration and the task was not healed (rebase onto integration conflicts: rebase conflict: <git-rebase-transcript>); repair: git -C .worktrees/task-1 rebase --onto integration <commit:orphan>, then run liza update-review-commit task-1"
             operation: review-assignment
             reason: review boundary mismatch
             recovery_hint: claim the task for integration fix, verify the worktree HEAD, then resubmit for review

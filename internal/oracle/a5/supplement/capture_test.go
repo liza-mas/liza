@@ -47,6 +47,13 @@ func normalisePIDs(b []byte) []byte { return pidRE.ReplaceAll(b, []byte("${1}<pi
 func capture(t testing.TB, f *fixture, c caseInput, mode string, r oracle.Result, before, after []byte) {
 	t.Helper()
 	n := f.normaliser()
+	if c.GitTranscript != nil {
+		masked, err := maskGitTranscript(string(after), *c.GitTranscript)
+		if err != nil {
+			t.Fatalf("%s: %v", c.ID, err)
+		}
+		after = []byte(masked)
+	}
 	if c.Step.Adapter != "" {
 		n.CheckState(t, c.ID+".state.yaml", normalisePIDs(before), normalisePIDs(after))
 		if slices.Contains(c.Modes, "alerts") {
