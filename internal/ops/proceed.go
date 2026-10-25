@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -99,101 +98,136 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 		return nil, err
 	}
 
-	statePath := paths.New(projectRoot).StatePath()
-	blackboard := db.For(statePath)
-	now := time.Now().UTC()
-	newResult := func() *ProceedResult {
-		return &ProceedResult{SourceTaskID: taskID, TransitionName: transitionName}
+	run := proceedRun{
+		projectRoot: projectRoot, taskID: taskID, transitionName: transitionName,
+		tDef: tDef, resolver: resolver, blackboard: db.For(paths.New(projectRoot).StatePath()), now: time.Now().UTC(),
 	}
-	execute := func(s *models.State, result *ProceedResult) error {
-		// Validate sprint is COMPLETED
-		if s.Sprint.Status != models.SprintStatusCompleted {
-			return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)
-		}
-
-		task := s.FindTask(taskID)
-		var inheritedDeps inheritedDepSet
-		if task != nil {
-			if task.PlanHandoffRetired() {
-				return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
-			}
-			if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
-				return fmt.Errorf("canonicalize dependencies: %w", err)
-			}
-			inheritedDeps, err = computeInheritedDeps(s, task, transitionName, resolver)
-			if err != nil {
-				return fmt.Errorf("inherited deps: %w", err)
-			}
-		}
-
-		if err := proceedTransaction(blackboard, s, projectRoot, taskID, transitionName, tDef, inheritedDeps, resolver, now, result); err != nil {
-			return err
-		}
-
-		// Add children to sprint scope so they appear in the next sprint
-		s.Sprint.Scope.Planned = append(s.Sprint.Scope.Planned, result.ChildTaskIDs...)
-
-		return nil
-	}
-
-	preflightState, err := blackboard.Read()
+	preflight, err := run.preflight()
 	if err != nil {
-		return nil, fmt.Errorf("proceed failed: read state preflight: %w", err)
+		return nil, err
 	}
-	allocationSnapshot := db.CloneState(preflightState).FindTask(taskID)
-	allocationCheck := validateDirectCodingGeneration(projectRoot, preflightState, allocationSnapshot)
-	if allocationCheck.err != nil {
-		return nil, fmt.Errorf("proceed failed: %w", allocationCheck.err)
-	}
-	// Exercise the exact transition path against the read snapshot so invalid
-	// requests retain their native errors before integration reconciliation. The
-	// in-memory mutations are discarded; the transaction below rechecks them.
-	// A replacing plan therefore runs its clone, retirements, validation and
-	// planReplacementTestHooks twice.
-	if err := execute(preflightState, newResult()); err != nil {
+
+	result := run.newResult()
+	if err := run.commit(preflight, result); err != nil {
 		return nil, fmt.Errorf("proceed failed: %w", err)
 	}
+	for _, warning := range cleanupRetiredOriginals(run.blackboard, projectRoot, []ProceedResult{*result}) {
+		log.Printf("WARNING: proceed: %s", warning)
+	}
 
-	result := newResult()
+	return result, nil
+}
 
+// proceedRun is one Proceed call: its request and the resolved pipeline.
+type proceedRun struct {
+	projectRoot, taskID, transitionName string
+	tDef                                transitionDef
+	resolver                            *pipeline.Resolver
+	blackboard                          *db.Blackboard
+	now                                 time.Time
+}
+
+// proceedPreflight is what the snapshot preflight hands to the transaction:
+// the state it read and the source task's direct-coding allocation check.
+type proceedPreflight struct {
+	state              *models.State
+	allocationSnapshot *models.Task
+	allocationCheck    directCodingGenerationCheck
+}
+
+func (r *proceedRun) newResult() *ProceedResult {
+	return &ProceedResult{SourceTaskID: r.taskID, TransitionName: r.transitionName}
+}
+
+// execute applies the transition to s: the sprint gate, the source's canonical
+// dependencies and inherited phase-gate dependencies, then the transition itself.
+func (r *proceedRun) execute(s *models.State, result *ProceedResult) error {
+	// Validate sprint is COMPLETED
+	if s.Sprint.Status != models.SprintStatusCompleted {
+		return fmt.Errorf("sprint must be COMPLETED before proceeding (current: %s)", s.Sprint.Status)
+	}
+
+	task := s.FindTask(r.taskID)
+	var inheritedDeps inheritedDepSet
+	if task != nil {
+		if task.PlanHandoffRetired() {
+			return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
+		}
+		if err := canonicalizeTaskDependsOnForTransition(s, r.resolver, task); err != nil {
+			return fmt.Errorf("canonicalize dependencies: %w", err)
+		}
+		var err error
+		inheritedDeps, err = computeInheritedDeps(s, task, r.transitionName, r.resolver)
+		if err != nil {
+			return fmt.Errorf("inherited deps: %w", err)
+		}
+	}
+
+	if err := proceedTransaction(r.blackboard, s, r.projectRoot, r.taskID, r.transitionName, r.tDef, inheritedDeps, r.resolver, r.now, result); err != nil {
+		return err
+	}
+
+	// Add children to sprint scope so they appear in the next sprint
+	s.Sprint.Scope.Planned = append(s.Sprint.Scope.Planned, result.ChildTaskIDs...)
+
+	return nil
+}
+
+// preflight reads a state snapshot, checks the source's direct-coding
+// allocation and exercises the exact transition path against the snapshot so
+// invalid requests retain their native errors before integration
+// reconciliation. The in-memory mutations are discarded; the transaction
+// rechecks them. A replacing plan therefore runs its clone, retirements,
+// validation and planReplacementTestHooks twice.
+func (r *proceedRun) preflight() (proceedPreflight, error) {
+	state, err := r.blackboard.Read()
+	if err != nil {
+		return proceedPreflight{}, fmt.Errorf("proceed failed: read state preflight: %w", err)
+	}
+	snapshot := db.CloneState(state).FindTask(r.taskID)
+	check := validateDirectCodingGeneration(r.projectRoot, state, snapshot)
+	if check.err != nil {
+		return proceedPreflight{}, fmt.Errorf("proceed failed: %w", check.err)
+	}
+	if err := r.execute(state, r.newResult()); err != nil {
+		return proceedPreflight{}, fmt.Errorf("proceed failed: %w", err)
+	}
+	return proceedPreflight{state: state, allocationSnapshot: snapshot, allocationCheck: check}, nil
+}
+
+// commit runs the transition in one state transaction. The integration
+// authorization depends on the allocation: a direct-coding allocation verifies
+// its artifacts at the integration HEAD under completion linearization, any
+// other transition only needs the effective completion authorization.
+func (r *proceedRun) commit(pf proceedPreflight, result *ProceedResult) error {
 	mutate := func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
-		return blackboard.Modify(func(s *models.State) error {
-			if allocationSnapshot != nil && models.HasCodingAllocation(allocationSnapshot.Output) {
-				current := s.FindTask(taskID)
-				if err := allocationCheck.validateState(s, current); err != nil {
+		return r.blackboard.Modify(func(s *models.State) error {
+			if pf.allocationSnapshot != nil && models.HasCodingAllocation(pf.allocationSnapshot.Output) {
+				current := s.FindTask(r.taskID)
+				if err := pf.allocationCheck.validateState(s, current); err != nil {
 					return err
 				}
 			}
 			if err := completionAuthorization.validateState(s, false); err != nil {
 				return err
 			}
-			return execute(s, result)
+			return r.execute(s, result)
 		})
 	}
-	if allocationCheck.commit != "" {
-		err = withEffectiveIntegrationCompletionLinearization(projectRoot, "proceed direct coding allocation", func() error {
-			authorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, false)
-			if err != nil {
-				return err
-			}
-			runBeforeEffectiveIntegrationProgressionMutationTestHook()
-			if err := verifyDirectCodingIntegration(projectRoot, preflightState.Config.IntegrationBranch, map[string]directCodingGenerationCheck{taskID: allocationCheck}); err != nil {
-				return err
-			}
-			return mutate(authorization)
-		})
-	} else {
-		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "proceed", false, mutate)
+	if pf.allocationCheck.commit == "" {
+		return withEffectiveIntegrationCompletionAuthorization(r.projectRoot, "proceed", false, mutate)
 	}
-
-	if err != nil {
-		return nil, fmt.Errorf("proceed failed: %w", err)
-	}
-	for _, warning := range cleanupRetiredOriginals(blackboard, projectRoot, []ProceedResult{*result}) {
-		log.Printf("WARNING: proceed: %s", warning)
-	}
-
-	return result, nil
+	return withEffectiveIntegrationCompletionLinearization(r.projectRoot, "proceed direct coding allocation", func() error {
+		authorization, err := authorizeEffectiveIntegrationCompletion(r.projectRoot, false)
+		if err != nil {
+			return err
+		}
+		runBeforeEffectiveIntegrationProgressionMutationTestHook()
+		if err := verifyDirectCodingIntegration(r.projectRoot, pf.state.Config.IntegrationBranch, map[string]directCodingGenerationCheck{r.taskID: pf.allocationCheck}); err != nil {
+			return err
+		}
+		return mutate(authorization)
+	})
 }
 
 // proceedManyToOneInner handles many-to-one transition logic. The trigger task
@@ -346,216 +380,6 @@ func selectsValidationNotes(resolver *pipeline.Resolver, task *models.Task, tran
 	return resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
 }
 
-// pendingTx represents a transition queued for execution in ExecuteAvailableTransitions.
-type pendingTx struct {
-	taskID  string
-	taskIdx int
-	name    string
-	tDef    transitionDef
-	origIdx int // original collection index for stable topo-sort tie-breaking
-}
-
-// topoSortPending sorts pending transitions by task DependsOn relationships using
-// Kahn's algorithm. Tie-breaker is original collection index for deterministic ordering.
-// Returns (sorted, cycles, blocked) where cycles are true SCC members and blocked
-// are nodes downstream of those cycles.
-func topoSortPending(pending []pendingTx, s *models.State) (sorted []pendingTx, cycles [][]pendingTx, blocked []pendingTx) {
-	n := len(pending)
-	if n == 0 {
-		return nil, nil, nil
-	}
-
-	// Build task ID → pending indices map
-	taskToPending := make(map[string][]int)
-	for i, p := range pending {
-		taskToPending[p.taskID] = append(taskToPending[p.taskID], i)
-	}
-
-	// Compute in-degrees: if pending[i]'s task depends on pending[j]'s task, j→i edge
-	inDegree := make([]int, n)
-	edges := make([][]int, n) // edges[j] = indices that j blocks
-	for i, p := range pending {
-		task := s.FindTask(p.taskID)
-		if task == nil {
-			continue
-		}
-		for _, depID := range task.DependsOn {
-			if depIndices, ok := taskToPending[depID]; ok {
-				for _, depIdx := range depIndices {
-					edges[depIdx] = append(edges[depIdx], i)
-					inDegree[i]++
-				}
-			}
-		}
-	}
-
-	// Kahn's: process zero-in-degree nodes, stable by origIdx
-	var queue []int
-	for i := range pending {
-		if inDegree[i] == 0 {
-			queue = append(queue, i)
-		}
-	}
-	slices.SortFunc(queue, func(a, b int) int {
-		return pending[a].origIdx - pending[b].origIdx
-	})
-
-	for len(queue) > 0 {
-		idx := queue[0]
-		queue = queue[1:]
-		sorted = append(sorted, pending[idx])
-		for _, blockedIdx := range edges[idx] {
-			inDegree[blockedIdx]--
-			if inDegree[blockedIdx] == 0 {
-				queue = append(queue, blockedIdx)
-				slices.SortFunc(queue, func(a, b int) int {
-					return pending[a].origIdx - pending[b].origIdx
-				})
-			}
-		}
-	}
-
-	// Remaining nodes have inDegree > 0. Some are in true cycles; others are
-	// merely downstream of those cycles and cannot be ordered yet.
-	var remaining []int
-	for i := range pending {
-		if inDegree[i] > 0 {
-			remaining = append(remaining, i)
-		}
-	}
-	if len(remaining) == 0 {
-		return sorted, nil, nil
-	}
-
-	cycleIndices := make(map[int]bool)
-	for _, scc := range findSCCs(remaining, edges) {
-		if len(scc) < 2 && !hasSelfLoop(scc[0], edges) {
-			continue
-		}
-		cycle := make([]pendingTx, len(scc))
-		for i, idx := range scc {
-			cycle[i] = pending[idx]
-			cycleIndices[idx] = true
-		}
-		cycles = append(cycles, cycle)
-	}
-
-	for _, idx := range remaining {
-		if !cycleIndices[idx] {
-			blocked = append(blocked, pending[idx])
-		}
-	}
-
-	return sorted, cycles, blocked
-}
-
-// findSCCs returns strongly connected components among the given node indices
-// using Tarjan's algorithm, considering only edges within the subgraph.
-func findSCCs(indices []int, edges [][]int) [][]int {
-	inSubgraph := make(map[int]bool, len(indices))
-	for _, i := range indices {
-		inSubgraph[i] = true
-	}
-
-	var (
-		stack   []int
-		onStack = make(map[int]bool)
-		disc    = make(map[int]int)
-		low     = make(map[int]int)
-		counter int
-		sccs    [][]int
-	)
-
-	var visit func(v int)
-	visit = func(v int) {
-		disc[v] = counter
-		low[v] = counter
-		counter++
-		stack = append(stack, v)
-		onStack[v] = true
-
-		for _, w := range edges[v] {
-			if !inSubgraph[w] {
-				continue
-			}
-			if _, seen := disc[w]; !seen {
-				visit(w)
-				if low[w] < low[v] {
-					low[v] = low[w]
-				}
-			} else if onStack[w] && disc[w] < low[v] {
-				low[v] = disc[w]
-			}
-		}
-
-		if low[v] == disc[v] {
-			var scc []int
-			for {
-				w := stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-				onStack[w] = false
-				scc = append(scc, w)
-				if w == v {
-					break
-				}
-			}
-			sccs = append(sccs, scc)
-		}
-	}
-
-	for _, v := range indices {
-		if _, seen := disc[v]; !seen {
-			visit(v)
-		}
-	}
-
-	return sccs
-}
-
-func hasSelfLoop(idx int, edges [][]int) bool {
-	for _, next := range edges[idx] {
-		if next == idx {
-			return true
-		}
-	}
-	return false
-}
-
-// hasCycleBlockedEvent checks if a task already has a transition_cycle_blocked
-// history entry for the given transition and cycle members (idempotency guard).
-func hasCycleBlockedEvent(task *models.Task, transitionName string, cycleMembers []string) bool {
-	for _, h := range task.History {
-		if h.Event != models.TaskEventTransitionCycleBlocked {
-			continue
-		}
-		if trans, ok := h.Extra["transition"].(string); ok && trans == transitionName {
-			if slices.Equal(extraToStringSlice(h.Extra["cycle_members"]), cycleMembers) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// extraToStringSlice normalizes an Extra field value to []string.
-// After YAML round-trip, []string becomes []any — this handles both.
-func extraToStringSlice(v any) []string {
-	switch typed := v.(type) {
-	case []string:
-		return typed
-	case []any:
-		result := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
-			}
-		}
-		return result
-	default:
-		return nil
-	}
-}
-
 // ExecuteAvailableTransitions auto-executes pipeline transitions for merged tasks.
 // Three-phase approach:
 //  1. Collect: (a) available transitions + (b) incomplete transitions (crash recovery)
@@ -642,301 +466,17 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	if err != nil {
 		return TransitionReport{}, fmt.Errorf("failed to load pipeline config: %w", err)
 	}
-	handoff := NewPlanHandoffDomain(resolver)
-
-	statePath := paths.New(projectRoot).StatePath()
-	blackboard := db.For(statePath)
-
-	// Pre-read state to check if goal.base_commit needs snapshotting.
-	// Git operation must happen outside Modify callback.
-	var integrationHEAD string
-	preState, preErr := blackboard.Read()
-	directChecks := make(map[string]directCodingGenerationCheck)
-	if preErr == nil {
-		for i := range preState.Tasks {
-			task := &preState.Tasks[i]
-			if task.Status != models.TaskStatusMerged || !models.HasCodingAllocation(task.Output) || task.PlanGenerationFenced() || task.PlanHandoffRetired() || task.TransitionsExecuted["replanned"] {
-				continue
-			}
-			needsGeneration := triggerFilter != "auto" && handoff.Pending(task)
-			for name, executed := range task.TransitionsExecuted {
-				needsGeneration = needsGeneration || (executed && isTransitionIncomplete(preState, task, name, resolver))
-			}
-			if needsGeneration {
-				directChecks[task.ID] = validateDirectCodingGeneration(projectRoot, preState, task)
-			}
-		}
+	pass := &transitionPass{
+		projectRoot: projectRoot, triggerFilter: triggerFilter, admission: admission,
+		resolver: resolver, handoff: NewPlanHandoffDomain(resolver), blackboard: db.For(paths.New(projectRoot).StatePath()),
 	}
-	if preErr == nil && preState.Goal.BaseCommit == nil {
-		branchName := preState.Config.IntegrationBranch
-		if branchName == "" {
-			branchName = "integration"
-		}
-		gw := git.New(projectRoot)
-		integrationHEAD, _ = gw.GetCommitSHA(branchName)
-	}
+	preState := pass.readInputs()
 
-	now := time.Now().UTC()
-	var results []ProceedResult
-	var failures []TransitionFailure
-	var observedFailures []PlanHandoffFailure
-	var skippedHandoffs []TransitionFailure
-	fail := func(taskID, transition string, err error) {
-		failures = append(failures, TransitionFailure{SourceTaskID: taskID, Transition: transition, Error: err.Error()})
-	}
-
-	mutate := func() error {
-		return blackboard.Modify(func(s *models.State) error {
-			now = time.Now().UTC()
-			var pending []pendingTx
-			origIdx := 0
-
-			// Phase 1a: Collect available transitions based on trigger filter.
-			for i := range s.Tasks {
-				task := &s.Tasks[i]
-				if task.RolePair == "" {
-					continue
-				}
-
-				// All tasks fan out from MERGED (after merge handler).
-				// Integration tasks previously bypassed merge, but that left
-				// orphaned worktrees. No-diff merges are handled gracefully by
-				// performCASMerge (ancestor check → fast-forward no-op).
-				if task.Status != models.TaskStatusMerged {
-					continue
-				}
-
-				// Replanned tasks must not spawn children — the replan replacement
-				// owns the downstream pipeline. Replan.go marks real transitions as
-				// executed (preventive), but this is a defensive second layer.
-				if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() || task.PlanGenerationFenced() {
-					continue
-				}
-
-				approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
-				if err != nil {
-					fail(task.ID, "", fmt.Errorf("unknown role-pair %q: %w", task.RolePair, err))
-					continue
-				}
-
-				var available []string
-				switch triggerFilter {
-				case "auto":
-					available = resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)
-				case "manual":
-					available = resolver.AvailableManualTransitions(approvedStatus, task.TransitionsExecuted)
-				default: // "" — both
-					available = resolver.AvailableManualTransitions(approvedStatus, task.TransitionsExecuted)
-					available = append(available, resolver.AvailableAutoTransitions(approvedStatus, task.TransitionsExecuted)...)
-				}
-				for _, transitionName := range available {
-					if !resolver.TransitionApplies(transitionName, task.Output) {
-						continue
-					}
-					if admission == AdmitReviewed && handoff.TransitionFailure(s, task, transitionName) != nil {
-						continue
-					}
-					if handoff.GatesTransition(task, transitionName) && !admitsHandoff(handoff, s, task, admission) {
-						continue
-					}
-					tDef, err := buildTransitionDefFromPipeline(resolver, transitionName)
-					if err != nil {
-						fail(task.ID, transitionName, err)
-						continue
-					}
-					tDef.requiredStatus = models.TaskStatusMerged
-
-					pending = append(pending, pendingTx{
-						taskID: task.ID, taskIdx: i, name: transitionName,
-						tDef: tDef, origIdx: origIdx,
-					})
-					origIdx++
-				}
-			}
-
-			// Phase 1b: Collect incomplete transitions (crash recovery)
-			for i := range s.Tasks {
-				task := &s.Tasks[i]
-				if task.RolePair == "" {
-					continue
-				}
-				// All tasks recover from MERGED (same as Phase 1a).
-				if task.Status != models.TaskStatusMerged {
-					continue
-				}
-				// Replanned tasks must not spawn children (same guard as Phase 1a).
-				if task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() || task.PlanGenerationFenced() {
-					continue
-				}
-				for transName := range task.TransitionsExecuted {
-					if !isTransitionIncomplete(s, task, transName, resolver) {
-						continue
-					}
-					tDef, err := buildTransitionDefFromPipeline(resolver, transName)
-					if err != nil {
-						fail(task.ID, transName, fmt.Errorf("crash recovery: %w", err))
-						continue
-					}
-					tDef.requiredStatus = models.TaskStatusMerged
-					pending = append(pending, pendingTx{
-						taskID: task.ID, taskIdx: i, name: transName,
-						tDef: tDef, origIdx: origIdx,
-					})
-					origIdx++
-				}
-			}
-
-			// Dedup by (taskID, transitionName) — same transition may appear in both scans
-			seen := make(map[string]bool)
-			deduped := pending[:0]
-			for _, p := range pending {
-				key := p.taskID + "\x00" + p.name
-				if !seen[key] {
-					seen[key] = true
-					deduped = append(deduped, p)
-				}
-			}
-			pending = deduped
-			// Artifact reads ran outside Modify. Fence that checked allocation before
-			// either ordinary generation or recovery can publish its coding children.
-			admitted := pending[:0]
-			for _, candidate := range pending {
-				task := s.FindTask(candidate.taskID)
-				if models.HasCodingAllocation(task.Output) {
-					check, checked := directChecks[task.ID]
-					if !checked || check.err != nil {
-						if check.err == nil {
-							check.err = fmt.Errorf("direct coding allocation was not checked before generation")
-						}
-						fail(task.ID, candidate.name, check.err)
-						continue
-					}
-					if err := check.validateState(s, task); err != nil {
-						fail(task.ID, candidate.name, err)
-						continue
-					}
-				}
-				admitted = append(admitted, candidate)
-			}
-			pending = admitted
-
-			// Phase 2: Topological sort by DependsOn
-			sorted, cycles, downstreamBlocked := topoSortPending(pending, s)
-
-			// Handle true cycles: add one history event per SCC (idempotent), log error
-			for _, cycle := range cycles {
-				cycleMemberIDs := make([]string, len(cycle))
-				for i, p := range cycle {
-					cycleMemberIDs[i] = p.taskID
-				}
-				slices.Sort(cycleMemberIDs)
-
-				for _, p := range cycle {
-					task := &s.Tasks[p.taskIdx]
-					if !hasCycleBlockedEvent(task, p.name, cycleMemberIDs) {
-						task.History = append(task.History, models.TaskHistoryEntry{
-							Time:  now,
-							Event: models.TaskEventTransitionCycleBlocked,
-							Extra: map[string]any{
-								"transition":    p.name,
-								"cycle_members": cycleMemberIDs,
-							},
-						})
-					}
-					fail(p.taskID, p.name, fmt.Errorf("blocked by dependency cycle among %v", cycleMemberIDs))
-				}
-			}
-
-			for _, p := range downstreamBlocked {
-				fail(p.taskID, p.name, errors.New("blocked by an upstream dependency cycle"))
-			}
-
-			// Phase 3: Execute in sorted order
-			planningAttemptStamped := false
-			for _, p := range sorted {
-				task := s.FindTask(p.taskID)
-				// Earlier transitions in this pass may have repaired selected inputs.
-				if admission == AdmitReviewed && handoff.TransitionFailure(s, task, p.name) != nil {
-					continue
-				}
-				if !planningAttemptStamped && handoff.Pending(task) && !task.TransitionsExecuted[p.name] {
-					// Use the pass start, so plans arriving after this attempt stay fresh.
-					s.Sprint.Timeline.TransitionsAttemptedAt = &now
-					planningAttemptStamped = true
-				}
-				var originalDeps []string
-				var inheritedDeps inheritedDepSet
-				if task != nil {
-					originalDeps = task.DependsOn
-					if err := canonicalizeTaskDependsOnForTransition(s, resolver, task); err != nil {
-						fail(p.taskID, p.name, fmt.Errorf("dependency canonicalization: %w", err))
-						continue
-					}
-					var depErr error
-					inheritedDeps, depErr = computeInheritedDeps(s, task, p.name, resolver)
-					if depErr != nil {
-						fail(p.taskID, p.name, fmt.Errorf("inherited deps: %w", depErr))
-						continue
-					}
-				}
-
-				result := ProceedResult{
-					SourceTaskID:   p.taskID,
-					TransitionName: p.name,
-				}
-
-				if err := proceedTransaction(blackboard, s, projectRoot, p.taskID, p.name, p.tDef, inheritedDeps, resolver, now, &result); err != nil {
-					var refusal *handoffInputError
-					if task != nil && errors.As(err, &refusal) && handoff.GatesTransition(task, p.name) && !task.TransitionsExecuted[p.name] {
-						// Initial pure refusals leave no child/output mutations published.
-						// Undo the earlier source-dependency normalization as well.
-						task.DependsOn = originalDeps
-						if observation := handoff.recordFailure(s, task, p.name, refusal, now); observation != nil {
-							observedFailures = append(observedFailures, *observation)
-						}
-					}
-					if !errors.Is(err, errTransitionAlreadyExecuted) && !errors.Is(err, errManyToOneCohortIncomplete) {
-						fail(p.taskID, p.name, err)
-						// A passed plan's skip that no observation classifies stays
-						// retryable, but must not live in a WARN line only (D-172).
-						if task != nil && task.PlanCheckVerdictOf() == models.PlanCheckPassed && handoff.GatesTransition(task, p.name) &&
-							!task.TransitionsExecuted[p.name] && handoff.TransitionFailure(s, task, p.name) == nil {
-							skippedHandoffs = append(skippedHandoffs, failures[len(failures)-1])
-						}
-					}
-					continue
-				}
-
-				results = append(results, result)
-			}
-
-			// Snapshot goal.base_commit if this is the first time coding-pair children are created.
-			if integrationHEAD != "" && s.Goal.BaseCommit == nil {
-				for _, r := range results {
-					tDef, tdErr := buildTransitionDefFromPipeline(resolver, r.TransitionName)
-					if tdErr == nil && tDef.targetRolePair == "coding-pair" && len(r.ChildTaskIDs) > 0 {
-						s.Goal.BaseCommit = &integrationHEAD
-						break
-					}
-				}
-			}
-
-			// Add children to sprint scope (dedup guard for crash recovery idempotency)
-			for _, r := range results {
-				for _, childID := range r.ChildTaskIDs {
-					if !slices.Contains(s.Sprint.Scope.Planned, childID) {
-						s.Sprint.Scope.Planned = append(s.Sprint.Scope.Planned, childID)
-					}
-				}
-			}
-
-			return nil
-		})
-	}
-	if len(directChecks) > 0 {
+	mutate := func() error { return pass.blackboard.Modify(pass.execute) }
+	if len(pass.directChecks) > 0 {
 		err = withEffectiveIntegrationCompletionLinearization(projectRoot, "generate direct coding allocations", func() error {
 			runBeforeEffectiveIntegrationProgressionMutationTestHook()
-			if err := verifyDirectCodingIntegration(projectRoot, preState.Config.IntegrationBranch, directChecks); err != nil {
+			if err := verifyDirectCodingIntegration(projectRoot, preState.Config.IntegrationBranch, pass.directChecks); err != nil {
 				return err
 			}
 			return mutate()
@@ -944,30 +484,10 @@ func ExecuteTransitionsReportWith(projectRoot string, triggerFilter string, admi
 	} else {
 		err = mutate()
 	}
-
 	if err != nil {
 		return TransitionReport{}, fmt.Errorf("execute available transitions failed: %w", err)
 	}
-	for _, warning := range cleanupRetiredOriginals(blackboard, projectRoot, results) {
-		log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
-	}
-
-	var warnings []string
-	for _, observation := range observedFailures {
-		if alertErr := writeHandoffFailureAlert(projectRoot, observation, now); alertErr != nil {
-			warning := fmt.Sprintf("plan handoff failure alert write failed: %v", alertErr)
-			warnings = append(warnings, warning)
-			log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
-		}
-	}
-	for _, skipped := range skippedHandoffs {
-		if alertErr := writeHandoffSkipAlert(projectRoot, skipped, now); alertErr != nil {
-			warning := fmt.Sprintf("plan handoff skip alert write failed: %v", alertErr)
-			warnings = append(warnings, warning)
-			log.Printf("WARNING: ExecuteAvailableTransitions: %s", warning)
-		}
-	}
-	return TransitionReport{Results: results, Failures: failures, Warnings: warnings}, nil
+	return pass.afterCommit(), nil
 }
 
 // buildTransitionDefFromPipeline resolves a transition definition from pipeline config.
