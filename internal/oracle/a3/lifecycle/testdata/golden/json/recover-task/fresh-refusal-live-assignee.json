@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "recover-task",
+            "outcome": "STATE_CHANGED",
+            "safe_action": "requery",
+            "task_id": "task-1",
+            "task_status": "IMPLEMENTING_CODE",
+            "transition_id": "<id-1>"
+          },
+          "message": "recover-task: STATE_CHANGED (safe_action=requery): task task-1: coder agent coder-1 (PID <live-pid>) still running, use --fresh --force to recover"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "recover-task",
+          "outcome": "STATE_CHANGED",
+          "safe_action": "requery",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

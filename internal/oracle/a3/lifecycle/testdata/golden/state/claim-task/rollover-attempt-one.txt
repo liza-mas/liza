@@ -1,0 +1,222 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: Lifecycle oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <at 20200101T000000 Z>
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: Lifecycle oracle task
+    done_when: Lifecycle oracle complete
+    status: CODE_REJECTED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <at 20200101T000000 Z>
+    iteration: 10
+    base_commit: '<commit:base>'
+    worktree: .worktrees/task-1
+    rejection_reason: oracle rejection
+    review_cycles_current: 1
+    history:
+      - time: <at 20200101T000000 Z>
+        agent: coder-1
+        event: submitted
+    handoff_events:
+      - timestamp: <at 20200101T000000 Z>
+        agent: coder-1
+        trigger: submission
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: gen-1
+    lease_expires: <at 20990101T000000 Z>
+    heartbeat: <at 20990101T000000 Z>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <live-pid>
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    lease_expires: <at 20990101T000000 Z>
+    heartbeat: <at 20990101T000000 Z>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <live-pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: <at 20200101T000000 Z>
+    deadline: <at 20990101T000000 Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <at 20200101T000000 Z>
+  status: OK
+  history: []
+config:
+  terminal_task_archival: true
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  max_global_integration_generations: 3
+  max_instances: 3
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  doer_max_wait: 600
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 18000
+  reviewer_poll_interval: 30
+  reviewer_max_wait: 600
+  agent_progress_timeout: 1800
+  integration_branch: integration
+  mode: RUNNING
+  auto_resume: false
+  no_follow_up: false
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 2
+goal:
+    id: goal-1
+    description: Lifecycle oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <at 20200101T000000 Z>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Lifecycle oracle task
+      status: DRAFT_CODE
+      priority: 1
+      spec_ref: specs/vision.md
+      done_when: Lifecycle oracle complete
+      scope: ""
+      lifecycle:
+        revision: 2
+        completion_sequence: 0
+      attempt: 2
+      handoff_events:
+        - timestamp: <at 20200101T000000 Z>
+          agent: coder-1
+          trigger: submission
+      created: <at 20200101T000000 Z>
+      history:
+        - time: <at 20200101T000000 Z>
+          event: submitted
+          agent: coder-1
+        - time: <now+0m Z>
+          event: new_attempt
+          reason: max iterations reached without approval (10/10)
+          note: oracle rejection
+agents:
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: gen-1
+        lease_expires: <at 20990101T000000 Z>
+        heartbeat: <at 20990101T000000 Z>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <live-pid>
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        lease_expires: <at 20990101T000000 Z>
+        heartbeat: <at 20990101T000000 Z>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <live-pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - task-1
+        stretch: []
+    timeline:
+        started: <at 20200101T000000 Z>
+        deadline: <at 20990101T000000 Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <at 20200101T000000 Z>
+    status: OK
+    history: []
+config:
+    terminal_task_archival: true
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 3
+    max_instances: 3
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 600
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 18000
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 600
+    agent_progress_timeout: 1800
+    integration_branch: integration
+    mode: RUNNING
+
+# git
+ref - refs/heads/task/task-1 <commit:base>
+worktree - .worktrees/task-1 refs/heads/task/task-1
+# lifecycle outcomes
+claim-task ALREADY_TRANSITIONED 1
+# exit 1

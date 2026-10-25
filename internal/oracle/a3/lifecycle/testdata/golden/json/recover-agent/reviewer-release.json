@@ -1,0 +1,31 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "AgentDeleted": true,
+          "AgentID": "code-reviewer-1",
+          "AlreadyClean": false,
+          "ClaimReleased": true,
+          "Role": "code-reviewer",
+          "TaskID": "task-1",
+          "Warnings": null,
+          "WorktreeRemoved": false,
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "operation": "recover-agent",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "CODE_TO_REVIEW",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

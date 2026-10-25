@@ -1,0 +1,224 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: Lifecycle oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <at 20200101T000000 Z>
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: Lifecycle oracle task
+    done_when: Lifecycle oracle complete
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <at 20200101T000000 Z>
+    iteration: 1
+    assigned_to: coder-1
+    base_commit: '<commit:base>'
+    worktree: .worktrees/task-1
+    blocked_reason: fixture blocked
+    blocked_questions: [fixture question]
+    history:
+      - time: <at 20200101T000000 Z>
+        agent: coder-1
+        event: blocked
+        reason: fixture blocked
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: gen-1
+    heartbeat: <at 20990101T000000 Z>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: 99999999
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    lease_expires: <at 20990101T000000 Z>
+    heartbeat: <at 20990101T000000 Z>
+    terminal: terminal-1
+    provider: claude
+    iterations_total: 0
+    context_percent: 0
+    pid: <live-pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1]
+    stretch: []
+  timeline:
+    started: <at 20200101T000000 Z>
+    deadline: <at 20990101T000000 Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <at 20200101T000000 Z>
+  status: OK
+  history: []
+config:
+  terminal_task_archival: true
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  max_global_integration_generations: 3
+  max_instances: 3
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  doer_max_wait: 600
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 18000
+  reviewer_poll_interval: 30
+  reviewer_max_wait: 600
+  agent_progress_timeout: 1800
+  integration_branch: integration
+  mode: RUNNING
+  auto_resume: false
+  no_follow_up: false
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 2
+goal:
+    id: goal-1
+    description: Lifecycle oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <at 20200101T000000 Z>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Lifecycle oracle task
+      status: BLOCKED
+      priority: 1
+      worktree: .worktrees/task-1
+      base_commit: <commit:base>
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Lifecycle oracle complete
+      scope: ""
+      blocked_reason: fixture blocked
+      blocked_questions:
+        - fixture question
+      lifecycle:
+        revision: 2
+        completion_sequence: 1
+        receipts:
+            - operation: recover-task
+              actor: human
+              expected_transition: <hex:036b86fc.e65ff556.a73c3194.b6335ed9.f95ae066.ac364608.8edd9352.b0bc8eca>
+              payload_digest: <hex:d63129b4.d4457c55.b73309b9.a81a4023.f6dbe82f.16e845e4.c523a414.dcca0266>
+              sequence: 1
+              transition_id: <id-1>
+              projection:
+                released_doer: true
+                base_commit: <commit:base>
+                source_status: BLOCKED
+      created: <at 20200101T000000 Z>
+      history:
+        - time: <at 20200101T000000 Z>
+          event: blocked
+          agent: coder-1
+          reason: fixture blocked
+        - time: <now+0m Z>
+          event: task_recovered_fresh
+          reason: task recovery
+          base_commit: <commit:base>
+          target_status: BLOCKED
+agents:
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        lease_expires: <at 20990101T000000 Z>
+        heartbeat: <at 20990101T000000 Z>
+        terminal: terminal-1
+        provider: claude
+        iterations_total: 0
+        context_percent: 0
+        pid: <live-pid>
+discovered: []
+human_notes:
+    - timestamp: <now+0m Z>
+      message: 'Task task-1 recovered (was held by coder-1): task recovery'
+      for: task-1
+      orchestrator_seen_at: "<now+0m Z>"
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - task-1
+        stretch: []
+    timeline:
+        started: <at 20200101T000000 Z>
+        deadline: <at 20990101T000000 Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <at 20200101T000000 Z>
+    status: OK
+    history: []
+config:
+    terminal_task_archival: true
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 3
+    max_instances: 3
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 600
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 18000
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 600
+    agent_progress_timeout: 1800
+    integration_branch: integration
+    mode: RUNNING
+
+# git
+# lifecycle outcomes
+recover-task COMPLETED 1
+# exit 0

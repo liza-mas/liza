@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "AgentID": "coder-1",
+          "AgentRecovered": true,
+          "AgentRole": "coder",
+          "BranchRemoved": true,
+          "ClaimReleased": true,
+          "FreshReset": true,
+          "InState": true,
+          "PreservedWorktree": false,
+          "TaskID": "task-1",
+          "Warnings": null,
+          "WorktreeCreated": true,
+          "WorktreeRecovered": false,
+          "WorktreeRemoved": true,
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "effects": "committed",
+          "operation": "recover-task",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "DRAFT_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}
