@@ -74,5 +74,38 @@ Sources: commits `e45849438` and `019b4d077`, including the 93-task agreement
 figure and the 31-hour reset. The user confirmed on 2026-09-21 that the contention
 was observed. Historical alternatives are reconstructed.
 
+## Amendment (2026-09-24 to 2026-10-16): observation reads beyond inspection
+
+Under lock saturation (D69, D100), the snapshot rule extends past `status` and
+`get`. A read that feeds only display, observation or launch-input validation takes
+a lock-free snapshot. Any mutation or authority decision that follows it re-reads
+under the lock or is guarded by locked registration. A locked read releases the
+lock before its caller acts, so its only extra guarantee is ordering after a writer
+that holds the lock.
+
+- `309594e94` (D69 step 2): the TUI state read, the watch tick, shell completion,
+  `usage-report`, `launch --cli` validation, `validate` and the lifecycle-metrics
+  sprint capture. The TUI had held the exclusive lock in 4 of 40 samples during the
+  2026-09-24 run.
+- `32dff6d2d` (D100): 24 supervisor observation, polling and gate reads. With a
+  6 MB `state.yaml` these reads had saturated the lock, so submits, claims, merges
+  and recoveries timed out.
+- Kept locked:
+  - `resolverOptionsFromState`, because it feeds the transition policy with no
+    later locked revalidation (the gap is recorded in `TECH_DEBT.md`);
+  - clean-task worktree cleanup, because its authority check is the only fence in
+    front of `DeleteWorktree`;
+  - the provider-start gate, which runs under the agent lifecycle lock.
+- `69865939c`, `94810936d`: TUI reads are single-flight, and checks run only
+  against a completed read's snapshot. Validation judges that same snapshot
+  (`ValidateLoadedState`) rather than re-reading by path. A failed read keeps the
+  last good snapshot and raises INVALID STATE once per episode.
+
+The selection rule is documented in the snapshot section of
+`blackboard-schema.md` and in the `db` package doc. Related: ADR-0177 (heartbeats
+evaluated against snapshots) and ADR-0183/ADR-0215 (shrinking what each locked
+cycle decodes). Reconstructed from the four commit bodies, read in full, on
+2026-10-25; no separate user intent was supplied.
+
 ---
 *Reconstructed from commits `e45849438`..`019b4d077` (2026-09-21).*
