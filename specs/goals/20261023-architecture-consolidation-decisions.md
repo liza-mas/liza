@@ -1035,6 +1035,20 @@ head, not the boundary SHA.
 - Rejected: testing the head and rebasing the record onto it (that mixes A3 changes into A2's proof); pausing A3 merges until G8 completes (it undoes D58).
 - Kind: proof mechanism (D52 refinement). Revert: dispatch on the branch only when the head equals the boundary SHA.
 
+
+### D60 — G8 may be green across failed-job reruns of one run when the reruns cover pre-existing intermittent tests (human, 2026-10-25)
+Human decision ("option 1"), 2026-10-25T07:07Z. D52 requires Linux, Windows and macOS green in one dispatched run. The run's CI shows independent intermittent
+failures in tests the refactor does not touch. Windows `internal/agent` timing tests failed in 3 of the last 4 runs, a different one each time
+(TestExecutionDeadlineMarkerPastItsDeadline…, TestHeartbeatRenewsReviewLease, TestHeartbeatConcurrency). A9 oracles failed intermittently: macOS i18-cleanup and Linux i21.
+`main` CI already failed 4 of 6 runs on 2026-10-23 on macOS/Windows timing tests. Every such failure passed on rerun.
+- Ruling: a boundary's G8 is green when one dispatched run of `ci.yml` at the boundary SHA ends with every job green after at most 3 attempts
+  (`gh run rerun --failed`), and every failure in an earlier attempt is in a test whose file and exercised production code are unchanged on the
+  branch (`git log origin/main..<SHA>` touches neither), or is a known intermittent oracle already green elsewhere at that SHA. The boundary record cites the
+  run URL, the tested SHA, each job's final conclusion and, for each earlier attempt, the failing tests with the evidence that they are unchanged.
+- A failure in a test or code changed on the branch is never rerun away: it holds the area, and the maintainer commissions the fix (D52 unchanged).
+- Rejected: strict single-attempt G8 (luck-driven, about 25 min per retry at every boundary); fixing the intermittent tests now (edits outside the refactor's scope).
+- Kind: proof mechanism (D52 refinement). Revert: require a single clean attempt.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
