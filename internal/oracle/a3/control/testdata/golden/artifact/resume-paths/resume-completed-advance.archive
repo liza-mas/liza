@@ -1,0 +1,28 @@
+id: sprint-1
+number: 1
+goal_ref: goal-oracle
+scope:
+    planned:
+        - cp-1
+    stretch: []
+timeline:
+    started: <at 2020.01.01 00.00.00>Z
+    deadline: <at 0001.01.01 00.00.00>Z
+    ended: <now+0m>Z
+status: COMPLETED
+metrics:
+    planning_changes:
+        daily: []
+        unknown_attribution: 0
+        missing_created: 0
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+    review_verdict_approvals: 0
+    review_verdict_rejections: 0
+    review_verdict_count: 0
+    review_verdict_approval_rate_percent: 0
+    task_submitted_for_review_count: 0
+    task_outcome_approval_rate_percent: 0

@@ -1,0 +1,9 @@
+exit 0
+[stdout]
+System resumed
+Resumed from: COMPLETED sprint
+Changed by: human
+Sprint advanced: sprint-1 → sprint-2
+⚠️ Transition error: task epic-plan-1-us-1 transition us-to-coding: many-to-one cohort detection failed: many-to-one cohort member "epic-plan-1-us-0" was superseded by "epic-plan-1-us-0-fix", which does not carry cohort lineage (parent epic-plan-1, role_pair us-writing-pair); task epic-plan-1-us-0-fix transition us-to-coding: many-to-one cohort detection failed: trigger task "epic-plan-1-us-0-fix" has no parent_task — cannot determine many-to-one cohort
+Agents will resume at their next check.
+[stderr]

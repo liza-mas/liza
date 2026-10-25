@@ -1,0 +1,10 @@
+exit 0
+[stdout]
+System resumed
+Resumed from: COMPLETED sprint
+Changed by: human
+Sprint advanced: sprint-1 → sprint-2
+Carried tasks: [cp-1]
+Transitions executed: 1 (child tasks created)
+Agents will resume at their next check.
+[stderr]
