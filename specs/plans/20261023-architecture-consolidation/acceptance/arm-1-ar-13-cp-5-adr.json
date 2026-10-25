@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-adr",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "goal-docs"
+    }
+  ]
+}
