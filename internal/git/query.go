@@ -123,7 +123,7 @@ func (g *Git) ObjectType(oid string) (objectType string, present bool, err error
 		if object.Status == BatchStatusMissing {
 			return "", false, nil
 		}
-		return "", false, fmt.Errorf("failed to inspect object %q: object %s", oid, object.Status)
+		return "", false, fmt.Errorf("failed to inspect object %q: object %s", oid, string(object.Status))
 	}
 	return string(object.Type), true, nil
 }
@@ -150,7 +150,7 @@ func (g *Git) ReadBlob(revision, path string) (string, error) {
 		return "", fmt.Errorf("failed to resolve blob OID for %q at %q: %s", path, revision, g.missingBlobReason(revision, object.Status))
 	}
 	if object.Type != ObjectTypeBlob {
-		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, object.Type)
+		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, string(object.Type))
 	}
 	return string(object.Content), nil
 }
@@ -226,7 +226,7 @@ func (g *Git) BlobOIDs(lookups []BlobPath) ([]ObjectIDResult, error) {
 		case object.Missing:
 			results[i].Err = fmt.Errorf("failed to resolve blob OID for %q at %q: %s", lookup.Path, lookup.Revision, g.missingBlobReason(lookup.Revision, object.Status))
 		case object.Type != ObjectTypeBlob:
-			results[i].Err = fmt.Errorf("object for %q at %q is %s, not a blob", lookup.Path, lookup.Revision, object.Type)
+			results[i].Err = fmt.Errorf("object for %q at %q is %s, not a blob", lookup.Path, lookup.Revision, string(object.Type))
 		default:
 			results[i].OID = object.OID
 		}
@@ -303,9 +303,9 @@ func (g *Git) ResolveCommits(refs []string) ([]ObjectIDResult, error) {
 		i := batched[j]
 		switch {
 		case object.Missing:
-			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: object %s", refs[i], object.Status)
+			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: object %s", refs[i], string(object.Status))
 		case object.Type != ObjectTypeCommit:
-			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: resolved to %s", refs[i], object.Type)
+			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: resolved to %s", refs[i], string(object.Type))
 		default:
 			results[i].OID = object.OID
 		}
