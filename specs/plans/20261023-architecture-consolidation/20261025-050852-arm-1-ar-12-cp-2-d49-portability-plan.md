@@ -240,6 +240,11 @@ Both drivers stay portable (`d49-plan`). `proof-scope` is updated: the `a3/lifec
 Linux-only row names its two exceptions, and "Runs on all three platforms" lists them. Native
 Windows/macOS proof is the next G8 (`d59`), outside this task.
 
+**Done when:** on Linux with Git 2.43, commands 0-4 below pass; the two drivers carry no
+platform scoping; R1-R5 pass and their manifest-recorded pre-correction runs fail; the golden
+diff touches only the transcript remainders of lines 132 and 157; no production, other driver,
+fixture, golden, PROVENANCE or harness code file changes.
+
 ### Canonical validation and manifest allocation
 
 Run from the coding worktree root, serially; no `-race` (`d55`).
@@ -276,11 +281,6 @@ AC-oracle → regen check (4); AC-proof → (1), (2), (3). `make lint` includes 
   ]
 }
 ```
-
-**Done when:** on Linux with Git 2.43, commands 0-4 pass; the two drivers carry no platform
-scoping; R1-R5 pass and their manifest-recorded pre-correction runs fail; the golden diff touches
-only the transcript remainders of lines 132 and 157; no production, other driver, fixture,
-golden, PROVENANCE or harness code file changes.
 
 ## Dependencies and Shared-File Ownership
 
