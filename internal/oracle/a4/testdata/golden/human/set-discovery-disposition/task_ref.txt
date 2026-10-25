@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Discovery disc-1 disposition set to t1
+--- stderr

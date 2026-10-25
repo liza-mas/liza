@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: set discovery disposition: validation failed: invalid disposition "Not A Disposition": must be a valid task ID, "deferred", or "dismissed"

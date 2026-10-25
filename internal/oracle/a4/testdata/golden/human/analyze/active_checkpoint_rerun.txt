@@ -1,0 +1,14 @@
+exit_code: 0
+--- stdout
+Circuit breaker response: CHECKPOINT
+Pattern: provider_audit_degradation
+Severity: OBSERVABILITY_DEGRADED
+Response: CHECKPOINT
+Evidence class: NEW
+Evidence:
+Explanation: fixture active provider-audit checkpoint
+State action: sprint moved to CHECKPOINT
+Recovery: run `liza resume` to continue
+Report written to: .liza/circuit_breaker_report.md
+Rejection RCA gate: no gated tasks
+--- stderr

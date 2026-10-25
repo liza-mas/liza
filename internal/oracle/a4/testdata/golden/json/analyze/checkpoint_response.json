@@ -1,0 +1,27 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "classification": "NEW",
+      "evidence": "3 provider_audit_degraded anomalies for provider fixture-provider across 2 agents",
+      "explanation": "current health for provider fixture-provider is unknown: registered agent orchestrator-1 lacks exact PID or registration-time identity",
+      "pattern": "provider_audit_degradation",
+      "rejection_rca": {
+        "currently_gated": 0,
+        "gate_cycles": 0,
+        "max_seconds_to_gate": 0,
+        "median_seconds_to_gate": 0,
+        "resumed_still_open": 0,
+        "resumed_then_regated": 0,
+        "resumed_then_terminal": 0,
+        "tasks_gated": 0,
+        "unrecognized_causes": 0
+      },
+      "report_path": "<FIXTURE>/.liza/circuit_breaker_report.md",
+      "response": "CHECKPOINT",
+      "severity": "OBSERVABILITY_DEGRADED",
+      "triggered": false
+    }
+  }
+}

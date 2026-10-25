@@ -1,0 +1,13 @@
+exit_code: 0
+--- stdout
+Sprint metrics updated:
+Tasks done: 2
+Tasks in progress: 0
+Tasks blocked: 0
+Total iterations: 0
+Total review cycles: 2
+Review verdicts: 2 approvals, 0 rejections (100%)
+Task outcomes: 2 submitted, 100% approval rate
+Lifecycle outcomes: unavailable
+Warning: lifecycle metrics unavailable: no observation window
+--- stderr
