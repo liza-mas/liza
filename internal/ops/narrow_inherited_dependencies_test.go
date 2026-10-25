@@ -365,3 +365,139 @@ func TestLoadNarrowSelectionsFile_ParsesYAML(t *testing.T) {
 		t.Fatalf("outputs = %v, want [0 2]", got)
 	}
 }
+
+// The child action vocabulary is serialised in NarrowedChild.Action: each
+// constant must keep the spelling the wire carries, asserted by literal.
+func TestNarrowAction_SpellingsMatchWire(t *testing.T) {
+	t.Parallel()
+	for got, want := range map[narrowAction]string{
+		narrowActionNarrowed:  "narrowed",
+		narrowActionUnchanged: "unchanged",
+		narrowActionSkipped:   "skipped",
+	} {
+		if string(got) != want {
+			t.Fatalf("narrowAction %q, want %q", got, want)
+		}
+	}
+}
+
+// A child at its initial status can only be claimed in a state the validator
+// refuses, so the live-lease reason is pinned here rather than by the oracle.
+func TestNarrowSkipReason_ClaimedWithLiveLease(t *testing.T) {
+	t.Parallel()
+	tmpDir, stateFile := setupNarrowFixture(t, narrowOutputs(1))
+	resolver, _, err := loadResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("loadResolver: %v", err)
+	}
+	child := *readNarrowState(t, stateFile).FindTask(narrowChild(narrowDownstream, 0))
+	now := time.Now().UTC()
+	live, expired := now.Add(time.Hour), now.Add(-time.Hour)
+	coder, placeholder := "coder-1", "$pending"
+	for _, tc := range []struct {
+		name     string
+		assigned *string
+		lease    *time.Time
+		want     string
+	}{
+		{"unclaimed", nil, nil, ""},
+		{"live lease", &coder, &live, "claimed by coder-1 with a live lease"},
+		{"expired lease", &coder, &expired, ""},
+		{"placeholder assignee", &placeholder, &live, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := child
+			c.AssignedTo, c.LeaseExpires = tc.assigned, tc.lease
+			if got := narrowSkipReason(&c, resolver, now); got != tc.want {
+				t.Fatalf("narrowSkipReason = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Every refusal before any child is rewritten is INVALID_INPUT with
+// correct_input and no effects, and leaves the producer and children as found.
+func TestNarrowInheritedDependencies_LifecycleDecisions(t *testing.T) {
+	t.Parallel()
+	valid := []NarrowSelection{selecting(0, 0)}
+	for _, tc := range []struct {
+		name       string
+		producer   string
+		reason     string
+		agent      string
+		selections []NarrowSelection
+		mutate     func(*models.Task)
+		wantErr    string
+	}{
+		{"no producer", "", "narrow", "orchestrator-1", valid, nil, "producer task ID is required"},
+		{"no reason", narrowDownstream, "", "orchestrator-1", valid, nil, "reason is required"},
+		{"no agent", narrowDownstream, "narrow", "", valid, nil, "orchestrator agent ID is required"},
+		{"no selections", narrowDownstream, "narrow", "orchestrator-1", nil, nil, "at least one output selection is required"},
+		{"not merged", narrowDownstream, "narrow", "orchestrator-1", valid, func(task *models.Task) { task.Status = models.TaskStatusReady }, "must be MERGED"},
+		{"replanned", narrowDownstream, "narrow", "orchestrator-1", valid, func(task *models.Task) { task.TransitionsExecuted[models.ReplannedTransition] = true }, "was replanned"},
+		{"transition not executed", narrowDownstream, "narrow", "orchestrator-1", valid, func(task *models.Task) { delete(task.TransitionsExecuted, selTransition) }, "has not executed transition"},
+		{"no output", narrowDownstream, "narrow", "orchestrator-1", valid, func(task *models.Task) { task.Output = nil }, "has no output[] entries"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir, stateFile := setupNarrowFixture(t, narrowOutputs(2))
+			if tc.mutate != nil {
+				if err := db.New(stateFile).Modify(func(s *models.State) error {
+					tc.mutate(s.FindTask(narrowDownstream))
+					return nil
+				}); err != nil {
+					t.Fatalf("mutate producer: %v", err)
+				}
+			}
+			before := readNarrowState(t, stateFile)
+			_, err := NarrowInheritedDependencies(tmpDir, tc.producer, selTransition, tc.selections, tc.reason, tc.agent)
+			testhelpers.RequireErrorContains(t, err, tc.wantErr)
+			requireLifecycleError(t, err, models.LifecycleInvalidInput, string(LifecycleSafeActionCorrectInput), string(LifecycleEffectsNone))
+			after := readNarrowState(t, stateFile)
+			for _, id := range []string{narrowDownstream, narrowChild(narrowDownstream, 0), narrowChild(narrowDownstream, 1)} {
+				if !slices.Equal(before.FindTask(id).DependsOn, after.FindTask(id).DependsOn) || len(before.FindTask(id).History) != len(after.FindTask(id).History) {
+					t.Fatalf("%s changed despite the refusal", id)
+				}
+			}
+		})
+	}
+}
+
+// An identified request completes once; its exact repeat returns the original
+// completion without a second rewrite or a second history entry.
+func TestNarrowInheritedDependencies_IdentifiedRequestReplaysOriginalCompletion(t *testing.T) {
+	t.Parallel()
+	tmpDir, stateFile := setupNarrowFixture(t, narrowOutputs(1))
+	if err := db.New(stateFile).Modify(func(s *models.State) error {
+		s.Agents["orchestrator-1"] = testhelpers.RegisteredTestAgent("orchestrator")
+		return nil
+	}); err != nil {
+		t.Fatalf("register orchestrator: %v", err)
+	}
+	producer := readNarrowState(t, stateFile).FindTask(narrowDownstream)
+	opts := LifecycleRequestOptions{RequestID: "narrow-replay", ExpectedTransition: models.TaskTransitionID(producer)}
+	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: testhelpers.TestAgentGeneration}
+	run := func() *NarrowInheritedDependenciesResult {
+		t.Helper()
+		result, err := NarrowInheritedDependenciesWithAuthorityAndOptions(tmpDir, narrowDownstream, selTransition, []NarrowSelection{selecting(0, 0)}, "narrow", authority, opts)
+		if err != nil {
+			t.Fatalf("NarrowInheritedDependenciesWithAuthorityAndOptions: %v", err)
+		}
+		return result
+	}
+	first := run()
+	if first.Narrowed != 1 || first.Outcome != models.LifecycleCompleted {
+		t.Fatalf("first = %+v", first)
+	}
+	committed := readNarrowState(t, stateFile)
+	replay := run()
+	if replay.Outcome != models.LifecycleAlreadyCompleted || replay.Changed == nil || *replay.Changed {
+		t.Fatalf("replay = %+v, want ALREADY_COMPLETED with changed=false", replay.LifecycleOutcome)
+	}
+	after := readNarrowState(t, stateFile)
+	for _, id := range []string{narrowDownstream, narrowChild(narrowDownstream, 0)} {
+		if len(committed.FindTask(id).History) != len(after.FindTask(id).History) || !slices.Equal(committed.FindTask(id).DependsOn, after.FindTask(id).DependsOn) {
+			t.Fatalf("%s changed on replay", id)
+		}
+	}
+}
