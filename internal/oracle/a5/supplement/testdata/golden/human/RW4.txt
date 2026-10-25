@@ -1,0 +1,5 @@
+# exit_code
+1
+# stdout
+# stderr
+Error: await resubmission: integration failed: review boundary mismatch

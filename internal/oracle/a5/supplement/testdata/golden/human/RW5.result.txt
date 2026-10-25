@@ -1,0 +1,7 @@
+verdict: TERMINAL
+task_status: ABANDONED
+reason: task entered terminal status: ABANDONED
+base_commit:
+review_commit:
+review_cycle: 0
+safe_action:

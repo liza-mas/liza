@@ -28,6 +28,9 @@ type fixture struct {
 	// outbox is the observation an adapter records about the private verdict
 	// outbox; only a case with the "outbox" capture mode compares it.
 	outbox []byte
+	// result is the observation an adapter records about the result of the
+	// operation it ran; only a case with the "result" capture mode compares it.
+	result []byte
 }
 
 // materialise builds a disposable project: a Git repository from the base

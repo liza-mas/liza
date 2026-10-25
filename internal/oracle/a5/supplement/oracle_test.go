@@ -92,6 +92,17 @@ type caseInput struct {
 // and ABORTED depend on elapsed time or a mode change while waiting and stay mapped to the
 // white-box await tests.
 //
+// RW*: an await-resubmission outcome reachable without waiting out a deadline. Outcome ->
+// case: PAUSED RW1 (halted at entry) and RW6 (halted while the reservation is held);
+// TERMINAL RW5 (the task leaves the waiting set while the reservation is held); reclaim
+// refused by the review-boundary check on the early-resubmission path RW2 (review commit
+// is not the worktree HEAD), RW3 (base commit is not the effective review base) and RW4
+// (the effective review base cannot be resolved: INTEGRATION_FAILED). RESUBMITTED, the
+// wrong-reviewer refusal and the escalated abort stay with the delivered AR1-AR3. POLL and
+// TIMEOUT depend on elapsed time and stay mapped to the white-box await tests. RW5 and RW6
+// change the state once the awaiting reviewer's reservation is observable, so they run the
+// exported operation in-process and record its result next to the state effect.
+//
 // Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
 //
 //	registration_required VR1; worktree_unavailable VR13 (no path), VR14 (not a
@@ -118,6 +129,8 @@ var inventory = map[string]string{
 	"AW1": "json human state", "AW2": "json human state", "AW3": "json human state", "AW4": "json human state",
 	"AW5": "json human state", "AW6": "json human state", "AW7": "json human state", "AW8": "json human state",
 	"AW9": "json human state", "AW10": "json state", "AW11": "json human state",
+	"RW1": "json human state", "RW2": "json human state", "RW3": "json human state", "RW4": "json human state",
+	"RW5": "state result", "RW6": "state result",
 }
 
 func loadCases(t *testing.T) []caseInput {
@@ -201,6 +214,9 @@ func expectedGoldens(c caseInput) []string {
 		}
 		if slices.Contains(c.Modes, "outbox") {
 			out = append(out, "human/"+c.ID+".outbox.txt")
+		}
+		if slices.Contains(c.Modes, "result") {
+			out = append(out, "human/"+c.ID+".result.txt")
 		}
 		return out
 	}

@@ -1,0 +1,8 @@
+# exit_code
+0
+# stdout
+Verdict: PAUSED
+Status: CODE_REJECTED
+Reason: system is PAUSED; stop this session; an operator can use "liza resume" to resume
+Safe action: stop
+# stderr

@@ -1,0 +1,7 @@
+verdict: PAUSED
+task_status: CODE_REJECTED
+reason: system is PAUSED; stop this session; an operator can use "liza resume" to resume
+base_commit:
+review_commit:
+review_cycle: 0
+safe_action: stop

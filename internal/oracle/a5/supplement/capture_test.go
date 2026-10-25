@@ -55,6 +55,9 @@ func capture(t testing.TB, f *fixture, c caseInput, mode string, r oracle.Result
 		if slices.Contains(c.Modes, "outbox") {
 			n.Check(t, oracle.Human, c.ID+".outbox.txt", f.outbox)
 		}
+		if slices.Contains(c.Modes, "result") {
+			n.Check(t, oracle.Human, c.ID+".result.txt", f.result)
+		}
 		return
 	}
 	switch mode {
