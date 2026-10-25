@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: cannot delete task t1: tasks [t2] depend on it (use --force to override)

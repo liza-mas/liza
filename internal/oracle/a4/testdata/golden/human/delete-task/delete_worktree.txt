@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Deleted task t1 (was DRAFT_CODE)
+Also deleted worktree and branch
+--- stderr
