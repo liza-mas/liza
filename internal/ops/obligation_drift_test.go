@@ -366,6 +366,27 @@ func TestRecordedObligationDriftAnomalyValidates(t *testing.T) {
 			t.Errorf("recorded anomaly missing required detail %q", field)
 		}
 	}
+	// The typed change is written as the plain string, so it compares equal to
+	// the persisted value and survives a YAML round-trip unchanged.
+	if change, isString := anomaly.Details["change"].(string); !isString || change != "repinned" {
+		t.Errorf("recorded change = %#v, want the plain string %q", anomaly.Details["change"], "repinned")
+	}
+}
+
+// The change names are persisted in anomaly details and read back by later
+// merges and by reviewers, so the typed constants must keep their bytes.
+func TestObligationDriftChangeConstantsKeepPersistedValues(t *testing.T) {
+	t.Parallel()
+	for change, want := range map[obligationDriftChange]string{
+		obligationDriftRepinned:   "repinned",
+		obligationDriftRetargeted: "retargeted",
+		obligationDriftDropped:    "dropped",
+		obligationDriftStale:      "stale",
+	} {
+		if string(change) != want {
+			t.Errorf("change constant = %q, want persisted value %q", change, want)
+		}
+	}
 }
 
 // The substitution a reference ID cannot catch: the carrier renames its
@@ -491,7 +512,7 @@ func TestRecordObligationContentDriftUpgradesRepinToRetarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.Anomalies) != 1 || first.Anomalies[0].Details["change"] != obligationDriftRepinned {
+	if len(first.Anomalies) != 1 || first.Anomalies[0].Details["change"] != string(obligationDriftRepinned) {
 		t.Fatalf("first record = %+v, want one %q", first.Anomalies, obligationDriftRepinned)
 	}
 	reviewedBefore := first.Anomalies[0].Details["reviewed_section"]
@@ -531,7 +552,7 @@ func TestRecordObligationContentDriftUpgradesRepinToRetarget(t *testing.T) {
 	if anomaly.Type == "" {
 		t.Fatalf("no record for the shared section: %+v", after.Anomalies)
 	}
-	if anomaly.Details["change"] != obligationDriftRetargeted {
+	if anomaly.Details["change"] != string(obligationDriftRetargeted) {
 		t.Errorf("change = %v, want %q after a carrier retargeted onto this section",
 			anomaly.Details["change"], obligationDriftRetargeted)
 	}

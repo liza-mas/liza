@@ -40,28 +40,33 @@ type obligationDriftKey struct {
 // obligationDrift accumulates who is affected by one changed section.
 type obligationDrift struct {
 	key          obligationDriftKey
-	change       string
+	change       obligationDriftChange
 	reviewed     string
 	carriers     map[string]bool
 	obligations  map[string]bool
 	referenceIDs map[string]bool
 }
 
+// obligationDriftChange is how a section's backing moved. It is converted to
+// string where it is written to an anomaly's Details, so the persisted bytes
+// and comparisons against persisted values are those of the plain string.
+type obligationDriftChange string
+
 const (
-	obligationDriftRepinned   = "repinned"
-	obligationDriftRetargeted = "retargeted"
+	obligationDriftRepinned   obligationDriftChange = "repinned"
+	obligationDriftRetargeted obligationDriftChange = "retargeted"
 	// obligationDriftDropped names a section the obligation rested on and no
 	// longer does. Its current_section is empty: there is nothing to read.
-	obligationDriftDropped = "dropped"
+	obligationDriftDropped obligationDriftChange = "dropped"
 	// obligationDriftStale names a section edited under a pin that did not
 	// move. Its reviewed_section is the text at the carrier's current pin,
 	// which a post-review re-pin may have made unreviewed; its current_section
 	// is empty when the section no longer resolves at the merge commit.
-	obligationDriftStale = "stale"
+	obligationDriftStale obligationDriftChange = "stale"
 )
 
-// driftRecorder is the accumulator detectObligationDrift feeds.
-type driftRecorder func(key obligationDriftKey, change, reviewedSection, carrier, obligation string, referenceIDs []string)
+// driftRecorder is the driftAccumulator.record method the detectors feed.
+type driftRecorder func(key obligationDriftKey, change obligationDriftChange, reviewedSection, carrier, obligation string, referenceIDs []string)
 
 // detectStaleUnderPins compares every obligation-backing reference of the
 // carrier at integrationCommit with the same path and heading at that commit,
@@ -107,51 +112,6 @@ func detectStaleUnderPins(cache blobCache, blobOID func(revision, path string) (
 	}
 }
 
-// backingEntry is one section an obligation rests on: where it lives and what
-// it says. Keying on the pair is what stops one reference's unchanged content
-// from answering for another reference that moved.
-type backingEntry struct {
-	referenceLocation
-	section string
-}
-
-// backingEntriesFor resolves an obligation's references to entries, mapping
-// each to the reference IDs that reach it. Two references landing on the same
-// section share one entry, because the obligation rests on it once.
-func backingEntriesFor(cache blobCache, root string, contract *referencecontract.Contract, referenceIDs []string) map[backingEntry][]string {
-	entries := map[backingEntry][]string{}
-	for _, referenceID := range referenceIDs {
-		span, ok := resolveDeclaredReferenceCached(cache, root, contract, referenceID)
-		if !ok {
-			continue
-		}
-		target, found := referenceTarget(contract, referenceID)
-		if !found {
-			continue
-		}
-		entry := backingEntry{referenceLocation{target.Path, target.Heading}, spanObjectID(span)}
-		entries[entry] = append(entries[entry], referenceID)
-	}
-	return entries
-}
-
-func sortedEntries(entries map[backingEntry][]string) []backingEntry {
-	keys := make([]backingEntry, 0, len(entries))
-	for entry := range entries {
-		keys = append(keys, entry)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].path != keys[j].path {
-			return keys[i].path < keys[j].path
-		}
-		if keys[i].heading != keys[j].heading {
-			return keys[i].heading < keys[j].heading
-		}
-		return keys[i].section < keys[j].section
-	})
-	return keys
-}
-
 // RecordObligationContentDrift compares what every obligation-backing reference
 // resolves to at the review commit that authorized a child against what it
 // resolves to at integrationCommit, and records one anomaly per changed
@@ -187,8 +147,8 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 				// as a re-pin. The record must carry the stronger claim and
 				// the evidence it rests on, or the reviewer reads a
 				// substitution as a routine move.
-				if drift.change == obligationDriftRetargeted && existing.Details["change"] != obligationDriftRetargeted {
-					existing.Details["change"] = drift.change
+				if retargetOutranksRecord(drift, existing) {
+					existing.Details["change"] = string(drift.change)
 					existing.Details["reviewed_section"] = drift.reviewed
 				}
 				continue
@@ -200,7 +160,7 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 				Details: map[string]any{
 					"path":             drift.key.path,
 					"heading":          drift.key.heading,
-					"change":           drift.change,
+					"change":           string(drift.change),
 					"reviewed_section": drift.reviewed,
 					"current_section":  drift.key.current,
 					"carriers":         sortedKeys(drift.carriers),
@@ -219,52 +179,90 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 	return recorded, nil
 }
 
+// driftAccumulator collects who is affected by each changed section, keyed so
+// that one section reached through several carriers is one event, in the order
+// its first observer reported it.
+type driftAccumulator struct {
+	byKey map[obligationDriftKey]*obligationDrift
+	order []obligationDriftKey
+}
+
+func newDriftAccumulator() *driftAccumulator {
+	return &driftAccumulator{byKey: map[obligationDriftKey]*obligationDrift{}}
+}
+
+// record is the driftRecorder of one detection pass.
+func (a *driftAccumulator) record(key obligationDriftKey, change obligationDriftChange, reviewedSection, carrier, obligation string, referenceIDs []string) {
+	drift, seen := a.byKey[key]
+	if !seen {
+		drift = &obligationDrift{
+			key: key, change: change, reviewed: reviewedSection,
+			carriers: map[string]bool{}, obligations: map[string]bool{}, referenceIDs: map[string]bool{},
+		}
+		a.byKey[key] = drift
+		a.order = append(a.order, key)
+	}
+	if change == obligationDriftRetargeted && drift.change != obligationDriftRetargeted {
+		// A retarget is the substitution this exists to surface; it outranks a
+		// re-pin reported for the same section, and carries the evidence the
+		// stronger claim rests on.
+		drift.change = obligationDriftRetargeted
+		drift.reviewed = reviewedSection
+	}
+	drift.carriers[carrier] = true
+	drift.obligations[obligation] = true
+	for _, referenceID := range referenceIDs {
+		drift.referenceIDs[referenceID] = true
+	}
+}
+
+// drifts returns the accumulated sections in first-reported order.
+func (a *driftAccumulator) drifts() []obligationDrift {
+	result := make([]obligationDrift, 0, len(a.order))
+	for _, key := range a.order {
+		result = append(result, *a.byKey[key])
+	}
+	return result
+}
+
+// blobIdentities reads Git blob object IDs once per (revision, path). An
+// unreadable blob is reported as absent, never as an error: drift is advisory.
+type blobIdentities struct {
+	repo *git.Git
+	oids map[string]string
+}
+
+func newBlobIdentities(projectRoot string) *blobIdentities {
+	return &blobIdentities{repo: git.New(projectRoot), oids: map[string]string{}}
+}
+
+func (b *blobIdentities) oid(revision, path string) (string, bool) {
+	key := revision + "\x00" + path
+	if oid, ok := b.oids[key]; ok {
+		return oid, true
+	}
+	oid, err := b.repo.BlobOID(revision, path)
+	if err != nil {
+		return "", false
+	}
+	b.oids[key] = oid
+	return oid, true
+}
+
+// sameBlob reports whether both revisions carry path as one readable blob.
+func (b *blobIdentities) sameBlob(revisionA, revisionB, path string) bool {
+	blobA, okA := b.oid(revisionA, path)
+	blobB, okB := b.oid(revisionB, path)
+	return okA && okB && blobA == blobB
+}
+
 // detectObligationDrift returns the changed sections, in stable order.
 func detectObligationDrift(state *models.State, projectRoot, integrationCommit string) []obligationDrift {
-	byKey := map[obligationDriftKey]*obligationDrift{}
-	var order []obligationDriftKey
+	accumulator := newDriftAccumulator()
 	// Carriers across a campaign cite the same protocol files, so one pass
 	// resolves far fewer distinct blobs than it has references.
 	cache := blobCache{}
-
-	var record driftRecorder = func(key obligationDriftKey, change, reviewedSection, carrier, obligation string, referenceIDs []string) {
-		drift, seen := byKey[key]
-		if !seen {
-			drift = &obligationDrift{
-				key: key, change: change, reviewed: reviewedSection,
-				carriers: map[string]bool{}, obligations: map[string]bool{}, referenceIDs: map[string]bool{},
-			}
-			byKey[key] = drift
-			order = append(order, key)
-		}
-		if change == obligationDriftRetargeted && drift.change != obligationDriftRetargeted {
-			// A retarget is the substitution this exists to surface; it
-			// outranks a re-pin reported for the same section, and carries the
-			// evidence the stronger claim rests on.
-			drift.change = obligationDriftRetargeted
-			drift.reviewed = reviewedSection
-		}
-		drift.carriers[carrier] = true
-		drift.obligations[obligation] = true
-		for _, referenceID := range referenceIDs {
-			drift.referenceIDs[referenceID] = true
-		}
-	}
-
-	g := git.New(projectRoot)
-	oids := map[string]string{}
-	blobOID := func(revision, path string) (string, bool) {
-		key := revision + "\x00" + path
-		if oid, ok := oids[key]; ok {
-			return oid, true
-		}
-		oid, err := g.BlobOID(revision, path)
-		if err != nil {
-			return "", false
-		}
-		oids[key] = oid
-		return oid, true
-	}
+	blobs := newBlobIdentities(projectRoot)
 	staleChecked := map[string]bool{}
 	for _, group := range acceptanceCarrierGroups(state) {
 		// A section edited under a pin that did not move: the carrier is
@@ -274,16 +272,14 @@ func detectObligationDrift(state *models.State, projectRoot, integrationCommit s
 		// checked once per carrier, since it reads only the integration side.
 		if group.live && !staleChecked[group.path] {
 			staleChecked[group.path] = true
-			detectStaleUnderPins(cache, blobOID, projectRoot, integrationCommit, group.path, record)
+			detectStaleUnderPins(cache, blobs.oid, projectRoot, integrationCommit, group.path, accumulator.record)
 		}
 
 		// An unchanged carrier declares the same references at the same pinned
 		// revisions, so no pin it rests on can have moved. Most merges touch
 		// no carrier at all, and this keeps their cost at one blob read per
 		// carrier instead of two git reads per declared reference.
-		reviewedBlob, reviewedOK := blobOID(group.reviewCommit, group.path)
-		integrationBlob, integrationOK := blobOID(integrationCommit, group.path)
-		if reviewedOK && integrationOK && reviewedBlob == integrationBlob {
+		if blobs.sameBlob(group.reviewCommit, integrationCommit, group.path) {
 			continue
 		}
 
@@ -295,72 +291,9 @@ func detectObligationDrift(state *models.State, projectRoot, integrationCommit s
 			// duplicate that signal under a type that means something else.
 			continue
 		}
-		// Walk obligations, not reference IDs. A reference ID is a name the
-		// carrier chose; an obligation is what the reviewer approved. A
-		// carrier that renames "counters" to "replacement", points it
-		// elsewhere and updates Obligation Coverage leaves the allocation
-		// section untouched, so acceptance sees nothing — and following the
-		// reviewed IDs would find no such reference at integration and skip
-		// the substitution in silence. Following the obligation finds it.
-		reviewedBacking := obligationBackedReferences(reviewed)
-		currentBacking := obligationBackedReferences(current)
-		for _, obligation := range sortedObligations(reviewedBacking) {
-			reviewedEntries := backingEntriesFor(cache, projectRoot, reviewed, reviewedBacking[obligation])
-			currentEntries := backingEntriesFor(cache, projectRoot, current, currentBacking[obligation])
-			if len(reviewedEntries) == 0 {
-				continue
-			}
-			reviewedAt := map[referenceLocation]string{}
-			for entry := range reviewedEntries {
-				reviewedAt[entry.referenceLocation] = entry.section
-			}
-
-			// Compare (location, content) pairs, not content alone. A
-			// reference moved onto a section a sibling already covers leaves
-			// the obligation resting on one section fewer, and a content-only
-			// comparison would let the sibling's unchanged text answer for the
-			// reference that moved. Pairing keeps rename support — an
-			// identical section under a new reference ID still matches — while
-			// making each section the obligation rests on account for itself.
-			addedLocations := map[referenceLocation]bool{}
-			for _, entry := range sortedEntries(currentEntries) {
-				if _, unchanged := reviewedEntries[entry]; unchanged {
-					continue
-				}
-				reviewedSection, sameLocation := reviewedAt[entry.referenceLocation]
-				change := obligationDriftRepinned
-				if !sameLocation {
-					// The approval never covered this section for this
-					// obligation.
-					change = obligationDriftRetargeted
-					reviewedSection = anyReviewedSection(reviewedAt)
-				}
-				addedLocations[entry.referenceLocation] = true
-				record(obligationDriftKey{entry.path, entry.heading, entry.section},
-					change, reviewedSection, group.path, obligation, currentEntries[entry])
-			}
-
-			// A section the obligation rested on and no longer does. Suppressed
-			// where the same location also gained content, because that pair is
-			// one re-pin rather than a loss and a gain.
-			for _, entry := range sortedEntries(reviewedEntries) {
-				if _, kept := currentEntries[entry]; kept {
-					continue
-				}
-				if addedLocations[entry.referenceLocation] {
-					continue
-				}
-				record(obligationDriftKey{entry.path, entry.heading, ""},
-					obligationDriftDropped, entry.section, group.path, obligation, reviewedEntries[entry])
-			}
-		}
+		recordCarrierDrift(cache, projectRoot, reviewed, current, group.path, accumulator.record)
 	}
-
-	result := make([]obligationDrift, 0, len(order))
-	for _, key := range order {
-		result = append(result, *byKey[key])
-	}
-	return result
+	return accumulator.drifts()
 }
 
 // acceptanceCarrierGroup is one carrier at one authorizing review commit.
@@ -400,13 +333,6 @@ func acceptanceCarrierGroups(state *models.State) []acceptanceCarrierGroup {
 	return groups
 }
 
-// referenceLocation is what a reference points at, independent of the revision
-// it is pinned at and of the ID the carrier gave it.
-type referenceLocation struct {
-	path    string
-	heading string
-}
-
 // obligationBackedReferences maps each obligation to the references backing it.
 // An approved proof appears here too and is compared the same way; it simply
 // cannot differ, because the acceptance boundary already refuses that case.
@@ -425,26 +351,6 @@ func sortedObligations(backing map[string][]string) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-// anyReviewedSection returns the content the obligation rested on when no
-// reviewed reference named the section it rests on now, so the record still
-// carries both sides of the comparison.
-func anyReviewedSection(reviewedAt map[referenceLocation]string) string {
-	locations := make([]referenceLocation, 0, len(reviewedAt))
-	for location := range reviewedAt {
-		locations = append(locations, location)
-	}
-	sort.Slice(locations, func(i, j int) bool {
-		if locations[i].path != locations[j].path {
-			return locations[i].path < locations[j].path
-		}
-		return locations[i].heading < locations[j].heading
-	})
-	if len(locations) == 0 {
-		return ""
-	}
-	return reviewedAt[locations[0]]
 }
 
 func referenceTarget(contract *referencecontract.Contract, referenceID string) (referencecontract.DirectReference, bool) {
@@ -471,6 +377,14 @@ func findObligationDrift(anomalies []models.Anomaly, key obligationDriftKey) *mo
 	return nil
 }
 
+// retargetOutranksRecord reports whether drift is a retarget that an existing
+// record still describes as something weaker. The comparison is against the
+// persisted string, which is a plain string whether written in this process or
+// round-tripped through YAML.
+func retargetOutranksRecord(drift obligationDrift, recorded *models.Anomaly) bool {
+	return drift.change == obligationDriftRetargeted && recorded.Details["change"] != string(obligationDriftRetargeted)
+}
+
 // allDriftRecorded reports whether every drift already has a record that the
 // widening in RecordObligationContentDrift would leave unchanged.
 func allDriftRecorded(anomalies []models.Anomaly, drifts []obligationDrift) bool {
@@ -479,7 +393,7 @@ func allDriftRecorded(anomalies []models.Anomaly, drifts []obligationDrift) bool
 		if existing == nil {
 			return false
 		}
-		if drift.change == obligationDriftRetargeted && existing.Details["change"] != obligationDriftRetargeted {
+		if retargetOutranksRecord(drift, existing) {
 			return false
 		}
 		for field, want := range map[string]map[string]bool{
