@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: no admission slot for class hold within 0s (slot locks: <PROJECT>/.liza/admission-slots/hold)
