@@ -223,12 +223,12 @@ file untouched).
 
 This file holds the commands or source reads, the integration SHA (`98dc9efc270749fb130ae5dbbababecf0bfc35d0`,
 for G1–G6 alike) and excerpts for G1–G6 above, and the G8 section below. The acceptance manifest
-(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-0-boundary.json`) is written when G8
-is green.
+(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-cp-0-boundary.json`) is written once G8 is
+green (it is, per the result below).
 
 ## G8 — dispatched CI result (D52, D59): pending
 
-Status: **pending, maintainer action**. Under D52 (replacing the per-boundary pull request), the operator
+Status: **green** (result appended below; the pre-result text of this section is kept as written). Under D52 (replacing the per-boundary pull request), the operator
 dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) at the integration revision
 `98dc9efc270749fb130ae5dbbababecf0bfc35d0` (on `global-refactoring` if the head still equals it, otherwise on a
 pinned `g8/a3-98dc9ef` ref under D59), and the maintainer confirms that the Linux, Windows and macOS jobs of that
@@ -257,3 +257,58 @@ tests would be a remaining A3 defect, not a regression of this record.
 If CI tests different code, G1–G7 are re-run at that revision and the old/new distinction is kept here
 (documentation-only deltas identified by diff); this record is not relabeled. The `internal/agent` `TestExecutionDeadlineMarkerPastItsDeadlineWithLiveProcessIsInterrupted`
 wall-clock flake on Windows rest-1 is A9 code, not A3, and is the operator's to track.
+
+### Result (appended 2026-10-25T07:20Z)
+
+Maintainer confirmation under the standing auto-approve delegation (operator note, 2026-10-25T07:16Z, D52 + D59):
+**green on the first attempt**. The run is a D52/D59 dispatch whose tested revision equals this record's integration
+revision, so no D60 rerun of failed jobs was needed. No pull request to `main` was opened or is claimed, and no
+agent pushed.
+
+- Run URL: `https://github.com/liza-mas/liza/actions/runs/40171327023`
+- Event and ref: `workflow_dispatch` of `.github/workflows/ci.yml` on the pinned ref `g8/a3-98dc9ef`
+  (`global-refactoring` was pushed at the same SHA).
+- Tested SHA: `98dc9efc270749fb130ae5dbbababecf0bfc35d0`, equal to the integration revision of G1–G6. The only
+  commits between it and this task's `HEAD` are `c7504560c` (decision record D60, documentation) and the commit that
+  added this record (`git diff --stat 98dc9efc2 HEAD`: `boundary-a3.md` and the decisions file only).
+- Run conclusion: `success`, attempt 1. Created 2026-10-25T07:03:09Z.
+
+| Job | Conclusion | Completed (UTC) |
+|---|---|---|
+| Shared CI / Linux tests | success | 07:15:54Z |
+| Shared CI / Linux lint and build | success | 07:05:01Z |
+| Shared CI / macOS compatibility | success | 07:14:27Z |
+| Test (windows) | success | 07:10:49Z |
+| Windows shard ops-1 | success | 07:07:48Z |
+| Windows shard ops-2 | success | 07:07:10Z |
+| Windows shard ops-3 | success | 07:07:06Z |
+| Windows shard ops-4 | success | 07:08:57Z |
+| Windows shard rest-1 | success | 07:09:49Z |
+| Windows shard rest-2 | success | 07:09:21Z |
+| Windows shard rest-3 | success | 07:10:30Z |
+| Release verified tag | skipped (tag-only job) | — |
+
+Linux, Windows and macOS all passed in this one run (D52 replaces the separate `main`-push macOS follow-up, so the
+macOS result is recorded here and no follow-up is open). The result is the maintainer's relayed observation,
+recorded as supplied; this task made no provider CLI call and ran no remote command.
+
+The run also proves on all three platforms the two A3 oracle portability corrections listed above (`de5c259cd`,
+`3ffd032fc`), which were verified only locally on Linux when G1–G7 were recorded. The Windows `internal/agent`
+wall-clock test that failed in the A2 run did not recur.
+
+### Oracle platform-proof scope (D53)
+
+Green jobs do not show that every oracle scenario ran on every platform. The committed inventory is
+[`internal/testhelpers/oracle/proof-scope.md`](../../../internal/testhelpers/oracle/proof-scope.md) (read at this
+task's `HEAD`; authority D53, D52). As it applies to A3 in the run above:
+
+- **`a3/control`:** all tests are Linux-only (`linuxOnly`, `t.Skip` off Linux: process liveness, POSIX
+  permissions). They ran on Linux; on Windows and macOS they were skipped, so the green jobs there prove only that
+  the package compiles (non-Linux twins carry no proof).
+- **`a3/lifecycle`:** Linux-only through `linuxOnly` in `env_test.go` (process and timezone proof), except
+  `TestOracleUnblockTaskVariants`, `TestOracleAssessBlockedVariants` and the portability regressions
+  (`portability_test.go`, `transcript_test.go`), which have no skip or build constraint and ran on all three
+  platforms.
+- **White-box coverage** in `internal/ops` and elsewhere carries no such restriction and ran on all three.
+
+The CI result, tested SHA and job conclusions recorded above are unchanged by this paragraph.
