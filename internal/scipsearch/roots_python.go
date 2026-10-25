@@ -20,8 +20,8 @@ func pythonIndexPlans(targetRoot string, inputs []pythonCommandInputs) []Runtime
 			args = append(args, "--target-only="+input.TargetOnly)
 		}
 		plans = append(plans, RuntimeCommandPlan{
-			Language:   "python",
-			Name:       languageIndexers["python"],
+			Language:   LanguagePython,
+			Name:       languageIndexers[LanguagePython],
 			Args:       args,
 			Dir:        targetRoot,
 			OutputPath: outputPathPlaceholder,

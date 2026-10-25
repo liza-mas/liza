@@ -3,7 +3,6 @@ package scipsearch
 import (
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -34,7 +33,7 @@ const (
 
 // PairingPlanSkip carries planner facts for presentation by callers.
 type PairingPlanSkip struct {
-	Language   string
+	Language   Language
 	Candidates []string
 	Reason     PairingPlanSkipReason
 }
@@ -42,7 +41,7 @@ type PairingPlanSkip struct {
 // PairingCommandOverride adds one explicit pairing-mode language root to the
 // aggregate plan for that language when autodetection should be replaced.
 type PairingCommandOverride struct {
-	Language              string
+	Language              Language
 	GoModuleRoot          string
 	TypeScriptCwd         string
 	TypeScriptProjectRoot string
@@ -138,14 +137,14 @@ func ParsePairingCommandOverrides(projectRoot string, raw []string) ([]PairingCo
 		if spec == "" {
 			continue
 		}
-		language, value, ok := strings.Cut(spec, "=")
+		rawLanguage, value, ok := strings.Cut(spec, "=")
 		if !ok {
 			return nil, fmt.Errorf("invalid scip-search pairing plan %q: expected language=value", spec)
 		}
-		language = strings.TrimSpace(language)
+		language := Language(strings.TrimSpace(rawLanguage))
 		value = strings.TrimSpace(value)
-		if !slices.Contains(supportedLanguages, language) {
-			return nil, fmt.Errorf("unsupported scip-search language %q (supported: %s)", language, strings.Join(supportedLanguages, ", "))
+		if err := validateLanguage(language); err != nil {
+			return nil, err
 		}
 		if value == "" {
 			return nil, fmt.Errorf("invalid scip-search pairing plan %q: value is empty", spec)
@@ -153,12 +152,12 @@ func ParsePairingCommandOverrides(projectRoot string, raw []string) ([]PairingCo
 		parts := splitPairingOverrideValue(value)
 		override := PairingCommandOverride{Language: language}
 		switch language {
-		case "go":
+		case LanguageGo:
 			if len(parts) != 1 {
 				return nil, fmt.Errorf("invalid go scip-search pairing plan %q: expected go=<module-root>", spec)
 			}
 			override.GoModuleRoot, err = resolvePairingOverridePath(projectRoot, parts[0])
-		case "typescript":
+		case LanguageTypeScript:
 			if len(parts) != 2 {
 				return nil, fmt.Errorf("invalid typescript scip-search pairing plan %q: expected typescript=<cwd>,<project-root>", spec)
 			}
@@ -166,7 +165,7 @@ func ParsePairingCommandOverrides(projectRoot string, raw []string) ([]PairingCo
 			if err == nil {
 				override.TypeScriptProjectRoot, err = resolvePairingOverridePath(projectRoot, parts[1])
 			}
-		case "python":
+		case LanguagePython:
 			if len(parts) < 1 || len(parts) > 2 {
 				return nil, fmt.Errorf("invalid python scip-search pairing plan %q: expected python=<cwd> or python=<cwd>,<target-only>", spec)
 			}
@@ -184,14 +183,14 @@ func ParsePairingCommandOverrides(projectRoot string, raw []string) ([]PairingCo
 }
 
 type pairingRootSelectionError struct {
-	language string
+	language Language
 }
 
 func (err pairingRootSelectionError) Error() string {
 	return fmt.Sprintf("unresolved scip-search language %s: no candidate roots found", err.language)
 }
 
-func pairingPlanSkip(language string, candidates []string) PairingPlanSkip {
+func pairingPlanSkip(language Language, candidates []string) PairingPlanSkip {
 	return PairingPlanSkip{
 		Language:   language,
 		Candidates: append([]string(nil), candidates...),
@@ -199,7 +198,7 @@ func pairingPlanSkip(language string, candidates []string) PairingPlanSkip {
 	}
 }
 
-func pairingCommandPlan(projectRoot, language string, files []string) (LanguageAggregatePlan, []string, bool) {
+func pairingCommandPlan(projectRoot string, language Language, files []string) (LanguageAggregatePlan, []string, bool) {
 	outputPath := projectRootIndexPath(projectRoot, language)
 	plan := LanguageAggregatePlan{
 		Language:    language,
@@ -208,19 +207,19 @@ func pairingCommandPlan(projectRoot, language string, files []string) (LanguageA
 	}
 
 	switch language {
-	case "go":
+	case LanguageGo:
 		roots := goRootCandidates(projectRoot, files)
 		if len(roots) == 0 {
 			return LanguageAggregatePlan{}, roots, false
 		}
 		plan.IndexPlans = goIndexPlans(projectRoot, roots)
-	case "typescript":
+	case LanguageTypeScript:
 		candidates := pairingTypeScriptCommandInputs(projectRoot, files)
 		if len(candidates) == 0 {
 			return LanguageAggregatePlan{}, typeScriptCandidateRoots(candidates), false
 		}
 		plan.IndexPlans = typeScriptIndexPlans(projectRoot, candidates)
-	case "python":
+	case LanguagePython:
 		candidates := pairingPythonCommandInputs(projectRoot, files)
 		if len(candidates) == 0 {
 			return LanguageAggregatePlan{}, pythonCandidateRoots(candidates), false
@@ -250,7 +249,7 @@ func pairingCommandOverridePlan(projectRoot string, overrides []PairingCommandOv
 			return LanguageAggregatePlan{}, fmt.Errorf("mixed scip-search override languages in %s plan", language)
 		}
 		switch language {
-		case "go":
+		case LanguageGo:
 			if override.GoModuleRoot == "" {
 				return LanguageAggregatePlan{}, fmt.Errorf("invalid go scip-search pairing override: module root is empty")
 			}
@@ -258,7 +257,7 @@ func pairingCommandOverridePlan(projectRoot string, overrides []PairingCommandOv
 				return LanguageAggregatePlan{}, err
 			}
 			plan.IndexPlans = append(plan.IndexPlans, goIndexPlans(projectRoot, []string{override.GoModuleRoot})...)
-		case "typescript":
+		case LanguageTypeScript:
 			if override.TypeScriptCwd == "" || override.TypeScriptProjectRoot == "" {
 				return LanguageAggregatePlan{}, fmt.Errorf("invalid typescript scip-search pairing override: cwd and project root are required")
 			}
@@ -272,7 +271,7 @@ func pairingCommandOverridePlan(projectRoot string, overrides []PairingCommandOv
 				Cwd:         override.TypeScriptCwd,
 				ProjectRoot: override.TypeScriptProjectRoot,
 			}})...)
-		case "python":
+		case LanguagePython:
 			if override.PythonCwd == "" {
 				return LanguageAggregatePlan{}, fmt.Errorf("invalid python scip-search pairing override: cwd is empty")
 			}
@@ -291,26 +290,26 @@ func pairingCommandOverridePlan(projectRoot string, overrides []PairingCommandOv
 				TargetOnly: override.PythonTargetOnly,
 			}})...)
 		default:
-			return LanguageAggregatePlan{}, fmt.Errorf("unsupported scip-search language %q (supported: %s)", language, strings.Join(supportedLanguages, ", "))
+			return LanguageAggregatePlan{}, validateLanguage(language)
 		}
 	}
 	plan.IndexPlans = dedupeIndexPlans(plan.IndexPlans)
 	return plan, nil
 }
 
-func pairingOverrideMap(overrides []PairingCommandOverride) (map[string][]PairingCommandOverride, error) {
-	out := make(map[string][]PairingCommandOverride, len(overrides))
+func pairingOverrideMap(overrides []PairingCommandOverride) (map[Language][]PairingCommandOverride, error) {
+	out := make(map[Language][]PairingCommandOverride, len(overrides))
 	for _, override := range overrides {
-		if !slices.Contains(supportedLanguages, override.Language) {
-			return nil, fmt.Errorf("unsupported scip-search language %q (supported: %s)", override.Language, strings.Join(supportedLanguages, ", "))
+		if err := validateLanguage(override.Language); err != nil {
+			return nil, err
 		}
 		out[override.Language] = append(out[override.Language], override)
 	}
 	return out, nil
 }
 
-func mergePairingLanguages(languages []string, overrides map[string][]PairingCommandOverride) []string {
-	seen := make(map[string]bool, len(languages)+len(overrides))
+func mergePairingLanguages(languages []Language, overrides map[Language][]PairingCommandOverride) []Language {
+	seen := make(map[Language]bool, len(languages)+len(overrides))
 	for _, language := range languages {
 		seen[language] = true
 	}
@@ -318,7 +317,7 @@ func mergePairingLanguages(languages []string, overrides map[string][]PairingCom
 		seen[language] = true
 	}
 
-	var out []string
+	var out []Language
 	for _, language := range supportedLanguages {
 		if seen[language] {
 			out = append(out, language)
@@ -327,8 +326,8 @@ func mergePairingLanguages(languages []string, overrides map[string][]PairingCom
 	return out
 }
 
-func ensureOverridesAllowedByExplicitLanguages(languages []string, overrides map[string][]PairingCommandOverride) error {
-	allowed := make(map[string]bool, len(languages))
+func ensureOverridesAllowedByExplicitLanguages(languages []Language, overrides map[Language][]PairingCommandOverride) error {
+	allowed := make(map[Language]bool, len(languages))
 	for _, language := range languages {
 		allowed[language] = true
 	}

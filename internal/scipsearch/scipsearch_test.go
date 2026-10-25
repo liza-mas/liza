@@ -33,12 +33,27 @@ func withTestScipProjectDirName(t *testing.T, dirName string) {
 	})
 }
 
-func TestParseEnvGate(t *testing.T) {
+func TestResolveInitConfigAutodetectionGate(t *testing.T) {
 	tests := map[string]bool{"": false, "0": false, " false ": false, "1": true, " TRUE ": true, "yes": false}
-	for value, want := range tests {
-		if got := ParseEnvGate(value); got != want {
-			t.Fatalf("ParseEnvGate(%q) = %v, want %v", value, got, want)
-		}
+	for value, wantDetected := range tests {
+		t.Run(value, func(t *testing.T) {
+			got, err := ResolveInitConfig(InitOptions{
+				ProjectRoot:   t.TempDir(),
+				EnvValue:      value,
+				CommandRunner: runnerFunc(nil, nil),
+				GitFiles:      func(string) ([]string, error) { return []string{"go.mod"}, nil },
+			})
+			if err != nil {
+				t.Fatalf("ResolveInitConfig() error = %v", err)
+			}
+			var want []Language
+			if wantDetected {
+				want = []Language{LanguageGo}
+			}
+			if !reflect.DeepEqual(got.Languages, want) {
+				t.Fatalf("Languages = %v with env %q, want %v", got.Languages, value, want)
+			}
+		})
 	}
 }
 
@@ -218,7 +233,7 @@ func TestPairingCommandPlanningSkipsTypeScriptWithoutTSConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanPairingCommands() error = %v", err)
 	}
-	if got, want := planLanguages(result.Plans), []string{"go"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(result.Plans), []Language{LanguageGo}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 	if got, want := len(result.Skips), 1; got != want {
@@ -250,7 +265,7 @@ func TestPairingCommandPlanningExplicitLanguageFiltersDoNotSelectRoots(t *testin
 		t.Fatalf("PlanPairingCommands() error = %v", err)
 	}
 	plans := result.Plans
-	if got, want := planLanguages(plans), []string{"go"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(plans), []Language{LanguageGo}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 	if realizedFirstIndexArgs(plans[0])[2] != target {
@@ -406,7 +421,7 @@ func TestPairingCommandPlanningAggregatesAutoDetectedRoots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanPairingCommands() error = %v", err)
 	}
-	if got, want := planLanguages(result.Plans), []string{"go", "typescript"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(result.Plans), []Language{LanguageGo, LanguageTypeScript}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 	if len(result.Skips) != 0 {
@@ -416,6 +431,58 @@ func TestPairingCommandPlanningAggregatesAutoDetectedRoots(t *testing.T) {
 	if got, want := planRoots(tsPlan.IndexPlans), []string{"apps/admin/src", "apps/web/src"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("typescript aggregate roots = %v, want %v", got, want)
 	}
+}
+
+func TestInitResultLanguageNamesConvertsToPersistedStrings(t *testing.T) {
+	if got := (InitResult{}).LanguageNames(); got != nil {
+		t.Fatalf("LanguageNames() = %#v, want nil when no language was validated", got)
+	}
+	got := InitResult{Languages: []Language{LanguageGo, LanguagePython}}.LanguageNames()
+	if want := []string{"go", "python"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("LanguageNames() = %v, want %v", got, want)
+	}
+}
+
+func TestUnknownLanguageIsRefusedWithSupportedList(t *testing.T) {
+	const want = `unsupported scip-search language "ruby" (supported: go, typescript, python)`
+	target := t.TempDir()
+	gitFiles := func(string) ([]string, error) { return []string{"go.mod"}, nil }
+
+	t.Run("explicit init allowlist", func(t *testing.T) {
+		_, err := ResolveInitConfig(InitOptions{ProjectRoot: target, ExplicitLanguages: []string{" ruby "}, CommandRunner: runnerFunc(nil, nil)})
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+	t.Run("override spec", func(t *testing.T) {
+		_, err := ParsePairingCommandOverrides(target, []string{"ruby=lib"})
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+	t.Run("pairing allowlist", func(t *testing.T) {
+		_, err := PlanPairingCommands(PairingPlanOptions{ProjectRoot: target, ExplicitLanguages: []string{"ruby"}, GitFiles: gitFiles})
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+	t.Run("typed override", func(t *testing.T) {
+		_, err := PlanPairingCommands(PairingPlanOptions{
+			ProjectRoot:      target,
+			CommandOverrides: []PairingCommandOverride{{Language: Language("ruby")}},
+			GitFiles:         gitFiles,
+		})
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+	t.Run("configured runtime language is ignored", func(t *testing.T) {
+		t.Setenv(EnvEnableScipSearch, "true")
+		plans, err := PlanRuntimeCommands(RuntimePlanOptions{TargetRoot: target, ConfiguredLanguages: []string{"ruby"}, GitFiles: gitFiles})
+		if err != nil || len(plans) != 0 {
+			t.Fatalf("PlanRuntimeCommands() = %v, %v; want no plans and no error", plans, err)
+		}
+	})
 }
 
 func TestParsePairingCommandOverridesRejectsUnsafeValues(t *testing.T) {
@@ -587,7 +654,7 @@ func TestResolveInitConfigVersionFailureIsNonFatal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveInitConfig() error = %v", err)
 	}
-	if !reflect.DeepEqual(got.Languages, []string{"go"}) || !hasCall(calls, "scip-search --version") {
+	if !reflect.DeepEqual(got.Languages, []Language{LanguageGo}) || !hasCall(calls, "scip-search --version") {
 		t.Fatalf("Languages = %v calls = %v, want [go] and version probe", got.Languages, calls)
 	}
 }
@@ -615,7 +682,7 @@ func TestResolveInitConfigLanguageSelection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ResolveInitConfig() error = %v", err)
 		}
-		if want := []string{"go", "typescript", "python"}; !reflect.DeepEqual(got.Languages, want) {
+		if want := []Language{LanguageGo, LanguageTypeScript, LanguagePython}; !reflect.DeepEqual(got.Languages, want) {
 			t.Fatalf("Languages = %v, want %v", got.Languages, want)
 		}
 	})
@@ -658,7 +725,7 @@ func TestResolveInitConfigWarnsAndDropsMissingIndexers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveInitConfig() error = %v", err)
 	}
-	if want := []string{"go", "python"}; !reflect.DeepEqual(got.Languages, want) {
+	if want := []Language{LanguageGo, LanguagePython}; !reflect.DeepEqual(got.Languages, want) {
 		t.Fatalf("Languages = %v, want %v", got.Languages, want)
 	}
 	if !strings.Contains(strings.Join(got.Warnings, "\n"), "typescript") {
@@ -725,11 +792,11 @@ func TestRuntimeCommandPlanningFiltersDetectedConfiguredLanguagesInDeterministic
 		t.Fatalf("PlanRuntimeCommands() error = %v", err)
 	}
 
-	if got, want := planLanguages(plans), []string{"go", "typescript", "python"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(plans), []Language{LanguageGo, LanguageTypeScript, LanguagePython}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 	for _, plan := range plans {
-		wantOutput := filepath.Join(target, paths.ProjectDirName(), "scip", plan.Language+".scip")
+		wantOutput := filepath.Join(target, paths.ProjectDirName(), "scip", string(plan.Language)+".scip")
 		if plan.OutputPath != wantOutput {
 			t.Fatalf("%s OutputPath = %q, want %q", plan.Language, plan.OutputPath, wantOutput)
 		}
@@ -753,7 +820,7 @@ func TestRuntimeCommandPlanningIncludesOnlyConfiguredDetectedLanguages(t *testin
 		t.Fatalf("PlanRuntimeCommands() error = %v", err)
 	}
 
-	if got, want := planLanguages(plans), []string{"typescript"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(plans), []Language{LanguageTypeScript}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 }
@@ -779,7 +846,7 @@ func TestRuntimeCommandPlanningBuildsExactCommandPlans(t *testing.T) {
 		{"index", "--cwd", target, "--output", filepath.Join(target, paths.ProjectDirName(), "scip", "typescript.scip"), target},
 		{"index", "--cwd", target, "--output", filepath.Join(target, paths.ProjectDirName(), "scip", "python.scip")},
 	}
-	if got, want := planLanguages(plans), []string{"go", "typescript", "python"}; !reflect.DeepEqual(got, want) {
+	if got, want := planLanguages(plans), []Language{LanguageGo, LanguageTypeScript, LanguagePython}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("plan languages = %v, want %v", got, want)
 	}
 	for i, want := range wantArgs {
@@ -1945,8 +2012,8 @@ func writeTestFile(t *testing.T, root, rel, content string) {
 	}
 }
 
-func planLanguages(plans []LanguageAggregatePlan) []string {
-	languages := make([]string, 0, len(plans))
+func planLanguages(plans []LanguageAggregatePlan) []Language {
+	languages := make([]Language, 0, len(plans))
 	for _, plan := range plans {
 		languages = append(languages, plan.Language)
 	}

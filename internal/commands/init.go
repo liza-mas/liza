@@ -282,7 +282,7 @@ func InitPairingCommand(params InitPairingParams) error {
 }
 
 func pairingScipEnabled() bool {
-	return scipsearch.ParseEnvGate(envgate.Value(scipsearch.EnvEnableScipSearch))
+	return envgate.Truthy(envgate.Value(scipsearch.EnvEnableScipSearch))
 }
 
 // activateProjectRootIndexing installs the lifecycle hooks and index script
@@ -325,13 +325,13 @@ func pairingScipSkipReasonText(reason scipsearch.PairingPlanSkipReason) string {
 	}
 }
 
-func pairingScipPlanSyntax(language string) string {
+func pairingScipPlanSyntax(language scipsearch.Language) string {
 	switch language {
-	case "go":
+	case scipsearch.LanguageGo:
 		return "--scip-search-plan go=<module-root>"
-	case "typescript":
+	case scipsearch.LanguageTypeScript:
 		return "--scip-search-plan typescript=<cwd>,<project-root>"
-	case "python":
+	case scipsearch.LanguagePython:
 		return "--scip-search-plan python=<cwd>[,<target-only>]"
 	default:
 		return "--scip-search-plan <language>=<values>"
@@ -1280,7 +1280,7 @@ func InitCommandWithConfig(params InitParams) error {
 	// them after the last prompt, so a cancelled init leaves Git hooks alone,
 	// and before writing state, so an unmanaged hook collision fails init
 	// rather than leaving a project whose indexes silently never refresh.
-	if err := activateProjectRootIndexing(pairingindex.MASActivationOptions(root, scipSearchConfig.Languages)); err != nil {
+	if err := activateProjectRootIndexing(pairingindex.MASActivationOptions(root, scipSearchConfig.LanguageNames())); err != nil {
 		return err
 	}
 
@@ -1364,7 +1364,7 @@ func InitCommandWithConfig(params InitParams) error {
 			ReviewerMaxWait:                 600,
 			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
 			DefaultCLI:                      params.DefaultCLI,
-			ScipSearch:                      scipSearchConfig.Languages,
+			ScipSearch:                      scipSearchConfig.LanguageNames(),
 			IntegrationBranch:               branch,
 			EscalationWebhook:               nil,
 			Mode:                            models.SystemModeRunning,

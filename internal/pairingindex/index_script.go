@@ -152,12 +152,13 @@ trap 'exit 1' HUP INT TERM
 }
 
 func renderScipCommand(plan scipsearch.LanguageAggregatePlan) string {
-	needsVar := "needs_" + shellIdentifier(plan.Language) + "_scip"
-	missingVar := "missing_" + shellIdentifier(plan.Language) + "_scip"
-	tmpVar := "tmp_" + shellIdentifier(plan.Language) + "_scip"
-	aggregateFunc := "aggregate_" + shellIdentifier(plan.Language) + "_scip"
-	stagedOutput := `"$staging_dir/` + shellIdentifier(plan.Language) + `.scip"`
-	indexedVar := "indexed_" + shellIdentifier(plan.Language) + "_roots"
+	languageID := shellIdentifier(string(plan.Language))
+	needsVar := "needs_" + languageID + "_scip"
+	missingVar := "missing_" + languageID + "_scip"
+	tmpVar := "tmp_" + languageID + "_scip"
+	aggregateFunc := "aggregate_" + languageID + "_scip"
+	stagedOutput := `"$staging_dir/` + languageID + `.scip"`
+	indexedVar := "indexed_" + languageID + "_roots"
 
 	var freshness strings.Builder
 	fmt.Fprintf(&freshness, `%s=0
@@ -222,7 +223,7 @@ fi
 	mkdir "$%s"
 	cd %s
 %sfi
-`, freshness.String(), commandChecks.String(), needsVar, missingVar, tmpVar, shellIdentifier(plan.Language), tmpVar, shellQuote(plan.ProjectRoot), commands.String())
+`, freshness.String(), commandChecks.String(), needsVar, missingVar, tmpVar, shellIdentifier(string(plan.Language)), tmpVar, shellQuote(plan.ProjectRoot), commands.String())
 }
 
 func renderFunctionalClustersCommand(repoRoot string, plans []scipsearch.LanguageAggregatePlan) string {
@@ -276,7 +277,7 @@ fi
 	fmt.Fprintf(&commands, "\tstacklit export-architecture -i %s -o \"$%s/%s\"%s\n", shellQuote(stacklitArtifactName), tmpVar, stacklitArchitectureArtifactName, closeLockFD)
 	graphPathExprs := make([]string, 0, len(plans))
 	for _, plan := range plans {
-		graphPathExpr := fmt.Sprintf("\"$%s/%s-scip-graph.json\"", tmpVar, shellIdentifier(plan.Language))
+		graphPathExpr := fmt.Sprintf("\"$%s/%s-scip-graph.json\"", tmpVar, shellIdentifier(string(plan.Language)))
 		graphPathExprs = append(graphPathExprs, graphPathExpr)
 		fmt.Fprintf(&commands, "\tscip-search graph-export --index %s -o %s%s\n", shellQuote(plan.OutputPath), graphPathExpr, closeLockFD)
 	}
@@ -297,13 +298,13 @@ fi
 `, shellQuote(repoRoot), freshness.String(), prerequisites.String(), needsVar, missingVar, tmpVar, tmpVar, commands.String(), functionalClustersArtifactName)
 }
 
-func scipFindSourceExpression(language string) string {
+func scipFindSourceExpression(language scipsearch.Language) string {
 	switch language {
-	case "go":
+	case scipsearch.LanguageGo:
 		return `-type f -name '*.go'`
-	case "python":
+	case scipsearch.LanguagePython:
 		return `-type f -name '*.py'`
-	case "typescript":
+	case scipsearch.LanguageTypeScript:
 		return `-type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \)`
 	default:
 		return ""
@@ -312,11 +313,11 @@ func scipFindSourceExpression(language string) string {
 
 func scipSourceRoot(plan scipsearch.RuntimeCommandPlan) string {
 	switch plan.Language {
-	case "go":
+	case scipsearch.LanguageGo:
 		if value, ok := argValueAfter(plan.Args, "--module-root"); ok {
 			return value
 		}
-	case "python", "typescript":
+	case scipsearch.LanguagePython, scipsearch.LanguageTypeScript:
 		if value, ok := argValueAfter(plan.Args, "--cwd"); ok {
 			return value
 		}
@@ -333,15 +334,15 @@ func argValueAfter(args []string, flag string) (string, bool) {
 	return "", false
 }
 
-func scipFindExclusions(language, sourceRoot string) string {
+func scipFindExclusions(language scipsearch.Language, sourceRoot string) string {
 	paths := []string{
 		filepath.Join(sourceRoot, ".git", "*"),
 		filepath.Join(sourceRoot, ".worktrees", "*"),
 	}
 	switch language {
-	case "typescript":
+	case scipsearch.LanguageTypeScript:
 		paths = append(paths, filepath.Join(sourceRoot, "node_modules", "*"))
-	case "python":
+	case scipsearch.LanguagePython:
 		paths = append(paths,
 			filepath.Join(sourceRoot, ".venv", "*"),
 			filepath.Join(sourceRoot, "venv", "*"),

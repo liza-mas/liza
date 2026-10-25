@@ -28,7 +28,7 @@ import (
 // eligible for t.Parallel.
 func requireLifecycleTestIndexesDisabled(t *testing.T) {
 	t.Helper()
-	if scipsearch.ParseEnvGate(envgate.Value(scipsearch.EnvEnableScipSearch)) {
+	if envgate.Truthy(envgate.Value(scipsearch.EnvEnableScipSearch)) {
 		t.Fatalf("%s is enabled; lifecycle tests require it off", scipsearch.EnvEnableScipSearch)
 	}
 	if stacklit.RuntimeEnabled() {

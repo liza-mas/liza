@@ -27,7 +27,7 @@ type RuntimePlanOptions struct {
 // LanguageAggregatePlan describes one final per-language SCIP index assembled
 // from one or more per-root language indexer outputs.
 type LanguageAggregatePlan struct {
-	Language    string
+	Language    Language
 	ProjectRoot string
 	OutputPath  string
 	IndexPlans  []RuntimeCommandPlan
@@ -35,7 +35,7 @@ type LanguageAggregatePlan struct {
 
 // RuntimeCommandPlan describes one fixed command invocation.
 type RuntimeCommandPlan struct {
-	Language   string
+	Language   Language
 	Name       string
 	Args       []string
 	Dir        string
@@ -66,13 +66,13 @@ type RefreshResult struct {
 
 // IndexRef identifies one prompt-safe generated index file.
 type IndexRef struct {
-	Language string
+	Language Language
 	Path     string
 }
 
 // RefreshFailure contains bounded diagnostics for one failed language indexer.
 type RefreshFailure struct {
-	Language   string
+	Language   Language
 	Diagnostic string
 }
 
@@ -228,7 +228,7 @@ func AvailableProjectRootIndexes(opts RuntimePlanOptions) ([]IndexRef, error) {
 }
 
 // appendExistingIndex appends the index at path when it is an existing file.
-func appendExistingIndex(indexes []IndexRef, language, path string) ([]IndexRef, error) {
+func appendExistingIndex(indexes []IndexRef, language Language, path string) ([]IndexRef, error) {
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return indexes, nil
@@ -244,14 +244,14 @@ func appendExistingIndex(indexes []IndexRef, language, path string) ([]IndexRef,
 
 // projectRootIndexPath is where the index lifecycle hooks publish a
 // language's repo-root index.
-func projectRootIndexPath(projectRoot, language string) string {
-	return filepath.Join(projectRoot, language+".scip")
+func projectRootIndexPath(projectRoot string, language Language) string {
+	return filepath.Join(projectRoot, string(language)+".scip")
 }
 
-func buildRuntimeCommandPlans(targetRoot string, languages []string, files []string) []LanguageAggregatePlan {
+func buildRuntimeCommandPlans(targetRoot string, languages []Language, files []string) []LanguageAggregatePlan {
 	plans := make([]LanguageAggregatePlan, 0, len(languages))
 	for _, language := range languages {
-		outputPath := filepath.Join(targetRoot, paths.ProjectDirName(), "scip", language+".scip")
+		outputPath := filepath.Join(targetRoot, paths.ProjectDirName(), "scip", string(language)+".scip")
 		plan, ok := languageAggregatePlan(targetRoot, language, outputPath, files)
 		if ok {
 			plans = append(plans, plan)
@@ -260,7 +260,7 @@ func buildRuntimeCommandPlans(targetRoot string, languages []string, files []str
 	return plans
 }
 
-func languageAggregatePlan(targetRoot, language, outputPath string, files []string) (LanguageAggregatePlan, bool) {
+func languageAggregatePlan(targetRoot string, language Language, outputPath string, files []string) (LanguageAggregatePlan, bool) {
 	indexPlans := languageIndexPlans(targetRoot, language, files)
 	indexPlans = dedupeIndexPlans(indexPlans)
 	if len(indexPlans) == 0 {
@@ -274,17 +274,17 @@ func languageAggregatePlan(targetRoot, language, outputPath string, files []stri
 	}, true
 }
 
-func languageIndexPlans(targetRoot, language string, files []string) []RuntimeCommandPlan {
+func languageIndexPlans(targetRoot string, language Language, files []string) []RuntimeCommandPlan {
 	switch language {
-	case "go":
+	case LanguageGo:
 		return goIndexPlans(targetRoot, goRootCandidates(targetRoot, files))
-	case "typescript":
+	case LanguageTypeScript:
 		inputs := pairingTypeScriptCommandInputs(targetRoot, files)
-		if len(inputs) == 0 && languageDetected(files, "typescript") {
+		if len(inputs) == 0 && languageDetected(files, LanguageTypeScript) {
 			inputs = []typeScriptCommandInputs{{Cwd: targetRoot, ProjectRoot: targetRoot}}
 		}
 		return typeScriptIndexPlans(targetRoot, inputs)
-	case "python":
+	case LanguagePython:
 		return pythonIndexPlans(targetRoot, pairingPythonCommandInputs(targetRoot, files))
 	}
 	return nil
@@ -317,7 +317,7 @@ func dedupeIndexPlans(plans []RuntimeCommandPlan) []RuntimeCommandPlan {
 	seen := make(map[string]bool, len(plans))
 	out := make([]RuntimeCommandPlan, 0, len(plans))
 	for _, plan := range plans {
-		key := plan.Language + "\x00" + plan.Root
+		key := string(plan.Language) + "\x00" + plan.Root
 		if seen[key] {
 			continue
 		}

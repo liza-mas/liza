@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "W1",
+      "file": "internal/scipsearch/scipsearch_test.go",
+      "assertion": "TestPairingCommandPlanningAggregatesAutoDetectedRoots, TestRuntimeCommandPlanningFiltersDetectedConfiguredLanguagesInDeterministicOrder, TestRuntimeCommandPlanningBuildsExactCommandPlans and TestResolveInitConfigLanguageSelection compare plan, result and init languages as []scipsearch.Language against the LanguageGo/LanguageTypeScript/LanguagePython constants, with detected/configured ordering and exact indexer argv unchanged; internal/pairingindex TestPlanActivationLanguageFilterKeepsConfiguredAndReportsUnindexable asserts typed plan languages through the pairingindex language filter, and the index-script rendering tests keep the generated per-language script text byte-stable.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-truth",
+      "file": "internal/scipsearch/scipsearch_test.go",
+      "assertion": "TestResolveInitConfigAutodetectionGate and TestRuntimeEnabled drive true, 1, whitespace, upper case, false, 0, empty and yes through envgate.Truthy via the init and runtime gates; internal/stacklit TestRuntimeEnabledParsesEnvGate and internal/semble TestActivation do the same for the migrated stacklit and semble gates; ParseEnvGate (scipsearch, semble) and parseEnvGate (stacklit) no longer exist, and commands/init.go and ops/lifecycle_submission_test.go call envgate.Truthy.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-types",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-callers",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-unknown",
+      "file": "internal/scipsearch/scipsearch_test.go",
+      "assertion": "TestUnknownLanguageIsRefusedWithSupportedList asserts the exact unsupported-language message for an explicit init allowlist, an override spec, a pairing allowlist and a typed override, and that an unknown configured runtime language is ignored; TestResolveInitConfigLanguageSelection keeps the unsupported explicit ruby refusal.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a2/artifact/index_test.go",
+      "assertion": "TestOracleA2IndexActivation and TestOracleA2IndexActivationCollision (A-6, A-7) and internal/oracle/a2/cli/index_test.go TestOracleA2IndexRefresh and TestOracleA2SembleReady (C-15, C-16) run live against unchanged goldens, fixtures and adapters in the ./internal/oracle/... run.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-guards",
+      "file": "internal/testguard/archguard/k4_guard_test.go",
+      "assertion": "TestK4ImportDirectionGuard and TestS1SizeGuard run under make lint: no new layer crossing, no new size offender; no package is added.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-policy",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    },
+    {
+      "obligation_id": "AC-order",
+      "approved_reference_id": "arch-files"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a2-context"
+    }
+  ]
+}

@@ -12,8 +12,8 @@ func goIndexPlans(targetRoot string, roots []string) []RuntimeCommandPlan {
 			continue
 		}
 		plans = append(plans, RuntimeCommandPlan{
-			Language:   "go",
-			Name:       languageIndexers["go"],
+			Language:   LanguageGo,
+			Name:       languageIndexers[LanguageGo],
 			Args:       []string{"index", "--module-root", root, "--output", outputPathPlaceholder},
 			Dir:        targetRoot,
 			OutputPath: outputPathPlaceholder,

@@ -220,7 +220,7 @@ func toPromptScipIndexRefs(indexes []scipsearch.IndexRef) []prompts.ScipIndexRef
 	refs := make([]prompts.ScipIndexRef, 0, len(indexes))
 	for _, index := range indexes {
 		refs = append(refs, prompts.ScipIndexRef{
-			Language: index.Language,
+			Language: string(index.Language),
 			Path:     index.Path,
 		})
 	}

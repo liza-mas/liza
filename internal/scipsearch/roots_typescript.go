@@ -18,8 +18,8 @@ func typeScriptIndexPlans(targetRoot string, inputs []typeScriptCommandInputs) [
 			continue
 		}
 		plans = append(plans, RuntimeCommandPlan{
-			Language:   "typescript",
-			Name:       languageIndexers["typescript"],
+			Language:   LanguageTypeScript,
+			Name:       languageIndexers[LanguageTypeScript],
 			Args:       []string{"index", "--cwd", input.Cwd, "--output", outputPathPlaceholder, input.ProjectRoot},
 			Dir:        targetRoot,
 			OutputPath: outputPathPlaceholder,

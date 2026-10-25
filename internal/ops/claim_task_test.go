@@ -2152,7 +2152,7 @@ func TestClaimTask_ScipConcurrentClaimsUseIsolatedIndexes(t *testing.T) {
 	outputs := map[string]string{}
 	withClaimTaskScipRuntimeRunner(t, func(plan scipsearch.RuntimeCommandPlan) (string, error) {
 		if plan.Name == "scip-search" {
-			finalPath := filepath.Join(plan.Dir, paths.ProjectDirName(), "scip", plan.Language+".scip")
+			finalPath := filepath.Join(plan.Dir, paths.ProjectDirName(), "scip", string(plan.Language)+".scip")
 			mu.Lock()
 			outputs[finalPath] = plan.Dir
 			mu.Unlock()

@@ -28,9 +28,19 @@ type InitOptions struct {
 }
 
 type InitResult struct {
-	Languages   []string
+	Languages   []Language
 	Diagnostics []string
 	Warnings    []string
+}
+
+// LanguageNames returns the validated languages as the plain strings persisted
+// in the project configuration, or nil when none were validated.
+func (r InitResult) LanguageNames() []string {
+	var names []string
+	for _, language := range r.Languages {
+		names = append(names, string(language))
+	}
+	return names
 }
 
 var (
@@ -86,25 +96,16 @@ func ResolveInitConfig(opts InitOptions) (InitResult, error) {
 	return result, nil
 }
 
-func ParseEnvGate(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true":
-		return true
-	default:
-		return false
-	}
-}
-
 // RuntimeEnabled reports whether runtime scip-search behavior is active for the
 // current process. It is true only when the branded ENABLE_SCIP_SEARCH
 // environment variable is truthy and at least one configured language from
 // Config.ScipSearch remains available.
 func RuntimeEnabled(configuredLanguages []string) bool {
-	return ParseEnvGate(envgate.Value(EnvEnableScipSearch)) && len(configuredLanguages) > 0
+	return envgate.Truthy(envgate.Value(EnvEnableScipSearch)) && len(configuredLanguages) > 0
 }
 
-func validateIndexers(languages []string, runner CommandRunner) ([]string, []string) {
-	var validated []string
+func validateIndexers(languages []Language, runner CommandRunner) ([]Language, []string) {
+	var validated []Language
 	var warnings []string
 	for _, language := range languages {
 		indexer := languageIndexers[language]

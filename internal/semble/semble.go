@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
@@ -77,19 +76,9 @@ type CommandResult struct {
 	Stderr   string
 }
 
-// ParseEnvGate reports whether a supplied Semble activation value is enabled.
-func ParseEnvGate(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true":
-		return true
-	default:
-		return false
-	}
-}
-
 // RuntimeEnabled reports whether Semble behavior is active for this process.
 func RuntimeEnabled() bool {
-	return ParseEnvGate(envgate.Value(EnvEnableSemble))
+	return envgate.Truthy(envgate.Value(EnvEnableSemble))
 }
 
 // PlanCommands returns fixed Semble prewarm and offline validation plans. When
