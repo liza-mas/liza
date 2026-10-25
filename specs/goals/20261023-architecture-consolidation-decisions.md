@@ -1017,6 +1017,24 @@ only `cmd/liza` wiring with them. Gain estimate: about 13 h off the critical pat
 - Rejected: a master-plan amendment (it would stall the whole run during authoring); parallelising A3–A7 (semantic refactor-on-refactor conflicts).
 - Kind: delivery (ordering). Revert: retarget the edges back (audit history keeps the originals).
 
+
+### D59 — G8 at a boundary SHA behind the branch head: dispatch on a pinned ref (operator, standing delegation, 2026-10-25)
+Operator ruling under the standing delegation, 2026-10-25T04:45Z. Under D58, A3 keeps merging while the A2 boundary records its proofs, so
+`global-refactoring` has already moved past the A2 boundary SHA `b3356c3c6` (head `09d0121af`). A D52 dispatch on the branch would test the
+head, not the boundary SHA.
+- Ruling: when a boundary SHA is behind the branch head, the operator pushes `global-refactoring` and a branch `g8/<area>-<sha7>` pointing at the
+  boundary SHA, then dispatches `ci.yml` with `--ref g8/<area>-<sha7>`. Every other D52 condition is unchanged: the tested SHA equals the
+  record's integration SHA; Linux, Windows and macOS are all green; the record cites the run URL, the tested SHA and each job's conclusion.
+  When the head equals the boundary SHA, dispatch on `global-refactoring` as before.
+- Mechanism, verified in source before ruling (D-23): `ci.yml` triggers on `workflow_dispatch` for any ref; its `push` trigger covers only `main`
+  and `v*` tags, so pushing a `g8/*` branch starts no run. `release` requires `push` of a `refs/tags/v*` ref (`ci.yml:38`), and macOS runs for every
+  non-`pull_request` event (`ci-core.yml:172-174` at `b3356c3c6`). `.github/` is identical at `b3356c3c6` and at the head.
+- Publication: the `g8/*` ref contains a subset of the commits that `global-refactoring` publishes under D52. The pre-push regex scan of
+  `origin/global-refactoring..global-refactoring` (54 commits) found no hit. The `g8/*` branches are deleted at run close with the human's approval.
+- Disproof: if the dispatched run's `headSha` differs from the boundary SHA, the run is not G8 evidence.
+- Rejected: testing the head and rebasing the record onto it (that mixes A3 changes into A2's proof); pausing A3 merges until G8 completes (it undoes D58).
+- Kind: proof mechanism (D52 refinement). Revert: dispatch on the branch only when the head equals the boundary SHA.
+
 ## Frictions (human, phase 1, 2026-10-23)
 
 - **F0 — In-place growth:** agents extend existing files/functions instead of refactoring as they go
