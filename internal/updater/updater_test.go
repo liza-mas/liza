@@ -2235,3 +2235,13 @@ func TestInstallTimeoutDefaultsToNamedTenMinutes(t *testing.T) {
 		t.Fatalf("install deadline remaining = %s, want within (9m, 10m]", remaining)
 	}
 }
+
+func TestShortCommitLengthKeepsValue(t *testing.T) {
+	long := "0123456789abcdef"
+	if shortCommitLength != 12 || shortCommit(long) != "0123456789ab" || shortCommit("0123456789ab") != "0123456789ab" || shortCommit("abc") != "abc" {
+		t.Fatalf("shortCommit bound drifted: length %d", shortCommitLength)
+	}
+	if lookupTimeout != 30*time.Second || verifyTimeout != 10*time.Second || sourceCloneBranch != "main" {
+		t.Fatalf("updater bounds = %s, %s, %q; want 30s, 10s, main", lookupTimeout, verifyTimeout, sourceCloneBranch)
+	}
+}

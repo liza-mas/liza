@@ -59,6 +59,9 @@ type terminal struct {
 // the ACP proxy without limit. The final result marks this as source truncation.
 const terminalCaptureBytes = 1024 * 1024
 
+// maxPartialUTF8Bytes is the longest incomplete UTF-8 sequence (a 4-byte rune minus one byte).
+const maxPartialUTF8Bytes = 3
+
 // Write captures a bounded prefix while continuing to drain the child pipes.
 func (t *terminal) Write(p []byte) (int, error) {
 	t.mu.Lock()
@@ -156,7 +159,7 @@ func (t *terminal) output(store *toolresult.Store, metadata toolresult.Result) (
 	t.mu.Unlock()
 	// A partial UTF-8 character belongs to the next poll, not a replacement rune.
 	if status == nil {
-		for len(raw) > 0 && !utf8.ValidString(raw) && len(raw)-lastValidUTF8(raw) <= 3 {
+		for len(raw) > 0 && !utf8.ValidString(raw) && len(raw)-lastValidUTF8(raw) <= maxPartialUTF8Bytes {
 			raw = raw[:len(raw)-1]
 		}
 	}

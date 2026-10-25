@@ -137,11 +137,14 @@ func InitHooks(opts InitHooksOptions) InitHooksResult {
 	return result
 }
 
+// hookConfirmationAnswers is how many "yes" answers auto-confirm supplies to the hook installer.
+const hookConfirmationAnswers = 16
+
 func initHooksStdin(stdin io.Reader, autoConfirm bool) io.Reader {
 	if !autoConfirm {
 		return stdin
 	}
-	return strings.NewReader(strings.Repeat("yes\n", 16))
+	return strings.NewReader(strings.Repeat("yes\n", hookConfirmationAnswers))
 }
 
 func (r InitHooksResult) Diagnostic() string {

@@ -15,8 +15,13 @@ import (
 	"strings"
 )
 
-var fingerprintKey = randomBytes(32)
-var fingerprintDomain = hex.EncodeToString(randomBytes(16))
+const (
+	fingerprintKeyBytes    = 32
+	fingerprintDomainBytes = 16
+)
+
+var fingerprintKey = randomBytes(fingerprintKeyBytes)
+var fingerprintDomain = hex.EncodeToString(randomBytes(fingerprintDomainBytes))
 
 func randomBytes(n int) []byte {
 	value := make([]byte, n)

@@ -305,10 +305,13 @@ func (g *Git) RestoreSyncedFiles(syncFrom, syncTo, restoreRef string) error {
 	return nil
 }
 
+// shortSHALength is the abbreviated SHA length used in messages.
+const shortSHALength = 7
+
 // shortSHA returns the first 7 characters of a SHA, or the full string if shorter.
 func shortSHA(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
+	if len(sha) > shortSHALength {
+		return sha[:shortSHALength]
 	}
 	return sha
 }

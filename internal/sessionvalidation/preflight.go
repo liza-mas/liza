@@ -60,8 +60,11 @@ func (e *Error) Error() string {
 
 func (e *Error) Is(target error) bool { return target == ErrPreflight }
 
+// maxVariableNameLength bounds a prerequisite environment variable name.
+const maxVariableNameLength = 256
+
 func validVariable(name string) bool {
-	if name == "" || len(name) > 256 {
+	if name == "" || len(name) > maxVariableNameLength {
 		return false
 	}
 	for i, c := range name {

@@ -312,3 +312,15 @@ func writeExecutable(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidVariableNameLengthEdge(t *testing.T) {
+	if maxVariableNameLength != 256 {
+		t.Fatalf("maxVariableNameLength = %d, want 256", maxVariableNameLength)
+	}
+	if !validVariable(strings.Repeat("A", 256)) || validVariable(strings.Repeat("A", 257)) {
+		t.Fatal("variable name length bound must accept 256 and refuse 257 characters")
+	}
+	if defaultProbeTimeout != 10*time.Second || defaultTotalTimeout != 30*time.Second {
+		t.Fatalf("fallback limits = %s, %s; want 10s, 30s", defaultProbeTimeout, defaultTotalTimeout)
+	}
+}
