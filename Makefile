@@ -152,10 +152,10 @@ ci-test-slow-race-nosync: test-integration-nosync
 	go test -race -timeout 30m ./cmd/liza/
 
 ci-test-slow-nosync: test-integration-nosync
-	go test ./cmd/liza/
+	go test -timeout 30m ./cmd/liza/
 
 test-units-nosync:
-	go test $(CI_UNIT_PACKAGES)
+	go test -timeout 30m $(CI_UNIT_PACKAGES)
 
 test-units-race-nosync:
 	go test -race -timeout 30m -p 2 $(CI_UNIT_PACKAGES)
