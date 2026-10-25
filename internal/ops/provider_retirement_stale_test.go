@@ -195,7 +195,7 @@ func TestStaleProviderDeclarationRefusesEveryGenerationPathAndReplanReauthors(t 
 		t.Fatal(err)
 	}
 	state := readClaimStateForTest(t, statePath)
-	if failures := domain.Failures(state, state.FindTask(consumer.ID)); len(failures) != 1 || failures[0].Class != handoffOutputRefusal {
+	if failures := domain.Failures(state, state.FindTask(consumer.ID)); len(failures) != 1 || failures[0].Class != string(handoffOutputRefusal) {
 		t.Fatalf("stale declaration refusal not persisted as an output_validation failure: %+v", failures)
 	}
 
@@ -654,7 +654,7 @@ func TestStaleSelectedChildRefusesOperatorAndManualGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := readClaimStateForTest(t, statePath)
-	if failures := domain.Failures(state, state.FindTask(consumer.ID)); len(failures) != 1 || failures[0].Class != handoffOutputRefusal {
+	if failures := domain.Failures(state, state.FindTask(consumer.ID)); len(failures) != 1 || failures[0].Class != string(handoffOutputRefusal) {
 		t.Fatalf("stale selected child refusal not persisted as an output_validation failure: %+v", failures)
 	}
 
@@ -1031,7 +1031,7 @@ func TestStaleProviderRefusalStaysRoutedToOrchestrator(t *testing.T) {
 					t.Fatal(err)
 				}
 				state := readClaimStateForTest(t, statePath)
-				if failures := domain.Failures(state, state.FindTask("consumer")); len(failures) != 1 || failures[0].Class != handoffOutputRefusal {
+				if failures := domain.Failures(state, state.FindTask("consumer")); len(failures) != 1 || failures[0].Class != string(handoffOutputRefusal) {
 					t.Fatalf("precondition: stale refusal not persisted as output_validation: %+v", failures)
 				}
 
@@ -1103,7 +1103,7 @@ func TestOrdinaryHandoffRefusalStillSuppressesPlanningComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := readClaimStateForTest(t, statePath)
-	if failures := domain.Failures(state, state.FindTask("plan")); len(failures) != 1 || failures[0].Class != handoffInputRefusal {
+	if failures := domain.Failures(state, state.FindTask("plan")); len(failures) != 1 || failures[0].Class != string(handoffInputRefusal) {
 		t.Fatalf("precondition: selective-inheritance refusal not persisted: %+v", failures)
 	}
 	if domain.PlanningCompleteEligible(state, state.FindTask("plan")) {

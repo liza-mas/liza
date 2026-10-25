@@ -81,6 +81,18 @@ func TestA4VocabularySpelling(t *testing.T) {
 			want: []string{"source_new_transition_id", "retargeted_consumers"},
 		},
 		{
+			name: "handoff refusal classes",
+			got: []string{
+				string(handoffOutputRefusal), string(handoffInputRefusal), string(handoffProviderRefusal),
+			},
+			want: []string{"output_validation", "selective_inheritance", "provider_retirement"},
+		},
+		{
+			name: "preserved base refusal fields",
+			got:  []string{replacePreservedFieldBaseCommit, replacePreservedFieldWorktree},
+			want: []string{"base_commit", "worktree"},
+		},
+		{
 			name: "alert categories",
 			got:  []string{planHandoffFailedAlertCategory, planDispositionMissingAlertCategory},
 			want: []string{"PLAN HANDOFF FAILED", "PLAN DISPOSITION MISSING"},
@@ -117,6 +129,8 @@ func TestA4NamedNumbers(t *testing.T) {
 		{"sprintArchiveFileMode", int(sprintArchiveFileMode), 420},
 		{"sprintSummaryFileMode", int(sprintSummaryFileMode), 420},
 		{"circuitBreakerReportFileMode", int(circuitBreakerReportFileMode), 420},
+		{"reservationTransferPolicyVersion", reservationTransferPolicyVersion, 1},
+		{"selectedChildLineagePolicyVersion", selectedChildLineagePolicyVersion, 1},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
