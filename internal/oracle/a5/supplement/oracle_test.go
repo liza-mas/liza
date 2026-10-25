@@ -62,12 +62,27 @@ type caseInput struct {
 //
 // SA*: a submit refused by loadDeclaredAcceptanceInput (allocation review).
 // VR*: a validation preflight refused or recorded by prepareValidationPreflight.
+//
+// Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
+//
+//	registration_required VR1; worktree_unavailable VR13 (no path), VR14 (not a
+//	worktree); integration_unavailable VR15; configuration_changed VR4;
+//	current_session_required VR7 (no identity), VR8 (stale generation);
+//	retry_pending VR9; artifact_unsupported VR2; execution_policy_required VR10
+//	(unknown execution), VR3 (tool policy differs); session PreparationError VR11
+//	(recorded) and VR12 (no prerequisites, returned unrecorded); probe failures
+//	environment_missing VR6/VR9 and executable_missing VR5.
+//
+// pipeline_unavailable (the pipeline bundle cannot load) is not reachable from a
+// committed fixture, so it keeps no oracle case.
 var inventory = map[string]string{
 	"SA1": "json human state", "SA2": "json human state", "SA3": "json human state", "SA4": "json human state",
 	"SA5": "json human state", "SA6": "json human state", "SA7": "json human state", "SA8": "json human state",
 	"SA9": "json human state", "SA10": "json human state",
 	"VR1": "state", "VR2": "state alerts", "VR3": "state alerts", "VR4": "state alerts",
-	"VR5": "state alerts", "VR6": "state alerts",
+	"VR5": "state alerts", "VR6": "state alerts", "VR7": "state alerts", "VR8": "state alerts",
+	"VR9": "state alerts", "VR10": "state alerts", "VR11": "state alerts", "VR12": "state alerts",
+	"VR13": "state alerts", "VR14": "state alerts", "VR15": "state alerts",
 }
 
 func loadCases(t *testing.T) []caseInput {
