@@ -285,20 +285,56 @@ file). The closure of "Decompose proceed.go (1,500 LOC)" and the recorded non-cl
 This file holds the commands or source reads, both integration SHAs (R1 `1e7807b0688691feef5369ff8d06953cfc8c174e`
 for G1–G6 above, R2 `20fee7197f2548b8e9844154a874700a603b8aee` for the refresh), the UTC observations, exits and
 excerpts for G1–G6, and the G8 section below. The closing revision is R2. The acceptance manifest
-(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-14-cp-0-boundary.json`) is written once G8 is
-green.
+(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-14-cp-0-boundary.json`) was written once G8 was
+green (it maps G1–G8 and the three boundary obligations; it records no result itself).
 
-## G8 — dispatched CI result (D52, D59, D60): pending at R2
+## G8 — dispatched CI result (D52, D59, D60): green at R2
 
-Status: **pending** for R2 `20fee7197f2548b8e9844154a874700a603b8aee`. Under D52 (replacing the per-boundary pull
-request), the operator dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) at R2 (on `global-refactoring`
-if the head still equals it, otherwise on a pinned ref under D59), applies D60 to any rerun of a pre-existing
-intermittent test and cites every attempt, and the maintainer confirms that the Linux, Windows and macOS jobs of
-that one run are green. D52 runs macOS in the same dispatched run, so no separate `main`-push macOS follow-up is
-expected; if the maintainer instead reports one, its owner and status are recorded here and it is never claimed as
-passed before it runs. No pull request to `main` is opened or claimed, and no agent pushes. To be appended on
-resume: run URL, tested full SHA (must equal R2, else the run is not G8 evidence), each job's name and conclusion,
-every attempt, UTC observation, the ruling.
+Status: **green** for R2 `20fee7197f2548b8e9844154a874700a603b8aee`, first attempt. Under D52 (replacing the
+per-boundary pull request) the operator dispatched `.github/workflows/ci.yml` (`workflow_dispatch`) on a pinned ref
+under D59; D52 runs macOS in the same run, so no separate `main`-push macOS follow-up exists or is owed. No pull
+request to `main` was opened or is claimed, and no agent pushed. The result is the maintainer's relayed observation,
+recorded as supplied; this task made no provider CLI call and ran no remote command.
+
+### Result (appended 2026-10-25T19:35Z)
+
+Operator answer, 2026-10-25T19:33Z (D52 + D59): **green on the first attempt**; the maintainer confirmation is given
+under the standing auto-approve delegation. The run meets every D52/D59 condition: a `workflow_dispatch` of
+`.github/workflows/ci.yml` on the pinned ref, whose tested SHA equals R2, with every job green in a single attempt, so
+no D60 rerun was needed. The dispatch was announced at 19:19Z (operator note) before the result.
+
+- Run URL: `https://github.com/liza-mas/liza/actions/runs/40225434048`
+- Event and ref: `workflow_dispatch` on the pinned ref `g8/a4-20fee71` (`global-refactoring` is at the same SHA).
+- Tested SHA (proven revision): `20fee7197f2548b8e9844154a874700a603b8aee` = R2, the integration revision of the G1–G4
+  refresh above.
+- Run conclusion: `success`, attempt 1.
+
+| Job | Conclusion | Completed (UTC) |
+|---|---|---|
+| Shared CI / Linux tests | success | 19:31:54Z |
+| Shared CI / Linux lint and build | success | 19:21:05Z |
+| Shared CI / macOS compatibility | success | 19:32:04Z |
+| Test (windows) | success | 19:26:26Z |
+| Windows shard ops-1 | success | 19:23:33Z |
+| Windows shard ops-2 | success | 19:22:30Z |
+| Windows shard ops-3 | success | 19:22:44Z |
+| Windows shard ops-4 | success | 19:22:57Z |
+| Windows shard rest-1 | success | 19:26:04Z |
+| Windows shard rest-2 | success | 19:25:07Z |
+| Windows shard rest-3 | success | 19:25:59Z |
+| Release verified tag | skipped (tag-only job) | — |
+
+Linux, Windows and macOS passed in this one run. macOS `internal/ops`, which exceeded Go's default 10 m timeout in the
+superseded R1 run, passed under the explicit `-timeout 30m` of `47abea4a1`/`20fee7197`. The superseded run's
+intermittent A9 `i14-decided` golden and ACP integration deadline did not recur.
+
+Proven revision versus submission base. The proven SHA is R2 (`20fee7197`), the tested commit and the revision of every
+G1–G6 observation. It is not the submission base: this task's commits (this record, the refresh, the acceptance
+manifest) sit on top of R2, and `submit-for-review` rebases and re-executes the canonical list on the resulting
+review commit. `global-refactoring` still equals R2 at 2026-10-25T19:35Z (`git rev-parse global-refactoring`), and
+`git diff --stat 20fee7197 HEAD` lists only `boundary-a4.md`, `architectural-issues.md` and the manifest, so the
+delta from the proven code to the submission base is documentation and evidence only. A later integration movement
+before the merge does not change what R2 proved and is not relabeled as proven.
 
 ### History: run 40219462697 at R1 (red, superseded)
 
