@@ -114,6 +114,8 @@ func buildFixture(t *testing.T, bin, name, caller string) fixture {
 //     README, so a rebase onto integration conflicts.
 //   - dirty-worktree: README carries an uncommitted tracked edit in the task
 //     worktree.
+//   - absent-artifacts: task-9, which no state task names, has a branch and
+//     a worktree, so absent-task cleanup has artifacts to remove.
 func (f *fixture) applyRecipe(t *testing.T, recipe string) {
 	t.Helper()
 	worktree := filepath.Join(f.project, ".worktrees", "task-1")
@@ -125,6 +127,8 @@ func (f *fixture) applyRecipe(t *testing.T, recipe string) {
 		writeFile(t, filepath.Join(worktree, "README"), []byte("task edit\n"))
 		f.git(t, "-C", worktree, "commit", "-a", "-m", "task edit")
 		f.commits["task"] = f.git(t, "-C", worktree, "rev-parse", "HEAD")
+	case "absent-artifacts":
+		f.git(t, "worktree", "add", "-b", "task/task-9", ".worktrees/task-9", f.commits["base"])
 	case "dirty-worktree":
 		writeFile(t, filepath.Join(worktree, "README"), []byte("local edit\n"))
 	default:
