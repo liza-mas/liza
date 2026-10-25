@@ -15,7 +15,6 @@ var areaA4 = Area{
 		{Key: Key{File: "internal/ops/plan_check.go", Func: "RecordPlanCheck"}, Ceiling: 129},
 		{Key: Key{File: "internal/ops/repair_superseded_dependencies.go", Func: "repairSupersededDependenciesWithOptionalAuthority"}, Ceiling: 131},
 		{Key: Key{File: "internal/ops/replace_task.go", Func: "ReplaceTaskWithAuthorityAndOptions"}, Ceiling: 211},
-		{Key: Key{File: "internal/ops/replan.go", Func: "Replan"}, Ceiling: 345},
 		{Key: Key{File: "internal/ops/retarget_dependency.go", Func: "retargetDependencyWithOptionalAuthority"}, Ceiling: 194},
 		{Key: Key{File: "internal/ops/sprint_checkpoint.go", Func: "sprintCheckpoint"}, Ceiling: 120},
 		{Key: Key{File: "internal/ops/supersede_task.go", Func: "supersedeTaskLifecycle"}, Ceiling: 152},

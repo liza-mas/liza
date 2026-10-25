@@ -890,3 +890,63 @@ func TestReplan_BlocksEpicPlanningTransitions(t *testing.T) {
 		t.Error("TransitionsExecuted should block epic-to-us after replan")
 	}
 }
+
+// The alignment event and the dependency-rewrite operation share one spelling
+// that persisted history and the oracle goldens freeze.
+func TestReplan_OperationAndMarkerSpelling(t *testing.T) {
+	t.Parallel()
+	if replanOperation != "replan" {
+		t.Errorf("replanOperation = %q, want %q", replanOperation, "replan")
+	}
+	if models.ReplannedTransition != "replanned" {
+		t.Errorf("models.ReplannedTransition = %q, want %q", models.ReplannedTransition, "replanned")
+	}
+}
+
+func TestBuildReplanReplacement_SuccessorEdgeCarriesOperation(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	upstream := buildMergedPlanningTask("a", now)
+	upstream.TransitionsExecuted = map[string]bool{models.ReplannedTransition: true}
+	successor := buildMergedPlanningTask("a-replan-1", now)
+	successor.Supersedes = testhelpers.StringPtr("a")
+	task := buildMergedPlanningTask("b", now)
+	task.DependsOn = []string{"a"}
+	state := &models.State{Tasks: []models.Task{upstream, successor, task}}
+
+	replacement := buildReplanReplacement(state, &state.Tasks[2], "b-replan-1", models.TaskStatusDraftCodingPlan, &ReplanInput{ChangedBy: "orchestrator-1"}, "", now)
+
+	if got := replacement.task.DependsOn; len(got) != 1 || got[0] != "a-replan-1" {
+		t.Fatalf("replacement depends_on = %v, want [a-replan-1]", got)
+	}
+	if len(replacement.task.History) != 1 || replacement.task.History[0].Extra["operation"] != replanOperation {
+		t.Fatalf("replacement history = %+v, want one dependencies_rewritten entry with operation %q", replacement.task.History, replanOperation)
+	}
+	if len(replacement.warnings) != 1 || !strings.Contains(replacement.warnings[0], "follows its successor a-replan-1") {
+		t.Fatalf("warnings = %v", replacement.warnings)
+	}
+}
+
+func TestRetireReplanSelections_RecordsRetirementOnProducer(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	producer := buildMergedPlanningTask("p", now)
+	producer.Output[0].InheritInputs = &models.InheritInputs{
+		Mode:       models.InheritModeSelected,
+		Selections: []models.InputSelection{{UpstreamTask: "a", Outputs: []int{0}}},
+	}
+	state := &models.State{Tasks: []models.Task{producer}}
+
+	warnings := retireReplanSelections(state, "a", "a-replan-1", "orchestrator-1", now)
+
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "selection retired to whole-phase inheritance (replacement a-replan-1)") {
+		t.Fatalf("warnings = %v", warnings)
+	}
+	if mode := state.Tasks[0].Output[0].InheritInputs.Mode; mode != models.InheritModeAll {
+		t.Fatalf("selection mode = %q, want %q", mode, models.InheritModeAll)
+	}
+	history := state.Tasks[0].History
+	if len(history) != 1 || history[0].Event != models.TaskEventDependenciesRewritten || history[0].Extra["rewrote_inherit_inputs"] != true {
+		t.Fatalf("producer history = %+v", history)
+	}
+}
