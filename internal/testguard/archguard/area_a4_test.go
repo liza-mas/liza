@@ -7,7 +7,6 @@ var areaA4 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/delete_task.go", Func: "DeleteTask"}, Ceiling: 119},
 		{Key: Key{File: "internal/ops/sprint_checkpoint.go", Func: "sprintCheckpoint"}, Ceiling: 120},
 	},
 	S2: []S2Entry{},

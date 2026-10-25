@@ -1,6 +1,7 @@
 package ops
 
 import (
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -620,4 +621,84 @@ func TestDeleteTask_CommitFailureDoesNotDeleteWorktreeOrBranch(t *testing.T) {
 	if !strings.Contains(branches, "task/task-1") {
 		t.Fatalf("Task branch should still exist after failed delete, branches output: %q", branches)
 	}
+}
+
+// TestRemoveTaskInState_LockedDecisions drives the in-lock removal directly:
+// the blocker recheck refuses with the pre-lock text and leaves state
+// untouched, --force skips it, a missing task is a not-found error, and an
+// agent working on another task is not released.
+func TestRemoveTaskInState_LockedDecisions(t *testing.T) {
+	t.Parallel()
+
+	build := func() *models.State {
+		state := testhelpers.CreateValidState()
+		now := time.Now().UTC()
+		target := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusDraft, now)
+		dependent := testhelpers.BuildTaskByStatus("task-2", models.TaskStatusDraft, now)
+		dependent.DependsOn = []string{"task-1"}
+		child := testhelpers.BuildTaskByStatus("task-3", models.TaskStatusDraft, now)
+		parent := "task-1"
+		child.ParentTask = &parent
+		state.Tasks = append(state.Tasks, target, dependent, child)
+		return state
+	}
+
+	t.Run("missing task", func(t *testing.T) {
+		t.Parallel()
+		err := removeTaskInState(build(), "nope", false, "r")
+		var notFound *errors.NotFoundError
+		if !stderrors.As(err, &notFound) || notFound.ID != "nope" {
+			t.Fatalf("error = %v, want NotFoundError for nope", err)
+		}
+	})
+
+	t.Run("recheck refuses first dependent", func(t *testing.T) {
+		t.Parallel()
+		state := build()
+		err := removeTaskInState(state, "task-1", false, "r")
+		want := "cannot delete task task-1: task task-2 depends on it (use --force to override)"
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+		if len(state.Tasks) != 3 || len(state.HumanNotes) != 0 {
+			t.Fatalf("refused removal changed state: %d tasks, %d notes", len(state.Tasks), len(state.HumanNotes))
+		}
+	})
+
+	t.Run("recheck refuses parent reference", func(t *testing.T) {
+		t.Parallel()
+		state := build()
+		state.Tasks[1].DependsOn = nil
+		err := removeTaskInState(state, "task-1", false, "r")
+		want := "cannot delete task task-1: task task-3 references it via parent_task (use --force to override)"
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("force skips recheck", func(t *testing.T) {
+		t.Parallel()
+		state := build()
+		if err := removeTaskInState(state, "task-1", true, "r"); err != nil {
+			t.Fatalf("forced removal error: %v", err)
+		}
+		if state.FindTaskIndex("task-1") != -1 || len(state.HumanNotes) != 1 {
+			t.Fatalf("task-1 index %d, notes %d", state.FindTaskIndex("task-1"), len(state.HumanNotes))
+		}
+	})
+
+	t.Run("agent on another task stays", func(t *testing.T) {
+		t.Parallel()
+		state := build()
+		agentID, other := "coder-1", "task-2"
+		state.Tasks[0].AssignedTo = &agentID
+		state.Agents[agentID] = models.Agent{Role: "coder", Status: models.AgentStatusWorking, CurrentTask: &other}
+		if err := removeTaskInState(state, "task-1", true, "r"); err != nil {
+			t.Fatalf("removal error: %v", err)
+		}
+		agent := state.Agents[agentID]
+		if agent.CurrentTask == nil || *agent.CurrentTask != other || agent.Status != models.AgentStatusWorking {
+			t.Fatalf("agent released from another task: %+v", agent)
+		}
+	})
 }
