@@ -8,8 +8,6 @@ var areaA3 = Area{
 		{Package: "internal/ops", Layer: layerApplication},
 	},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/mode_change.go", Func: "resume"}, Ceiling: 148},
-	},
-	S2: []S2Entry{},
+	Ratchet:   []RatchetEntry{},
+	S2:        []S2Entry{},
 }
