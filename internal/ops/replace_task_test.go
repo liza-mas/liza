@@ -1017,3 +1017,59 @@ func TestReplaceTask_SamePairReplacementKeepsParentLineage(t *testing.T) {
 		})
 	}
 }
+
+// TestReplaceTask_LifecycleDecisionsOfMovedSteps pins the wire spelling of the
+// safe action and effects the admission and replay steps decide, with literal
+// expectations independent of the typed constants the code now uses.
+func TestReplaceTask_LifecycleDecisionsOfMovedSteps(t *testing.T) {
+	t.Parallel()
+	t.Run("completion audit unavailable requeries", func(t *testing.T) {
+		t.Parallel()
+		f := newReplacementFixture(t)
+		if _, err := f.run(); err != nil {
+			t.Fatal(err)
+		}
+		s := replacementState(t, f)
+		source := s.FindTask("source")
+		for i, h := range source.History {
+			if h.Event == models.TaskEventReplacementCommitted {
+				delete(source.History[i].Extra, "source_new_transition_id")
+			}
+		}
+		testhelpers.WriteInitialState(t, f.statePath, s)
+		before := replacementBytes(t, f.statePath)
+		_, err := f.run()
+		requireLifecycleError(t, err, models.LifecycleStateChanged, "requery", "none")
+		if !strings.Contains(err.Error(), "replacement completion audit is unavailable") {
+			t.Fatalf("error: %v", err)
+		}
+		if !bytes.Equal(before, replacementBytes(t, f.statePath)) {
+			t.Fatal("unavailable audit wrote state")
+		}
+	})
+	t.Run("ineligible source stops without effects", func(t *testing.T) {
+		t.Parallel()
+		f := newReplacementFixture(t)
+		s := replacementState(t, f)
+		s.Tasks[0] = testhelpers.BuildTaskByStatus("source", models.TaskStatusMerged, time.Now().UTC())
+		testhelpers.WriteInitialState(t, f.statePath, s)
+		f.opts.ExpectedTransition = models.TaskTransitionID(s.FindTask("source"))
+		before := replacementBytes(t, f.statePath)
+		_, err := f.run()
+		requireLifecycleError(t, err, models.LifecycleAlreadyTransitioned, "stop", "none")
+		if !bytes.Equal(before, replacementBytes(t, f.statePath)) {
+			t.Fatal("ineligible source wrote state")
+		}
+	})
+	t.Run("invalid preserved base asks for corrected input", func(t *testing.T) {
+		t.Parallel()
+		f := newReplacementFixture(t)
+		f.input.PreservedBase = &PreservedTaskBase{BaseCommit: "HEAD", Worktree: "elsewhere"}
+		before := replacementBytes(t, f.statePath)
+		_, err := f.run()
+		requireLifecycleError(t, err, models.LifecycleInvalidInput, "correct_input", "none")
+		if !bytes.Equal(before, replacementBytes(t, f.statePath)) {
+			t.Fatal("invalid preserved base wrote state")
+		}
+	})
+}
