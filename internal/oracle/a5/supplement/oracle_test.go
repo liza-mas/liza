@@ -42,8 +42,9 @@ type step struct {
 }
 
 type recipeStep struct {
-	Label string            `json:"label"`
-	Files map[string]string `json:"files"`
+	Label  string            `json:"label"`
+	Files  map[string]string `json:"files"`
+	Remove []string          `json:"remove,omitempty"`
 }
 
 type caseInput struct {
@@ -62,7 +63,9 @@ type caseInput struct {
 // SA*: a submit refused by loadDeclaredAcceptanceInput (allocation review).
 // VR*: a validation preflight refused or recorded by prepareValidationPreflight.
 var inventory = map[string]string{
-	"SA1": "json human state", "SA2": "json human state", "SA3": "json human state",
+	"SA1": "json human state", "SA2": "json human state", "SA3": "json human state", "SA4": "json human state",
+	"SA5": "json human state", "SA6": "json human state", "SA7": "json human state", "SA8": "json human state",
+	"SA9": "json human state", "SA10": "json human state",
 	"VR1": "state", "VR2": "state alerts", "VR3": "state alerts", "VR4": "state alerts",
 	"VR5": "state alerts", "VR6": "state alerts",
 }

@@ -58,6 +58,9 @@ func materialise(t *testing.T, c caseInput) *fixture {
 		}
 		sort.Strings(paths)
 		f.git(t, f.project, append([]string{"add"}, paths...)...)
+		if len(r.Remove) > 0 {
+			f.git(t, f.project, append([]string{"rm", "-q", "--"}, r.Remove...)...)
+		}
 		f.git(t, f.project, "commit", "--allow-empty", "-m", r.Label)
 		if r.Label != "" {
 			f.labels[r.Label] = f.git(t, f.project, "rev-parse", "HEAD")
