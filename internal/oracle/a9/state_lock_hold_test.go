@@ -22,7 +22,7 @@ import (
 //     hold; a second poll over the unchanged refusal writes nothing.
 func TestOracleA9StateLockHoldRecovery(t *testing.T) {
 	t.Run("recovered", func(t *testing.T) {
-		p := newScenario(t, "state-lock-hold-recovered")
+		p := newStateScenario(t, "state-lock-hold-recovered")
 		count, err := recoverStateLockHolds(context.Background(), p)
 		if err != nil || count != 1 {
 			t.Fatalf("state lock hold recovery: count %d, error %v; want 1 continuation", count, err)
@@ -40,7 +40,7 @@ func TestOracleA9StateLockHoldRecovery(t *testing.T) {
 		p.check(t, invocation{code: 0, stdout: fmt.Sprintf("recovered %d\n", count)})
 	})
 	t.Run("refused", func(t *testing.T) {
-		p := newScenario(t, "state-lock-hold-refused")
+		p := newStateScenario(t, "state-lock-hold-refused")
 		count, err := recoverStateLockHolds(context.Background(), p)
 		if err != nil || count != 0 {
 			t.Fatalf("state lock hold refusal: count %d, error %v; want 0 continuations", count, err)

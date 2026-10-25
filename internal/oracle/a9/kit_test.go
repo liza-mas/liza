@@ -28,11 +28,13 @@ var scenarioExtras = []string{
 
 type scenario struct {
 	name, root, dir, home, tmp, bin, recordDir, cli, named string
-	env                                                    []string
-	before                                                 []byte
-	beforeFiles                                            map[string][]byte
-	beforeListing                                          []byte
-	recipeSHAs                                             []string
+	// gitBin is the Git used for setup when the scenario has no bin directory.
+	gitBin        string
+	env           []string
+	before        []byte
+	beforeFiles   map[string][]byte
+	beforeListing []byte
+	recipeSHAs    []string
 }
 type invocation struct {
 	code           int
@@ -166,6 +168,20 @@ func newScenario(t *testing.T, name string) *scenario {
 	if err != nil {
 		t.Fatal(err)
 	}
+	p.seed(t, name)
+	var script stubScript
+	if err := readJSON(filepath.Join("testdata", "fixtures", name, "stub.json"), &script); err != nil {
+		t.Fatal("A9 setup: scenario stub script unavailable")
+	}
+	p.installStub(t, script)
+	p.snapshotBefore(t)
+	return p
+}
+
+// seed creates the scenario's Git repository from the recipe and writes its
+// pipeline and state fixtures.
+func (p *scenario) seed(t *testing.T, name string) {
+	t.Helper()
 	var recipe gitRecipe
 	if err := readJSON("testdata/fixtures/common/recipe.json", &recipe); err != nil {
 		t.Fatal("A9 setup: recipe unavailable")
@@ -200,15 +216,15 @@ func newScenario(t *testing.T, name string) *scenario {
 	state = bytes.ReplaceAll(state, []byte("<live-pid>"), []byte(fmt.Sprint(os.Getpid())))
 	state = bytes.ReplaceAll(state, []byte("<base-sha>"), []byte(sha))
 	p.write(t, ".liza/state.yaml", state)
-	var script stubScript
-	if err := readJSON(filepath.Join("testdata", "fixtures", name, "stub.json"), &script); err != nil {
-		t.Fatal("A9 setup: scenario stub script unavailable")
-	}
-	p.installStub(t, script)
+}
+
+// snapshotBefore records the state, runtime files and listing the goldens are
+// compared against.
+func (p *scenario) snapshotBefore(t *testing.T) {
+	t.Helper()
 	p.before = p.state(t)
 	p.beforeFiles = p.runtimeFiles(t)
 	p.beforeListing = p.listing(t)
-	return p
 }
 
 func verifyRecipeSHA(recipe gitRecipe, actual string) error {
@@ -268,7 +284,11 @@ func (p *scenario) run(t testing.TB, args ...string) invocation {
 }
 func (p *scenario) git(t testing.TB, args ...string) string {
 	t.Helper()
-	r := p.execute(t, filepath.Join(p.bin, "git"), args...)
+	bin := p.gitBin
+	if bin == "" {
+		bin = filepath.Join(p.bin, "git")
+	}
+	r := p.execute(t, bin, args...)
 	if r.code != 0 {
 		t.Fatalf("A9 %s setup: git %s exit %d: %s", p.name, args[0], r.code, r.stderr)
 	}
