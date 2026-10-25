@@ -313,7 +313,8 @@ commits only, see Observed revision); the record is not re-pinned to it.
 
 ## G8 — dispatched CI result (D52/D59): Linux, Windows and macOS
 
-Status: **pending (held for the maintainer)**. G1–G7 pass at `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`.
+Status: **GREEN** (maintainer ruling, 2026-10-25T07:07:58Z; see "G8 result" below). G1–G7 pass at
+`3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`.
 
 - **Superseded, red:** run <https://github.com/liza-mas/liza/actions/runs/40162651273> (workflow_dispatch of
   `ci.yml` on `g8/a2-b3356c3`, headSha `b3356c3c62742eebd20cfcaa3b36d6c66172c149`, completed 2026-10-25T04:51:37Z),
@@ -324,15 +325,58 @@ Status: **pending (held for the maintainer)**. G1–G7 pass at `3ffd032fcb24b9b9
   (`TestExecutionDeadlineMarkerPastItsDeadlineWithLiveProcessIsInterrupted`, passed in the A1 G8 run), none in A2
   code. This run is **not** G8 evidence for this boundary and is kept here, not deleted. The A3 portability
   correction (`de5c259cd`, `7ea9d342d`, `3ffd032fc`) merged afterwards; this refresh re-pins to its last commit.
-- **Early signal (not G8 unless the operator says so):** run
-  <https://github.com/liza-mas/liza/actions/runs/40168040686> at `3ffd032fc`, in progress when the operator
-  released this task. It qualifies only if its SHA equals `3ffd032fc…` above and every job is green.
+- **Early signal, not G8:** run <https://github.com/liza-mas/liza/actions/runs/40168040686>, a dispatch on
+  `global-refactoring` when its head was `3ffd032fc`. Attempt 1 failed in Windows rest-1
+  (`internal/agent` `TestHeartbeatRenewsReviewLease`) and in Linux tests (`internal/oracle/a9`
+  `TestOracleA9SignalMatch` i21, "a started process outlived the test"); both are pre-existing intermittent tests
+  whose code is unchanged on the branch. Whether failed-jobs reruns of that run can satisfy D52 was escalated to the
+  human (D60, below); the run below, not this one, is the G8 evidence.
 - **Requested from the maintainer** (D52/D59): a `workflow_dispatch` of `.github/workflows/ci.yml` on a branch
   pointing at exactly `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5` (not the moving `global-refactoring` head), with
   each job's conclusion for Linux, Windows (including the windows-tagged A2 tests such as
   `internal/procscan/kill_windows_test.go`) and macOS (under D52 the dispatch itself runs macOS, so no separate
-  main-push follow-up and no pull request). This record does not claim G8 before the run's jobs complete. A red job
-  holds A2 closure and the run close; the maintainer commissions the fix task. To be appended on resume: run URL,
-  tested full SHA, each job's name and conclusion, UTC observation, maintainer ruling. If integration moves to
-  different A2 code before the run, the affected G1–G7 are refreshed at that revision and the old/new distinction
-  is kept here.
+  main-push follow-up and no pull request).
+
+### G8 result (maintainer, reported by the operator 2026-10-25T07:07:58Z; D52 + D59 + D60)
+
+Verdict: **GREEN.** The human decided D60 ("option 1", decision record commit `c7504560c`); the maintainer
+confirmation was given under the standing auto-approve delegation. The run meets every D52/D59/D60 condition: a
+`workflow_dispatch` of `.github/workflows/ci.yml` on the pinned ref `g8/a2-3ffd032`, whose tested SHA equals this
+record's integration SHA, with every job green after 2 attempts.
+
+- Run: <https://github.com/liza-mas/liza/actions/runs/40169821321>; event `workflow_dispatch`; ref `g8/a2-3ffd032`
+  (D59: `global-refactoring` had moved past the boundary SHA); no pull request (D52).
+- Tested SHA: `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5` (equals the integration revision of G1–G7).
+- Run conclusion: success after attempt 2. Created 2026-10-25T06:38:43Z; last updated 2026-10-25T06:59:34Z.
+- Final job conclusions (completedAt, UTC):
+
+  | Job | Conclusion | Completed |
+  |---|---|---|
+  | Shared CI / Linux tests | success | 06:51:15Z |
+  | Shared CI / Linux lint and build | success | 06:40:58Z |
+  | Shared CI / macOS compatibility | success | 06:49:08Z |
+  | Test (windows) | success | 06:59:33Z |
+  | Windows shard ops-1 | success | 06:43:42Z |
+  | Windows shard ops-2 | success | 06:42:03Z |
+  | Windows shard ops-3 | success | 06:42:26Z |
+  | Windows shard ops-4 | success | 06:44:41Z |
+  | Windows shard rest-1 | success on attempt 2 | 06:59:05Z |
+  | Windows shard rest-2 | success | 06:44:22Z |
+  | Windows shard rest-3 | success | 06:46:33Z |
+  | Release verified tag | skipped (tag-only job) | |
+
+- macOS follow-up: under D52 the dispatch itself runs macOS (`ci-core.yml`: every non-`pull_request` event), so the
+  macOS job above is the follow-up result; owner: the maintainer; status: success. No separate main-push job exists
+  or is claimed.
+- Attempt 1 failure (D60 evidence): Windows rest-1, `internal/agent` `TestHeartbeatConcurrency`
+  (`heartbeat_test.go:404`, "heartbeat not updated", a wall-clock window). `internal/agent/heartbeat.go` and
+  `heartbeat_test.go` are unchanged on the branch (the operator's diff of both is empty). Attempt 2 reran only
+  rest-1 and it passed. This is recorded as an intermittent timing test, not as an A2 defect; no code was
+  changed for it.
+- Superseded: run 40162651273 at `b3356c3c6` (red, A3 oracle portability; fixed by `de5c259cd`/`7ea9d342d`/
+  `3ffd032fc`), kept above.
+- The windows-tagged A2 tests such as `internal/procscan/kill_windows_test.go` ran inside the Windows shards of this
+  run; the operator reported shard conclusions only, not per-test output, so no per-test claim is made here.
+
+G1–G8 pass; A2 closes at `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`. Observed 2026-10-25T07:07:58Z (operator
+report); recorded by `arm-1-ar-12-cp-0-code-0`.
