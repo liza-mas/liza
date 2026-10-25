@@ -92,7 +92,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Dual Contract Delivery Paths](#dual-contract-delivery-paths)
   - [Kill Switch Granularity](#kill-switch-granularity)
 - [Structural Debt](#structural-debt)
-  - [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc)
   - [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc)
   - [Duplicate Initialization Implementations](#duplicate-initialization-implementations)
   - [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners)
@@ -168,7 +167,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 | **low** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
-| **medium** | STRUCTURAL DEBT | [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) |
 | **medium** | STRUCTURAL DEBT | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) |
 | **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — mitigated, open |
 | **medium** | STRUCTURAL DEBT | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) |
@@ -179,7 +177,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 34 medium, 16 low — 67 open issues total. *(2026-10-25: the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 33 medium, 16 low — 66 open issues total. *(2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -1204,18 +1202,6 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 File sizes in issue titles retain the original assessment values to preserve existing anchors. The 2026-09-06 measurements are: `proceed.go` 1,563 lines, `commands/init.go` 1,418, `supervisor.go` 1,131, `watch.go` 1,407, and `embedded.go` 1,635. Function sizes and rankings below are historical 2026-07-24 measurements, not a fresh function-level assessment.
 
-### Decompose proceed.go (1,500 LOC)
-
-**Skill:** code-quality-assessment
-**Category:** RECOMMENDATION (P1 — reassessed 2026-07-24)
-**Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#11-decompose-internalopsproceedgo)
-
-**Issue:** `internal/ops/proceed.go` reached 1,500 LOC, up from 1,200 at the 2026-04-13 assessment and 816 at the 2026-03-24 assessment. It spans transition execution, many-to-one cohort management, phase-gate dependency propagation, topo-sorted execution with SCC cycle detection, crash recovery, and child task construction. `ExecuteAvailableTransitions` is 218 LOC and `recoverCrashedTransition` is 183 LOC.
-
-**Implication:** Navigability, reviewability, and testability degrade as feature work continues to interleave otherwise distinct lifecycle responsibilities. Two consecutive reassessments show that the debt is compounding rather than remaining stable.
-
-**Direction:** Extract by responsibility cluster: transition execution, cohort management, child construction, graph algorithms, crash recovery, and the available-transitions engine. Each cluster has clear boundaries already. After structural decomposition, evaluate design-level improvements (P3.4).
-
 ### Decompose init.go (1,268 LOC)
 
 **Skill:** code-quality-assessment
@@ -1336,6 +1322,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-08-20:** [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated).
 - **2026-09-20:** [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) — help alignment and regression coverage (`43dacebcfd2e61d37456f5104690999202388c95`).
 - **2026-10-25:** [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) — concern-file split with an unchanged exported API (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`).
+- **2026-10-25:** [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) — responsibility-cluster split within the S1 limits and an unchanged exported A4 surface (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`).
 
 ---
 
@@ -1363,10 +1350,19 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated) | FEEDBACK | 2026-08-20 — ADR-0113; `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace`; merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d` |
 | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) | FRAGILITY | 2026-09-20 — CLI help requires `spec_ref`; `TestMutationCommandWiring` pins required and optional fields (`43dacebcfd2e61d37456f5104690999202388c95`) |
 | [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) | STRUCTURAL DEBT | 2026-10-25 — `embedded.go` split into artifact-family files with the 38 exported declarations unchanged (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`); A2 boundary record `specs/architecture/consolidation-run/boundary-a2.md` |
+| [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) | STRUCTURAL DEBT | 2026-10-25 — `proceed.go` split into transition entry plus child, cohort, inherited-dependency, pass and recovery concern files, 638 lines against 2,052 at the starting commit, longest function 53 lines (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`); A4 boundary record `specs/architecture/consolidation-run/boundary-a4.md` |
 
 ---
 
 ## Fix Details
+
+### Decompose proceed.go (1,500 LOC)
+
+**Resolution:** `1faa264af5075eae64863726949b1568a20c8008` (`refactor(ops): separate transition child generation, cohort resolution and crash recovery`) and `5ebceec54b284cf1b1e677d963df48f315bae485` (`refactor(ops): separate transition entry from pass collection, ordering and reporting`), both merged by `4e55d734a` (Merge arm-1-ar-13-cp-3-code-0), replaced the 2,052-line `internal/ops/proceed.go` (the file had grown beyond the 1,500 LOC in the title) with a 638-line file holding transition entry, admission, definition resolution and the available-transitions entries, and concern files for child construction (`transition_children.go`), the many-to-one cohort (`transition_cohort.go`), phase-gate dependency propagation (`transition_inherited_deps.go`), pass collection, topological ordering and SCC cycle detection (`transition_pass.go`) and crash recovery (`transition_recovery.go`). These are the six responsibility clusters the Direction named. `9600d2f0fad2e336c123937f765cdbc144924431` later adopted the typed vocabulary in them.
+
+**Evidence:** Measured with `go/parser` at integration `1e7807b0688691feef5369ff8d06953cfc8c174e`: `proceed.go` 638 lines; longest function in the six files 89 lines (`topoSortPending`); `ExecuteAvailableTransitions` 10 lines (218 when the issue was written) and `recoverCrashedTransition` 15 lines (183). The A4 ratchet is empty (`TestAreaA4RatchetIsEmpty`) and the 181 exported A4 declarations are unchanged from the starting commit `96c9ad69aee983ce2b929dd681b6ba43bf920535` (`a4-closure-readiness.md`). A4 boundary record `specs/architecture/consolidation-run/boundary-a4.md`.
+
+**Related:** The Direction's closing step, evaluating design-level improvements (P3.4) after the structural decomposition, is a recommendation for future work, not part of this closure. [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) stays open.
 
 ### Split embedded.go by Artifact Family (1,530 LOC)
 
