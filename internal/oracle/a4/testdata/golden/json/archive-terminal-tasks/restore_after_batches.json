@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "batches": 0,
+      "bytes": "<BYTES>",
+      "restored": [
+        "m1",
+        "m2",
+        "m3"
+      ]
+    }
+  }
+}

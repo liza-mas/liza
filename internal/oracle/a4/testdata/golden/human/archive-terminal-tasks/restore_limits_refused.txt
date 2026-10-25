@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: --restore-inline cannot be combined with batch limits
