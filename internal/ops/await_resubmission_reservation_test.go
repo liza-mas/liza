@@ -117,7 +117,7 @@ func requireOwnershipLost(t *testing.T, result *AwaitResubmissionResult, err err
 	if err != nil {
 		t.Fatalf("await error = %v, want final ABORTED", err)
 	}
-	if result == nil || result.Verdict != ResubmissionAborted {
+	if result == nil || result.Verdict != string(ResubmissionAborted) {
 		t.Fatalf("result = %+v, want final ABORTED (never a retryable TIMEOUT)", result)
 	}
 }
@@ -223,7 +223,7 @@ func TestAwaitResubmission_TerminalReleaseKeepsOutcome(t *testing.T) {
 	}
 
 	result, err := wait.finish()
-	if err != nil || result.Verdict != ResubmissionTerminal || result.TaskStatus != models.TaskStatusBlocked {
+	if err != nil || result.Verdict != string(ResubmissionTerminal) || result.TaskStatus != models.TaskStatusBlocked {
 		t.Fatalf("blocked wait = %+v, %v; want TERMINAL on BLOCKED", result, err)
 	}
 }
@@ -350,7 +350,7 @@ func TestAwaitResubmission_ReservationSurvivesHeartbeatAndDoerActivity(t *testin
 	}
 
 	result, err := wait.finish()
-	if err != nil || result.Verdict != ResubmissionResubmitted {
+	if err != nil || result.Verdict != string(ResubmissionResubmitted) {
 		t.Fatalf("legitimate wait = %+v, %v; want RESUBMITTED", result, err)
 	}
 	requireSameAgentClaimIntact(t, bb)
@@ -472,7 +472,7 @@ func TestD42RetainedReviewReservationSafety(t *testing.T) {
 			authority := reservationAuthority(t, bb)
 			opts := AwaitResubmissionOptions{PollOnTimeout: true, AbortPollInterval: time.Millisecond}
 			result, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority, 20*time.Millisecond, opts)
-			if err != nil || result.Verdict != ResubmissionPoll {
+			if err != nil || result.Verdict != string(ResubmissionPoll) {
 				t.Fatalf("first interval = %+v, %v; want retained POLL", result, err)
 			}
 			ctx, cancel := context.WithCancel(context.Background())
@@ -531,11 +531,11 @@ func TestD42RetainedReviewReservationSafety(t *testing.T) {
 					t.Fatalf("cancelled retry error = %v", err)
 				}
 			default:
-				want := ResubmissionTimeout
+				want := string(ResubmissionTimeout)
 				if exit == "paused" {
-					want = ResubmissionPaused
+					want = string(ResubmissionPaused)
 				} else if exit == "stopped" {
-					want = ResubmissionAborted
+					want = string(ResubmissionAborted)
 				}
 				if err != nil || result.Verdict != want {
 					t.Fatalf("retry = %+v, %v; want %s", result, err, want)
@@ -561,7 +561,7 @@ func TestD42PausedRetainedCleanupCannotReleaseLaterClaim(t *testing.T) {
 	authority := reservationAuthority(t, bb)
 	result, err := AwaitResubmissionWithAuthorityOptions(context.Background(), root, "task-1", *authority,
 		20*time.Millisecond, AwaitResubmissionOptions{PollOnTimeout: true})
-	if err != nil || result.Verdict != ResubmissionPoll {
+	if err != nil || result.Verdict != string(ResubmissionPoll) {
 		t.Fatalf("first interval = %+v, %v; want POLL", result, err)
 	}
 	if err := bb.Modify(func(s *models.State) error { s.Config.Mode = models.SystemModePaused; return nil }); err != nil {

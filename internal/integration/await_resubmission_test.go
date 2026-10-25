@@ -139,8 +139,8 @@ func TestAwaitResubmission_RejectResubmitFlow(t *testing.T) {
 
 	// --- Phase 5: Verify AwaitResubmission returns RESUBMITTED ---
 	awaitResult := receiveAwaitResubmission(t, awaitCall, 10*time.Second)
-	if awaitResult.Verdict != ops.ResubmissionResubmitted {
-		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, ops.ResubmissionResubmitted)
+	if awaitResult.Verdict != string(ops.ResubmissionResubmitted) {
+		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, string(ops.ResubmissionResubmitted))
 	}
 	if awaitResult.ReviewCommit == "" {
 		t.Error("Expected non-empty ReviewCommit on resubmission")
@@ -207,8 +207,8 @@ func TestAwaitResubmission_TerminalFlow(t *testing.T) {
 	}
 
 	result := receiveAwaitResubmission(t, awaitCall, 10*time.Second)
-	if result.Verdict != ops.ResubmissionTerminal {
-		t.Fatalf("Verdict = %q, want %q", result.Verdict, ops.ResubmissionTerminal)
+	if result.Verdict != string(ops.ResubmissionTerminal) {
+		t.Fatalf("Verdict = %q, want %q", result.Verdict, string(ops.ResubmissionTerminal))
 	}
 	if result.TaskStatus != models.TaskStatusBlocked {
 		t.Fatalf("Task status = %q, want %q", result.TaskStatus, models.TaskStatusBlocked)

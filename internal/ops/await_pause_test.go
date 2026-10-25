@@ -174,7 +174,7 @@ func TestD42EarlyResubmissionPauseBeforeAndAfterPreflight(t *testing.T) {
 				armBeforeReclaim(t, pause)
 			}
 			result, err := AwaitResubmissionWithAuthority(context.Background(), f.root, "task-1", authority, time.Second)
-			if err != nil || result.Verdict != ResubmissionPaused || result.SafeAction != string(SafeActionStop) ||
+			if err != nil || result.Verdict != string(ResubmissionPaused) || result.SafeAction != string(SafeActionStop) ||
 				!strings.Contains(result.Reason, brand.Command("resume")) {
 				t.Fatalf("early reclaim = %+v, %v; want PAUSED/stop/resume", result, err)
 			}

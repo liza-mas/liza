@@ -44,7 +44,7 @@ func TestD42ResubmissionPollRetainsReviewOwnership(t *testing.T) {
 		boundedAwaitReviewerID, "code-reviewer", models.AgentStatusIdle, models.TaskEventRejected)
 	result, err := awaitResubmissionWithInterval(fixture.projectRoot, boundedAwaitTaskID,
 		boundedAwaitReviewerID, 2*time.Second, 20*time.Millisecond)
-	if err != nil || result.Verdict != ops.ResubmissionPoll {
+	if err != nil || result.Verdict != string(ops.ResubmissionPoll) {
 		t.Fatalf("await = %+v, %v; want POLL", result, err)
 	}
 	state, err := fixture.bb.Read()
@@ -60,7 +60,7 @@ func TestD42ResubmissionPollRetainsReviewOwnership(t *testing.T) {
 	// The final expiry is different from POLL and still releases ownership.
 	result, err = awaitResubmissionWithInterval(fixture.projectRoot, boundedAwaitTaskID,
 		boundedAwaitReviewerID, 0, 20*time.Millisecond)
-	if err != nil || result.Verdict != ops.ResubmissionTimeout {
+	if err != nil || result.Verdict != string(ops.ResubmissionTimeout) {
 		t.Fatalf("exhausted await = %+v, %v; want TIMEOUT", result, err)
 	}
 	assertBoundedAwaitOwnershipReleased(t, fixture, true)
@@ -93,7 +93,7 @@ func TestD42SubmissionPreparationSurvivesPollRetry(t *testing.T) {
 	for round := range 2 {
 		result, err := awaitResubmissionWithInterval(fixture.projectRoot, boundedAwaitTaskID,
 			boundedAwaitReviewerID, 2*time.Second, 20*time.Millisecond)
-		if err != nil || result.Verdict != ops.ResubmissionPoll {
+		if err != nil || result.Verdict != string(ops.ResubmissionPoll) {
 			t.Fatalf("round %d await = %+v, %v; want POLL", round, result, err)
 		}
 		state, err := fixture.bb.Read()
@@ -141,9 +141,9 @@ func TestD42AuthenticatedResubmissionIntervalAndCleanupPolicy(t *testing.T) {
 				if interval <= 0 || interval > tc.cap || (tc.poll && interval != tc.cap) {
 					t.Fatalf("interval = %s, want cap %s within the remaining budget", interval, tc.cap)
 				}
-				verdict := ops.ResubmissionTimeout
+				verdict := string(ops.ResubmissionTimeout)
 				if opts.PollOnTimeout {
-					verdict = ops.ResubmissionPoll
+					verdict = string(ops.ResubmissionPoll)
 				}
 				return &ops.AwaitResubmissionResult{Verdict: verdict}, nil
 			}
@@ -153,10 +153,10 @@ func TestD42AuthenticatedResubmissionIntervalAndCleanupPolicy(t *testing.T) {
 				t.Fatalf("await = %+v, %v", result, err)
 			}
 			if tc.poll {
-				if result.Verdict != ops.ResubmissionPoll || result.TimeoutSeconds <= 0 {
+				if result.Verdict != string(ops.ResubmissionPoll) || result.TimeoutSeconds <= 0 {
 					t.Fatalf("await = %+v; want POLL with remaining budget", result)
 				}
-			} else if result.Verdict != ops.ResubmissionTimeout || result.TimeoutSeconds != 0 {
+			} else if result.Verdict != string(ops.ResubmissionTimeout) || result.TimeoutSeconds != 0 {
 				t.Fatalf("await = %+v; want final TIMEOUT", result)
 			}
 		})

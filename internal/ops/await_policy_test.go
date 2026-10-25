@@ -201,12 +201,12 @@ func TestAwaitPollingPolicyRoutes(t *testing.T) {
 				}
 				want := string(VerdictPaused)
 				if caller == "reviewer" {
-					want = ResubmissionPaused
+					want = string(ResubmissionPaused)
 				}
 				if route == "deadline" {
 					want = string(VerdictTimeout)
 					if caller == "reviewer" {
-						want = ResubmissionTimeout
+						want = string(ResubmissionTimeout)
 					}
 				}
 				// The deadline performs a fresh pause check. With a 60s cadence,

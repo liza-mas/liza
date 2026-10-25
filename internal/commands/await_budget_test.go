@@ -97,7 +97,7 @@ func TestAwaitVerdictWithBudget_DecreasesUntilExhausted(t *testing.T) {
 
 func TestAwaitResubmissionWithBudget_DecreasesUntilExhausted(t *testing.T) {
 	remaining := 250 * time.Second
-	wantVerdicts := []string{ops.ResubmissionPoll, ops.ResubmissionPoll, ops.ResubmissionTimeout}
+	wantVerdicts := []string{string(ops.ResubmissionPoll), string(ops.ResubmissionPoll), string(ops.ResubmissionTimeout)}
 	wantRemaining := []int{150, 50, 0}
 	wantIntervals := []time.Duration{100 * time.Second, 100 * time.Second, 50 * time.Second}
 
@@ -105,7 +105,7 @@ func TestAwaitResubmissionWithBudget_DecreasesUntilExhausted(t *testing.T) {
 		var gotInterval time.Duration
 		result, err := awaitResubmissionWithBudget(remaining, 100*time.Second, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
 			gotInterval = interval
-			return &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionTimeout}, nil
+			return &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionTimeout)}, nil
 		})
 		if err != nil {
 			t.Fatalf("call %d: awaitResubmissionWithBudget error: %v", i+1, err)
@@ -140,13 +140,13 @@ func TestAwaitWithBudget_PreservesNonTimeoutOutcome(t *testing.T) {
 
 func TestAwaitResubmissionWithBudget_OmitsBudgetFromNonTimeoutOutcome(t *testing.T) {
 	result, err := awaitResubmissionWithBudget(250*time.Second, 100*time.Second, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
-		return &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionResubmitted}, nil
+		return &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionResubmitted)}, nil
 	})
 	if err != nil {
 		t.Fatalf("awaitResubmissionWithBudget error: %v", err)
 	}
-	if result.Verdict != ops.ResubmissionResubmitted {
-		t.Errorf("verdict = %q, want %q", result.Verdict, ops.ResubmissionResubmitted)
+	if result.Verdict != string(ops.ResubmissionResubmitted) {
+		t.Errorf("verdict = %q, want %q", result.Verdict, string(ops.ResubmissionResubmitted))
 	}
 	if result.TimeoutSeconds != 0 {
 		t.Errorf("timeout_seconds = %d, want 0 for non-POLL outcome", result.TimeoutSeconds)
@@ -159,12 +159,12 @@ func TestAwaitResubmissionWithBudget_OwnershipLossIsNotRetryable(t *testing.T) {
 	calls := 0
 	result, err := awaitResubmissionWithBudget(250*time.Second, 100*time.Second, func(interval time.Duration) (*ops.AwaitResubmissionResult, error) {
 		calls++
-		return &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionAborted, Reason: "review ownership lost"}, nil
+		return &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionAborted), Reason: "review ownership lost"}, nil
 	})
 	if err != nil {
 		t.Fatalf("awaitResubmissionWithBudget error: %v", err)
 	}
-	if calls != 1 || result.Verdict != ops.ResubmissionAborted || result.TimeoutSeconds != 0 {
+	if calls != 1 || result.Verdict != string(ops.ResubmissionAborted) || result.TimeoutSeconds != 0 {
 		t.Errorf("calls=%d verdict=%q timeout_seconds=%d, want one final ABORTED", calls, result.Verdict, result.TimeoutSeconds)
 	}
 }
@@ -207,9 +207,9 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 		t.Fatalf("AwaitVerdict result = (%q, %d), want (%q, 1)",
 			verdictResult.Verdict, verdictResult.TimeoutSeconds, string(ops.VerdictPoll))
 	}
-	if resubmissionResult.Verdict != ops.ResubmissionPoll || resubmissionResult.TimeoutSeconds != 1 {
+	if resubmissionResult.Verdict != string(ops.ResubmissionPoll) || resubmissionResult.TimeoutSeconds != 1 {
 		t.Fatalf("AwaitResubmission result = (%q, %d), want (%q, 1)",
-			resubmissionResult.Verdict, resubmissionResult.TimeoutSeconds, ops.ResubmissionPoll)
+			resubmissionResult.Verdict, resubmissionResult.TimeoutSeconds, string(ops.ResubmissionPoll))
 	}
 	assertBoundedAwaitOwnershipReleased(t, verdictFixture, false)
 	state, err := resubmissionFixture.bb.Read()
@@ -247,9 +247,9 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 		t.Fatalf("final AwaitVerdict result = (%q, %d), want (%q, 0)",
 			verdictResult.Verdict, verdictResult.TimeoutSeconds, string(ops.VerdictTimeout))
 	}
-	if resubmissionResult.Verdict != ops.ResubmissionTimeout || resubmissionResult.TimeoutSeconds != 0 {
+	if resubmissionResult.Verdict != string(ops.ResubmissionTimeout) || resubmissionResult.TimeoutSeconds != 0 {
 		t.Fatalf("final AwaitResubmission result = (%q, %d), want (%q, 0)",
-			resubmissionResult.Verdict, resubmissionResult.TimeoutSeconds, ops.ResubmissionTimeout)
+			resubmissionResult.Verdict, resubmissionResult.TimeoutSeconds, string(ops.ResubmissionTimeout))
 	}
 	assertBoundedAwaitOwnershipReleased(t, verdictFixture, false)
 	assertBoundedAwaitOwnershipReleased(t, resubmissionFixture, true)

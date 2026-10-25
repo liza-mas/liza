@@ -192,29 +192,29 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "json poll uses default remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionPoll, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionPoll), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          1700,
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.ResubmissionPoll,
+			wantJSONVerdict: string(ops.ResubmissionPoll),
 			wantJSONTimeout: 1700,
 		},
 		{
 			name: "json timeout uses caller remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--timeout-seconds", "80", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionTimeout, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionTimeout), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          0,
 			},
 			wantBudget:      80 * time.Second,
-			wantJSONVerdict: ops.ResubmissionTimeout,
+			wantJSONVerdict: string(ops.ResubmissionTimeout),
 			wantJSONTimeout: 0,
 		},
 		{
 			name: "human poll uses default remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionPoll, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionPoll), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          1700,
 			},
 			wantBudget:      1800 * time.Second,
@@ -224,7 +224,7 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "human timeout uses caller remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--timeout-seconds", "80"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionTimeout, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionTimeout), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          0,
 			},
 			wantBudget:      80 * time.Second,
@@ -234,23 +234,23 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "json immediate resubmission omits wait-only budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionResubmitted, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionResubmitted), TaskStatus: models.TaskStatusReadyForReview},
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.ResubmissionResubmitted,
+			wantJSONVerdict: string(ops.ResubmissionResubmitted),
 		},
 		{
 			name: "json paused resubmission has stop guidance",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
-			wantBudget: 1800 * time.Second, wantJSONVerdict: ops.ResubmissionPaused,
+				Verdict: string(ops.ResubmissionPaused), TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
+			wantBudget: 1800 * time.Second, wantJSONVerdict: string(ops.ResubmissionPaused),
 		},
 		{
 			name: "human paused resubmission has stop guidance",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
+				Verdict: string(ops.ResubmissionPaused), TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
 			wantBudget:      1800 * time.Second,
 			wantHumanOutput: "Verdict: PAUSED\nStatus: CODE_REJECTED\nReason: operator can resume\nSafe action: stop\n",
 		},
@@ -259,7 +259,7 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{
 				AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-					Verdict:      ops.ResubmissionResubmitted,
+					Verdict:      string(ops.ResubmissionResubmitted),
 					TaskStatus:   models.TaskStatusReadyForReview,
 					BaseCommit:   "base-commit",
 					ReviewCommit: "review-commit",
@@ -313,13 +313,13 @@ func assertAwaitJSONResult(t *testing.T, stdout, wantVerdict string, wantTimeout
 	if result["verdict"] != wantVerdict {
 		t.Errorf("verdict = %#v, want %q", result["verdict"], wantVerdict)
 	}
-	if wantVerdict == string(ops.VerdictPaused) || wantVerdict == ops.ResubmissionPaused {
+	if wantVerdict == string(ops.VerdictPaused) || wantVerdict == string(ops.ResubmissionPaused) {
 		if result["safe_action"] != string(ops.SafeActionStop) || !strings.Contains(fmt.Sprint(result["reason"]), "resume") {
 			t.Error("PAUSED JSON result omitted stop/resume guidance")
 		}
 	}
 	gotTimeout, hasTimeout := result["timeout_seconds"]
-	if wantVerdict == string(ops.VerdictPoll) || wantVerdict == ops.ResubmissionPoll {
+	if wantVerdict == string(ops.VerdictPoll) || wantVerdict == string(ops.ResubmissionPoll) {
 		if !hasTimeout || gotTimeout != wantTimeout {
 			t.Errorf("timeout_seconds = %#v, want %v", gotTimeout, wantTimeout)
 		}

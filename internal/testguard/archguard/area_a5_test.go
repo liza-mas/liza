@@ -7,9 +7,6 @@ var areaA5 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/await_resubmission.go"}, Ceiling: 834},
-		{Key: Key{File: "internal/ops/await_resubmission.go", Func: "awaitResubmissionWithOptions"}, Ceiling: 214},
-		{Key: Key{File: "internal/ops/await_resubmission.go", Func: "reclaimForReview"}, Ceiling: 124},
 		{Key: Key{File: "internal/ops/claim_reviewer_task.go"}, Ceiling: 825},
 		{Key: Key{File: "internal/ops/claim_reviewer_task.go", Func: "claimReviewerTask"}, Ceiling: 383},
 		{Key: Key{File: "internal/ops/clear_stale_review_claims.go", Func: "ClearStaleReviewClaims"}, Ceiling: 110},
