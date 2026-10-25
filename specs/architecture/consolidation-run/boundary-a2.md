@@ -29,9 +29,17 @@ the acceptance manifest are written besides this record.
   `internal/oracle/a3/**`, `cmd/liza/lifecycle.go`, `internal/testguard/archguard/area_a3_test.go`, one test in
   `internal/commands`, `INVARIANTS.md`, plans/acceptance/decision records). Source inspections of G1–G3 and G6 hold
   by that identity; C0–C4 and G5 were re-executed at `3ffd032fc` (old results kept only as marked below).
-  The task worktree `HEAD` is `3ffd032fc` plus the commits that add this record, the registry edit and the
-  acceptance manifest; those commits are documentation/manifest only (`git diff --stat 3ffd032fc HEAD` lists
-  the three owned paths).
+  **Boundary proof versus submission base.** G1–G8 are proved at `3ffd032fc` (D59). The task submission is a
+  different, later revision: the task worktree was rebased onto `global-refactoring` at `c7504560c` (which includes
+  the A3-lane merges after `3ffd032fc` and decision records), and this task adds three commits on top of it that
+  change only this record, `architectural-issues.md` and the acceptance manifest
+  (`git diff --stat c7504560c <submission>` lists those three paths). Whole-tree, `git diff --shortstat
+  3ffd032fc <submission>` reports 86 files, 2485 insertions, 383 deletions (A3-lane `internal/ops`,
+  `internal/agent` and oracle work, specs and acceptance files, plus this task's three paths). Bounded to the A2
+  proof surface, `git diff --stat 3ffd032fc <submission> -- <26 A2 package dirs> internal/testguard Makefile`
+  prints nothing, so A2 code, all guard data and the Makefile are byte-identical to the checked revision. The
+  submission-time canonical validation (receipt at the submission commit) therefore also covers the A3-lane
+  changes and supplements, but does not replace, the G4 runs at `3ffd032fc`.
 - Starting commit of the run (for A2 diffs): `96c9ad69aee983ce2b929dd681b6ba43bf920535`.
 - Inherited barrier (sequence): all 23 dependencies of this task are `MERGED` in `omni-ee get <id> --json`
   (observed 2026-10-25T04:20Z): `deferred-validation-2-1-correction-plan-code-0` (D41 repair), A1 boundary
@@ -307,9 +315,11 @@ for G1–G6 alike, with the superseded `b3356c3c62742eebd20cfcaa3b36d6c66172c149
 UTC observations, exit codes and excerpts for G1–G6 above, and the G8 section below. Manifest:
 `specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-0-boundary.json` (G4 mapped to the
 `Makefile` test target with `command_index` 1; every other obligation maps to its declared approved
-reference). The code revision did not change between the G1–G5 runs at `3ffd032fc` and the submission commit: only
-this record, the registry and the manifest differ. `global-refactoring` has since advanced to `f474104d2` (A3-lane
-commits only, see Observed revision); the record is not re-pinned to it.
+reference). The boundary proof (G1–G8) is pinned to `3ffd032fc`. The submission commit is a later revision: it
+sits on `global-refactoring` at `c7504560c`, which carries A3-lane changes made after `3ffd032fc` (whole-tree diff
+86 files, see Observed revision), plus this task's three owned paths. Over the 26 A2 package dirs, `internal/testguard`
+and `Makefile` the submission is byte-identical to `3ffd032fc`; outside them it is not. The record is not
+re-pinned to the later revision.
 
 ## G8 — dispatched CI result (D52/D59): Linux, Windows and macOS
 
