@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "provider cp-p max_outputs is 1; reserve-provider only tightens a cap, never raises it"
+    },
+    "ok": false,
+    "result": null
+  }
+}

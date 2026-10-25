@@ -1,0 +1,19 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "cancel-task",
+      "original_status": "DRAFT_CODING_PLAN",
+      "outcome": "COMPLETED",
+      "safe_action": "continue",
+      "task_id": "cp-p",
+      "task_status": "ABANDONED",
+      "transition_id": "<DIGEST 1>",
+      "warnings": null
+    }
+  }
+}

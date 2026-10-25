@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "provider_dependencies on cm-p code-plan-decompose selects code-planning-pair tasks, but deferring it to code-plan-to-coding would hold coding-pair tasks; only a wait between tasks of the same stage can be deferred"
+    },
+    "ok": false,
+    "result": null
+  }
+}

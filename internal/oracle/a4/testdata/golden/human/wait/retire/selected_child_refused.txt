@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: ABANDONED
+effects: none
+task_id: cp-p-code-0
+transition_id: <DIGEST 1>
+Error: cancel task: cancel-task: INVALID_INPUT (safe_action=correct_input): failed to cancel task: modification function failed: validation failed: cannot retire provider cp-p-code-0 while cx-1 descendant_dependencies has a live provider_dependencies declaration; replace or retire that consumer declaration first

@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+provider wait cp-p code-plan-to-coding deferred for cp-x to its outputs at code-plan-to-coding
+--- stderr

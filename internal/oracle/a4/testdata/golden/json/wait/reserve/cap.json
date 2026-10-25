@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "cap_changed": true,
+      "changed": true,
+      "provider_max_outputs": 2,
+      "provider_task": "cp-p",
+      "released": false,
+      "task_id": "t1",
+      "transition": "code-plan-to-coding"
+    }
+  }
+}
