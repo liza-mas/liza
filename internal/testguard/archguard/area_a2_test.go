@@ -34,8 +34,12 @@ var areaA2 = Area{
 		{Package: "internal/worktreeexclude", Layer: layerInfrastructure},
 	},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/toolchain/catalog.go", Func: "Catalog"}, Ceiling: 153},
+	Ratchet:   []RatchetEntry{},
+	S2: []S2Entry{
+		{
+			Key:       Key{File: "internal/toolchain/catalog.go", Func: "Catalog"},
+			Category:  S2Table,
+			Rationale: "declarative tool catalog: one literal entry per tool",
+		},
 	},
-	S2: []S2Entry{},
 }
