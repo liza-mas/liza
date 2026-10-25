@@ -13,6 +13,8 @@ import (
 
 const (
 	reviewBoundaryOperationAssignment = "review-assignment"
+	// reviewBoundaryPhase is the OperationalError.Phase of review-boundary validation.
+	reviewBoundaryPhase = "review-boundary"
 )
 
 // ReviewBoundaryRepairNeededError indicates submitted review metadata is stale
@@ -44,7 +46,7 @@ func reviewBaseOrphaned(g *gitpkg.Git, base, review, integration string) bool {
 // only the task's own commits onto integration, then record the boundary.
 func orphanedBaseRepairCommand(task *models.Task, integrationBranch string) string {
 	return fmt.Sprintf("git -C %s rebase --onto %s %s, then run %s",
-		optionalValue(task.Worktree), integrationBranch, optionalValue(task.BaseCommit), brand.Command("update-review-commit", task.ID))
+		optionalValue(task.Worktree), integrationBranch, optionalValue(task.BaseCommit), brand.Command(updateReviewCommitOperation, task.ID))
 }
 
 func (e *ReviewBoundaryRepairNeededError) Error() string {
@@ -82,8 +84,8 @@ func validateReviewBoundaryForAssignment(projectRoot string, state *models.State
 	expectedBase, err := g.GetMergeBase(*task.ReviewCommit, integrationBranch)
 	if err != nil {
 		return &OperationalError{
-			Code:    "git_operation",
-			Phase:   "review-boundary",
+			Code:    operationalCodeGitOperation,
+			Phase:   reviewBoundaryPhase,
 			Message: "failed to resolve effective review base",
 			Details: map[string]any{
 				"operation":          reviewBoundaryOperationAssignment,
@@ -115,8 +117,8 @@ func validateReviewBoundaryCommit(projectRoot string, task *models.Task, reviewC
 			}
 		}
 		return &OperationalError{
-			Code:    "worktree_context",
-			Phase:   "review-boundary",
+			Code:    reviewClaimCodeWorktreeContext,
+			Phase:   reviewBoundaryPhase,
 			Message: "failed to stat task worktree",
 			Details: map[string]any{
 				"operation":     reviewBoundaryOperationAssignment,
@@ -130,8 +132,8 @@ func validateReviewBoundaryCommit(projectRoot string, task *models.Task, reviewC
 	wtHEAD, err := g.GetWorktreeHEAD(task.ID)
 	if err != nil {
 		return &OperationalError{
-			Code:    "git_operation",
-			Phase:   "review-boundary",
+			Code:    operationalCodeGitOperation,
+			Phase:   reviewBoundaryPhase,
 			Message: "failed to get task worktree HEAD",
 			Details: map[string]any{
 				"operation":     reviewBoundaryOperationAssignment,
@@ -145,21 +147,21 @@ func validateReviewBoundaryCommit(projectRoot string, task *models.Task, reviewC
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("review_commit %s does not match worktree HEAD %s", reviewCommit, wtHEAD),
-			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command(updateReviewCommitOperation, task.ID)),
 		}
 	}
 	if task.BaseCommit == nil {
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("base_commit is missing; expected effective review base %s", expectedBase),
-			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command(updateReviewCommitOperation, task.ID)),
 		}
 	}
 	if *task.BaseCommit != expectedBase {
 		return &ReviewBoundaryRepairNeededError{
 			TaskID:       task.ID,
 			Reason:       fmt.Sprintf("base_commit %s does not match effective review base %s", *task.BaseCommit, expectedBase),
-			RecoveryHint: fmt.Sprintf("run %s", brand.Command("update-review-commit", task.ID)),
+			RecoveryHint: fmt.Sprintf("run %s", brand.Command(updateReviewCommitOperation, task.ID)),
 		}
 	}
 	return nil

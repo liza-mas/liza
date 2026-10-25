@@ -68,7 +68,7 @@ func RepairInvalidReviewOwnership(statePath, projectRoot, logPath, reason string
 			detail := fmt.Sprintf("Invalid active review ownership repaired (%s; reason: %s)", reason, repairReason)
 			if err := logger.Append(log.Entry{
 				Timestamp: now,
-				Agent:     "system",
+				Agent:     actorSystem,
 				Action:    "invalid_review_ownership_repaired",
 				Task:      &task.ID,
 				Detail:    detail,

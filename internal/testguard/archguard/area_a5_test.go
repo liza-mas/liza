@@ -6,11 +6,6 @@ var areaA5 = Area{
 	ID:        "A5",
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/claim_reviewer_task.go"}, Ceiling: 825},
-		{Key: Key{File: "internal/ops/claim_reviewer_task.go", Func: "claimReviewerTask"}, Ceiling: 383},
-		{Key: Key{File: "internal/ops/clear_stale_review_claims.go", Func: "ClearStaleReviewClaims"}, Ceiling: 110},
-		{Key: Key{File: "internal/ops/update_review_commit.go", Func: "updateReviewCommitLocked"}, Ceiling: 183},
-	},
-	S2: []S2Entry{},
+	Ratchet:   []RatchetEntry{},
+	S2:        []S2Entry{},
 }
