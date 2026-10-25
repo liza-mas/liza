@@ -550,8 +550,8 @@ providers:
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				_, err := ParseCatalog(tt.data)
-				if err == nil || !strings.Contains(err.Error(), tt.want) {
-					t.Fatalf("ParseCatalog error = %v, want %q", err, tt.want)
+				if err == nil || err.Error() != tt.want {
+					t.Fatalf("ParseCatalog error = %v, want exactly %q", err, tt.want)
 				}
 			})
 		}
