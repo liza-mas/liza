@@ -10,11 +10,27 @@ the acceptance manifest are written besides this record.
 - Configured integration branch: `omni-ee -C <project root> get config --json`, field
   `IntegrationBranch` = `"global-refactoring"` (observed 2026-10-25T04:05Z); equals the D23 ruling cited by
   `baseline.md`.
-- Integration revision under test (`git rev-parse global-refactoring` and task worktree `HEAD`, both observed
-  2026-10-25T04:05:47Z; `git log HEAD..global-refactoring` printed nothing, again at 04:28:53Z after all runs):
-  `b3356c3c62742eebd20cfcaa3b36d6c66172c149` (`Merge arm-1-ar-11-cp-4-code-8`). No rebase was needed. The
-  task worktree `HEAD` is this revision plus the commits that add this record, the registry edit and the
-  acceptance manifest; those commits are documentation/manifest only (`git diff --stat b3356c3c6 HEAD` lists
+- **Integration revision under test (refresh, 2026-10-25T06:10:43Z):**
+  `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5` (`test(oracle): mask every path spelling in the Git shim fidelity
+  probes`, the last commit of the A3 portability correction `arm-1-ar-12-cp-2-d49-portability-plan-code-0`).
+  `git rev-parse global-refactoring` printed this SHA at 06:10:43Z, when the operator's unblock had rebased the
+  task worktree onto it (worktree `HEAD` at that time: `5696979e2`, this record's first commit, on top of it).
+  Everything below (G1–G7, except where "b3356c3c6" is named as superseded) refers to this SHA.
+  `global-refactoring` has moved on since (first seen at the check after C4, after 06:22:00Z): `f474104d2` adds
+  four A3-lane commits (`0ca9db493`, `408bb4c1a`, `f04ab36d9`, `e76d6d748`: `internal/ops` and oracle work). `git diff
+  --stat 3ffd032fc global-refactoring` over the 26 A2 package dirs, `internal/testguard` and `Makefile` printed
+  nothing, so they do not change the A2 code or guard data; this record deliberately stays pinned to `3ffd032fc`
+  (the SHA the maintainer's workflow_dispatch branch must point at, D59).
+- **Superseded revision.** The first G1–G7 pass and the first G8 dispatch ran at
+  `b3356c3c62742eebd20cfcaa3b36d6c66172c149` (`Merge arm-1-ar-11-cp-4-code-8`, observed 2026-10-25T04:05:47Z).
+  Its G8 run (`40162651273`) was **red** and is superseded (see G8). `git diff --stat b3356c3c6 3ffd032fc` over the
+  26 A2 package dirs, `internal/testguard/archguard/area_a2_test.go` and `Makefile` printed nothing: the A2 code
+  and A2 guard data are byte-identical between the two revisions. The delta (82 files) is the A3 lane (`internal/ops`,
+  `internal/oracle/a3/**`, `cmd/liza/lifecycle.go`, `internal/testguard/archguard/area_a3_test.go`, one test in
+  `internal/commands`, `INVARIANTS.md`, plans/acceptance/decision records). Source inspections of G1–G3 and G6 hold
+  by that identity; C0–C4 and G5 were re-executed at `3ffd032fc` (old results kept only as marked below).
+  The task worktree `HEAD` is `3ffd032fc` plus the commits that add this record, the registry edit and the
+  acceptance manifest; those commits are documentation/manifest only (`git diff --stat 3ffd032fc HEAD` lists
   the three owned paths).
 - Starting commit of the run (for A2 diffs): `96c9ad69aee983ce2b929dd681b6ba43bf920535`.
 - Inherited barrier (sequence): all 23 dependencies of this task are `MERGED` in `omni-ee get <id> --json`
@@ -37,14 +53,15 @@ the acceptance manifest are written besides this record.
   "run from the worktree root" form (BASH CONSTRAINTS forbid `cd <path> &&`). No remote push, provider CLI,
   installation or update ran; output below is sanitized (no environment values).
 - Operator notice of 2026-10-25T02:00Z (cache trim errors `could not import …` / `cannot open file`, 00:37Z–01:54Z)
-  does not apply: all runs here started at 04:06Z or later and none printed such an error.
+  does not apply: the runs at `3ffd032fc` started at 06:10Z or later (the superseded ones at 04:06Z or later) and
+  none printed such an error.
 - Host: `Linux 6.8.0-147-generic x86_64`, `nproc` 8, `go1.26.0 linux/amd64`; shared host, other agent sessions
   running (load below).
 
 ## G1 — A2 ratchet empty; S2 exceptions data-like with rationale
 
-- Source: `internal/testguard/archguard/area_a2_test.go` at `b3356c3c6` (read in full, 45 lines). Excerpt
-  (lines 36–44):
+- Source: `internal/testguard/archguard/area_a2_test.go` at `b3356c3c6` (read in full, 45 lines); byte-identical at
+  `3ffd032fc` (no diff, see Observed revision). Excerpt (lines 36–44):
 
   ```go
   Allowlist: []AllowEntry{},
@@ -77,8 +94,10 @@ the acceptance manifest are written besides this record.
   `internal/toolresult/redact.go` 654, `internal/toolchain/install.go` 506, `internal/brandrender/render.go`
   482, `internal/git/worktree.go` 477, `internal/pairingindex/index_script.go` 453 (all < 800);
   `internal/embedded/embedded.go` went from 1842 lines at the start to 128.
-- C0: `env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard/`,
-  2026-10-25T04:06:08Z–04:06:10Z, exit 0: `ok  github.com/liza-mas/liza/internal/testguard/archguard  0.507s`.
+- C0 at `3ffd032fc`: `env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go -C <worktree> test -count=1
+  ./internal/testguard/archguard/`, run between 06:10:43Z and 06:13:08Z (start/end not stamped), exit 0:
+  `ok  github.com/liza-mas/liza/internal/testguard/archguard  0.124s`. (Superseded run at `b3356c3c6`,
+  04:06:08Z–04:06:10Z, exit 0, 0.507s.)
 - Result: pass.
 
 ## G2 — A2 allowlist data holds only rationale-carrying entries; no SI-5 crossing owned by A2
@@ -95,12 +114,14 @@ the acceptance manifest are written besides this record.
   crossings to Scope 19 (A8), Scope 17 (A7), Scope 20 (A9) and Scope 21 (C6, in A9); none is owned by A2.
   Result: no A2-owned crossing.
 - The C0 `TestK4ImportDirectionGuard` pass also proves no unlisted forbidden edge and no stale allowlist entry
-  exists (the package passes; C1 and C2 repeat it: `ok … archguard 1.101s` and `0.199s`). Result: pass.
+  exists (the package passes; C1 and C2 at `3ffd032fc` repeat it: `ok … archguard 0.146s` and `0.149s`). Result: pass.
 
 ## G3 — A2 Shim Register empty; no temporary alias or forwarder added
 
 - Register: `20261023-195624-arm-1-ar-11.md#Shim Register` (pinned `cb79e6713`) reads "None."
-- Inspection of every A2 code change, `git diff -U0 96c9ad69a HEAD -- <26 A2 package dirs> ':!*_test.go'`:
+- Inspection of every A2 code change, `git diff -U0 96c9ad69a HEAD -- <26 A2 package dirs> ':!*_test.go'`, run at
+  `b3356c3c6`; the A2 dirs are byte-identical at `3ffd032fc` (empty `git diff --stat` between the two), so the
+  `96c9ad69a`-relative diff and every count below are the same at the new revision:
   - added `type X = Y` alias declarations: 0 (`grep -cE '^\+\s*type\s+\w+(\[[^]]*\])?\s+=\s'`, count 0).
   - added lines containing `deprecated|shim|forwarder|compat alias|temporary` (case-insensitive): 5, all the
     word "temporary" in the updater's `replaceExecutable` comment and its four `temporary binary` error
@@ -120,26 +141,29 @@ the acceptance manifest are written besides this record.
 
 ## G4 — suite green at the integration revision
 
-All five canonical commands ran at `b3356c3c6` in the task worktree (`git status --short` empty before and
-after, so the generators — `make sync-embedded` inside `test`/`lint` — left tracked embedded artifacts
-unchanged). Load average (1, 5, 15 min) at each start is shown; C1–C4 ran serially.
+All five canonical commands ran at `3ffd032fc` in the task worktree (`git status --short` empty after C4, so the
+generators — `make sync-embedded` inside `test`/`lint` — left tracked embedded artifacts unchanged). Load average
+(1, 5, 15 min) at each start is shown; C1–C4 ran serially, each under `env -i HOME="$HOME" PATH="$PATH"
+TMPDIR=/tmp` (+`GOFLAGS=-count=1` for C1–C4).
 
 | Cmd | Command | Start (UTC) | End (UTC) | Exit | Load at start | Excerpt |
 |---|---|---|---|---|---|---|
-| C0 | `go test -count=1 ./internal/testguard/archguard/` | 04:06:08 | 04:06:10 | 0 | 21 (1 min) | `ok … archguard 0.507s` |
-| C1 | `make test` (+`GOFLAGS=-count=1`) | 04:06:16 | 04:13:07 | 0 | 21.48 17.97 13.94 | 83 `ok`, 0 `FAIL`, 0 `(cached)`; 4 `[no test files]`; last: `ok …/scripts/ci/testshard 0.768s` |
-| C2 | `make lint` (+`GOFLAGS=-count=1`) | 04:13:07 | 04:14:50 | 0 | 17.09 24.94 19.64 | `Embedded artifacts are consistent with masters`; `go vet ./...` for `GOOS=linux`, `windows`, `darwin`; archguard `ok 0.199s` |
-| C3 | `make test-e2e` (+`GOFLAGS=-count=1`) | 04:14:50 | 04:16:48 | 0 | 23.28 25.46 20.43 | `ok …/internal/integration 100.989s` (`TestFullSprintSequence`, `TestTerminalDependencyRecovery`, `-race -tags e2e`) |
-| C4 | `go test -race <A2 roots>` (+`GOFLAGS=-count=1`) | 04:16:48 | 04:17:47 | 0 | 6.95 18.85 18.63 | 25 `ok`, 0 `FAIL`, 0 `(cached)`, 2 `[no test files]` |
+| C0 | `go test -count=1 ./internal/testguard/archguard/` | before 06:13:08 | (not stamped) | 0 | not captured | `ok … archguard 0.124s` |
+| C1 | `make test` | 06:13:08 | 06:17:27 | 0 | 1.75 4.68 5.78 | 83 `ok`, 0 `FAIL`, 0 `(cached)`; 4 `[no test files]`; `ok …/internal/testguard/archguard 0.146s`; last: `ok …/scripts/ci/testshard 0.298s` |
+| C2 | `make lint` | 06:17:44 | 06:18:27 | 0 | 11.09 9.58 7.70 | `Embedded artifacts are consistent with masters`; `go vet ./...` for `GOOS=linux`, `windows`, `darwin`; archguard `ok 0.149s` |
+| C3 | `make test-e2e` | 06:19:05 | 06:20:35 | 0 | 7.05 9.09 7.71 | `ok …/internal/integration 80.080s` (`TestFullSprintSequence`, `TestTerminalDependencyRecovery`, `-race -tags e2e`) |
+| C4 | `go test -race <A2 roots>` | 06:20:44 | 06:22:00 | 0 | 2.19 6.92 7.08 | 25 `ok`, 0 `FAIL`, 0 `(cached)`, 2 `[no test files]` |
+
+Superseded run at `b3356c3c6` (04:06Z–04:17Z): C0–C4 all exit 0 with the same counts (83 `ok` in C1, 25 `ok` in C4).
 
 C4 selection reconciled with the delivered layer data: the 24 package roots plus `./internal/embedded/...`
 and `./internal/brandrender/...` expand to 27 packages — the 26 A2 layer entries plus
-`internal/brandrender/cmd/sync-embedded` — and the layer data holds the same 27. Results: git 2.985s, gitenv
-1.224s, gitbash 1.012s, worktreeexclude 12.782s, subprocess 6.020s, procscan 1.027s, secretmask 1.012s,
-toolresult 56.416s, toolresultacp 8.082s, sessionvalidation 2.228s, precommit 1.093s, initcheck 1.282s,
-codexconfig 1.014s, bash-policy-cli 1.017s, providers 1.308s, embedded 9.366s, brandrender 6.723s,
-scipsearch 6.465s, stacklit 1.235s, semble 1.087s, functionalclusters 1.196s, pairingindex 3.593s, toolchain
-1.080s, updater 1.147s, termutil 1.012s; `internal/projectdetect` and `internal/brandrender/cmd/sync-embedded`
+`internal/brandrender/cmd/sync-embedded` — and the layer data holds the same 27. Results: git 2.872s, gitenv
+1.241s, gitbash 1.023s, worktreeexclude 12.919s, subprocess 6.023s, procscan 1.023s, secretmask 1.016s,
+toolresult 72.747s, toolresultacp 10.094s, sessionvalidation 2.224s, precommit 1.113s, initcheck 1.323s,
+codexconfig 1.011s, bash-policy-cli 1.023s, providers 1.425s, embedded 23.310s, brandrender 8.979s,
+scipsearch 7.391s, stacklit 1.290s, semble 1.115s, functionalclusters 1.384s, pairingindex 9.008s, toolchain
+1.134s, updater 1.390s, termutil 1.045s; `internal/projectdetect` and `internal/brandrender/cmd/sync-embedded`
 have no test files (projectdetect has none at the starting commit either).
 
 Not run locally, by design: windows-tagged A2 tests such as `internal/procscan/kill_windows_test.go`. `make lint`
@@ -148,74 +172,91 @@ results are G8's, not G4's.
 
 ## G5 — wall time and benchmarks against `baseline.md` (indicative; never blocks)
 
-Protocol repeated from `baseline.md`: fresh disposable clone outside the worktrees
-(`git clone --local --no-checkout <project root> /tmp/a2g5base.XXXXXX/repo`, `git checkout --detach
-b3356c3c6…`; clone `HEAD` printed `b3356c3c62742eebd20cfcaa3b36d6c66172c149`). Sync-clean check: `make
-sync-embedded` exit 0 and clone `git status --short` empty. Environment
-`env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp GOFLAGS=-count=1`; one warm-up and one timed `make test`, neither
-retried; then `timeout 300 go test -run '^$' -bench . -benchmem ./internal/<pkg>` per package. The clone's
-`git status --short` stayed empty; the clone was deleted (`ls -d /tmp/a2g5base.*` matches nothing).
+Protocol repeated from `baseline.md` at `3ffd032fc`: fresh disposable clone outside the worktrees
+(`git clone --local --no-checkout <project root> /tmp/a2g5r2/repo`, `git checkout --detach 3ffd032fc…`; clone
+`HEAD` printed `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`). Sync-clean check: `make sync-embedded` exit 0 and clone
+`git status --short` empty. Environment `env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp GOFLAGS=-count=1`; one
+warm-up and one timed `make test`, neither retried; then `timeout 300 go test -run '^$' -bench . -benchmem
+./internal/<pkg>` per package (db, commands, agent), each exit 0 with `PASS`. The clone's `git status --short` stayed
+empty; the clone is deleted after this record is written (`ls -d /tmp/a2g5r2` then fails).
 
 | Run | Start (UTC) | End (UTC) | Wall s | Exit | Load at start | Output |
 |---|---|---|---|---|---|---|
-| Warm-up | 2026-10-25T04:18:11Z | 2026-10-25T04:22:37Z | 266 | 0 | 5.52 15.68 17.54 | 83 `ok`, no `FAIL`, no `(cached)` |
-| Timed | 2026-10-25T04:22:37Z | 2026-10-25T04:27:14Z | 277 | 0 | 15.12 15.31 17.10 | 83 `ok`, no `FAIL`, no `(cached)` |
+| Warm-up | 2026-10-25T06:22:33Z | 2026-10-25T06:26:14Z | 221 | 0 | 5.49 7.22 7.20 | 83 `ok`, no `FAIL`, no `(cached)` |
+| Timed | 2026-10-25T06:26:14Z | 2026-10-25T06:29:34Z | 200 | 0 | 6.28 7.86 7.61 | 83 `ok`, no `FAIL`, no `(cached)` |
 
-Load after the timed run: 9.77 14.64 16.58.
+Load after the timed run: 4.18 7.55 7.67.
 
 **N4 comparison (+25%).** The baseline holds two numbers that are not interchangeable: the timed run of 523 s,
 which was red (exit 2, two `internal/agent` deadline tests failed under load about 30) and load-confounded
-(bound +25% = 653.75 s), and a separate green warm-up observation of 444 s (bound 555 s). Timed 277 s is −47.0%
-vs 523 s and −37.6% vs 444 s; warm-up 266 s is −49.1% and −40.1%. Both are inside either bound. The 444 s
+(bound +25% = 653.75 s), and a separate green warm-up observation of 444 s (bound 555 s). Timed 200 s is −61.8%
+vs 523 s and −55.0% vs 444 s; warm-up 221 s is −57.7% and −50.2%. Both are inside either bound. The 444 s
 figure is shown only as a separate observation, never substituted for the 523 s reference. Caveats: load here
-(about 5–17 on 8 cores) is lower than the baseline's (about 9–30) but not quiet, and the test set is larger now
+(about 4–8 on 8 cores during `make test`) is lower than the baseline's (about 9–30) and the test set is larger now
 (83 packages with `ok` vs 66), so the comparison is indicative, not like-for-like. Disposition: N4 holds; no
-action.
+action. (Superseded run at `b3356c3c6`: warm-up 266 s, timed 277 s, both exit 0.)
 
-**N3 benchmarks.** One run per package, baseline numbers from `baseline.md` (load about 30). Missing result: none
-— all 18 benchmark rows of the baseline (14 db, 2 commands, 2 agent) were captured and all three packages exited
-0 with `PASS` (`internal/db` 59.119s, `internal/commands` 4.906s, `internal/agent` 3.172s). Deltas below are
-ns/op; B/op and allocs/op are shown as changes (0.0 where within ±0.1%).
+**N3 benchmarks.** One protocol run per package (run 1), baseline numbers from `baseline.md` (load about 30).
+Missing result: none — all 18 benchmark rows of the baseline (14 db, 2 commands, 2 agent) were captured. The host
+load was **not** stable across the benchmark window: 1-min load was 4.18 when the timed run ended (06:29:34Z) and
+50.10 at 06:32:11Z (5-min 25.32, 15-min 14.25), i.e. another session's suite started during run 1. A supplementary
+second pass (run 2, 06:32:11Z–06:34:29Z, load 45–50 throughout, listed as an extra observation; the protocol forbids
+retrying `make test`, not diagnosing a benchmark) was slower on almost every row, which confirms the host, not the
+code, drives the ns/op swings. ns/op deltas are run 1 against baseline; B/op and allocs/op are run 1 changes
+(0.0 where within ±0.1%).
 
-| Benchmark | ns/op base → now | B/op | allocs/op |
-|---|---|---|---|
-| db `BlackboardWrite` | 12033415 → 5677267 (−53%) | 0.0% | 0.0% |
-| db `BlackboardModify` | 22577288 → 6528676 (−71%) | +0.4% | +0.4% |
-| db `BlackboardReadCached` | 44938 → 24172 (−46%) | 0.0% | 0.0% |
-| db `BlackboardReadUncached` | 1890776 → 225713 (−88%) | −0.1% | 0.0% |
-| db `MarshalStateForWriteLarge/repaired=false` | 536001675 → 130252064 (−76%) | 0.0% | 0.0% |
-| db `MarshalStateForWriteLarge/repaired=true` | 1331986515 → 150660211 (−89%) | 0.0% | 0.0% |
-| db `ReadCachedHit` | 4916749 → 1378280 (−72%) | 0.0% | 0.0% |
-| db `StateParse` | 112041835 → 38458015 (−66%) | 0.0% | 0.0% |
-| db `TerminalArchiveTransaction/inline/cold-instance` | 772451364 → 349433419 (−55%) | 0.0% | 0.0% |
-| db `TerminalArchiveTransaction/inline/warm` | 628528774 → 355246667 (−43%) | 0.0% | 0.0% |
-| db `TerminalArchiveTransaction/archived/cold-instance` | 320733652 → 173038090 (−46%) | 0.0% | 0.0% |
-| db `TerminalArchiveTransaction/archived/warm` | 185103984 → 32488329 (−82%) | −9.7% | −18.5% |
-| db `TerminalArchiveTransaction/archived-256/cold-instance` | 990744276 → 634486239 (−36%) | 0.0% | 0.0% |
-| db `TerminalArchiveTransaction/archived-256/warm` | 319924638 → 121707374 (−62%) | −1.8% | −3.5% |
-| commands `InspectionSnapshotDuringHeartbeat/status` | 9380378 → 10780557 (**+15%**) | **+12.4%** | **+6.7%** |
-| commands `InspectionSnapshotDuringHeartbeat/get` | 4376937 → 4153097 (−5%) | **+5.2%** | **+4.8%** |
-| agent `BenchmarkClaimReviewerTask` | 34512825 → 4745032 (−86%) | 0.0% | 0.0% |
-| agent `BenchmarkResumeHandoff` | 5936738 → 2332885 (−61%) | −0.1% | −0.1% |
+| Benchmark | ns/op base → run 1 | run 2 ns/op (load 45–50) | B/op | allocs/op |
+|---|---|---|---|---|
+| db `BlackboardWrite` | 12033415 → 1922396 (−84%) | 7255949 | −0.1% | 0.0% |
+| db `BlackboardModify` | 22577288 → 2061810 (−91%) | 10813586 | +0.6% | +0.6% |
+| db `BlackboardReadCached` | 44938 → 17488 (−61%) | 221016 | 0.0% | 0.0% |
+| db `BlackboardReadUncached` | 1890776 → 178078 (−91%) | 2825952 | −0.1% | 0.0% |
+| db `MarshalStateForWriteLarge/repaired=false` | 536001675 → 140478630 (−74%) | 1303324243 | 0.0% | 0.0% |
+| db `MarshalStateForWriteLarge/repaired=true` | 1331986515 → 141484380 (−89%) | 1042313616 | 0.0% | 0.0% |
+| db `ReadCachedHit` | 4916749 → 1079413 (−78%) | 13045064 | 0.0% | 0.0% |
+| db `StateParse` | 112041835 → 29336572 (−74%) | 425531034 | 0.0% | 0.0% |
+| db `TerminalArchiveTransaction/inline/cold-instance` | 772451364 → 337729194 (−56%) | 2910056875 | 0.0% | 0.0% |
+| db `TerminalArchiveTransaction/inline/warm` | 628528774 → 474023423 (−25%) | 2142948869 | 0.0% | 0.0% |
+| db `TerminalArchiveTransaction/archived/cold-instance` | 320733652 → 430031011 (**+34%**) | 1438877286 | 0.0% | 0.0% |
+| db `TerminalArchiveTransaction/archived/warm` | 185103984 → 127786512 (−31%) | 346105946 | −5.7% | −10.9% |
+| db `TerminalArchiveTransaction/archived-256/cold-instance` | 990744276 → 12765621814 (**+1189%**) | 6774634673 | 0.0% | 0.0% |
+| db `TerminalArchiveTransaction/archived-256/warm` | 319924638 → 3294806068 (**+930%**) | 2902365721 | **+61.9%** | **+123.5%** |
+| commands `InspectionSnapshotDuringHeartbeat/status` | 9380378 → 87608564 (**+834%**) | 119270379 | **+22.9%** | **+12.1%** |
+| commands `InspectionSnapshotDuringHeartbeat/get` | 4376937 → 32782161 (**+649%**) | 27367262 | **+7.1%** | **+5.9%** |
+| agent `BenchmarkClaimReviewerTask` | 34512825 → 72314661 (**+110%**) | 25092229 | +0.8% | −0.1% |
+| agent `BenchmarkResumeHandoff` | 5936738 → 43153582 (**+627%**) | 26319946 | +1.0% | +0.5% |
 
 **Dispositions** (N3 is Should; none blocks):
 
-- Sixteen of eighteen rows have ns/op at or below baseline with B/op and allocs/op within ±0.5% or lower, so there
-  is no slowdown to dispose of. The improvements are recorded as measured and not claimed as caused by A2: the
-  baseline ran at load about 30 and this run at about 5–17.
-- `InspectionSnapshotDuringHeartbeat/status`: ns/op +15%, B/op +12.4%, allocs +6.7%; `/get`: ns/op −5%, B/op
-  +5.2%, allocs +4.8%. These are the same allocation increases the A1 record disclosed (`boundary-a1.md`: status
-  B/op +10.5%, allocs +5.6%; get +5.2%, +4.3%), so they were already present at the A1 boundary and moved by
-  about 2 points since. A2 did not cause them: the benchmark exercises `internal/commands` and `internal/db`,
-  and A2's changes to those packages are test files plus two call-site edits (`internal/commands/init.go`, 4
-  insertions and 4 deletions after the A1 boundary, `git diff --stat 265a14b3a HEAD`; none of `internal/db`). The benchmark
-  overlaps a concurrent heartbeat writer (heartbeat-writes 28 and 22 here vs 6 and 13 at the baseline), so work
-  per iteration is not like-for-like with the baseline. Disposition, unchanged from A1: the benchmark lives in
-  `commands` (A7); re-measure at the A7 boundary, where a persistent increase would be commissioned. The
-  `/status` ns/op +15% is a load-confounded single run (baseline at load about 30, this run 5–17 with a
-  concurrent heartbeat writer) and is likewise deferred to A7.
-- `BlackboardModify` B/op +0.4%, allocs +0.4%: within run-to-run variation of a concurrent-write benchmark; no
+- Eleven of eighteen rows have ns/op at or below baseline in run 1 with B/op and allocs/op within ±0.6% or lower.
+  Seven are slower (db `archived/cold-instance`, `archived-256/cold-instance`, `archived-256/warm`; commands
+  `status` and `get`; agent both). None of them is attributable to A2:
+  - **A2 code is unchanged** between `b3356c3c6` (benchmarks 04:18Z–04:28Z at load 5–17: db and agent rows all at
+    or below baseline, `ClaimReviewerTask` −86%, `archived-256/cold-instance` 634486239) and `3ffd032fc`: no A2
+    package, no `internal/db` and no `internal/agent` file changed (`git diff --stat b3356c3c6 3ffd032fc`; the
+    `internal/agent` and `internal/db` trees are absent from its 82-file list). The same code measured
+    about two hours earlier ran the seven slower rows 2.5–27 times faster, so the swing is the host's load spike
+    (run 1 straddled it; run 2 sat in it), not a regression.
+  - db `archived-256/warm` B/op +61.9% and allocs/op +123.5% (also in run 2: 99079360 B/op, 556979 allocs/op) are
+    count-per-iteration artefacts: both archived-256 rows ran a single iteration (`b.N` = 1), so the "warm" row
+    absorbs first-iteration (cold) allocations that more iterations amortise; at `b3356c3c6` the same row showed
+    −1.8% and −3.5%. Slower iterations lower the `b.N` Go chooses, which fits this pattern; no `internal/db` change is involved.
+  - commands `InspectionSnapshotDuringHeartbeat`: ns/op is load-driven (heartbeat-writes 5 and 4 vs 28 and 22 at
+    the previous run and 6 and 13 at the baseline; max heartbeat latency 381679 and 594041 µs vs about 214000–
+    236000 at the baseline). The allocation increases (`status` B/op +22.9%, allocs +12.1%; `get` +7.1% and +5.9%)
+    are larger than at `b3356c3c6` (+12.4%/+6.7% and +5.2%/+4.8%) and than at the A1 boundary (+10.5%/+5.6% and
+    +5.2%/+4.3%). No A2 package changed between the two measured revisions, and `internal/commands` changed only in
+    one test (`replace_task_test.go`) and `cmd/liza/lifecycle.go`. The A3 lane merged `internal/ops` changes
+    (`lifecycle_result.go`, `mode_change.go`, `resume_transitions.go`, …) in that interval; whether the snapshot path
+    uses them was **not isolated** here. Disposition: not A2 debt; flag to the A3 boundary owner for a re-measure,
+    and keep the A7 re-measure (the benchmark lives in `commands`, A7) where a persistent increase would be
+    commissioned. The single-run ns/op figures are load-confounded and not evidence of slowdown.
+  - agent rows: allocations within +1.0%; ns/op swing is load (run 2: 25 ms and 26 ms vs baseline 34.5 ms and
+    5.9 ms).
+- `BlackboardModify` B/op +0.6%, allocs +0.6%: within run-to-run variation of a concurrent-write benchmark; no
   action.
+- Superseded run at `b3356c3c6`: sixteen of eighteen rows at or below baseline; the two commands rows carried the
+  same allocation disposition (+12.4%/+6.7% and +5.2%/+4.8%).
 
 ## G6 — architectural issues resolved by A2
 
@@ -228,7 +269,8 @@ section, and every registry line mentioning an A2 package (`grep` for each of th
   is historical (the file was 1842 lines at the starting commit), so closure is judged on the issue's
   Direction, not the size: "Keep the package API stable while splitting implementation by artifact family:
   global corpus, Claude settings, Codex settings and permissions, hooks, project artifacts, and stale-artifact
-  cleanup." Evidence at `b3356c3c6`:
+  cleanup." Evidence at `b3356c3c6`, unchanged at `3ffd032fc` (A2 dirs byte-identical; `make test`, `make lint` and the
+  `internal/embedded` race run were re-run green there, G4):
   - `20d654f7b` (`refactor(embedded): split embedded.go into concern files`) replaced `embedded.go` (1842 → 128
     lines) with `global_corpus.go` 226, `claude_settings.go` 287, `codex_permissions.go` 344, `codex_hooks.go`
     250, `toml_edit.go` 246, `project_artifacts.go` 229, `stale_artifacts.go` 53, `write_policy.go` 82,
@@ -253,28 +295,44 @@ section, and every registry line mentioning an A2 package (`grep` for each of th
   routing issue (line 644) concerns `ops`/`cmd/liza` direct `exec.Command("git")` sites (A3/A6/A7).
   Everything else is untouched.
 
-Registry edit (this commit): `Split embedded.go …` removed from the Table of Contents entry and Structural
+Registry edit (first record commit; the evidence line was extended to name `3ffd032fc` in the refresh): `Split embedded.go …` removed from the Table of Contents entry and Structural
 Debt active section and from the Open Issues Summary; added to Completed Fixes (dated 2026-10-25), Fixed
 (Traceability) and Fix Details with commit references `20d654f7b`, and the Counts line updated (68 → 67 open;
 34 medium).
 
 ## G7 — record completeness
 
-This file holds the commands or source reads, the integration SHA (`b3356c3c62742eebd20cfcaa3b36d6c66172c149`,
-for G1–G6 alike), UTC observations, exit codes and excerpts for G1–G6 above, and the G8 section below. Manifest:
+This file holds the commands or source reads, the integration SHA (`3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`,
+for G1–G6 alike, with the superseded `b3356c3c62742eebd20cfcaa3b36d6c66172c149` marked where its results are kept),
+UTC observations, exit codes and excerpts for G1–G6 above, and the G8 section below. Manifest:
 `specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-0-boundary.json` (G4 mapped to the
 `Makefile` test target with `command_index` 1; every other obligation maps to its declared approved
-reference). The code revision did not change between the G1–G5 runs and the submission commit: only this record,
-the registry and the manifest differ.
+reference). The code revision did not change between the G1–G5 runs at `3ffd032fc` and the submission commit: only
+this record, the registry and the manifest differ. `global-refactoring` has since advanced to `f474104d2` (A3-lane
+commits only, see Observed revision); the record is not re-pinned to it.
 
-## G8 — dispatched CI result (D52): Linux, Windows and macOS
+## G8 — dispatched CI result (D52/D59): Linux, Windows and macOS
 
-Status: **pending (held for the maintainer)**. G1–G7 above pass at `b3356c3c62742eebd20cfcaa3b36d6c66172c149`.
-Under D52 the operator may push `global-refactoring` and dispatch `.github/workflows/ci.yml`
-(`workflow_dispatch`) on it; G8 evidence is that run's URL, tested SHA (must equal the revision above) and
-each job's conclusion, confirmed by the maintainer, covering Linux, Windows (including the windows-tagged A2
-tests such as `internal/procscan/kill_windows_test.go`) and macOS. No pull request is opened or claimed, and
-this record does not claim G8 before the run's jobs complete. Red CI holds A2 closure and the run close; the
-maintainer commissions the fix task. To be appended on resume: run URL, tested full SHA, each job's name and
-conclusion, UTC observation, maintainer ruling. If integration moves to different code before the run, the
-affected G1–G7 are refreshed at that revision and the old/new distinction is kept here.
+Status: **pending (held for the maintainer)**. G1–G7 pass at `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5`.
+
+- **Superseded, red:** run <https://github.com/liza-mas/liza/actions/runs/40162651273> (workflow_dispatch of
+  `ci.yml` on `g8/a2-b3356c3`, headSha `b3356c3c62742eebd20cfcaa3b36d6c66172c149`, completed 2026-10-25T04:51:37Z),
+  reported by the operator: green Linux lint and build and Windows ops-1..4 and rest-3; red Linux tests, macOS,
+  Windows rest-1 and rest-2. Causes: two A3-lane oracle defects (`internal/oracle/a3/lifecycle`
+  `TestOracleUnblockTaskVariants/rebase-on-refusal-conflict/json` golden carrying git-version-dependent stderr; the
+  fixture git shim not launchable on Windows) and one Windows wall-clock flake in `internal/agent`
+  (`TestExecutionDeadlineMarkerPastItsDeadlineWithLiveProcessIsInterrupted`, passed in the A1 G8 run), none in A2
+  code. This run is **not** G8 evidence for this boundary and is kept here, not deleted. The A3 portability
+  correction (`de5c259cd`, `7ea9d342d`, `3ffd032fc`) merged afterwards; this refresh re-pins to its last commit.
+- **Early signal (not G8 unless the operator says so):** run
+  <https://github.com/liza-mas/liza/actions/runs/40168040686> at `3ffd032fc`, in progress when the operator
+  released this task. It qualifies only if its SHA equals `3ffd032fc…` above and every job is green.
+- **Requested from the maintainer** (D52/D59): a `workflow_dispatch` of `.github/workflows/ci.yml` on a branch
+  pointing at exactly `3ffd032fcb24b9b914c42da29af3d93ed5cc55e5` (not the moving `global-refactoring` head), with
+  each job's conclusion for Linux, Windows (including the windows-tagged A2 tests such as
+  `internal/procscan/kill_windows_test.go`) and macOS (under D52 the dispatch itself runs macOS, so no separate
+  main-push follow-up and no pull request). This record does not claim G8 before the run's jobs complete. A red job
+  holds A2 closure and the run close; the maintainer commissions the fix task. To be appended on resume: run URL,
+  tested full SHA, each job's name and conclusion, UTC observation, maintainer ruling. If integration moves to
+  different A2 code before the run, the affected G1–G7 are refreshed at that revision and the old/new distinction
+  is kept here.
