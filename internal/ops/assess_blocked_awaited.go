@@ -68,12 +68,16 @@ func awaitedTasksFrom(entry *models.TaskHistoryEntry) ([]string, bool) {
 	return normalized, true
 }
 
+// awaitedState is the state of an awaited member or of the whole set. It is
+// converted to string where the fingerprint projection stores it.
+type awaitedState string
+
 // Awaited-member states. The set is one all-of wait: it completes when every
 // member is satisfied and needs attention as soon as any member has failed.
 const (
-	awaitedPending   = "pending"
-	awaitedSatisfied = "satisfied"
-	awaitedFailed    = "failed"
+	awaitedPending   awaitedState = "pending"
+	awaitedSatisfied awaitedState = "satisfied"
+	awaitedFailed    awaitedState = "failed"
 )
 
 // awaitedMemberState classifies one awaited ID over its replacement path.
@@ -83,7 +87,7 @@ const (
 // is satisfied only when the resolver satisfies it, i.e. every replacement of a
 // split has merged, and pending before that. A BLOCKED or INTEGRATION_FAILED
 // task can recover, so failed means "needs reassessment", not "can never merge".
-func awaitedMemberState(state *models.State, resolver *models.DependencyResolver, id string) (string, []string) {
+func awaitedMemberState(state *models.State, resolver *models.DependencyResolver, id string) (awaitedState, []string) {
 	resolution := resolver.Resolve(id)
 	var failed []string
 	for _, pathID := range resolution.Path {
@@ -91,9 +95,9 @@ func awaitedMemberState(state *models.State, resolver *models.DependencyResolver
 		switch {
 		case task == nil:
 			failed = append(failed, pathID+" (missing)")
-		case assessmentDependencyOutcome(task) == "unknown":
+		case assessmentDependencyOutcome(task) == assessmentOutcomeUnknown:
 			failed = append(failed, pathID+" (unknown status)")
-		case assessmentDependencyOutcome(task) == "failed_or_blocked":
+		case assessmentDependencyOutcome(task) == assessmentOutcomeFailedOrBlocked:
 			failed = append(failed, fmt.Sprintf("%s (%s)", pathID, task.Status))
 		}
 	}
@@ -210,7 +214,7 @@ func validateAwaitedTasks(state *models.State, task *models.Task, awaited []stri
 // merged, failed, blocked or missing has nothing left to wait for.
 func awaitedTaskPending(state *models.State, resolver *models.DependencyResolver, id string) bool {
 	for _, pathID := range resolver.Resolve(id).Path {
-		if candidate := state.FindTask(pathID); candidate != nil && assessmentDependencyOutcome(candidate) == "pending" {
+		if candidate := state.FindTask(pathID); candidate != nil && assessmentDependencyOutcome(candidate) == assessmentOutcomePending {
 			return true
 		}
 	}

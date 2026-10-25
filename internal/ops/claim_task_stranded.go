@@ -45,14 +45,14 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 	transitions := BuildPipelineTransitions(resolver)
 
 	lock := filelock.New(claimTaskWorktreeLockPath(statePath, task.ID))
-	err = lock.WithLockOperation("claim-task-takeover", func() error {
+	err = lock.WithLockOperation(claimTaskTakeoverLockOperation, func() error {
 		return lifecycleMutation(bb, authority)(func(state *models.State) error {
-			if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+			if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 				return err
 			}
 			live := state.FindTask(task.ID)
 			if live == nil {
-				return &errors.NotFoundError{Entity: "task", ID: task.ID}
+				return &errors.NotFoundError{Entity: notFoundEntityTask, ID: task.ID}
 			}
 			invocation.observe(live)
 			now := time.Now().UTC()

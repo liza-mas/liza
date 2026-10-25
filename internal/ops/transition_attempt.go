@@ -12,6 +12,9 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// transitionAttemptOperation names the attempt rollover operation and its lock label.
+const transitionAttemptOperation = "transition-attempt"
+
 // TransitionAttemptResult contains the outcome of transitioning to a new attempt.
 type TransitionAttemptResult struct {
 	models.LifecycleOutcome
@@ -59,7 +62,7 @@ func TransitionToNewAttemptWithAuthority(projectRoot, taskID, reason string, aut
 
 func transitionToNewAttemptWithProjectLock(projectRoot, taskID, reason string, authority *models.AgentAuthority) (*TransitionAttemptResult, error) {
 	var result *TransitionAttemptResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "transition-attempt", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, transitionAttemptOperation, func() error {
 		var inner error
 		result, inner = transitionToNewAttemptWithOptionalAuthority(projectRoot, taskID, reason, authority)
 		return inner
@@ -93,7 +96,7 @@ func transitionToNewAttemptAtBoundary(projectRoot, taskID, reason string, author
 	// it only after releasing its final state transaction.
 	lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
 	var result *TransitionAttemptResult
-	err := lock.WithLockOperation("transition-attempt", func() error {
+	err := lock.WithLockOperation(transitionAttemptOperation, func() error {
 		var inner error
 		result, inner = transitionToNewAttemptLocked(projectRoot, taskID, reason, authority, expectedCompletionToken, requireAdmitted, options...)
 		return inner
@@ -153,7 +156,7 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 	return &TransitionAttemptResult{
 		LifecycleOutcome: lifecycleOutcome,
 		TaskID:           taskID,
-		NewAttempt:       2,
+		NewAttempt:       models.MaxTaskAttempt,
 		WorktreeDeleted:  cleanupAttemptWorktree(projectRoot, taskID, boundary.worktreePath),
 		InitialStatus:    boundary.initialStatus,
 	}, nil
@@ -173,13 +176,13 @@ type attemptBoundary struct {
 // reason are preserved for recovery until finalisation.
 func markAttemptBoundary(state *models.State, pb *pipelineBundle, taskID, reason, expectedCompletionToken string, requireAdmitted bool) (attemptBoundary, error) {
 	if requireAdmitted {
-		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+		if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 			return attemptBoundary{}, err
 		}
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
-		return attemptBoundary{}, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return attemptBoundary{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 	if expectedCompletionToken != "" && models.TaskTransitionID(task) != expectedCompletionToken {
 		return attemptBoundary{}, &PreconditionError{Reason: "task boundary changed after verdict completion; attempt rollover was not applied"}
@@ -216,7 +219,7 @@ func markAttemptBoundary(state *models.State, pb *pipelineBundle, taskID, reason
 
 	// Mutations.
 	models.AdvanceLifecycle(task)
-	task.Attempt = 2
+	task.Attempt = models.MaxTaskAttempt
 	task.Iteration = 0
 	task.ReviewCyclesCurrent = 0
 	task.LeaseExpires = nil
@@ -245,7 +248,7 @@ func markAttemptBoundary(state *models.State, pb *pipelineBundle, taskID, reason
 func finalizeAttemptBoundary(state *models.State, pb *pipelineBundle, taskID string, initialStatus models.TaskStatus) (models.LifecycleOutcome, error) {
 	task := state.FindTask(taskID)
 	if task == nil {
-		return models.LifecycleOutcome{}, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return models.LifecycleOutcome{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 
 	// Re-check sentinel — concurrent modification detection.
@@ -274,7 +277,7 @@ func finalizeAttemptBoundary(state *models.State, pb *pipelineBundle, taskID str
 	if err := task.TransitionWith(initialStatus, pb.transitions); err != nil {
 		return models.LifecycleOutcome{}, err
 	}
-	return NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted), nil
+	return NewLifecycleOutcome(transitionAttemptOperation, task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted), nil
 }
 
 // cleanupAttemptWorktree removes the task worktree after the state is final. It

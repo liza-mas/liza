@@ -136,10 +136,10 @@ func resumeOwnedCandidate(bb *db.Blackboard, taskID, agentID string, authority *
 		}
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if len(task.ValidationPrerequisites) > 0 && (len(preflights) == 0 || preflights[0] == nil) {
-			return validationError("context_changed")
+			return validationError(validationContextChanged)
 		}
 		if !models.IsResumableOwnedTask(state, task, agentID, pr) {
 			return nil
@@ -194,7 +194,7 @@ func blockOwnedResumeCandidate(
 	err := lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if !models.IsResumableOwnedTask(state, task, agentID, pr) {
 			return nil

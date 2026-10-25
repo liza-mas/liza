@@ -50,7 +50,7 @@ func classifyLimitEscalation(reviewCycles, reviewLimit, iteration, iterationLimi
 	}
 
 	action := LimitActionBlocked
-	if attempt < 2 {
+	if attempt < models.MaxTaskAttempt {
 		action = LimitActionNewAttempt
 	}
 

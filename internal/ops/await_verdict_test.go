@@ -1735,7 +1735,7 @@ func TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent(t 
 			if !ok {
 				t.Fatal("AgentHealth missing entry, want degraded record for the auto-reclaim failure")
 			}
-			if health.Reason != AgentDegradedWorktreeSetupFailed {
+			if health.Reason != string(AgentDegradedWorktreeSetupFailed) {
 				t.Errorf("health.Reason = %q, want %q", health.Reason, AgentDegradedWorktreeSetupFailed)
 			}
 			if strings.Contains(health.LastError, "\n") {

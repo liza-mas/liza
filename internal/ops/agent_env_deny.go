@@ -44,32 +44,32 @@ func SetAgentEnvDeny(projectRoot string, input SetAgentEnvDenyInput) (*ConfigSet
 		previous = slices.Clone(state.Config.AgentEnvDeny)
 		switch {
 		case slices.Equal(previous, input.Names):
-			result.Outcome = "unchanged"
+			result.Outcome = string(configSetUnchanged)
 		case len(previous) > 0 && !input.Replace:
-			result.Outcome = "conflict"
+			result.Outcome = string(configSetConflict)
 			return &PreconditionError{
 				Reason:  AgentEnvDenyConfigKey + " is already set to a different list; use --replace with --reason to replace it",
-				Details: map[string]any{"key": AgentEnvDenyConfigKey, "conflict": "existing_value"},
+				Details: map[string]any{"key": AgentEnvDenyConfigKey, "conflict": configConflictExistingValue},
 			}
 		default:
 			state.Config.AgentEnvDeny = slices.Clone(input.Names)
 			switch {
 			case len(input.Names) == 0:
-				result.Outcome = "cleared"
+				result.Outcome = string(configSetCleared)
 			case len(previous) > 0:
-				result.Outcome = "replaced"
+				result.Outcome = string(configSetReplaced)
 			default:
-				result.Outcome = "set"
+				result.Outcome = string(configSetSet)
 			}
 		}
 		return nil
 	})
-	if err != nil && result.Outcome != "conflict" {
-		result.Outcome = "failed"
+	if err != nil && result.Outcome != string(configSetConflict) {
+		result.Outcome = string(configSetFailed)
 	}
 	mask := secretmask.New()
 	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%q value=%q reason=%q",
-		AgentEnvDenyConfigKey, result.Outcome, "operator", mask.MaskText(projectRoot), strings.Join(previous, ","), strings.Join(input.Names, ","), boundPostWorktreeCmd(mask.MaskText(input.Reason)))
+		AgentEnvDenyConfigKey, result.Outcome, actorOperator, mask.MaskText(projectRoot), strings.Join(previous, ","), strings.Join(input.Names, ","), boundPostWorktreeCmd(mask.MaskText(input.Reason)))
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %w", AgentEnvDenyConfigKey, err)
 	}

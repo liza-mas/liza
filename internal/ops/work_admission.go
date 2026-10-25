@@ -39,7 +39,7 @@ type SystemHaltedError struct {
 }
 
 func (e *SystemHaltedError) reason() string {
-	return fmt.Sprintf("system is %s: %s refused; running work finishes, new work waits for %q", e.Mode, e.Operation, brand.Command("resume"))
+	return fmt.Sprintf("system is %s: %s refused; running work finishes, new work waits for %q", e.Mode, e.Operation, brand.Command(resumeOperation))
 }
 
 func (e *SystemHaltedError) Error() string { return e.Unwrap().Error() }
@@ -59,10 +59,21 @@ func RequireWorkAdmitted(state *models.State, operation string) error {
 	return nil
 }
 
+// workAdmissionLockName names the project lock that orders provider starts
+// against a halt; the barrier waits on it under the same name.
+const workAdmissionLockName = "work-admission"
+
+// workAdmissionBarrierSuffix follows the caller's operation in the lock
+// operation label of the barrier wait.
+const workAdmissionBarrierSuffix = "-barrier"
+
+// defaultWorkAdmissionBarrierTimeout is the initial barrier wait.
+const defaultWorkAdmissionBarrierTimeout = 60 * time.Second
+
 var workAdmissionBarrierTimeoutNanos atomic.Int64
 
 func init() {
-	workAdmissionBarrierTimeoutNanos.Store(int64(60 * time.Second))
+	workAdmissionBarrierTimeoutNanos.Store(int64(defaultWorkAdmissionBarrierTimeout))
 }
 
 // SetWorkAdmissionBarrierTimeoutForTest shortens the barrier wait so a hung
@@ -91,7 +102,7 @@ func (e *WorkAdmissionBarrierError) Unwrap() error { return e.Err }
 // WithWorkAdmissionSharedLock runs fn, a provider start's mode check and
 // start, holding the work-admission lock shared.
 func WithWorkAdmissionSharedLock(ctx context.Context, projectRoot, operation string, fn func() error) error {
-	lock, err := projectFileLock(projectRoot, "work-admission")
+	lock, err := projectFileLock(projectRoot, workAdmissionLockName)
 	if err != nil {
 		// Non-repository callers have no halt command racing them; keep their
 		// own validation and error contract, as project lifecycle locking does.
@@ -106,7 +117,7 @@ func WithWorkAdmissionSharedLock(ctx context.Context, projectRoot, operation str
 // AwaitWorkAdmissionBarrier waits until no provider start admitted before the
 // caller's committed halt is still in progress. Callers must hold no other lock.
 func AwaitWorkAdmissionBarrier(projectRoot, operation string) error {
-	lock, err := projectFileLock(projectRoot, "work-admission")
+	lock, err := projectFileLock(projectRoot, workAdmissionLockName)
 	if err != nil {
 		if stderrors.Is(err, os.ErrNotExist) {
 			return nil
@@ -114,7 +125,7 @@ func AwaitWorkAdmissionBarrier(projectRoot, operation string) error {
 		return err
 	}
 	timeout := time.Duration(workAdmissionBarrierTimeoutNanos.Load())
-	err = lock.WithTimeout(timeout).WithLockOperation(operation+"-barrier", func() error { return nil })
+	err = lock.WithTimeout(timeout).WithLockOperation(operation+workAdmissionBarrierSuffix, func() error { return nil })
 	if filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
 		return &WorkAdmissionBarrierError{Operation: operation, Timeout: timeout, Err: err}
 	}

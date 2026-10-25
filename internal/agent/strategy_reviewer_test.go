@@ -394,7 +394,7 @@ func TestReviewerStrategy_ClaimTask_PostWorktreeCmdFailureReleasesClaimAndDegrad
 	if !ok {
 		t.Fatal("AgentHealth missing entry, want the reviewer degraded")
 	}
-	if health.Reason != ops.AgentDegradedWorktreeSetupFailed {
+	if health.Reason != string(ops.AgentDegradedWorktreeSetupFailed) {
 		t.Errorf("health.Reason = %q, want %q", health.Reason, ops.AgentDegradedWorktreeSetupFailed)
 	}
 }
@@ -436,7 +436,7 @@ func TestReviewerStrategy_ClaimTask_SuccessClearsDegradedHealth(t *testing.T) {
 			Provider:   reviewer.Provider,
 			PID:        reviewer.PID,
 			DegradedAt: now.Add(-time.Minute),
-			Reason:     ops.AgentDegradedWorktreeSetupFailed,
+			Reason:     string(ops.AgentDegradedWorktreeSetupFailed),
 			LastTask:   task,
 			LastError:  "post-worktree setup command failed",
 		}
@@ -850,7 +850,7 @@ func TestReviewerObserveClaimFailureLogsErrorOnceWhenKeyOpens(t *testing.T) {
 		t.Fatalf("circuit-open anomalies = %d, want 1", len(anomalies))
 	}
 	details := anomalies[0].Details
-	if anomalies[0].Task != "task-broken" || details["role"] != models.RoleCodeReviewer || details["failure_class"] != ops.ReviewClaimClassReviewBoundaryRepair {
+	if anomalies[0].Task != "task-broken" || details["role"] != models.RoleCodeReviewer || details["failure_class"] != string(ops.ReviewClaimClassReviewBoundaryRepair) {
 		t.Fatalf("anomaly = %+v, want task-broken/%s/%s", anomalies[0], models.RoleCodeReviewer, ops.ReviewClaimClassReviewBoundaryRepair)
 	}
 	if details["attempts"] != claimBreakerThreshold {

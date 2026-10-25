@@ -141,7 +141,7 @@ func readClaimAdmissionState(bb *db.Blackboard, taskID string, authority *models
 	}
 	invocation.observe(task)
 	// Fast refusal only; each claim-triggered write below rechecks under its lock.
-	if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+	if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 		return nil, nil, err
 	}
 	if testClaimTaskHooks != nil && testClaimTaskHooks.afterInitialAdmission != nil {
@@ -181,7 +181,7 @@ func resolveClaimStatuses(resolver *pipeline.Resolver, task *models.Task, runtim
 // claim continues under a request rebuilt on the released state. A retained
 // receipt for the request returns its replayed result.
 func establishClaimRequest(bb *db.Blackboard, statePath string, state *models.State, task *models.Task, agentID, runtimeRole string, resolver *pipeline.Resolver, authority *models.AgentAuthority, invocation *ownershipInvocation) (*models.State, *models.Task, *ClaimResult, error) {
-	request, err := NewLifecycleRequest("claim-task", task, agentID, authority, invocation.opts, nil)
+	request, err := NewLifecycleRequest(claimTaskOperation, task, agentID, authority, invocation.opts, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -192,7 +192,7 @@ func establishClaimRequest(bb *db.Blackboard, statePath string, state *models.St
 		if state, task, err = takeOverStrandedDoerClaim(bb, statePath, state, task, agentID, runtimeRole, resolver, authority, invocation); err != nil {
 			return nil, nil, nil, err
 		}
-		if request, err = NewLifecycleRequest("claim-task", task, agentID, authority, invocation.opts, nil); err != nil {
+		if request, err = NewLifecycleRequest(claimTaskOperation, task, agentID, authority, invocation.opts, nil); err != nil {
 			return nil, nil, nil, err
 		}
 		invocation.request = request
@@ -292,7 +292,7 @@ func (op *claimOperation) enforceLimits(state *models.State, task *models.Task) 
 		}
 		op.invocation.effects = true
 		outcome := result.LifecycleOutcome
-		outcome.Operation, outcome.Outcome, outcome.SafeAction = "claim-task", models.LifecycleAlreadyTransitioned, string(LifecycleSafeActionStop)
+		outcome.Operation, outcome.Outcome, outcome.SafeAction = claimTaskOperation, models.LifecycleAlreadyTransitioned, string(LifecycleSafeActionStop)
 		return &LifecycleError{Outcome: outcome, Err: &PreconditionError{Reason: fmt.Sprintf(
 			"task %s exhausted limits, transitioned to attempt %d — claimable on next cycle",
 			op.taskID, result.NewAttempt,
@@ -377,12 +377,12 @@ func (op *claimOperation) captureEvidence(lockedTask *models.Task) (*acceptanceI
 func (op *claimOperation) persistPreparation() (models.LifecyclePreparation, error) {
 	var preparation models.LifecyclePreparation
 	err := lifecycleMutation(op.bb, op.authority)(func(state *models.State) error {
-		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+		if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 			return err
 		}
 		task := state.FindTask(op.taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: op.taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: op.taskID}
 		}
 		op.invocation.observe(task)
 		if task.Status != op.taskStatus {
@@ -416,12 +416,12 @@ func enforceBlockedEscalation(
 
 	return lifecycleMutation(bb, authority)(func(state *models.State) error {
 		// Claim-triggered: a halted system must not block the task on a claim's behalf.
-		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+		if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 			return err
 		}
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if task.Status != expectedStatus {
 			return fmt.Errorf("race condition: task status changed from %s to %s", expectedStatus, task.Status)
@@ -464,12 +464,12 @@ func enforceBlockedEscalation(
 		reasonPtr := &blockedReason
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  "blocked",
+			Event:  models.TaskEventBlocked,
 			Agent:  agentPtr,
 			Reason: reasonPtr,
 		})
 		for _, outcome := range outcomes {
-			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsCommitted)
+			*outcome = NewLifecycleOutcome(claimTaskOperation, task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsCommitted)
 		}
 
 		return nil

@@ -28,7 +28,7 @@ func captureRecoverAgentClaims(state *models.State, agentID string, lockedIDs []
 	slices.Sort(claims)
 	claims = slices.Compact(claims)
 	if !slices.Equal(claims, lockedIDs) {
-		return recoverAgentClaims{}, WrapLifecycleError("recover-agent", nil, fmt.Errorf("agent task claims changed before recovery"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+		return recoverAgentClaims{}, WrapLifecycleError(recoverAgentOperation, nil, fmt.Errorf("agent task claims changed before recovery"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
 	return recoverAgentClaims{agent: agent, exists: exists, doers: doerTaskIDs, reviewers: reviewerTaskIDs, all: claims}, nil
 }
@@ -47,7 +47,7 @@ func recoverAgentAnchor(state *models.State, agentID string, claims []string, op
 				continue
 			}
 			for _, receipt := range task.Lifecycle.Receipts {
-				if receipt.Operation == "recover-agent" && receipt.Actor == agentID && receipt.RequestID == opts.RequestID && receipt.ExpectedTransition == opts.ExpectedTransition {
+				if receipt.Operation == recoverAgentOperation && receipt.Actor == agentID && receipt.RequestID == opts.RequestID && receipt.ExpectedTransition == opts.ExpectedTransition {
 					if anchor != nil && anchor.ID != task.ID {
 						return nil, &PreconditionError{Reason: "request_id requires one task boundary for recover-agent"}
 					}
@@ -65,7 +65,7 @@ func recoverAgentAnchor(state *models.State, agentID string, claims []string, op
 // recoverAgentRequest builds the anchored request and resolves a retained
 // receipt; a non-nil replay result is the already-completed answer.
 func recoverAgentRequest(anchor *models.Task, agentID string, force bool, reason string, opts LifecycleRequestOptions) (LifecycleRequest, *RecoverAgentResult, error) {
-	request, err := NewLifecycleRequest("recover-agent", anchor, agentID, nil, opts, struct {
+	request, err := NewLifecycleRequest(recoverAgentOperation, anchor, agentID, nil, opts, struct {
 		Force  bool
 		Reason string
 	}{force, reason})

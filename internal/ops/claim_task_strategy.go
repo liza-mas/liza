@@ -13,6 +13,29 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// interruptedOperationRebase is the name git.InterruptedOperation reports for
+// a rebase left in progress; internal/git declares no constant for it.
+const interruptedOperationRebase = "rebase"
+
+// preservedClaimRecovery names the repair a preserved initial claim blocked for.
+// It selects the repair command and the question, and is recorded as the
+// operation of the task's repair request, a string field.
+type preservedClaimRecovery string
+
+const (
+	preservedClaimRetryRebase     preservedClaimRecovery = "retry_preserved_claim_rebase"
+	preservedClaimResolveConflict preservedClaimRecovery = "resolve_preserved_claim_rebase_conflict"
+	preservedClaimRepairBase      preservedClaimRecovery = "repair_preserved_claim_base"
+	preservedClaimCleanWorktree   preservedClaimRecovery = "clean_preserved_claim_worktree"
+)
+
+const (
+	// preservedClaimEvidenceLimit bounds the failure text kept as repair evidence.
+	preservedClaimEvidenceLimit = 2000
+	// rebaseSkippedNoteLimit bounds the failure text kept in a skipped-rebase note.
+	rebaseSkippedNoteLimit = 500
+)
+
 type claimContext struct {
 	authority           *models.AgentAuthority
 	request             *LifecycleRequest
@@ -272,11 +295,11 @@ func rebasePreservedOntoIntegration(bb *db.Blackboard, gitWrapper *git.Git, ctx 
 		return head, nil
 	}
 	if err := gitWrapper.RebaseOnto(ctx.worktreeDir, ctx.baseCommit); err != nil {
-		kind := "retry_preserved_claim_rebase"
+		kind := preservedClaimRetryRebase
 		reason := fmt.Sprintf("preserved worktree rebase failed onto %s: %v", ctx.baseCommit, err)
 		var conflict *git.RebaseConflictError
 		if stderrors.As(err, &conflict) {
-			kind = "resolve_preserved_claim_rebase_conflict"
+			kind = preservedClaimResolveConflict
 			reason = fmt.Sprintf("preserved worktree rebase conflict onto %s: %v", ctx.baseCommit, err)
 		}
 		if abortErr := gitWrapper.AbortRebase(ctx.worktreeDir); abortErr != nil {
@@ -293,7 +316,7 @@ func rebasePreservedOntoIntegration(bb *db.Blackboard, gitWrapper *git.Git, ctx 
 // Invalid preserved ancestry needs an operator decision; repeatedly claiming
 // the same boundary cannot repair it and must not discard task commits.
 func blockPreservedClaimBase(bb *db.Blackboard, ctx *claimContext, reason string) error {
-	if err := markPreservedInitialClaimRecovery(bb, ctx, "repair_preserved_claim_base", reason, reason); err != nil {
+	if err := markPreservedInitialClaimRecovery(bb, ctx, preservedClaimRepairBase, reason, reason); err != nil {
 		return fmt.Errorf("%s; failed to record recovery state: %w", reason, err)
 	}
 	return &PreconditionError{Reason: reason}
@@ -308,7 +331,7 @@ func blockPreservedClaimBase(bb *db.Blackboard, ctx *claimContext, reason string
 // WIP commit on the task branch.
 func adoptPreservedWIP(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext, status string) error {
 	block := func(reason string) error {
-		if markErr := markPreservedInitialClaimRecovery(bb, ctx, "clean_preserved_claim_worktree", reason, reason); markErr != nil {
+		if markErr := markPreservedInitialClaimRecovery(bb, ctx, preservedClaimCleanWorktree, reason, reason); markErr != nil {
 			return fmt.Errorf("%s; failed to record recovery state: %w", reason, markErr)
 		}
 		return &PreconditionError{Reason: reason}
@@ -340,7 +363,7 @@ func adoptPreservedWIP(bb *db.Blackboard, gitWrapper *git.Git, ctx *claimContext
 func markPreservedInitialClaimRecovery(
 	bb *db.Blackboard,
 	ctx *claimContext,
-	operation,
+	operation preservedClaimRecovery,
 	reason,
 	evidence string,
 ) error {
@@ -349,10 +372,10 @@ func markPreservedInitialClaimRecovery(
 	statusCommand := fmt.Sprintf("git -C %s status --short", ctx.worktreeRel)
 	repairCommand := statusCommand
 	validation := []string{statusCommand}
-	if operation == "repair_preserved_claim_base" {
-		repairCommand = brand.Command("recover-task", ctx.taskID) + " --fresh"
+	if operation == preservedClaimRepairBase {
+		repairCommand = brand.Command(recoverTaskOperation, ctx.taskID) + " --fresh"
 		question = "Inspect the preserved task branch and repair its base metadata, or deliberately discard the preserved work with " + repairCommand + "."
-	} else if operation != "clean_preserved_claim_worktree" {
+	} else if operation != preservedClaimCleanWorktree {
 		repairCommand = fmt.Sprintf("git -C %s rebase %s", ctx.worktreeRel, ctx.baseCommit)
 		validation = append(validation, repairCommand)
 	}
@@ -378,10 +401,10 @@ func markPreservedInitialClaimRecovery(
 		task.BlockedReason = &reason
 		task.BlockedQuestions = []string{question}
 		task.RepairRequest = &models.RepairRequest{
-			Operation:  operation,
+			Operation:  string(operation),
 			Target:     ctx.taskID,
 			Command:    repairCommand,
-			Evidence:   []string{truncateForDiagnostics(evidence, 2000)},
+			Evidence:   []string{truncateForDiagnostics(evidence, preservedClaimEvidenceLimit)},
 			Validation: validation,
 		}
 		task.History = append(task.History, models.TaskHistoryEntry{
@@ -554,7 +577,7 @@ func rebaseRejectedWorktree(gitWrapper *git.Git, ctx *claimContext) error {
 	if stderrors.As(rebaseErr, &conflict) {
 		ctx.rebaseSkipped = fmt.Sprintf("rebase conflict onto %s", shortSHA(target))
 	} else {
-		ctx.rebaseSkipped = fmt.Sprintf("rebase onto %s failed: %s", shortSHA(target), truncateForDiagnostics(rebaseErr.Error(), 500))
+		ctx.rebaseSkipped = fmt.Sprintf("rebase onto %s failed: %s", shortSHA(target), truncateForDiagnostics(rebaseErr.Error(), rebaseSkippedNoteLimit))
 	}
 	return nil
 }
@@ -568,7 +591,7 @@ func restoreRejectedWorktreeAfterRebase(gitWrapper *git.Git, ctx *claimContext, 
 	}
 	switch operation {
 	case "":
-	case "rebase":
+	case interruptedOperationRebase:
 		if err := gitWrapper.AbortRebase(ctx.worktreeDir); err != nil {
 			return failClosedRejectedRebase(ctx, fmt.Sprintf("rebase abort failed: %v", err))
 		}

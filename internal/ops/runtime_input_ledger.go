@@ -17,14 +17,22 @@ import (
 	"github.com/liza-mas/liza/internal/runtimeinputs"
 )
 
+// runtimeInputCode is a refusal code a runtime input can be refused with. It is
+// converted to string where it enters anomaly details, diagnostics and messages.
+type runtimeInputCode string
+
 // Refusal codes a runtime input can be refused with (ADR-0169). Each is a
 // precondition: it costs no review cycle and executes no command.
 const (
-	runtimeInputCodeConsumed    = "runtime_input_consumed"
-	runtimeInputCodeInvalidated = "runtime_input_invalidated"
-	runtimeInputCodeMissing     = "runtime_input_missing"
-	runtimeInputCodeUnavailable = "runtime_input_unavailable"
+	runtimeInputCodeConsumed    runtimeInputCode = "runtime_input_consumed"
+	runtimeInputCodeInvalidated runtimeInputCode = "runtime_input_invalidated"
+	runtimeInputCodeMissing     runtimeInputCode = "runtime_input_missing"
+	runtimeInputCodeUnavailable runtimeInputCode = "runtime_input_unavailable"
 )
+
+// runtimeInputNoBoundInstance is the bound value of an input with no instance
+// recorded for the task.
+const runtimeInputNoBoundInstance = "none"
 
 // runtimeInputKeyPath locates the operator key; tests redirect it.
 var runtimeInputKeyPath = runtimeinputs.DefaultKeyPath
@@ -70,13 +78,14 @@ type runtimeInputResolution struct {
 	instanceID      string
 	materialization *runtimeinputs.Materialization
 	// code is empty when the instance is usable.
-	code string
+	code runtimeInputCode
 	// invalidate lists available instances whose artifact no longer
 	// matches the recorded identity; they are invalidated even when a later
 	// instance is usable.
 	invalidate []string
 	// bound names the most recently recorded instance bound to the task for
-	// this input, or "none"; it re-arms anomaly deduplication.
+	// this input, or runtimeInputNoBoundInstance; it re-arms anomaly
+	// deduplication.
 	bound string
 }
 
@@ -87,7 +96,7 @@ type runtimeInputResolution struct {
 func resolveRuntimeInputs(projectRoot string, state *models.State, taskID string, declarations []models.RuntimeInput, key *runtimeinputs.Key, keyErr error) []runtimeInputResolution {
 	resolutions := make([]runtimeInputResolution, 0, len(declarations))
 	for _, declaration := range declarations {
-		resolution := runtimeInputResolution{declaration: declaration, bound: "none"}
+		resolution := runtimeInputResolution{declaration: declaration, bound: runtimeInputNoBoundInstance}
 		var available []string
 		latest := time.Time{}
 		latestState := ""
@@ -96,7 +105,7 @@ func resolveRuntimeInputs(projectRoot string, state *models.State, taskID string
 			if instance.InputID != declaration.ID || !instance.BoundTo(taskID) {
 				continue
 			}
-			if resolution.bound == "none" || instance.RegisteredAt.After(latest) {
+			if resolution.bound == runtimeInputNoBoundInstance || instance.RegisteredAt.After(latest) {
 				resolution.bound, latest, latestState = id, instance.RegisteredAt, instance.State
 			}
 			if instance.State == models.RuntimeInputAvailable {
@@ -274,8 +283,11 @@ func (gate runtimeInputGate) acquire(task *models.Task) (*runtimeInputGrant, err
 	return grant, nil
 }
 
+// runtimeInputRunIDBytes is the random part of a gate run's identifier.
+const runtimeInputRunIDBytes = 8
+
 func newRuntimeInputRunID() string {
-	value := make([]byte, 8)
+	value := make([]byte, runtimeInputRunIDBytes)
 	if _, err := rand.Read(value); err != nil {
 		return fmt.Sprintf("run-%d", time.Now().UnixNano())
 	}
@@ -286,19 +298,19 @@ func newRuntimeInputRunID() string {
 // input unless the latest one for the same task and input already says the
 // same thing about the same bound instance. Recording a new instance changes
 // the bound instance, so a later refusal is announced again.
-func appendRuntimeInputAnomaly(state *models.State, taskID, inputID, code, operation, bound, reporter string, now time.Time) {
+func appendRuntimeInputAnomaly(state *models.State, taskID, inputID string, code runtimeInputCode, operation, bound, reporter string, now time.Time) {
 	for i := len(state.Anomalies) - 1; i >= 0; i-- {
 		anomaly := state.Anomalies[i]
 		if anomaly.Type != models.AnomalyTypeRuntimeInputUnavailable || anomaly.Details["task_id"] != taskID || anomaly.Details["input_id"] != inputID {
 			continue
 		}
-		if anomaly.Details["code"] == code && anomaly.Details["bound_instance"] == bound {
+		if anomaly.Details["code"] == string(code) && anomaly.Details["bound_instance"] == bound {
 			return
 		}
 		break
 	}
 	if reporter == "" {
-		reporter = "operator"
+		reporter = actorOperator
 	}
 	state.Anomalies = append(state.Anomalies, models.Anomaly{
 		Timestamp: now,
@@ -308,7 +320,7 @@ func appendRuntimeInputAnomaly(state *models.State, taskID, inputID, code, opera
 		Details: map[string]any{
 			"task_id":        taskID,
 			"input_id":       inputID,
-			"code":           code,
+			"code":           string(code),
 			"operation":      operation,
 			"bound_instance": bound,
 			"action":         runtimeInputOperatorAction(taskID, inputID),
@@ -327,7 +339,7 @@ func runtimeInputOperatorAction(taskID, inputID string) string {
 func runtimeInputRefusalError(taskID string, refusals []runtimeInputResolution, claim *AcceptanceClaimObservation) *AcceptanceEvidenceError {
 	codes := make([]string, len(refusals))
 	for i, refusal := range refusals {
-		codes[i] = refusal.code + ":" + refusal.declaration.ID
+		codes[i] = string(refusal.code) + ":" + refusal.declaration.ID
 	}
 	return &AcceptanceEvidenceError{
 		TaskID: taskID, Field: "runtime_inputs", Reason: strings.Join(codes, ", "),

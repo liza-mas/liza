@@ -11,6 +11,10 @@ import (
 
 const projectLifecycleLockTimeout = 30 * time.Minute
 
+// projectLifecycleLockName names the project lock shared by cleanup, agent
+// registration and worktree provisioning or recovery.
+const projectLifecycleLockName = "project-lifecycle"
+
 // Project lifecycle locking is intentionally limited to operations that
 // establish a live agent or create or recover Git worktree resources. Those
 // effects can outlive project-local blackboard state and would become orphaned
@@ -62,5 +66,5 @@ func withProjectLifecycleLock(lock *filelock.FileLock, operation string, shared 
 }
 
 func projectLifecycleLock(projectRoot string) (*filelock.FileLock, error) {
-	return projectFileLock(projectRoot, "project-lifecycle")
+	return projectFileLock(projectRoot, projectLifecycleLockName)
 }

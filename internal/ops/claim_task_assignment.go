@@ -10,6 +10,10 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// validationContextChanged is the preflight failure code of a claim or resume
+// whose revalidated context no longer matches the one observed.
+const validationContextChanged = "context_changed"
+
 // claimAssignment is phase three: the locked recheck of current state and the
 // commit of the claim. The operation's captured evidence is compared with
 // current state under the lock; it is not used as authority for the write.
@@ -89,7 +93,7 @@ func (a *claimAssignment) verifyPreservedBoundary() error {
 // captured evidence and returns them for the write.
 func (a *claimAssignment) recheckCurrent(state *models.State) (*models.Task, models.Agent, error) {
 	op := a.op
-	if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+	if err := RequireWorkAdmitted(state, claimTaskOperation); err != nil {
 		return nil, models.Agent{}, err
 	}
 	if err := a.preflight.CheckCurrent(state); err != nil {
@@ -98,10 +102,10 @@ func (a *claimAssignment) recheckCurrent(state *models.State) (*models.Task, mod
 	// Re-check task exists and status hasn't changed
 	task := state.FindTask(op.taskID)
 	if task == nil {
-		return nil, models.Agent{}, &errors.NotFoundError{Entity: "task", ID: op.taskID}
+		return nil, models.Agent{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: op.taskID}
 	}
 	if len(task.ValidationPrerequisites) > 0 && a.preflight == nil {
-		return nil, models.Agent{}, validationError("context_changed")
+		return nil, models.Agent{}, validationError(validationContextChanged)
 	}
 	op.invocation.observe(task)
 	if task.Status != op.taskStatus {

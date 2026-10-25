@@ -72,18 +72,19 @@ func (p *project) startAdmit(t *testing.T, label string, admitFlags ...string) *
 // the bound passes; it observes state, it never decides the outcome.
 func (r *heldSlotRun) awaitPath(t *testing.T, what string, holds func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	timeout := time.NewTimer(20 * time.Second)
+	defer timeout.Stop()
 	for !holds() {
 		select {
 		case err := <-r.done:
 			r.done <- err
 			t.Fatalf("admit ended before %s: %v; stderr: %s", what, err, r.stderr.String())
-		default:
-		}
-		if time.Now().After(deadline) {
+		case <-timeout.C:
 			t.Fatalf("timed out waiting for %s", what)
+		case <-poll.C:
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
 }
 

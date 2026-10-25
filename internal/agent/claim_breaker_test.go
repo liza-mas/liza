@@ -46,7 +46,7 @@ func quarantineFailure(taskID, boundaryVersion string) *ops.ReviewClaimFailure {
 	}
 }
 
-func candidateFreeFailure(class string, transient bool) *ops.ReviewClaimFailure {
+func candidateFreeFailure(class ops.ReviewClaimClass, transient bool) *ops.ReviewClaimFailure {
 	return &ops.ReviewClaimFailure{Role: breakerTestRole, Class: class, Transient: transient}
 }
 
@@ -300,7 +300,7 @@ func TestClaimBreakerStopAndNoWorkClassesTouchNoCounters(t *testing.T) {
 	breaker.Observe(candidateFreeFailure(ops.ReviewClaimClassGitOperation, true), breakerTestNow)
 	breaker.Observe(candidateFreeFailure(ops.ReviewClaimClassGitOperation, true), breakerTestNow)
 
-	for _, class := range []string{ops.ReviewClaimClassAuthority, ops.ReviewClaimClassDegraded} {
+	for _, class := range []ops.ReviewClaimClass{ops.ReviewClaimClassAuthority, ops.ReviewClaimClassDegraded} {
 		decision := breaker.Observe(candidateFreeFailure(class, false), breakerTestNow)
 		if !decision.Stop || decision.Delay != 0 || len(decision.Opened) != 0 {
 			t.Fatalf("%s: decision = %+v, want Stop only", class, decision)

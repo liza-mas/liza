@@ -24,10 +24,39 @@ import (
 // tests shorten it.
 var admissionSlotPollInterval = time.Second
 
+// defaultAdmissionLimitRefreshInterval is the initial admissionLimitRefreshInterval.
+const defaultAdmissionLimitRefreshInterval = 10 * time.Second
+
 // admissionLimitRefreshInterval spaces the re-reads of a full class's limit
 // by its head waiter, so a changed max_concurrent reaches waiters already
 // queued (D-180); tests shorten it.
-var admissionLimitRefreshInterval = 10 * time.Second
+var admissionLimitRefreshInterval = defaultAdmissionLimitRefreshInterval
+
+// Lock operation labels of the slot protocol, recorded in the lock owner
+// metadata. A ticket's lock is held while it waits; a slot's while it runs.
+const (
+	admissionQueueLockOperation = "admission-slot-queue"
+	admissionWaitLockOperation  = "admission-slot-wait"
+	admissionSlotLockOperation  = "admission-slot"
+	admissionPruneLockOperation = "admission-slot-prune"
+)
+
+// admissionQueueDirName is the per-class directory of waiter tickets.
+const admissionQueueDirName = "queue"
+
+// admissionDirMode is the mode of the per-class queue directory.
+const admissionDirMode = 0o755
+
+// admissionTicketNonceBytes is the random part of a ticket name, which keeps
+// tickets created in the same nanosecond apart.
+const admissionTicketNonceBytes = 8
+
+// Lock-file names filelock derives from a protected path (filelock.go): the
+// lock itself and its owner metadata. filelock exports no constant for them.
+const (
+	admissionLockFileSuffix  = ".lock"
+	admissionOwnerFileSuffix = ".lock.owner.json"
+)
 
 // admissionSlotCap bounds a slot wait plus the execution budget behind it;
 // tests shorten it.
@@ -232,21 +261,21 @@ func currentAdmissionMax(statePath, class string) (int, bool) {
 // known value when it reports none (D-180). A zero deadline never expires.
 func acquireAdmissionSlot(ctx context.Context, dir string, limit models.AdmissionLimit, deadline time.Time, tier admissionTier, queued func(ahead int), current func() (int, bool)) (*filelock.Held, error) {
 	started := time.Now()
-	queue := filepath.Join(dir, "queue")
-	if err := os.MkdirAll(queue, 0o755); err != nil {
+	queue := filepath.Join(dir, admissionQueueDirName)
+	if err := os.MkdirAll(queue, admissionDirMode); err != nil {
 		return nil, err
 	}
 	// Creation and pruning share this lock, so no ticket is ever seen
 	// between its creation and its lock.
 	queueLock := filelock.New(queue)
-	nonce := make([]byte, 8)
+	nonce := make([]byte, admissionTicketNonceBytes)
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
 	ticketPath := filepath.Join(queue, fmt.Sprintf("%d-%020d-%s", tier, time.Now().UnixNano(), hex.EncodeToString(nonce)))
 	var ticket *filelock.Held
-	err := queueLock.WithLockOperation("admission-slot-queue", func() error {
-		held, acquired, err := filelock.New(ticketPath).TryHold("admission-slot-wait")
+	err := queueLock.WithLockOperation(admissionQueueLockOperation, func() error {
+		held, acquired, err := filelock.New(ticketPath).TryHold(admissionWaitLockOperation)
 		if err == nil && !acquired {
 			err = fmt.Errorf("admission slot ticket %s already held", ticketPath)
 		}
@@ -276,7 +305,7 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 			}
 			full = true
 			for i := range tier.usableSlots(limit.MaxConcurrent) {
-				held, acquired, err := filelock.New(filepath.Join(dir, fmt.Sprintf("slot-%d", i))).TryHold("admission-slot")
+				held, acquired, err := filelock.New(filepath.Join(dir, fmt.Sprintf("slot-%d", i))).TryHold(admissionSlotLockOperation)
 				if err != nil {
 					return nil, err
 				}
@@ -325,13 +354,13 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 // unprobed.
 func admissionQueueAhead(queueLock *filelock.FileLock, queue, ticketPath string) (int, error) {
 	ahead := 0
-	err := queueLock.WithLockOperation("admission-slot-queue", func() error {
+	err := queueLock.WithLockOperation(admissionQueueLockOperation, func() error {
 		entries, err := os.ReadDir(queue)
 		if err != nil {
 			return err
 		}
 		for _, entry := range entries { // ReadDir sorts by name: arrival order.
-			name, ok := strings.CutSuffix(entry.Name(), ".lock")
+			name, ok := strings.CutSuffix(entry.Name(), admissionLockFileSuffix)
 			if !ok {
 				continue
 			}
@@ -340,7 +369,7 @@ func admissionQueueAhead(queueLock *filelock.FileLock, queue, ticketPath string)
 				return nil
 			}
 			if ahead == 0 {
-				held, acquired, err := filelock.New(path).TryHold("admission-slot-prune")
+				held, acquired, err := filelock.New(path).TryHold(admissionPruneLockOperation)
 				if err != nil {
 					return err
 				}
@@ -360,7 +389,7 @@ func removeAdmissionTicket(path string, held *filelock.Held) {
 	// Release before removing: Windows refuses to unlink an open file, and
 	// releasing first also avoids a re-creator flocking a different inode.
 	_ = held.Release()
-	for _, file := range []string{path + ".lock", path + ".lock.owner.json"} {
+	for _, file := range []string{path + admissionLockFileSuffix, path + admissionOwnerFileSuffix} {
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 			log.Printf("WARNING: admission slot ticket not removed: %v", err)
 		}

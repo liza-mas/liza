@@ -57,10 +57,16 @@ func SetAgentLifecycleLockTimeoutForTest(timeout time.Duration) func() {
 	}
 }
 
+// agentLifecycleKeyBytes is how much of the agent ID's digest names its lock.
+const agentLifecycleKeyBytes = 8
+
+// agentLifecycleLockPrefix leads the name of every per-agent lifecycle lock.
+const agentLifecycleLockPrefix = "agent-lifecycle-"
+
 func agentLifecycleLock(projectRoot, agentID string) (*filelock.FileLock, error) {
 	sum := sha256.Sum256([]byte(agentID))
-	key := hex.EncodeToString(sum[:8])
-	lock, err := projectFileLock(projectRoot, "agent-lifecycle-"+key)
+	key := hex.EncodeToString(sum[:agentLifecycleKeyBytes])
+	lock, err := projectFileLock(projectRoot, agentLifecycleLockPrefix+key)
 	if err == nil {
 		return lock, nil
 	}
@@ -74,6 +80,6 @@ func agentLifecycleLock(projectRoot, agentID string) (*filelock.FileLock, error)
 	if absErr != nil {
 		return nil, fmt.Errorf("resolve project root for agent lifecycle lock: %w", absErr)
 	}
-	lockName := strings.TrimPrefix(paths.ProjectDirName(), ".") + "-agent-lifecycle-" + key
+	lockName := strings.TrimPrefix(paths.ProjectDirName(), ".") + "-" + agentLifecycleLockPrefix + key
 	return filelock.New(filepath.Join(filepath.Clean(root), lockName)), nil
 }

@@ -222,7 +222,7 @@ func TestRuntimeInputGateSpendsBeforeLaunchAndRefusesReuse(t *testing.T) {
 		t.Fatalf("refused repair changed the task: cycles %d→%d, status %s→%s", cycles, got.ReviewCyclesCurrent, task.Status, got.Status)
 	}
 	anomalies := runtimeInputAnomalies(after)
-	if len(anomalies) != 1 || anomalies[0].Details["input_id"] != "w03" || anomalies[0].Details["code"] != runtimeInputCodeConsumed {
+	if len(anomalies) != 1 || anomalies[0].Details["input_id"] != "w03" || anomalies[0].Details["code"] != "runtime_input_consumed" {
 		t.Fatalf("anomalies = %+v, want one deduplicated operator signal for w03", anomalies)
 	}
 

@@ -10,6 +10,12 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// Operation and lock labels of the recover-task operation.
+const (
+	recoverTaskOperation     = "recover-task"
+	recoverTaskLockOperation = "task-recover-worktree"
+)
+
 // RecoverTaskResult contains the outcome of recovering a task.
 type RecoverTaskResult struct {
 	models.LifecycleOutcome
@@ -87,7 +93,7 @@ func RecoverTask(projectRoot, taskID string, force bool, reason string) (*Recove
 
 // RecoverTaskWithOptions performs task recovery with explicit reset options.
 func RecoverTaskWithOptions(projectRoot, taskID string, reason string, opts RecoverTaskOptions) (result *RecoverTaskResult, err error) {
-	invocation := &ownershipInvocation{operation: "recover-task", opts: opts.RequestOptions, metrics: NewLifecycleInvocation(projectRoot)}
+	invocation := &ownershipInvocation{operation: recoverTaskOperation, opts: opts.RequestOptions, metrics: NewLifecycleInvocation(projectRoot)}
 	defer func() { err = invocation.finish(projectRoot, err) }()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID required"}
@@ -98,7 +104,7 @@ func RecoverTaskWithOptions(projectRoot, taskID string, reason string, opts Reco
 	if err := ValidateLifecycleRequestOptions(opts.RequestOptions); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
-	err = withOwnershipTaskLock(projectRoot, taskID, "task-recover-worktree", func() error {
+	err = withOwnershipTaskLock(projectRoot, taskID, recoverTaskLockOperation, func() error {
 		var recoverErr error
 		result, recoverErr = recoverTaskWithOptions(projectRoot, taskID, reason, opts, invocation)
 		return recoverErr
@@ -183,7 +189,7 @@ func recoverTaskResolveRequest(task *models.Task, state *models.State, reason st
 	taskID := task.ID
 	result.InState = true
 	invocation.observe(task)
-	request, err := NewLifecycleRequest("recover-task", task, "human", nil, opts.RequestOptions, struct {
+	request, err := NewLifecycleRequest(recoverTaskOperation, task, actorHuman, nil, opts.RequestOptions, struct {
 		Force, Fresh bool
 		Reason       string
 	}{opts.Force, opts.Fresh, reason})
@@ -196,7 +202,7 @@ func recoverTaskResolveRequest(task *models.Task, state *models.State, reason st
 		return false, err
 	}
 	if receipt != nil {
-		invocation.outcome = LifecycleReplayOutcome(task, receipt, "human")
+		invocation.outcome = LifecycleReplayOutcome(task, receipt, actorHuman)
 		result.LifecycleOutcome = invocation.outcome
 		result.ClaimReleased = receipt.Projection.ReleasedDoer || receipt.Projection.ReleasedReviewer
 		result.FreshReset = opts.Fresh
@@ -219,7 +225,7 @@ func recoverTaskAbsentCleanup(gitWrapper *git.Git, taskID string, artifact recov
 	if err := recoverTaskCleanupGitArtifacts(gitWrapper, taskID, artifact, result); err != nil {
 		return result, fmt.Errorf("cleanup git artifacts: %w", err)
 	}
-	invocation.outcome = NewLifecycleOutcome("recover-task", nil, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
+	invocation.outcome = NewLifecycleOutcome(recoverTaskOperation, nil, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
 	invocation.outcome.TaskID = taskID
 	result.LifecycleOutcome = invocation.outcome
 	return result, nil

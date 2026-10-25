@@ -16,12 +16,38 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// Operation names of the two mode commands that also label their locks and
+// refusals.
+const (
+	pauseOperation  = "pause"
+	resumeOperation = "resume"
+)
+
 const (
 	goalCompleteStopReservedNamespace = "system:goal-complete:"
 	goalCompleteStopTokenPrefix       = goalCompleteStopReservedNamespace + "v1:"
 	goalCompleteStopOperationIDBytes  = 16
 	goalCompleteStopWriteStop         = "stop"
 	goalCompleteStopWriteRestore      = "restore"
+
+	// goalCompleteRestoredBy is the changed-by identity of the restore that
+	// follows a stop whose completion no longer verifies.
+	goalCompleteRestoredBy = "system:integration-head-verification"
+
+	// Linearization operation labels of the two goal-complete mode writes.
+	goalCompleteStopLinearization    = "goal-complete stop"
+	goalCompleteRestoreLinearization = "restore stale goal-complete stop"
+
+	// integrationStateChangedCode is the integration progress reason code of a
+	// completion that changed between verification and the mode write.
+	integrationStateChangedCode = "integration_state_changed"
+)
+
+// Persisted circuit-breaker statuses. models.CircuitBreaker.Status is a plain
+// string and models declares no constants for its two values.
+const (
+	circuitBreakerStatusOK        = "OK"
+	circuitBreakerStatusTriggered = "TRIGGERED"
 )
 
 type goalCompleteStopToken struct {
@@ -88,7 +114,7 @@ func StopForGoalCompletion(projectRoot, reason string) (*ModeChangeResult, error
 	blackboard := db.For(paths.New(projectRoot).StatePath())
 	timestamp := goalCompleteStopNow()
 	var previousMode models.SystemMode
-	err = withEffectiveIntegrationCompletionLinearization(projectRoot, "goal-complete stop", func() error {
+	err = withEffectiveIntegrationCompletionLinearization(projectRoot, goalCompleteStopLinearization, func() error {
 		if beforeGoalCompleteStopStateWriteTestHook != nil {
 			beforeGoalCompleteStopStateWriteTestHook(goalCompleteStopWriteStop)
 		}
@@ -126,7 +152,7 @@ func StopForGoalCompletion(projectRoot, reason string) (*ModeChangeResult, error
 	if verificationErr != nil {
 		return nil, errors.Join(fmt.Errorf("verify goal-complete stop: %w", verificationErr), restoreErr)
 	}
-	return nil, errors.Join(integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"}), restoreErr)
+	return nil, errors.Join(integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode}), restoreErr)
 }
 
 func goalCompleteStopAuthorizationMatches(
@@ -143,7 +169,7 @@ func goalCompleteStopAuthorizationMatches(
 }
 
 func restoreRunningForExactGoalCompleteStop(projectRoot, rawToken string) error {
-	return withEffectiveIntegrationCompletionLinearization(projectRoot, "restore stale goal-complete stop", func() error {
+	return withEffectiveIntegrationCompletionLinearization(projectRoot, goalCompleteRestoreLinearization, func() error {
 		if beforeGoalCompleteStopStateWriteTestHook != nil {
 			beforeGoalCompleteStopStateWriteTestHook(goalCompleteStopWriteRestore)
 		}
@@ -157,7 +183,7 @@ func restoreRunningForExactGoalCompleteStop(projectRoot, rawToken string) error 
 				return &PreconditionError{Reason: err.Error()}
 			}
 			timestamp := goalCompleteStopNow()
-			changedBy := "system:integration-head-verification"
+			changedBy := goalCompleteRestoredBy
 			state.Config.Mode = models.SystemModeRunning
 			state.Config.ModeChangedAt = &timestamp
 			state.Config.ModeChangedBy = &changedBy
@@ -240,7 +266,7 @@ func Pause(projectRoot, reason, changedBy string) (*ModeChangeResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := AwaitWorkAdmissionBarrier(projectRoot, "pause"); err != nil {
+	if err := AwaitWorkAdmissionBarrier(projectRoot, pauseOperation); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -275,7 +301,7 @@ func changeModeAllowingSame(projectRoot, reason, changedBy string, target models
 			return &PreconditionError{Reason: err.Error()}
 		}
 		if target == models.SystemModeRunning && hasActiveHaltResponse(s) {
-			return &PreconditionError{Reason: fmt.Sprintf("cannot start while an active HALT response is unresolved; use %q to acknowledge it", brand.Command("resume"))}
+			return &PreconditionError{Reason: fmt.Sprintf("cannot start while an active HALT response is unresolved; use %q to acknowledge it", brand.Command(resumeOperation))}
 		}
 
 		s.Config.Mode = target
@@ -301,7 +327,7 @@ func hasActiveHaltResponse(s *models.State) bool {
 	if s.CircuitBreaker.CurrentResponse != nil {
 		return s.CircuitBreaker.CurrentResponse.Response == models.CircuitBreakerResponseHalt
 	}
-	return s.CircuitBreaker.Status == "TRIGGERED" && s.CircuitBreaker.CurrentTrigger != nil
+	return s.CircuitBreaker.Status == circuitBreakerStatusTriggered && s.CircuitBreaker.CurrentTrigger != nil
 }
 
 // ResumeResult contains the outcome of a system resume.
@@ -327,7 +353,7 @@ func resumeSystemMode(s *models.State, timestamp time.Time, changedBy string) st
 		s.Config.Mode = models.SystemModeRunning
 		s.Config.ModeChangedAt = &timestamp
 		s.Config.ModeChangedBy = &changedBy
-		s.CircuitBreaker.Status = "OK"
+		s.CircuitBreaker.Status = circuitBreakerStatusOK
 		s.CircuitBreaker.CurrentTrigger = nil
 		return "CIRCUIT_BREAKER_TRIPPED mode"
 	default:
@@ -355,7 +381,7 @@ func acknowledgeCircuitBreakerResponse(s *models.State, timestamp time.Time, cha
 		entry.ResolvedAt = &timestamp
 		s.CircuitBreaker.CurrentResponse = nil
 		if response.Response == models.CircuitBreakerResponseHalt {
-			s.CircuitBreaker.Status = "OK"
+			s.CircuitBreaker.Status = circuitBreakerStatusOK
 			s.CircuitBreaker.CurrentTrigger = nil
 		}
 		return nil
@@ -398,7 +424,7 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 			// sprint so post-resume transition execution can add child work before
 			// sprint-completion handling runs.
 			s.Sprint.Status = models.SprintStatusInProgress
-			return "CHECKPOINT", nil, nil
+			return string(models.SprintStatusCheckpoint), nil, nil
 		}
 
 		allTerminal, termErr := allPlannedTasksTerminalForProject(s, projectRoot)
@@ -417,7 +443,7 @@ func resumeSprint(s *models.State, lizaPaths paths.LizaPaths, projectRoot string
 			// PreWork clears it after executing transitions.
 			s.Sprint.Status = models.SprintStatusInProgress
 		}
-		return "CHECKPOINT", nil, nil
+		return string(models.SprintStatusCheckpoint), nil, nil
 
 	default:
 		return "", nil, nil
@@ -482,7 +508,7 @@ func resume(projectRoot, changedBy string, origin resumeOrigin) (*ResumeResult, 
 		})
 	}
 	if requiresCompletion {
-		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "resume", false, resumeMutation)
+		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, resumeOperation, false, resumeMutation)
 	} else {
 		err = resumeMutation(nil)
 	}
@@ -566,7 +592,7 @@ func (d *resumeDecision) apply(s *models.State, projectRoot, changedBy string, o
 		}
 		if currentRequiresCompletion {
 			if completionAuthorization == nil {
-				return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+				return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
 			}
 			if err := completionAuthorization.validateState(s, false); err != nil {
 				return err
@@ -583,7 +609,7 @@ func (d *resumeDecision) apply(s *models.State, projectRoot, changedBy string, o
 		d.systemRemainsStopped = true
 		if s.CircuitBreaker.CurrentResponse == nil {
 			// Legacy HALTs have no typed history boundary to resolve.
-			s.CircuitBreaker.Status = "OK"
+			s.CircuitBreaker.Status = circuitBreakerStatusOK
 			s.CircuitBreaker.CurrentTrigger = nil
 		}
 	} else {

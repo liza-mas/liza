@@ -21,7 +21,7 @@ func TestReviewClaimFailureClassifiesCandidateFreeErrors(t *testing.T) {
 	tests := []struct {
 		name          string
 		err           error
-		wantClass     string
+		wantClass     ReviewClaimClass
 		wantTransient bool
 	}{
 		{
@@ -223,7 +223,7 @@ func TestReviewClaimFailureClassifiesRemovalBranches(t *testing.T) {
 	tests := []struct {
 		name          string
 		err           error
-		wantClass     string
+		wantClass     ReviewClaimClass
 		wantTransient bool
 		wantRecovery  string
 	}{
@@ -381,7 +381,7 @@ func TestReviewerClaimCircuitOpenRecordsOneAnomalyPerKey(t *testing.T) {
 	}
 	wantDetails := map[string]any{
 		"role":             input.Role,
-		"failure_class":    input.FailureClass,
+		"failure_class":    string(input.FailureClass),
 		"boundary_version": input.BoundaryVersion,
 		"attempts":         3,
 		"first_failure":    "2026-09-18T10:00:00Z",

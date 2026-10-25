@@ -8,6 +8,20 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// Entity names NotFoundError carries for the two records most operations look
+// up. internal/errors documents them but declares no constants.
+const (
+	notFoundEntityTask  = "task"
+	notFoundEntityAgent = "agent"
+)
+
+// Audit actors recorded for operations performed without an agent identity.
+const (
+	actorOperator = "operator"
+	actorHuman    = "human"
+	actorSystem   = "system"
+)
+
 // readTaskState reads state from the blackboard and finds the specified task.
 // Returns an error if state cannot be read or the task doesn't exist.
 func readTaskState(bb *db.Blackboard, taskID string) (*models.State, *models.Task, error) {
@@ -27,7 +41,7 @@ func findReadTask(state *models.State, readErr error, taskID string) (*models.St
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
-		return nil, nil, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return nil, nil, &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 	return state, task, nil
 }

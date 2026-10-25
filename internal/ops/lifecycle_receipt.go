@@ -92,7 +92,7 @@ func lifecycleDigest(data []byte) string {
 }
 
 func lifecycleDigestValid(value string) bool {
-	if len(value) != 64 {
+	if len(value) != hex.EncodedLen(sha256.Size) {
 		return false
 	}
 	decoded, err := hex.DecodeString(value)
