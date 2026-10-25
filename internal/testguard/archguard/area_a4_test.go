@@ -7,7 +7,6 @@ var areaA4 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/apply_dependency_repair.go", Func: "applyDependencyRepairWithOptionalAuthority"}, Ceiling: 161},
 		{Key: Key{File: "internal/ops/cancel_task.go", Func: "cancelTaskLifecycle"}, Ceiling: 118},
 		{Key: Key{File: "internal/ops/delete_task.go", Func: "DeleteTask"}, Ceiling: 119},
 		{Key: Key{File: "internal/ops/narrow_inherited_dependencies.go", Func: "narrowInheritedDependenciesWithOptionalAuthority"}, Ceiling: 305},
