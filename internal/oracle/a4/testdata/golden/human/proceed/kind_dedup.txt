@@ -1,0 +1,7 @@
+exit_code: 0
+--- stdout
+Transition "code-plan-to-coding" executed on task cp-1
+Created 1 child task(s):
+- cp-1-code-1
+Run 'liza resume' to start a new sprint with the child tasks.
+--- stderr

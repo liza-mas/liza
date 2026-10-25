@@ -1,0 +1,7 @@
+exit_code: 0
+--- stdout
+Transition "us-to-coding" executed on task us-1
+Created 1 child task(s):
+- ep-1-arm
+Run 'liza resume' to start a new sprint with the child tasks.
+--- stderr
