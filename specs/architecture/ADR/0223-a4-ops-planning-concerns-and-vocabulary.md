@@ -55,8 +55,18 @@ and delivered by its coding tasks. The occurrence-by-occurrence evidence is the
    | Sprint coordination | `pipeline_ops.go`, `advance_sprint.go`, `sprint_checkpoint.go`, `sprint_summary.go`, `update_sprint_metrics.go`, `set_discovery_disposition.go`, `analyze.go`, `orchestrator_wake.go`, `human_note.go` | Resolver, hand-off and integration evidence → checkpoint, wake and metric decision → existing state and report publication. Checkpoint admission, trigger resolution, report staging and the locked update are separate steps; completion authorization is its own concern in `pipeline_ops.go`; wake queries, metrics and breaker decisions stay distinct |
 
    A helper extracted from a transaction receives explicit state, resolver and
-   request context, never acquires another state lock and never starts Git or
-   process effects (INVARIANTS §5 lock discipline). Operations keep their
+   request context and never acquires another state lock. Extraction adds no
+   Git or process effect inside a `Modify` callback (INVARIANTS §5 lock
+   discipline). Git or `exec` calls that the starting tree already made inside
+   a callback are inherited K1 exceptions (D33, generalised by D49): they stay
+   in the same transaction with the same checks, order and refusals, and may
+   move with their operation but never out of the transaction nor weaker.
+   Representative site: `AmendPlan` applies a correction inside its `Modify`
+   callback (`applyPlanAmendment`), whose bounded-contract validation
+   (`validateBoundedContractCorrection`) calls the extracted
+   `compareChangedContractFiles` (`contract_amendment_compare.go`); that
+   comparison reads `DiffFiles` and `TreeEntryAt` through the Git adapter,
+   exactly as the code it was extracted from did. Operations keep their
    transaction, error, authority and effect order: completion linearization →
    integration mutation → blackboard read is preserved and no mutation lock is
    held across a blackboard write. Extraction adds no validation, swallows no
