@@ -12,12 +12,19 @@ unit that moves no code.
   `IntegrationBranch` = `"global-refactoring"`. `git rev-parse global-refactoring` and `git rev-parse HEAD` of the
   task worktree both print the revision below, and `git log HEAD..global-refactoring` printed nothing at the start
   (2026-10-25T17:35Z) and again at the end of G1–G6 (2026-10-25T18:00Z, `global-refactoring` unchanged).
-- Integration revision under test: `1e7807b0688691feef5369ff8d06953cfc8c174e`
-  (`Merge arm-1-ar-13-cp-5-code-2 (task/arm-1-ar-13-cp-5-code-2)`). The task worktree `HEAD` is this revision plus
-  the commits that add this record, the registry closure and the acceptance manifest; `git diff --stat 1e7807b06
-  HEAD` lists only those files.
-- Observation window (UTC): 2026-10-25T17:35Z to 18:00Z, task branch `task/arm-1-ar-14-cp-0-code-0`. The worktree
-  was clean before every command until the G6 registry edit (`git status --short` empty).
+- Two integration revisions are recorded; neither relabels the other.
+  - **R1, superseded:** `1e7807b0688691feef5369ff8d06953cfc8c174e`
+    (`Merge arm-1-ar-13-cp-5-code-2 (task/arm-1-ar-13-cp-5-code-2)`). G1–G6 below were observed there. The
+    dispatched G8 run at R1 was red (section G8), so R1 is not the closing revision.
+  - **R2, current:** `20fee7197f2548b8e9844154a874700a603b8aee` (`fix(build): fold manifest notes into the
+    AC-budget assertion`), after the macOS test-budget correction merged (`47abea4a1`, `20fee7197`). Section
+    "Refresh at R2" re-runs G1–G4 and identifies the delta for G5–G6.
+  The task worktree `HEAD` is the integration revision of the last observation plus the commits that add this
+  record, the registry closure and the acceptance manifest; `git diff --stat 20fee7197 HEAD` lists only those
+  files.
+- Observation windows (UTC), task branch `task/arm-1-ar-14-cp-0-code-0`: R1 2026-10-25T17:35Z to 18:00Z (the
+  worktree was clean before every command until the G6 registry edit, `git status --short` empty); R2
+  2026-10-25T19:04Z to 19:17Z.
 - Starting commit of the run (for A4 diffs): `96c9ad69aee983ce2b929dd681b6ba43bf920535`.
 - A4 coding units merged before this unit: the task `depends_on` list (arm-1-ar-13-cp-0 through cp-5, 21 tasks) is
   all MERGED. Commits touching `internal/ops` since the A3 boundary record (`98dc9efc2`), by concern:
@@ -226,24 +233,94 @@ medium item.
   entries (`add_tasks.go`, `proceed.go` evidence lines). "Status Vocabulary…", "Single-Goal Data Model…" and
   "Destructive-DB Break-Glass…" are the three items the plan names as describing behaviour outside C1–C6.
 
+## Refresh at R2 (`20fee7197f2548b8e9844154a874700a603b8aee`)
+
+Reason: the dispatched G8 run at R1 was red on macOS (section G8). The operator-commissioned correction merged
+(`47abea4a1`, `20fee7197`) and released this task on 2026-10-25T19:01Z to refresh G1–G7. `git rev-parse
+global-refactoring` printed R2 and `git log HEAD..global-refactoring` printed nothing at 19:04Z and 19:17Z.
+
+**Delta R1 → R2** (`git diff --name-only 1e7807b06 20fee7197`): `Makefile`, the correction plan and its output
+manifest, and its acceptance manifest under `specs/plans/`. `git diff --stat 1e7807b06 20fee7197 -- internal cmd`
+prints nothing: no Go file, test, oracle, guard-data or embedded file changed. The `Makefile` change is two lines
+(`go test` → `go test -timeout 30m`) in `test-units-nosync` and `ci-test-slow-nosync`, the targets of the macOS
+compat lane (`make -n ci-test-compat-nosync` shows `-timeout 30m` on both). `make test` runs `go test ./...` and
+`make lint`, `make test-e2e` and the benchmarks use none of the changed lines.
+
+**G1–G3.** Unchanged by construction and re-read: `internal/testguard/archguard/area_a4_test.go` at R2 still
+holds `Layers`, `Allowlist`, `Ratchet` and `S2` as empty slices (lines 9–12); the Go tree is byte-identical to R1,
+so the S1 measurements, the SI-5 assignment, the AST shim scan and the exported-surface comparison of G1–G3 apply
+unchanged. `TestAreaA4RatchetIsEmpty` passed in C0 below at R2.
+
+**G4 at R2.** `env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp <command>` from the task worktree. The first pass
+ran the canonical forms; Go's test cache served 69 of 83 packages in C1 and all of C4, which is valid for
+byte-identical inputs but is not a fresh run. C1 and C4 were therefore re-run once with `GOFLAGS=-count=1`
+(translation of the canonical command; same commands otherwise). Neither pass was retried after a failure; there
+was none.
+
+| Cmd | Command | Start–End (UTC) | Exit | Excerpt |
+|---|---|---|---|---|
+| C0 | `go test -count=1 ./internal/testguard/archguard/` | 19:04:27–19:04:27 | 0 | `ok .../internal/testguard/archguard 0.111s` |
+| C1 | `make test` (first pass) | 19:04:27–19:07:22 | 0 | 83 `ok`, 0 `FAIL`, 69 `(cached)` |
+| C1 | `make test`, `GOFLAGS=-count=1` | 19:09:29–19:12:31 | 0 | 83 `ok`, 0 `FAIL`, 0 `(cached)`; `internal/ops` 254.434s, `internal/oracle/a4` 34.374s, `internal/agent` 179.445s, `internal/commands` 27.929s, `cmd/liza` 84.946s |
+| C2 | `make lint` | 19:07:22–19:07:25 | 0 | `ok .../internal/embedded 0.014s`, `ok .../internal/testguard/archguard 0.117s` (`lint-archguard`) |
+| C3 | `make test-e2e` | 19:07:25–19:08:44 | 0 | `ok .../internal/integration 78.545s` (`-race -tags e2e -count=1`) |
+| C4 | `go test -race ./internal/ops/...` (first pass) | 19:08:44–19:09:03 | 0 | `ok .../internal/ops (cached)` |
+| C4 | `go test -race ./internal/ops/...`, `GOFLAGS=-count=1` | 19:12:31–19:16:46 | 0 | `ok .../internal/ops 169.415s` (the only package under `./internal/ops/...`) |
+
+G4 holds at R2: no red suite is recorded as green. The task's canonical list is re-run again by the submission on
+the clean rebased commit, the validation of record for the manifest.
+
+**G5 at R2: carried forward from R1, not re-measured.** The delta identifies no Go change, so the `make test`
+wall time and the benchmarks measure the same code and the same recipes. The protocol clone at R1 stays the
+measurement of record (205 s timed `make test` against 523 s and +25% = 653.75 s; all 18 benchmark rows
+captured; dispositions in G5 above). As a separate, non-protocol observation the uncached C1 above took 182 s in
+the task worktree; the 1-minute load average read at 19:16Z, after C4, was 5.56. The two open indicative allocation observations handed to the
+A1/A7 boundary re-measurement are unchanged. Never blocks.
+
+**G6 at R2.** `specs/architecture/architectural-issues.md` is untouched by the delta (the delta lists no such
+file). The closure of "Decompose proceed.go (1,500 LOC)" and the recorded non-closures in G6 stand at R2.
+
 ## G7 — record completeness
 
-This file holds the commands or source reads, the integration SHA (`1e7807b0688691feef5369ff8d06953cfc8c174e`, for
-G1–G6 alike), the UTC observation, exits and excerpts for G1–G6 above, and the G8 section below. The acceptance
-manifest (`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-14-cp-0-boundary.json`) is written
-once G8 is green.
+This file holds the commands or source reads, both integration SHAs (R1 `1e7807b0688691feef5369ff8d06953cfc8c174e`
+for G1–G6 above, R2 `20fee7197f2548b8e9844154a874700a603b8aee` for the refresh), the UTC observations, exits and
+excerpts for G1–G6, and the G8 section below. The closing revision is R2. The acceptance manifest
+(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-14-cp-0-boundary.json`) is written once G8 is
+green.
 
-## G8 — dispatched CI result (D52, D59): pending
+## G8 — dispatched CI result (D52, D59, D60): pending at R2
 
-Status: **pending**. Under D52 (replacing the per-boundary pull request), the operator dispatches
-`.github/workflows/ci.yml` (`workflow_dispatch`) at the integration revision
-`1e7807b0688691feef5369ff8d06953cfc8c174e` (on `global-refactoring` if the head still equals it, otherwise on a
-pinned ref under D59), and the maintainer confirms that the Linux, Windows and macOS jobs of that one run are
-green. D52 runs macOS in the same dispatched run, so no separate `main`-push macOS follow-up is expected; if the
-maintainer instead reports one, its owner and status are recorded here and it is never claimed as passed before it
-runs. No pull request to `main` is opened or claimed, and no agent pushes. To be appended on resume: run URL, tested
-full SHA (must equal the revision above, else the run is not G8 evidence), each job's name and conclusion, UTC
-observation, the ruling.
+Status: **pending** for R2 `20fee7197f2548b8e9844154a874700a603b8aee`. Under D52 (replacing the per-boundary pull
+request), the operator dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) at R2 (on `global-refactoring`
+if the head still equals it, otherwise on a pinned ref under D59), applies D60 to any rerun of a pre-existing
+intermittent test and cites every attempt, and the maintainer confirms that the Linux, Windows and macOS jobs of
+that one run are green. D52 runs macOS in the same dispatched run, so no separate `main`-push macOS follow-up is
+expected; if the maintainer instead reports one, its owner and status are recorded here and it is never claimed as
+passed before it runs. No pull request to `main` is opened or claimed, and no agent pushes. To be appended on
+resume: run URL, tested full SHA (must equal R2, else the run is not G8 evidence), each job's name and conclusion,
+every attempt, UTC observation, the ruling.
+
+### History: run 40219462697 at R1 (red, superseded)
+
+Operator evidence, 2026-10-25T18:04Z and 18:20Z. Run
+`https://github.com/liza-mas/liza/actions/runs/40219462697`, `workflow_dispatch` on the pinned ref `g8/a4-1e7807b`,
+`headSha` `1e7807b0688691feef5369ff8d06953cfc8c174e` (= R1; `global-refactoring` was pushed at the same SHA). This
+run is **not** G8 evidence for the closing revision and is not deleted from the record.
+
+- Linux tests, Linux lint and build, and all Windows jobs: green.
+- **Attempt 1, macOS: red.** `internal/ops` hit `panic: test timed out after 10m0s` (600.094 s): the package
+  outgrew Go's default per-binary timeout, because the compat lane's `test-units-nosync` and `ci-test-slow-nosync`
+  carried no `-timeout` (macOS `internal/ops`: 447 s at the A1 G8, 481 s at A2, 488 s at A3, over 600 s here).
+  `internal/ops` is changed code on the branch, so D60 does not permit a rerun to count. Also
+  `internal/integration` `TestCodexACPProviderUnavailableLeavesUnrelatedFailureOnCrashPath` timed out at 20 s
+  (`provider_unavailable_acp_test.go:220`); its test file is unchanged on the branch, a candidate intermittent
+  timing failure under D60.
+- **Attempt 2, macOS: failed, informational only.** The operator reran the failed macOS job; it failed on an
+  intermittent A9 golden (`i14-decided`, T3/T4 numbering). It cannot count as G8 under D60 for the `internal/ops`
+  timeout.
+- Correction: `arm-1-ar-13-g8-timeout-correction-plan-code-0` merged as `47abea4a1` and `20fee7197` (explicit `-timeout
+  30m` on the two compat-lane targets, no test, assertion or package-list change). R2 is the integration revision
+  after it. Red CI keeps A5 coding held until a green G8 at R2.
 
 If CI tests different code, G1–G7 are re-run at that revision and both are kept (documentation-only deltas
 identified by diff); this record is not relabeled. Red CI keeps A5 coding held and the maintainer opens the fix
