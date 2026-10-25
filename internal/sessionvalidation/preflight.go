@@ -60,8 +60,11 @@ func (e *Error) Error() string {
 
 func (e *Error) Is(target error) bool { return target == ErrPreflight }
 
+// maxVariableNameLength bounds a prerequisite environment variable name.
+const maxVariableNameLength = 256
+
 func validVariable(name string) bool {
-	if name == "" || len(name) > 256 {
+	if name == "" || len(name) > maxVariableNameLength {
 		return false
 	}
 	for i, c := range name {
@@ -71,6 +74,12 @@ func validVariable(name string) bool {
 	}
 	return true
 }
+
+// Fallback limits for Check when a caller passes a non-positive limit.
+const (
+	defaultProbeTimeout = 10 * time.Second
+	defaultTotalTimeout = 30 * time.Second
+)
 
 // Check executes cheap declared prerequisite probes in cwd with exactly env.
 // Each probe gets at most probeTimeout and the whole check at most totalTimeout
@@ -82,10 +91,10 @@ func Check(ctx context.Context, commands []string, prerequisites []models.Valida
 		return &Error{Code: CodeInvalidContract, CommandIndex: -1, CheckIndex: -1}
 	}
 	if probeTimeout <= 0 {
-		probeTimeout = 10 * time.Second
+		probeTimeout = defaultProbeTimeout
 	}
 	if totalTimeout <= 0 {
-		totalTimeout = 30 * time.Second
+		totalTimeout = defaultTotalTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, totalTimeout)
 	defer cancel()

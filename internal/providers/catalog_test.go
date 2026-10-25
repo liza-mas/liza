@@ -1168,3 +1168,9 @@ providers:
       contract_key: qwen
 `
 }
+
+func TestCatalogFetchBoundsKeepValues(t *testing.T) {
+	if maxCatalogResponseBytes != 1<<20 || acpxExecutable != "acpx" {
+		t.Fatalf("catalog bounds = %d, %q; want 1048576, acpx", maxCatalogResponseBytes, acpxExecutable)
+	}
+}

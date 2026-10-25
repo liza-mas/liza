@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -105,5 +106,34 @@ func TestDoctorReportsBinaryLackingRequiredCommand(t *testing.T) {
 		if !strings.Contains(check.Message, want) {
 			t.Fatalf("message = %q, want to contain %q", check.Message, want)
 		}
+	}
+}
+
+func TestDoctorToolSelector(t *testing.T) {
+	ids := func(t *testing.T, toolID string) []string {
+		t.Helper()
+		got, err := Doctor(DoctorOptions{ToolID: toolID, Runner: &fakeRunner{}})
+		if err != nil {
+			t.Fatalf("Doctor(%q) error = %v", toolID, err)
+		}
+		var out []string
+		for _, check := range got.Checks {
+			out = append(out, check.ToolID)
+		}
+		return out
+	}
+
+	if allToolsSelector != "all" {
+		t.Fatalf("allToolsSelector = %q, want %q", allToolsSelector, "all")
+	}
+	every := ids(t, "")
+	if len(every) < 2 {
+		t.Fatalf("default selection = %v, want several tools", every)
+	}
+	if got := ids(t, "all"); !slices.Equal(got, every) {
+		t.Fatalf("selector all = %v, want %v", got, every)
+	}
+	if got := ids(t, "rtk"); !slices.Equal(got, []string{"rtk"}) {
+		t.Fatalf("selector rtk = %v, want [rtk]", got)
 	}
 }

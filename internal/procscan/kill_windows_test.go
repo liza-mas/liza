@@ -62,3 +62,9 @@ func TestOrderProcessTree_RecycledPIDIsExcludedByCreationTime(t *testing.T) {
 		t.Fatalf("orderProcessTree() = %v, want %v", order, want)
 	}
 }
+
+func TestKillTreeDeadlineIsFiveSeconds(t *testing.T) {
+	if killTreeDeadline != 5*time.Second {
+		t.Fatalf("killTreeDeadline = %s, want 5s", killTreeDeadline)
+	}
+}

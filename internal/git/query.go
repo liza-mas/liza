@@ -265,7 +265,7 @@ func (g *Git) blobOIDByArgs(revision, path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect object for %q at %q: %w", path, revision, err)
 	}
-	if objectType != "blob" {
+	if objectType != string(ObjectTypeBlob) {
 		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, objectType)
 	}
 	return oid, nil

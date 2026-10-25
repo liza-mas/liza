@@ -16,6 +16,16 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// defaultInstallTimeout bounds an install when Config.InstallTimeout is unset.
+const defaultInstallTimeout = 10 * time.Minute
+
+const (
+	// lookupTimeout bounds the latest-version lookup.
+	lookupTimeout = 30 * time.Second
+	// verifyTimeout bounds the post-install verification.
+	verifyTimeout = 10 * time.Second
+)
+
 // FatalError represents a fatal CLI input/config error that should exit
 // before command execution, as opposed to non-fatal update failures.
 type FatalError struct {
@@ -86,7 +96,7 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 		return &FatalError{fmt.Errorf("invalid update channel %q (valid values: stable, main)", channel)}
 	}
 
-	lookupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
 	defer cancel()
 
 	next, err := lookupCandidate(lookupCtx, cfg)
@@ -138,7 +148,7 @@ func MaybeUpdateAndReexec(ctx context.Context, cfg Config) error {
 
 	// Post-install verification if configured
 	if cfg.VerifyInstall != nil {
-		verifyCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 		defer cancel()
 		if err := cfg.VerifyInstall(verifyCtx, target, cfg.Stderr); err != nil {
 			fmt.Fprintf(cfg.Stderr, "%s: post-install verification failed: %v\n", cliPrefix(), err)
@@ -319,7 +329,7 @@ func withDefaults(cfg Config) Config {
 		cfg.IsInteractive = func() bool { return false }
 	}
 	if cfg.InstallTimeout == 0 {
-		cfg.InstallTimeout = 10 * time.Minute
+		cfg.InstallTimeout = defaultInstallTimeout
 	}
 	if cfg.LookupLatest == nil {
 		cfg.LookupLatest = LatestModuleVersion

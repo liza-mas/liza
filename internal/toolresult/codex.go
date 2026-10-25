@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// codexManagedPermissionMode is the permission mode the managed Codex
+// configuration reports for approval_policy="never".
+const codexManagedPermissionMode = "bypassPermissions"
+
 // CodexHook applies the native Codex synchronous hook contract. Shell output
 // must be captured before execution: post hooks see truncated or final chunks.
 // Hosted tools do not traverse this boundary.
@@ -41,7 +45,7 @@ func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([
 		// "workspace-write". Any other mode means the session is not the
 		// managed baseline — accepting it would either elevate a constrained
 		// session or run outside the trusted posture.
-		if event.PermissionMode != "bypassPermissions" {
+		if event.PermissionMode != codexManagedPermissionMode {
 			return codexDeny("The managed tool-result boundary requires the permission mode rendered by the managed Codex configuration.")
 		}
 		var args map[string]json.RawMessage

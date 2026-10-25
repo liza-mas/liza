@@ -115,3 +115,9 @@ func TestACPAdapterHelper(t *testing.T) {
 	// Avoid test-runner PASS on protocol stdout.
 	os.Exit(0)
 }
+
+func TestFrameAndPartialUTF8BoundsKeepValues(t *testing.T) {
+	if initialFrameBytes != 64*1024 || maxFrameBytes != 64*1024*1024 || maxPartialUTF8Bytes != 3 {
+		t.Fatalf("bounds = %d, %d, %d; want 65536, 67108864, 3", initialFrameBytes, maxFrameBytes, maxPartialUTF8Bytes)
+	}
+}

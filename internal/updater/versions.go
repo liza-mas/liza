@@ -186,9 +186,12 @@ func sameCommit(current, latest string) bool {
 	return strings.HasPrefix(latest, current) || strings.HasPrefix(current, latest)
 }
 
+// shortCommitLength is the abbreviated commit length shown in update output.
+const shortCommitLength = 12
+
 func shortCommit(commit string) string {
-	if len(commit) <= 12 {
+	if len(commit) <= shortCommitLength {
 		return commit
 	}
-	return commit[:12]
+	return commit[:shortCommitLength]
 }

@@ -11,8 +11,14 @@ func TestAwaitInterval(t *testing.T) {
 		t.Run(cli, func(t *testing.T) {
 			t.Parallel()
 			want, limit := 100*time.Second, 120*time.Second
+			if defaultAwaitInterval != want {
+				t.Fatalf("defaultAwaitInterval = %s, want %s", defaultAwaitInterval, want)
+			}
 			if cli == "claude" {
 				want, limit = 540*time.Second, 600*time.Second
+				if claudeAwaitInterval != want {
+					t.Fatalf("claudeAwaitInterval = %s, want %s", claudeAwaitInterval, want)
+				}
 			}
 			if got := AwaitInterval(cli); got != want || got >= limit {
 				t.Fatalf("AwaitInterval(%q) = %s; want %s below %s", cli, got, want, limit)

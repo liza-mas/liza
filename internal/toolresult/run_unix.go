@@ -20,9 +20,12 @@ func configureRunCancellation(cmd *exec.Cmd) {
 	}
 }
 
+// signalExitCodeBase is the shell convention for a signal-terminated exit status.
+const signalExitCodeBase = 128
+
 func runExitCode(cmd *exec.Cmd) int {
 	if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-		return 128 + int(status.Signal())
+		return signalExitCodeBase + int(status.Signal())
 	}
 	return cmd.ProcessState.ExitCode()
 }

@@ -29,10 +29,13 @@ func (p Provider) ACPToolConfig() models.AgentToolConfig {
 	return runtimeToolConfig(p.ID+"-acp", BackendACPX, *p.ACPRuntime)
 }
 
+// acpxExecutable is the executable an ACPX-backed runtime requires when it declares none.
+const acpxExecutable = "acpx"
+
 func runtimeToolConfig(id string, backend Backend, rt Runtime) models.AgentToolConfig {
 	required := append([]string(nil), rt.RequiredExecutables...)
 	if len(required) == 0 && backend == BackendACPX {
-		required = []string{"acpx"}
+		required = []string{acpxExecutable}
 	}
 	transport := rt.PromptTransport
 	if transport == "" {

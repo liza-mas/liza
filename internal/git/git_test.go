@@ -189,3 +189,9 @@ func TestCreateBranch(t *testing.T) {
 		t.Error("CreateBranch should not checkout the new branch")
 	}
 }
+
+func TestShortSHALengthKeepsValue(t *testing.T) {
+	if shortSHALength != 7 || shortSHA("0123456789") != "0123456" || shortSHA("0123456") != "0123456" || shortSHA("012") != "012" {
+		t.Fatalf("shortSHA bound drifted: length %d", shortSHALength)
+	}
+}

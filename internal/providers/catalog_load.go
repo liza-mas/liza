@@ -21,9 +21,11 @@ import (
 var errCatalogNotModified = errors.New("provider catalog not modified")
 
 const (
-	DefaultCatalogURL       = "https://raw.githubusercontent.com/liza-mas/liza/main/provider-catalog.yaml"
-	defaultCatalogTTL       = time.Hour
-	defaultCatalogTimeout   = 1500 * time.Millisecond
+	DefaultCatalogURL     = "https://raw.githubusercontent.com/liza-mas/liza/main/provider-catalog.yaml"
+	defaultCatalogTTL     = time.Hour
+	defaultCatalogTimeout = 1500 * time.Millisecond
+	// maxCatalogResponseBytes caps a fetched catalog body.
+	maxCatalogResponseBytes = 1 << 20
 	envCatalogURLSuffix     = "PROVIDER_CATALOG_URL"
 	envCatalogTTLSuffix     = "PROVIDER_CATALOG_TTL"
 	envCatalogTimeoutSuffix = "PROVIDER_CATALOG_TIMEOUT"
@@ -212,10 +214,10 @@ func fetchCatalog(ctx context.Context, client *http.Client, url string, timeout 
 		metaOut.FetchedAt = fetchedAt
 		return fetchedCatalog{}, metaOut, errCatalogNotModified
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fetchedCatalog{}, CacheMeta{}, fmt.Errorf("provider catalog fetch returned HTTP %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxCatalogResponseBytes))
 	if err != nil {
 		return fetchedCatalog{}, CacheMeta{}, err
 	}

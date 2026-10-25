@@ -208,3 +208,20 @@ func TestStorePersistWritesArtifactWithoutEvent(t *testing.T) {
 		t.Fatalf("evidence storage must not record telemetry: %d events, stats %+v", len(events), stats)
 	}
 }
+
+func TestNamedLimitsKeepValues(t *testing.T) {
+	for name, got := range map[string][2]int{
+		"minDigestBytes":           {minDigestBytes, 1024},
+		"randomIDBytes":            {randomIDBytes, 16},
+		"minEnvSecretLength":       {minEnvSecretLength, 8},
+		"minLongTokenLength":       {minLongTokenLength, 12},
+		"minCredentialTokenLength": {minCredentialTokenLength, 6},
+	} {
+		if got[0] != got[1] {
+			t.Errorf("%s = %d, want %d", name, got[0], got[1])
+		}
+	}
+	if _, err := New(t.TempDir(), Config{ThresholdBytes: 2048, DigestBytes: minDigestBytes - 1}, nil); err == nil {
+		t.Fatal("New accepted a digest below the minimum")
+	}
+}

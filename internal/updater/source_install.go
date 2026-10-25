@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 )
 
+// sourceCloneBranch is the branch a source install clones.
+const sourceCloneBranch = "main"
+
 func installFromSource(ctx context.Context, commit, target string, stderr io.Writer) error {
 	tmpDir, err := os.MkdirTemp("", binaryName()+"-source-update-*")
 	if err != nil {
@@ -18,7 +21,7 @@ func installFromSource(ctx context.Context, commit, target string, stderr io.Wri
 
 	repoDir := filepath.Join(tmpDir, sourceCheckoutDirName())
 	// Clone with depth 1 for main branch
-	if err := runStreaming(ctx, stderr, "git", "clone", "--depth", "1", "--branch", "main", sourceCloneURL(), repoDir); err != nil {
+	if err := runStreaming(ctx, stderr, "git", "clone", "--depth", "1", "--branch", sourceCloneBranch, sourceCloneURL(), repoDir); err != nil {
 		return fmt.Errorf("clone %s source: %w", nameLower(), err)
 	}
 	// Fetch the exact commit we need (may not be in the shallow clone)

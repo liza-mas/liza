@@ -22,6 +22,12 @@ const DefaultThresholdBytes = 32 * 1024
 const DefaultDigestBytes = 4 * 1024
 const MaxReadBytes = 64 * 1024
 
+// minDigestBytes is the smallest digest budget a store accepts.
+const minDigestBytes = 1024
+
+// randomIDBytes is the entropy of a generated identifier.
+const randomIDBytes = 16
+
 type Config struct {
 	ThresholdBytes int
 	DigestBytes    int
@@ -105,7 +111,7 @@ func New(path string, config Config, secrets []string) (*Store, error) {
 	if config.DigestBytes == 0 {
 		config.DigestBytes = DefaultDigestBytes
 	}
-	if config.ThresholdBytes < 1 || config.DigestBytes < 1024 || config.DigestBytes > config.ThresholdBytes {
+	if config.ThresholdBytes < 1 || config.DigestBytes < minDigestBytes || config.DigestBytes > config.ThresholdBytes {
 		return nil, errors.New("tool-result requires threshold >= digest >= 1024 bytes")
 	}
 	abs, err := filepath.Abs(path)
@@ -290,7 +296,7 @@ func validPrefix(text string, n int) string {
 }
 
 func randomID() string    { return hex.EncodeToString(randomBytes()) }
-func randomBytes() []byte { var b [16]byte; _, _ = rand.Read(b[:]); return b[:] }
+func randomBytes() []byte { var b [randomIDBytes]byte; _, _ = rand.Read(b[:]); return b[:] }
 
 // Link publishes a fully written, synced file without overwriting a competing
 // writer. Existing evidence must match exactly before it can be referenced.

@@ -150,9 +150,15 @@ func Run(ctx context.Context, cfg Config) error {
 	return end
 }
 
+// Frame buffer bounds for one newline-delimited wire message.
+const (
+	initialFrameBytes = 64 * 1024
+	maxFrameBytes     = 64 * 1024 * 1024
+)
+
 func readMessages(r io.Reader, handle func(wireMessage) error) error {
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
+	scanner.Buffer(make([]byte, initialFrameBytes), maxFrameBytes)
 	for scanner.Scan() {
 		if len(strings.TrimSpace(scanner.Text())) == 0 {
 			continue
