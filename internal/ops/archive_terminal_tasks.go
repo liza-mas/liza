@@ -10,13 +10,19 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// Operation labels the project lifecycle lock records for its holders.
+const (
+	archiveTerminalTasksLockOperation = "archive-terminal-tasks"
+	restoreTerminalTasksLockOperation = "restore-terminal-tasks"
+)
+
 var errNoTerminalArchiveWork = errors.New("no terminal archive work")
 
 // ArchiveTerminalTasks performs one bounded maintenance transaction, only when
 // the operator has enabled terminal_task_archival. It never enables it itself.
 func ArchiveTerminalTasks(projectRoot string, authority *models.AgentAuthority, limit ArchiveLimit) (ArchiveResult, error) {
 	var result ArchiveResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "archive-terminal-tasks", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, archiveTerminalTasksLockOperation, func() error {
 		var err error
 		result, err = archiveTerminalTasks(projectRoot, authority, limit)
 		return err
@@ -34,7 +40,7 @@ func archiveTerminalTasks(projectRoot string, authority *models.AgentAuthority, 
 // and the first bounded batch commit together, even when there is no backlog.
 func EnableAndArchiveTerminalTasks(projectRoot string, limit ArchiveLimit) (ArchiveResult, error) {
 	var result ArchiveResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "archive-terminal-tasks", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, archiveTerminalTasksLockOperation, func() error {
 		var err error
 		result, err = archiveTerminalTasksBatch(projectRoot, nil, limit, true)
 		return err
@@ -126,7 +132,7 @@ func hasArchivableTerminalTask(state *models.State) bool {
 // process before calling; immutable objects remain available to old snapshots.
 func RestoreTerminalTasksInline(projectRoot string) ([]string, error) {
 	var restored []string
-	err := WithProjectLifecycleSharedLock(projectRoot, "restore-terminal-tasks", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, restoreTerminalTasksLockOperation, func() error {
 		bb := db.For(paths.New(projectRoot).StatePath())
 		return bb.Modify(func(state *models.State) error {
 			for i := range state.Tasks {

@@ -107,7 +107,7 @@ func drainDeferredLifecycleRetirements(projectRoot string) {
 	}
 	bb := db.For(statePath).Patient()
 	for _, entry := range pending {
-		err := retireFailedLifecyclePreparation(bb, entry.taskID, entry.authority, &entry.preparation, errDeferredRetirement, "unknown")
+		err := retireFailedLifecyclePreparation(bb, entry.taskID, entry.authority, &entry.preparation, errDeferredRetirement, LifecycleEffectsUnknown)
 		// A committed retirement, a marker that is gone or replaced, and a
 		// stale generation all end this entry; only a failed write stays queued.
 		if retirementUncommitted(err) {
