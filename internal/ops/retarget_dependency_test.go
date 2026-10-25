@@ -558,3 +558,101 @@ func TestRetargetDependency_CycleDiagnostics(t *testing.T) {
 		}
 	}
 }
+
+// retargetDecisionState holds a task of the given status on old-dep, merged
+// old-dep and new-dep tasks, and a three-task cycle closed by retargeting
+// "cyc" to "cyc-b".
+func retargetDecisionState(status models.TaskStatus) *models.State {
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "README.md"
+	task := testhelpers.BuildTaskByStatus("task-1", status, now)
+	task.DependsOn = []string{"old-dep"}
+	cycle := testhelpers.BuildTaskByStatus("cyc", models.TaskStatusReady, now)
+	cycle.DependsOn = []string{"old-dep"}
+	cycleB := testhelpers.BuildTaskByStatus("cyc-b", models.TaskStatusReady, now)
+	cycleB.DependsOn = []string{"cyc-c"}
+	cycleC := testhelpers.BuildTaskByStatus("cyc-c", models.TaskStatusReady, now)
+	cycleC.DependsOn = []string{"cyc"}
+	state.Tasks = []models.Task{
+		task, cycle, cycleB, cycleC,
+		testhelpers.BuildTaskByStatus("old-dep", models.TaskStatusMerged, now),
+		testhelpers.BuildTaskByStatus("new-dep", models.TaskStatusMerged, now),
+	}
+	return state
+}
+
+// The lifecycle decision of each refusal follows the stage that reached it:
+// eligibility against the lineage, the old edge or the new dependencies, and
+// the complete candidate. None of them has committed an effect.
+func TestRetargetDependency_LifecycleDecisions(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		status     models.TaskStatus
+		taskID     string
+		newDeps    []string
+		wantOutput string
+		wantAction string
+		wantErr    string
+	}{
+		{"terminal dependent", models.TaskStatusMerged, "task-1", []string{"new-dep"}, models.LifecycleAlreadyTransitioned, "stop", "cannot retarget dependencies on terminal task task-1"},
+		{"missing old edge", models.TaskStatusBlocked, "new-dep-holder", []string{"new-dep"}, models.LifecycleStateChanged, "requery", "does not depend on old-dep"},
+		{"self dependency", models.TaskStatusBlocked, "task-1", []string{"task-1"}, models.LifecycleInvalidInput, "correct_input", "cannot depend on itself"},
+		{"unknown new dependency", models.TaskStatusBlocked, "task-1", []string{"nowhere"}, models.LifecycleInvalidInput, "correct_input", `new dependency "nowhere" does not exist`},
+		{"dependency cycle", models.TaskStatusBlocked, "cyc", []string{"cyc-b"}, models.LifecycleInvalidInput, "correct_input", "dependency cycle"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := retargetDecisionState(tc.status)
+			if tc.taskID == "new-dep-holder" {
+				holder := testhelpers.BuildTaskByStatus(tc.taskID, models.TaskStatusBlocked, time.Now().UTC())
+				holder.DependsOn = []string{"actual-dep"}
+				state.Tasks = append(state.Tasks, holder, testhelpers.BuildTaskByStatus("actual-dep", models.TaskStatusMerged, time.Now().UTC()))
+			}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			_, err := RetargetDependency(tmpDir, tc.taskID, "old-dep", tc.newDeps, "Should fail", "orchestrator-1")
+			testhelpers.RequireErrorContains(t, err, tc.wantErr)
+			requireLifecycleError(t, err, tc.wantOutput, tc.wantAction, string(LifecycleEffectsNone))
+		})
+	}
+}
+
+// An identified request completes once; its exact repeat returns the original
+// completion without a second history entry.
+func TestRetargetDependency_IdentifiedRequestReplaysOriginalCompletion(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.WriteInitialState(t, stateFile, retargetDecisionState(models.TaskStatusBlocked))
+	stored, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := LifecycleRequestOptions{RequestID: "retarget-replay", ExpectedTransition: models.TaskTransitionID(stored.FindTask("task-1"))}
+
+	first, err := RetargetDependencyWithOptions(tmpDir, "task-1", "old-dep", []string{"new-dep"}, "Moved", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Outcome != models.LifecycleCompleted || first.SafeAction != string(LifecycleSafeActionContinue) || first.Effects != string(LifecycleEffectsCommitted) || first.Changed == nil || !*first.Changed {
+		t.Fatalf("first outcome = %+v, want committed COMPLETED/continue", first.LifecycleOutcome)
+	}
+	historyLen := len(readDependencyUpdateState(t, stateFile).FindTask("task-1").History)
+
+	replay, err := RetargetDependencyWithOptions(tmpDir, "task-1", "old-dep", []string{"new-dep"}, "Moved", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.Outcome != models.LifecycleAlreadyCompleted || replay.SafeAction != string(LifecycleSafeActionStop) || replay.Changed == nil || *replay.Changed {
+		t.Fatalf("replay outcome = %+v, want ALREADY_COMPLETED/stop with changed=false", replay.LifecycleOutcome)
+	}
+	if got := len(readDependencyUpdateState(t, stateFile).FindTask("task-1").History); got != historyLen {
+		t.Fatalf("replay appended history: %d entries, want %d", got, historyLen)
+	}
+}

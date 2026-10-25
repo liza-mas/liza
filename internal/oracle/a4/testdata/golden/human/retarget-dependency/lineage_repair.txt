@@ -1,0 +1,11 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: MERGED
+effects: committed
+task_id: cp-2
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+Retargeted dependency for cp-2: cp-1 -> cp-1-replan-1
+--- stderr
