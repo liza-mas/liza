@@ -1,0 +1,8 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: UNKNOWN
+effects: none
+Error: supersede task: supersede-task: INVALID_INPUT (safe_action=correct_input): validation failed: recoverability command is required when superseding without replacements

@@ -1,0 +1,11 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: ABANDONED
+effects: committed
+task_id: t1
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+Cancelled task t1 (was DRAFT_CODE)
+--- stderr
