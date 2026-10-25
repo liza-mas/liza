@@ -469,7 +469,7 @@ func enforceBlockedEscalation(
 			Reason: reasonPtr,
 		})
 		for _, outcome := range outcomes {
-			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, "stop", "committed")
+			*outcome = NewLifecycleOutcome("claim-task", task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsCommitted)
 		}
 
 		return nil

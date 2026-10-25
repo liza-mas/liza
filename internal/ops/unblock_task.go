@@ -133,9 +133,9 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 	invocation := NewLifecycleInvocation(projectRoot)
 	effects := false
 	defer func() {
-		outcome, action, effect := models.LifecycleInvalidInput, "correct_input", "none"
+		outcome, action, effect := models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone
 		if effects {
-			outcome, action, effect = models.LifecycleStateChanged, "requery", "unknown"
+			outcome, action, effect = models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown
 		}
 		retErr = WrapLifecycleError("unblock-task", nil, retErr, outcome, action, effect)
 		var value models.LifecycleOutcome
@@ -215,7 +215,7 @@ func checkUnblockRejectionRCAGate(task *models.Task, newIteration bool) error {
 		// other operations, so requery — no payload correction can clear it.
 		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s has an open rejection-RCA gate: run %s next, then unblock-task (record-rejection-rca records the classified RCA, resume-rejection-rca records the authorized disposition)",
-			task.ID, missing)}, models.LifecycleStateChanged, "requery", "none")
+			task.ID, missing)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
 	switch mode := record.Disposition.RestoreMode; mode {
 	// A wrong flag is a payload defect, so both refusals ask to correct it.
@@ -240,7 +240,7 @@ func checkUnblockRejectionRCAGate(task *models.Task, newIteration bool) error {
 		// restore this task, so stop rather than invite a retry.
 		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s recovery path %s authorizes restore mode %q: it is not restored by unblock-task",
-			task.ID, record.Disposition.RecoveryPath, mode)}, models.LifecycleStateChanged, "stop", "none")
+			task.ID, record.Disposition.RecoveryPath, mode)}, models.LifecycleStateChanged, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 }
 

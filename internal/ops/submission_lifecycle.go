@@ -48,13 +48,13 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			// Finalization may lose a race after Git or indexing. Report a fresh
 			// authorized observation, never a callback's uncommitted candidate.
 			invocation.task = readLifecycleTask(projectRoot, taskID, authority, opts)
-			outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+			outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 			var invalid *PreconditionError
 			if !invocation.effects && errors.As(err, &invalid) {
 				outcome, action = models.LifecycleInvalidInput, "correct_input"
 			}
 			if invocation.effects {
-				effects = "unknown"
+				effects = LifecycleEffectsUnknown
 			}
 			err = WrapLifecycleError(integrationOperationSubmitForReview, invocation.task, err, outcome, action, effects)
 		}
@@ -241,7 +241,7 @@ func submissionRequest(task *models.Task, commitRef, actor string, authority *mo
 		for _, event := range task.History {
 			if event.Event == models.TaskEventSubmittedForReview && event.SubmissionInputCommit == commitRef {
 				return request, nil, &LifecycleError{
-					Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, "requery", "none"),
+					Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone),
 					Err:     fmt.Errorf("input SHA was submitted previously; no exact receipt matches this request and authority; inspect before choosing a new request"),
 				}
 			}

@@ -53,7 +53,7 @@ func deferredRetirementStatePath(projectRoot string) (string, bool) {
 // retireOrDeferFailedLifecyclePreparation is retireFailedLifecyclePreparation on
 // the patient wait for in-process claim paths, which also queue an uncommitted
 // retirement for their process's next claim in this project.
-func retireOrDeferFailedLifecyclePreparation(projectRoot, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects string) error {
+func retireOrDeferFailedLifecyclePreparation(projectRoot, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects LifecycleEffects) error {
 	statePath, ok := deferredRetirementStatePath(projectRoot)
 	if !ok {
 		statePath = paths.New(projectRoot).StatePath()

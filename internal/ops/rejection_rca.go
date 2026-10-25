@@ -190,7 +190,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 	decode func() (any, error), mutate rejectionRCAMutation) (returned *RejectionRCAResult, retErr error) {
 	var invocation *LifecycleInvocation
 	var observed *models.Task
-	effects := "none"
+	effects := LifecycleEffectsNone
 	defer func() {
 		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
 		if invocation == nil {
@@ -270,7 +270,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			result.RejectionRCA = cloneRejectionRCARecord(task.RejectionRCA)
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		return err
 	})

@@ -45,12 +45,12 @@ type HandoffInput struct {
 // the initiating agent to HANDOFF status. No terminal I/O.
 func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	if input == nil {
-		return nil, WrapLifecycleError("handoff", nil, fmt.Errorf("handoff input is required"), models.LifecycleInvalidInput, "correct_input", "none")
+		return nil, WrapLifecycleError("handoff", nil, fmt.Errorf("handoff input is required"), models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	invocation := NewLifecycleInvocation(input.ProjectRoot)
 	var observed *models.Task
 	defer func() {
-		retErr = WrapLifecycleError("handoff", observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError("handoff", observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {
@@ -166,14 +166,14 @@ func handoffTransaction(state *models.State, run handoffRun, observed **models.T
 	}
 
 	if !isExecutingStatus(task.Status, run.pipelineExecuting) {
-		return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != agentID {
-		return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}, models.LifecycleStaleCaller, "stop", "none")
+		return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	if task.HandoffPending {
-		return WrapLifecycleError("handoff", task, fmt.Errorf("handoff is already pending"), models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError("handoff", task, fmt.Errorf("handoff is already pending"), models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	handoffRecord(state, task, run)

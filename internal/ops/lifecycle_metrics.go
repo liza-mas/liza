@@ -231,7 +231,7 @@ func (*LifecycleSprintChangedError) Error() string {
 
 // SafeDetails exposes actionable recovery without implying a metric write.
 func (*LifecycleSprintChangedError) SafeDetails() map[string]any {
-	return map[string]any{"operation": "update-sprint-metrics", "outcome": "STATE_CHANGED", "safe_action": "requery", "effects": "none"}
+	return map[string]any{"operation": "update-sprint-metrics", "outcome": "STATE_CHANGED", "safe_action": string(LifecycleSafeActionRequery), "effects": string(LifecycleEffectsNone)}
 }
 
 func applyLifecycleSprintMetrics(state *models.State, sprint LifecycleSprintIdentity, metrics models.SprintMetrics) error {

@@ -274,7 +274,7 @@ func finalizeAttemptBoundary(state *models.State, pb *pipelineBundle, taskID str
 	if err := task.TransitionWith(initialStatus, pb.transitions); err != nil {
 		return models.LifecycleOutcome{}, err
 	}
-	return NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, "continue", "committed"), nil
+	return NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted), nil
 }
 
 // cleanupAttemptWorktree removes the task worktree after the state is final. It

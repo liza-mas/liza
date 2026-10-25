@@ -32,13 +32,13 @@ func (i *ownershipInvocation) finish(projectRoot string, err error) error {
 		err = nil
 	}
 	if err != nil {
-		outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+		outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 		var invalid *PreconditionError
 		if !i.effects && errors.As(err, &invalid) {
 			outcome, action = models.LifecycleInvalidInput, "correct_input"
 		}
 		if i.effects {
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		var observed *models.Task
 		if i.task != nil {

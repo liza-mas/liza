@@ -219,7 +219,7 @@ func recoverTaskAbsentCleanup(gitWrapper *git.Git, taskID string, artifact recov
 	if err := recoverTaskCleanupGitArtifacts(gitWrapper, taskID, artifact, result); err != nil {
 		return result, fmt.Errorf("cleanup git artifacts: %w", err)
 	}
-	invocation.outcome = NewLifecycleOutcome("recover-task", nil, models.LifecycleCompleted, "continue", "committed")
+	invocation.outcome = NewLifecycleOutcome("recover-task", nil, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
 	invocation.outcome.TaskID = taskID
 	result.LifecycleOutcome = invocation.outcome
 	return result, nil
@@ -264,7 +264,7 @@ func recoverTaskPreserveOrRetire(bb *db.Blackboard, gitWrapper *git.Git, task *m
 			return false, err
 		}
 		invocation.effects = false
-		return false, retireFailedLifecyclePreparation(bb.Patient(), task.ID, nil, preparation, err, "none")
+		return false, retireFailedLifecyclePreparation(bb.Patient(), task.ID, nil, preparation, err, LifecycleEffectsNone)
 	}
 	if testRecoverTaskHooks != nil && testRecoverTaskHooks.beforePreserveModify != nil {
 		testRecoverTaskHooks.beforePreserveModify()

@@ -61,18 +61,18 @@ type assessHypothesisExhaustedCall struct {
 
 	result   *AssessHypothesisExhaustedResult
 	observed *models.Task
-	effects  string
+	effects  LifecycleEffects
 }
 
 func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *AssessHypothesisExhaustedResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
-	call := &assessHypothesisExhaustedCall{taskID: taskID, note: note, agentID: agentID, authority: authority, effects: "none",
+	call := &assessHypothesisExhaustedCall{taskID: taskID, note: note, agentID: agentID, authority: authority, effects: LifecycleEffectsNone,
 		result: &AssessHypothesisExhaustedResult{TaskID: taskID}}
 	if len(options) > 0 {
 		call.opts = options[0]
 	}
 	defer func() {
-		retErr = WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
@@ -89,7 +89,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 	call.now = time.Now().UTC()
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
-		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
+		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
 	call.transitions = BuildPipelineTransitions(resolver)
 
@@ -99,7 +99,7 @@ func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, a
 	}
 
 	if err != nil {
-		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, fmt.Errorf("failed to assess hypothesis-exhausted task: %w", err), models.LifecycleStateChanged, "requery", call.effects)
+		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, fmt.Errorf("failed to assess hypothesis-exhausted task: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, call.effects)
 	}
 
 	return call.result, nil
@@ -119,7 +119,7 @@ func (c *assessHypothesisExhaustedCall) validateCaller() error {
 	// so this must be restricted to orchestrator agents even though the MCP handler
 	// also gates via resolveOrchestratorID.
 	if err := identity.ValidateRole(c.agentID, roles.Orchestrator); err != nil {
-		return WrapLifecycleError(assessHypothesisExhaustedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess hypothesis-exhausted tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
+		return WrapLifecycleError(assessHypothesisExhaustedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess hypothesis-exhausted tasks: %v", err)}, models.LifecycleForbidden, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	return nil
 }
@@ -129,7 +129,7 @@ func (c *assessHypothesisExhaustedCall) validateCaller() error {
 // assessment.
 func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr error) {
 	defer func() {
-		callbackErr = WrapLifecycleError(assessHypothesisExhaustedOperation, c.observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+		callbackErr = WrapLifecycleError(assessHypothesisExhaustedOperation, c.observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}()
 	task := state.FindTask(c.taskID)
 	if task == nil {
@@ -154,7 +154,7 @@ func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr
 		return &PreconditionError{Reason: fmt.Sprintf("task must have 2+ entries in failed_by to assess as hypothesis-exhausted, has %d", len(task.FailedBy))}
 	}
 	if task.Status.IsTerminal() {
-		return WrapLifecycleError(assessHypothesisExhaustedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must not be in terminal status, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError(assessHypothesisExhaustedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must not be in terminal status, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if _, err := blockTaskForHypothesisExhaustion(state, task, c.agentID, c.transitions, c.now); err != nil {
@@ -174,7 +174,7 @@ func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr
 	task.History = append(task.History, entry)
 	c.result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 	if err == nil {
-		c.effects = "unknown"
+		c.effects = LifecycleEffectsUnknown
 	}
 	return err
 }

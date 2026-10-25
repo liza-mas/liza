@@ -237,15 +237,15 @@ type assessBlockedCall struct {
 
 	result   AssessBlockedResult
 	observed *models.Task
-	effects  string
+	effects  LifecycleEffects
 }
 
 func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID string, opts AssessBlockedOptions, authority *models.AgentAuthority) (returned *AssessBlockedResult, retErr error) {
 	call := &assessBlockedCall{projectRoot: projectRoot, taskID: taskID, note: note, agentID: agentID, opts: opts, authority: authority,
-		result: AssessBlockedResult{TaskID: taskID}, effects: "none"}
+		result: AssessBlockedResult{TaskID: taskID}, effects: LifecycleEffectsNone}
 	var invocation *LifecycleInvocation
 	defer func() {
-		retErr = WrapLifecycleError(assessBlockedOperation, call.observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(assessBlockedOperation, call.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
@@ -287,7 +287,7 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	}
 
 	if err != nil {
-		return nil, WrapLifecycleError(assessBlockedOperation, call.observed, fmt.Errorf("failed to assess blocked task: %w", err), models.LifecycleStateChanged, "requery", call.effects)
+		return nil, WrapLifecycleError(assessBlockedOperation, call.observed, fmt.Errorf("failed to assess blocked task: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, call.effects)
 	}
 
 	call.result.Warnings = call.alertUnresolved(lp)
@@ -307,7 +307,7 @@ func (c *assessBlockedCall) validateCaller() error {
 	// so this must be restricted to orchestrator agents even though the MCP handler
 	// also gates via resolveOrchestratorID.
 	if err := identity.ValidateRole(c.agentID, roles.Orchestrator); err != nil {
-		return WrapLifecycleError(assessBlockedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
+		return WrapLifecycleError(assessBlockedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	return nil
 }

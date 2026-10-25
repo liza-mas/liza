@@ -188,7 +188,7 @@ func completeClaimTaskAfterValidation(op *claimOperation) (result *ClaimResult, 
 	// patient budget and, failing that, is retried by this process's next claim.
 	defer func() {
 		if retErr != nil {
-			retErr = retireOrDeferFailedLifecyclePreparation(op.projectRoot, op.taskID, op.authority, &preparation, retErr, "unknown")
+			retErr = retireOrDeferFailedLifecyclePreparation(op.projectRoot, op.taskID, op.authority, &preparation, retErr, LifecycleEffectsUnknown)
 		}
 	}()
 	op.invocation.effects = true

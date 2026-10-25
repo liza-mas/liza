@@ -52,11 +52,11 @@ func (c *markBlockedCall) newRequest(task *models.Task) (LifecycleRequest, error
 // caller, or whose added dependencies or state-lock wait are not acceptable.
 func (c *markBlockedCall) checkBlockable(state *models.State, task *models.Task) error {
 	if !isExecutingStatus(task.Status, c.pipelineExecuting) {
-		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != c.agentID {
-		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, "stop", "none")
+		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	if err := validateDependsOnForBlockedTask(state, task, c.dependsOn); err != nil {
 		return err
