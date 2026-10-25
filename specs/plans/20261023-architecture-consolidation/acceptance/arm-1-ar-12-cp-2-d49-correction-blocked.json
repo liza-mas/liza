@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-episode",
+      "file": "internal/oracle/a3/lifecycle/blocked_episode_variants_test.go",
+      "assertion": "TestOracleAssessBlockedVariants (unchanged NO_CHANGE, carried awaited NO_CHANGE, carried human ask NO_CHANGE) and TestLifecycleSuppressedEntryMask compare the assess-blocked --json, human and state effects against goldens frozen at 0beb4ba84; internal/ops/blocked_episode_phase_fence_test.go TestPhaseAssessBlockedCarriedStateUnderReplacedGeneration pins the carried human/awaited NO_CHANGE under a replaced generation; the existing assess_blocked, mark_blocked and assess_hypothesis_exhausted suites run unchanged.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-ksites",
+      "approved_reference_id": "d49"
+    },
+    {
+      "obligation_id": "AC-phase",
+      "file": "internal/ops/blocked_episode_phase_test.go",
+      "assertion": "P1 TestPhaseUnblockLifecycleRunsInsideOwnershipTaskLock; P2 TestPhaseUnblockReplayReturnsBeforePreparationOrGit; P3 TestPhaseUnblockMutateCheckOrder and (blocked_episode_phase_test.go) TestPhaseUnblockFinalTransactionCheckOrder; P4 TestPhaseUnblockRebaseRevalidationRefusals; P5 TestPhaseAutomaticStateLockHoldGatePrecedence, ...EachFaultAlone and ...DirectDependencyIsShadowed (blocked_episode_phase_hold_test.go); P6 TestPhaseRecordStateLockHoldRefusal (same file); P7 TestPhaseCandidateValidationInEpisodeTransactions (blocked_episode_phase_candidate_test.go); P8 TestPhaseEpisodeOperationsSelectTransactionByCaller and TestPhaseAssessBlockedCarriedStateUnderReplacedGeneration, P9 TestPhaseIdentifiedUnblockRetriesAcquisitionOnly (blocked_episode_phase_fence_test.go); all committed in 53d2ab8a4 before any production edit and unchanged afterwards. Negative proofs: swapping unblock check order, moving B4-B6 before the dependency check, dropping B7, dropping the generation fence of assess-blocked, removing the B2 health check and disabling assessment no-change suppression each failed the named test and were restored.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a3/lifecycle/unblock_task_variants_test.go",
+      "assertion": "TestOracleUnblockTaskVariants (scope/budget exception success and refusal, rebase-on success, tracked-changes and conflict refusals, assign-to success and refusal, new-iteration variants, receipt replay and stale-transition) and the A9 TestOracleA9StateLockHoldRecovery (recovered, refused; internal/oracle/a9/state_lock_hold_test.go) compare json, human and state.yaml/git effects against goldens written from the starting tree; every earlier A3 lifecycle and A9 golden is unchanged.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-oracle",
+      "file": "internal/oracle/a3/lifecycle/unblock_task_variants_test.go",
+      "assertion": "The 49 new A3 lifecycle goldens and 8 new A9 goldens were written by regen -mode write-new from the starting tree in 0beb4ba84, before any production edit; regen -mode check reproduces them and every earlier golden after the refactor. mask_test.go gained one determinism-only mask (suppressed_entry_bytes) whose size varied with timestamp digits.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard runs under make lint with area_a3_test.go no longer listing assess_blocked.go:assessBlockedWithOptionalAuthority, assess_hypothesis_exhausted.go:assessHypothesisExhaustedWithOptionalAuthority, mark_blocked.go:markBlockedWithOptionalAuthority or unblock_task.go:unblockTaskLifecycle; the four declarations remain at their names and files and the other seven A3 entries are untouched.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-layout",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target (go test ./...) runs the A3, A9, ops and testguard suites; lint, test-e2e and the regen check are mandatory with it.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "a3-proof"
+    },
+    {
+      "obligation_id": "AC-sequence",
+      "approved_reference_id": "sequence"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}
