@@ -312,7 +312,7 @@ func writePairingScipSkipDiagnostics(skips []scipsearch.PairingPlanSkip) {
 			fmt.Fprintf(os.Stderr, "  Candidate roots: %s\n", strings.Join(skip.Candidates, ", "))
 		}
 		fmt.Fprintf(os.Stderr, "  To require this language, rerun with --scip-search %s and add an explicit --scip-search-plan.\n", skip.Language)
-		fmt.Fprintf(os.Stderr, "  Plan syntax: %s\n", pairingScipPlanSyntax(skip.Language))
+		fmt.Fprintf(os.Stderr, "  Plan syntax: %s\n", pairingScipPlanSyntax(string(skip.Language)))
 	}
 }
 
@@ -325,13 +325,13 @@ func pairingScipSkipReasonText(reason scipsearch.PairingPlanSkipReason) string {
 	}
 }
 
-func pairingScipPlanSyntax(language scipsearch.Language) string {
+func pairingScipPlanSyntax(language string) string {
 	switch language {
-	case scipsearch.LanguageGo:
+	case "go":
 		return "--scip-search-plan go=<module-root>"
-	case scipsearch.LanguageTypeScript:
+	case "typescript":
 		return "--scip-search-plan typescript=<cwd>,<project-root>"
-	case scipsearch.LanguagePython:
+	case "python":
 		return "--scip-search-plan python=<cwd>[,<target-only>]"
 	default:
 		return "--scip-search-plan <language>=<values>"
