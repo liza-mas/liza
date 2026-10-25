@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-references",
+      "approved_reference_id": "goal-docs"
+    },
+    {
+      "obligation_id": "AC-shims",
+      "approved_reference_id": "a4-shims"
+    },
+    {
+      "obligation_id": "AC-closure",
+      "file": "internal/testguard/archguard/area_a4_test.go",
+      "assertion": "TestAreaA4RatchetIsEmpty fails for any remaining A4 ratchet entry and for any S2 entry lacking its ruling or rationale; the whole archguard package, which carries the S1 size guard, passes at index 1. The regeneration comparison at index 2 (regen -mode check -pkg ./internal/oracle/a4) reproduces every A4 golden from the starting tree; a4-closure-readiness.md records both results and the empty Ratchet, Layers, Allowlist and S2 data.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-docs",
+      "file": "specs/architecture/consolidation-run/a4-closure-readiness.md",
+      "assertion": "git diff --check over the declared documents, the evidence document and this manifest is clean; the evidence document records the reference reconciliation (no citation needs correction, F1 recorded as pre-existing drift), the empty guard data, the shim audit, the exported-API comparison and the archguard and regen results.",
+      "command_index": 0
+    }
+  ]
+}
