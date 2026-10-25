@@ -9,13 +9,7 @@ var areaA3 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/handoff.go", Func: "Handoff"}, Ceiling: 141},
 		{Key: Key{File: "internal/ops/mode_change.go", Func: "resume"}, Ceiling: 148},
-		{Key: Key{File: "internal/ops/recover_agent.go", Func: "recoverAgentLifecycle"}, Ceiling: 240},
-		{Key: Key{File: "internal/ops/recover_task.go"}, Ceiling: 822},
-		{Key: Key{File: "internal/ops/recover_task.go", Func: "recoverTaskWithOptions"}, Ceiling: 181},
-		{Key: Key{File: "internal/ops/release_claim.go", Func: "releaseClaimLocked"}, Ceiling: 123},
-		{Key: Key{File: "internal/ops/transition_attempt.go", Func: "transitionToNewAttemptLocked"}, Ceiling: 162},
 	},
 	S2: []S2Entry{},
 }

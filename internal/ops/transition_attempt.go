@@ -115,81 +115,15 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 	}
 
 	var (
-		worktreePath     string
-		previousAgent    string
-		originalStatus   models.TaskStatus
-		initialStatus    models.TaskStatus
+		boundary         attemptBoundary
 		lifecycleOutcome models.LifecycleOutcome
 	)
 
 	// Phase 1: mark attempt boundary, block claims via sentinel.
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
-		if requireAdmitted {
-			if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
-				return err
-			}
-		}
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		if expectedCompletionToken != "" && models.TaskTransitionID(task) != expectedCompletionToken {
-			return &PreconditionError{Reason: "task boundary changed after verdict completion; attempt rollover was not applied"}
-		}
-
-		if task.EffectiveAttempt() != 1 {
-			return &PreconditionError{
-				Reason: fmt.Sprintf("task %s is on attempt %d, only attempt 1 can transition", taskID, task.EffectiveAttempt()),
-			}
-		}
-
-		// Resolve initial status for the task's role-pair.
-		var resolveErr error
-		initialStatus, resolveErr = pb.pr.InitialStatus(task.RolePair)
-		if resolveErr != nil {
-			return fmt.Errorf("failed to resolve initial status for role-pair %s: %w", task.RolePair, resolveErr)
-		}
-
-		// Capture fields for Phase 2 and Phase 3.
-		originalStatus = task.Status
-		if task.Worktree != nil {
-			worktreePath = *task.Worktree
-		}
-		if task.AssignedTo != nil {
-			previousAgent = *task.AssignedTo
-		}
-
-		// Capture rejection feedback before mutations for history preservation.
-		var rejectionNote *string
-		if task.RejectionReason != nil && *task.RejectionReason != "" {
-			rr := *task.RejectionReason
-			rejectionNote = &rr
-		}
-
-		// Mutations.
-		models.AdvanceLifecycle(task)
-		task.Attempt = 2
-		task.Iteration = 0
-		task.ReviewCyclesCurrent = 0
-		task.LeaseExpires = nil
-
-		sentinel := transitioning
-		task.AssignedTo = &sentinel
-
-		now := time.Now().UTC()
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventNewAttempt,
-			Reason: &reason,
-			Note:   rejectionNote,
-		})
-
-		if previousAgent != "" {
-			state.ReleaseAgent(previousAgent)
-		}
-
-		// Preserved: Status, Worktree, BaseCommit, RejectionReason.
-		return nil
+		var markErr error
+		boundary, markErr = markAttemptBoundary(state, pb, taskID, reason, expectedCompletionToken, requireAdmitted)
+		return markErr
 	})
 	if err != nil {
 		return nil, err
@@ -203,63 +137,156 @@ func transitionToNewAttemptLocked(projectRoot, taskID, reason string, authority 
 	// Add attempt-boundary transition: original status → initial status.
 	// This transition is specific to the attempt boundary and not part of
 	// the standard pipeline transitions (e.g. REJECTED → initial).
-	pb.transitions[originalStatus] = append(pb.transitions[originalStatus], initialStatus)
+	pb.transitions[boundary.originalStatus] = append(pb.transitions[boundary.originalStatus], boundary.initialStatus)
 
 	// Finalize state before destructive cleanup. A failed state write retains
 	// both the sentinel and the reviewed Git evidence for recover-task.
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-
-		// Re-check sentinel — concurrent modification detection.
-		if task.AssignedTo == nil || *task.AssignedTo != transitioning {
-			actual := "<nil>"
-			if task.AssignedTo != nil {
-				actual = *task.AssignedTo
-			}
-			return fmt.Errorf("sentinel replaced: expected %s, got %s (concurrent modification)", transitioning, actual)
-		}
-
-		// Release reviewer agent before clearing task fields (same transaction).
-		if task.ReviewingBy != nil {
-			state.ReleaseAgent(*task.ReviewingBy)
-		}
-
-		task.AssignedTo = nil
-		models.AdvanceLifecycle(task)
-		task.RejectionReason = nil
-		task.Worktree = nil
-		task.BaseCommit = nil
-		task.ReviewingBy = nil
-		task.ReviewLeaseExpires = nil
-		clearAttemptState(task, attemptStateInitialReset)
-
-		if err := task.TransitionWith(initialStatus, pb.transitions); err != nil {
-			return err
-		}
-		lifecycleOutcome = NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, "continue", "committed")
-		return nil
+		var finalizeErr error
+		lifecycleOutcome, finalizeErr = finalizeAttemptBoundary(state, pb, taskID, boundary.initialStatus)
+		return finalizeErr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("state finalization failed: %w", err)
-	}
-	worktreeDeleted := false
-	if worktreePath != "" {
-		gw := git.New(projectRoot)
-		if rmErr := gw.RemoveWorktree(taskID); rmErr != nil {
-			log.Printf("WARNING: failed to remove worktree for task %s: %v", taskID, rmErr)
-		} else {
-			worktreeDeleted = true
-		}
 	}
 
 	return &TransitionAttemptResult{
 		LifecycleOutcome: lifecycleOutcome,
 		TaskID:           taskID,
 		NewAttempt:       2,
-		WorktreeDeleted:  worktreeDeleted,
-		InitialStatus:    initialStatus,
+		WorktreeDeleted:  cleanupAttemptWorktree(projectRoot, taskID, boundary.worktreePath),
+		InitialStatus:    boundary.initialStatus,
 	}, nil
+}
+
+// attemptBoundary is the evidence the sentinel phase captures for finalisation
+// and cleanup.
+type attemptBoundary struct {
+	worktreePath   string
+	originalStatus models.TaskStatus
+	initialStatus  models.TaskStatus
+}
+
+// markAttemptBoundary is the sentinel phase: admission, token and attempt
+// checks, then the attempt-2 counters, the transitioning sentinel and the
+// release of the previous agent. Status, worktree, base commit and rejection
+// reason are preserved for recovery until finalisation.
+func markAttemptBoundary(state *models.State, pb *pipelineBundle, taskID, reason, expectedCompletionToken string, requireAdmitted bool) (attemptBoundary, error) {
+	if requireAdmitted {
+		if err := RequireWorkAdmitted(state, "claim-task"); err != nil {
+			return attemptBoundary{}, err
+		}
+	}
+	task := state.FindTask(taskID)
+	if task == nil {
+		return attemptBoundary{}, &errors.NotFoundError{Entity: "task", ID: taskID}
+	}
+	if expectedCompletionToken != "" && models.TaskTransitionID(task) != expectedCompletionToken {
+		return attemptBoundary{}, &PreconditionError{Reason: "task boundary changed after verdict completion; attempt rollover was not applied"}
+	}
+
+	if task.EffectiveAttempt() != 1 {
+		return attemptBoundary{}, &PreconditionError{
+			Reason: fmt.Sprintf("task %s is on attempt %d, only attempt 1 can transition", taskID, task.EffectiveAttempt()),
+		}
+	}
+
+	// Resolve initial status for the task's role-pair.
+	initialStatus, resolveErr := pb.pr.InitialStatus(task.RolePair)
+	if resolveErr != nil {
+		return attemptBoundary{}, fmt.Errorf("failed to resolve initial status for role-pair %s: %w", task.RolePair, resolveErr)
+	}
+
+	// Capture fields for finalisation and cleanup.
+	boundary := attemptBoundary{originalStatus: task.Status, initialStatus: initialStatus}
+	if task.Worktree != nil {
+		boundary.worktreePath = *task.Worktree
+	}
+	previousAgent := ""
+	if task.AssignedTo != nil {
+		previousAgent = *task.AssignedTo
+	}
+
+	// Capture rejection feedback before mutations for history preservation.
+	var rejectionNote *string
+	if task.RejectionReason != nil && *task.RejectionReason != "" {
+		rr := *task.RejectionReason
+		rejectionNote = &rr
+	}
+
+	// Mutations.
+	models.AdvanceLifecycle(task)
+	task.Attempt = 2
+	task.Iteration = 0
+	task.ReviewCyclesCurrent = 0
+	task.LeaseExpires = nil
+
+	sentinel := transitioning
+	task.AssignedTo = &sentinel
+
+	now := time.Now().UTC()
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:   now,
+		Event:  models.TaskEventNewAttempt,
+		Reason: &reason,
+		Note:   rejectionNote,
+	})
+
+	if previousAgent != "" {
+		state.ReleaseAgent(previousAgent)
+	}
+
+	// Preserved: Status, Worktree, BaseCommit, RejectionReason.
+	return boundary, nil
+}
+
+// finalizeAttemptBoundary rechecks the sentinel, releases the reviewer and moves
+// the task to its initial status with the attempt evidence cleared.
+func finalizeAttemptBoundary(state *models.State, pb *pipelineBundle, taskID string, initialStatus models.TaskStatus) (models.LifecycleOutcome, error) {
+	task := state.FindTask(taskID)
+	if task == nil {
+		return models.LifecycleOutcome{}, &errors.NotFoundError{Entity: "task", ID: taskID}
+	}
+
+	// Re-check sentinel — concurrent modification detection.
+	if task.AssignedTo == nil || *task.AssignedTo != transitioning {
+		actual := "<nil>"
+		if task.AssignedTo != nil {
+			actual = *task.AssignedTo
+		}
+		return models.LifecycleOutcome{}, fmt.Errorf("sentinel replaced: expected %s, got %s (concurrent modification)", transitioning, actual)
+	}
+
+	// Release reviewer agent before clearing task fields (same transaction).
+	if task.ReviewingBy != nil {
+		state.ReleaseAgent(*task.ReviewingBy)
+	}
+
+	task.AssignedTo = nil
+	models.AdvanceLifecycle(task)
+	task.RejectionReason = nil
+	task.Worktree = nil
+	task.BaseCommit = nil
+	task.ReviewingBy = nil
+	task.ReviewLeaseExpires = nil
+	clearAttemptState(task, attemptStateInitialReset)
+
+	if err := task.TransitionWith(initialStatus, pb.transitions); err != nil {
+		return models.LifecycleOutcome{}, err
+	}
+	return NewLifecycleOutcome("transition-attempt", task, models.LifecycleCompleted, "continue", "committed"), nil
+}
+
+// cleanupAttemptWorktree removes the task worktree after the state is final. It
+// is best-effort: a failure only warns, as the committed state no longer refers
+// to the worktree.
+func cleanupAttemptWorktree(projectRoot, taskID, worktreePath string) bool {
+	if worktreePath == "" {
+		return false
+	}
+	if rmErr := git.New(projectRoot).RemoveWorktree(taskID); rmErr != nil {
+		log.Printf("WARNING: failed to remove worktree for task %s: %v", taskID, rmErr)
+		return false
+	}
+	return true
 }

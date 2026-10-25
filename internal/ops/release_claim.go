@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -21,212 +22,6 @@ type ReleaseClaimResult struct {
 	Role             string `json:"role"`
 	ReleasedReviewer bool   `json:"released_reviewer"`
 	ReleasedDoer     bool   `json:"released_doer"`
-}
-
-// claimRelease describes the field access pattern for one role's claim on a task.
-type claimRelease struct {
-	hasClaimFn              func(*models.Task) bool
-	agentFieldFn            func(*models.Task) *string
-	leaseFieldFn            func(*models.Task) *time.Time
-	activeStatus            models.TaskStatus
-	releasedStatus          models.TaskStatus
-	eventName               string
-	clearFn                 func(*models.Task)
-	missingLeaseMsg         string
-	activeLeaseMsg          string
-	validateRejectedHandoff bool
-}
-
-var reviewerRelease = claimRelease{
-	hasClaimFn:      func(t *models.Task) bool { return t.ReviewingBy != nil || t.ReviewLeaseExpires != nil },
-	agentFieldFn:    func(t *models.Task) *string { return t.ReviewingBy },
-	leaseFieldFn:    func(t *models.Task) *time.Time { return t.ReviewLeaseExpires },
-	activeStatus:    models.TaskStatusReviewing,
-	releasedStatus:  models.TaskStatusReadyForReview,
-	eventName:       string(models.TaskEventReviewClaimReleased),
-	clearFn:         func(t *models.Task) { t.ReviewingBy = nil; t.ReviewLeaseExpires = nil },
-	missingLeaseMsg: "review lease expires missing for task %s, use --force to clear",
-	activeLeaseMsg:  "review lease still valid until %s, use --force to clear",
-}
-
-var doerRelease = claimRelease{
-	hasClaimFn:     func(t *models.Task) bool { return t.AssignedTo != nil || t.LeaseExpires != nil },
-	agentFieldFn:   func(t *models.Task) *string { return t.AssignedTo },
-	leaseFieldFn:   func(t *models.Task) *time.Time { return t.LeaseExpires },
-	activeStatus:   models.TaskStatusImplementing,
-	releasedStatus: models.TaskStatusReady,
-	eventName:      string(models.TaskEventDoerClaimReleased),
-	clearFn: func(t *models.Task) {
-		t.AssignedTo = nil
-		t.LeaseExpires = nil
-		t.Worktree = nil
-		t.BaseCommit = nil
-		t.Iteration = 0
-		clearAttemptState(t, attemptStateClaimReleaseReset)
-	},
-	missingLeaseMsg: "lease expires missing for task %s, use --force to clear",
-	activeLeaseMsg:  "doer lease still valid until %s, use --force to clear",
-}
-
-// ResolveReleaseStatuses returns the active/released status pairs for doer and
-// reviewer claims, resolving from the pipeline config.
-// Returns zero-value statuses when task has no RolePair or resolver is nil.
-// This legacy convenience helper intentionally drops reviewer release resolution
-// errors. Mutating reviewer-release paths must use ResolveReviewerReleaseStatus
-// so they fail closed instead of clearing ownership in-place.
-func ResolveReleaseStatuses(task *models.Task, resolver *pipeline.Resolver) (doerActive, doerReleased, reviewerActive, reviewerReleased models.TaskStatus) {
-	doerActive, doerReleased = ResolveDoerReleaseStatus(task, resolver)
-	reviewerActive, reviewerReleased, _ = ResolveReviewerReleaseStatus(task, resolver)
-	return
-}
-
-// ResolveDoerReleaseStatus returns the active/released status pair for a doer
-// claim, resolving from the pipeline config when available.
-func ResolveDoerReleaseStatus(task *models.Task, resolver models.PipelineResolver) (active, released models.TaskStatus) {
-	if task.RolePair == "" || resolver == nil {
-		return
-	}
-	initial, initialErr := resolver.InitialStatus(task.RolePair)
-	executing, executingErr := resolver.ExecutingStatus(task.RolePair)
-	if initialErr == nil && executingErr == nil {
-		active = executing
-		released = initial
-	}
-	return
-}
-
-// ResolveReviewerReleaseStatus returns the active/released status pair for an
-// active reviewer claim. Non-reviewing statuses return zero values with no
-// error so passive/orphaned review fields can still be cleared. Reviewing states
-// fail closed when their release target cannot be resolved.
-func ResolveReviewerReleaseStatus(task *models.Task, resolver models.PipelineResolver) (active, released models.TaskStatus, err error) {
-	if task.RolePair == "" || resolver == nil {
-		return
-	}
-
-	reviewing, reviewingErr := resolver.ReviewingStatus(task.RolePair)
-	if reviewingErr == nil && task.Status == reviewing {
-		submitted, submittedErr := resolver.SubmittedStatus(task.RolePair)
-		if submittedErr != nil {
-			return "", "", fmt.Errorf("task %s is in reviewing state %s but submitted status resolution failed for role-pair %q: %w",
-				task.ID, task.Status, task.RolePair, submittedErr)
-		}
-		return reviewing, submitted, nil
-	}
-
-	reviewing2, reviewing2Err := resolver.Reviewing2Status(task.RolePair)
-	if reviewing2Err == nil && task.Status == reviewing2 {
-		partiallyApproved, partiallyApprovedErr := resolver.PartiallyApprovedStatus(task.RolePair)
-		if partiallyApprovedErr != nil {
-			return "", "", fmt.Errorf("task %s is in reviewing-2 state %s but partially-approved status resolution failed for role-pair %q: %w",
-				task.ID, task.Status, task.RolePair, partiallyApprovedErr)
-		}
-		return reviewing2, partiallyApproved, nil
-	}
-
-	return
-}
-
-// resolveDoerClaimReleaseStatus returns the doer claimRelease config with
-// pipeline-resolved active/released statuses when the task has a RolePair and a
-// resolver is available.
-func resolveDoerClaimReleaseStatus(task *models.Task, resolver models.PipelineResolver) claimRelease {
-	doer := doerRelease
-	doerActive, doerReleased := ResolveDoerReleaseStatus(task, resolver)
-	if doerActive != "" && doerReleased != "" {
-		doer.activeStatus = doerActive
-		doer.releasedStatus = doerReleased
-	}
-	rejected := isRejectedDoerRelease(task, resolver)
-	doer.validateRejectedHandoff = rejected
-	preserveAttemptEvidence := rejected || task.Status == models.TaskStatusMerged
-	if preserveAttemptEvidence {
-		// Completed output and review/merge evidence outlive ownership. A
-		// merged task is not starting a new attempt when its claim is released.
-		doer.clearFn = func(t *models.Task) {
-			t.AssignedTo = nil
-			t.LeaseExpires = nil
-		}
-	}
-	return doer
-}
-
-func isRejectedDoerRelease(task *models.Task, resolver models.PipelineResolver) bool {
-	if task.Status == models.TaskStatusRejected || task.Status == models.TaskStatusCodingPlanRejected {
-		return true
-	}
-	if task.RolePair == "" || resolver == nil {
-		return false
-	}
-	rejected, err := resolver.RejectedStatus(task.RolePair)
-	return err == nil && task.Status == rejected
-}
-
-// resolveReviewerClaimReleaseStatus returns the reviewer claimRelease config
-// with pipeline-resolved active/released statuses. It returns an error when an
-// active reviewing status is recognized but its release target is unavailable.
-func resolveReviewerClaimReleaseStatus(task *models.Task, resolver models.PipelineResolver) (claimRelease, error) {
-	reviewer := reviewerRelease
-	if resolver == nil && (task.ReviewingBy != nil || task.ReviewLeaseExpires != nil) {
-		return reviewer, fmt.Errorf("cannot release reviewer claim for task %s: pipeline resolver not loaded", task.ID)
-	}
-	reviewerActive, reviewerReleased, err := ResolveReviewerReleaseStatus(task, resolver)
-	if err != nil {
-		return reviewer, err
-	}
-	if reviewerActive != "" && reviewerReleased != "" {
-		reviewer.activeStatus = reviewerActive
-		reviewer.releasedStatus = reviewerReleased
-	}
-	return reviewer, nil
-}
-
-// releaseOneClaim executes the 9-step release sequence for a single role's claim.
-// pipelineTransitions, if non-nil, overrides the default transition map.
-// Returns true if a claim was released.
-func releaseOneClaim(state *models.State, task *models.Task, cfg claimRelease, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, force bool, agentID, reason string, now time.Time) (bool, error) {
-	if !cfg.hasClaimFn(task) {
-		return false, nil
-	}
-
-	agent := cfg.agentFieldFn(task)
-	lease := cfg.leaseFieldFn(task)
-
-	if agent != nil && lease == nil && !force {
-		return false, &PreconditionError{Reason: fmt.Sprintf(cfg.missingLeaseMsg, task.ID)}
-	}
-
-	if lease != nil && !force {
-		if lease.After(now) {
-			return false, &PreconditionError{Reason: fmt.Sprintf(cfg.activeLeaseMsg, lease.Format(time.RFC3339))}
-		}
-	}
-
-	if task.Status == cfg.activeStatus && pipelineTransitions != nil {
-		if err := task.TransitionWith(cfg.releasedStatus, pipelineTransitions); err != nil {
-			return false, err
-		}
-	}
-
-	if agent != nil {
-		if a, ok := state.Agents[*agent]; ok {
-			if a.CurrentTask != nil && *a.CurrentTask == task.ID {
-				state.ReleaseAgent(*agent)
-			}
-		}
-	}
-
-	cfg.clearFn(task)
-	models.AdvanceLifecycle(task)
-
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:   now,
-		Event:  models.TaskEventName(cfg.eventName),
-		Agent:  &agentID,
-		Reason: &reason,
-	})
-
-	return true, nil
 }
 
 // ReleaseClaim releases reviewer, doer, or both claims on a task. Without
@@ -268,6 +63,17 @@ func ReleaseClaimWithRequest(projectRoot, taskID, role string, force bool, reaso
 	return result, err
 }
 
+// releaseClaimRun is the normalised input and resolved pipeline of one locked release.
+type releaseClaimRun struct {
+	projectRoot, taskID, role, reason, agentID string
+	force                                      bool
+	authority                                  *models.AgentAuthority
+	invocation                                 *ownershipInvocation
+	transitions                                map[models.TaskStatus][]models.TaskStatus
+	resolver                                   *pipeline.Resolver
+	now                                        time.Time
+}
+
 func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, agentID string, authority *models.AgentAuthority, invocation *ownershipInvocation) (*ReleaseClaimResult, error) {
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -289,12 +95,8 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 	if reason == "" {
 		reason = "manual release"
 	}
-
 	lp := paths.New(projectRoot)
 	bb := RequestBlackboard(lp.StatePath(), authority, invocation.opts)
-
-	releasedReviewer := false
-	releasedDoer := false
 
 	now := time.Now().UTC()
 
@@ -303,70 +105,11 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	pipelineTransitions := BuildPipelineTransitions(resolver)
+	run := releaseClaimRun{projectRoot: projectRoot, taskID: taskID, role: role, reason: reason, agentID: agentID, force: force, authority: authority, invocation: invocation, transitions: BuildPipelineTransitions(resolver), resolver: resolver, now: now}
 
+	var released models.LifecycleProjection
 	err := lifecycleMutation(bb, authority)(func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		invocation.observe(task)
-		request, err := NewLifecycleRequest("release-claim", task, agentID, authority, invocation.opts, struct {
-			Role   string
-			Force  bool
-			Reason string
-		}{role, force, reason})
-		if err != nil {
-			return err
-		}
-		invocation.request = request
-		receipt, err := checkOwnerEndingRequest(task, request)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			invocation.outcome = LifecycleReplayOutcome(task, receipt, agentID)
-			releasedDoer, releasedReviewer = receipt.Projection.ReleasedDoer, receipt.Projection.ReleasedReviewer
-			return errLifecycleReplay
-		}
-
-		if claim := roles.ClaimType(role); claim == roles.ClaimReviewer || claim == roles.ClaimBoth {
-			effectiveReviewerRelease, err := resolveReviewerClaimReleaseStatus(task, resolver)
-			if err != nil {
-				return err
-			}
-			released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, force, agentID, reason, now)
-			if err != nil {
-				return err
-			}
-			releasedReviewer = released
-		}
-
-		validateRejectedHandoff := false
-		if claim := roles.ClaimType(role); claim == roles.ClaimDoer || claim == roles.ClaimBoth {
-			effectiveCoderRelease := resolveDoerClaimReleaseStatus(task, resolver)
-			released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, force, agentID, reason, now)
-			if err != nil {
-				return err
-			}
-			releasedDoer = released
-			validateRejectedHandoff = released && effectiveCoderRelease.validateRejectedHandoff
-		}
-
-		if !releasedReviewer && !releasedDoer {
-			return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, "stop", "none"), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
-		}
-		if validateRejectedHandoff {
-			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
-				return fmt.Errorf("released rejected claim produced invalid state: %w", err)
-			}
-		}
-
-		invocation.outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{ReleasedDoer: releasedDoer, ReleasedReviewer: releasedReviewer}, state.Agents)
-		if err == nil {
-			invocation.effects = true
-		}
-		return err
+		return releaseClaimTransaction(state, bb, run, &released)
 	})
 
 	if err != nil && !isLifecycleReplay(err) {
@@ -379,7 +122,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 	// cleanup deletes a worktree that a concurrent ClaimTask just created.
 	// Orphaned worktrees in .worktrees/ are gitignored and harmless until re-claimed.
 	// See handleReadyClaimWorktree in claim_task.go for the cleanup path.
-	if releasedDoer && !isLifecycleReplay(err) {
+	if released.ReleasedDoer && !isLifecycleReplay(err) {
 		log.Printf("INFO: release-claim %s: worktree cleanup deferred to next claim", taskID)
 	}
 
@@ -387,7 +130,84 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 		LifecycleOutcome: invocation.outcome,
 		TaskID:           taskID,
 		Role:             role,
-		ReleasedReviewer: releasedReviewer,
-		ReleasedDoer:     releasedDoer,
+		ReleasedReviewer: released.ReleasedReviewer,
+		ReleasedDoer:     released.ReleasedDoer,
 	}, nil
+}
+
+// releaseClaimTransaction is the locked release callback: request identity and
+// replay, reviewer then doer release, rejected-handoff candidate validation and
+// receipt completion. It starts no Git or process effect.
+func releaseClaimTransaction(state *models.State, bb *db.Blackboard, run releaseClaimRun, released *models.LifecycleProjection) error {
+	taskID, agentID, invocation := run.taskID, run.agentID, run.invocation
+	task := state.FindTask(taskID)
+	if task == nil {
+		return &errors.NotFoundError{Entity: "task", ID: taskID}
+	}
+	invocation.observe(task)
+	request, err := NewLifecycleRequest("release-claim", task, agentID, run.authority, invocation.opts, struct {
+		Role   string
+		Force  bool
+		Reason string
+	}{run.role, run.force, run.reason})
+	if err != nil {
+		return err
+	}
+	invocation.request = request
+	receipt, err := checkOwnerEndingRequest(task, request)
+	if err != nil {
+		return err
+	}
+	if receipt != nil {
+		invocation.outcome = LifecycleReplayOutcome(task, receipt, agentID)
+		released.ReleasedDoer, released.ReleasedReviewer = receipt.Projection.ReleasedDoer, receipt.Projection.ReleasedReviewer
+		return errLifecycleReplay
+	}
+
+	validateRejectedHandoff, err := releaseClaimRoles(state, task, run, released)
+	if err != nil {
+		return err
+	}
+	if !released.ReleasedReviewer && !released.ReleasedDoer {
+		return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, "stop", "none"), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
+	}
+	if validateRejectedHandoff {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, run.projectRoot, true, os.Stderr); err != nil {
+			return fmt.Errorf("released rejected claim produced invalid state: %w", err)
+		}
+	}
+
+	invocation.outcome, err = CompleteLifecycleRequest(task, request, *released, state.Agents)
+	if err == nil {
+		invocation.effects = true
+	}
+	return err
+}
+
+// releaseClaimRoles releases the reviewer claim, then the doer claim, as the
+// requested role selects. It reports whether a rejected doer handoff was
+// released and so needs candidate validation.
+func releaseClaimRoles(state *models.State, task *models.Task, run releaseClaimRun, released *models.LifecycleProjection) (validateRejectedHandoff bool, err error) {
+	claim := roles.ClaimType(run.role)
+	if claim == roles.ClaimReviewer || claim == roles.ClaimBoth {
+		effectiveReviewerRelease, err := resolveReviewerClaimReleaseStatus(task, run.resolver)
+		if err != nil {
+			return false, err
+		}
+		releasedReviewer, err := releaseOneClaim(state, task, effectiveReviewerRelease, run.transitions, run.force, run.agentID, run.reason, run.now)
+		if err != nil {
+			return false, err
+		}
+		released.ReleasedReviewer = releasedReviewer
+	}
+	if claim == roles.ClaimDoer || claim == roles.ClaimBoth {
+		effectiveCoderRelease := resolveDoerClaimReleaseStatus(task, run.resolver)
+		releasedDoer, err := releaseOneClaim(state, task, effectiveCoderRelease, run.transitions, run.force, run.agentID, run.reason, run.now)
+		if err != nil {
+			return false, err
+		}
+		released.ReleasedDoer = releasedDoer
+		validateRejectedHandoff = releasedDoer && effectiveCoderRelease.validateRejectedHandoff
+	}
+	return validateRejectedHandoff, nil
 }

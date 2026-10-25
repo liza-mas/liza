@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"fmt"
-	"log"
 	"slices"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
 
 // RecoverAgentResult contains the outcome of recovering a crashed agent.
@@ -85,6 +85,25 @@ func RecoverAgentWithOptions(projectRoot, agentID string, force bool, reason str
 	return result, retErr
 }
 
+// recoverAgentTestHooks injects interleavings between recovery phases. Nil in
+// production; tests that set it must not run in parallel.
+type recoverAgentTestHooks struct {
+	// beforePrepare runs before the preparation transaction of an anchored recovery.
+	beforePrepare func()
+	// afterGitRemoval runs after the doer worktree removal, before the completion transaction.
+	afterGitRemoval func()
+}
+
+var testRecoverAgentHooks *recoverAgentTestHooks
+
+// recoverAgentRun carries the resolved context shared by the recovery phases.
+type recoverAgentRun struct {
+	agentID, reason, role string
+	result                *RecoverAgentResult
+	resolver              *pipeline.Resolver
+	transitions           map[models.TaskStatus][]models.TaskStatus
+}
+
 func recoverAgentLifecycle(projectRoot, agentID string, force bool, reason string, opts LifecycleRequestOptions, lockedIDs []string, effects *bool) (*RecoverAgentResult, error) {
 	if agentID == "" {
 		return nil, fmt.Errorf("agent ID required")
@@ -102,56 +121,24 @@ func recoverAgentLifecycle(projectRoot, agentID string, force bool, reason strin
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 
-	agent, exists := state.Agents[agentID]
-	doerTaskIDs, reviewerTaskIDs := TaskClaimsForAgent(state, agentID)
-	claims := append(append([]string(nil), doerTaskIDs...), reviewerTaskIDs...)
-	slices.Sort(claims)
-	claims = slices.Compact(claims)
-	if !slices.Equal(claims, lockedIDs) {
-		return nil, WrapLifecycleError("recover-agent", nil, fmt.Errorf("agent task claims changed before recovery"), models.LifecycleStateChanged, "requery", "none")
+	claims, err := captureRecoverAgentClaims(state, agentID, lockedIDs)
+	if err != nil {
+		return nil, err
 	}
-	// Receipts are task scoped; an agent-wide or taskless request cannot invent a boundary.
-	var anchor *models.Task
-	if len(claims) == 1 {
-		anchor = state.FindTask(claims[0])
-	}
-	if opts.RequestID != "" && anchor == nil {
-		for index := range state.Tasks {
-			task := &state.Tasks[index]
-			if task.Lifecycle == nil {
-				continue
-			}
-			for _, receipt := range task.Lifecycle.Receipts {
-				if receipt.Operation == "recover-agent" && receipt.Actor == agentID && receipt.RequestID == opts.RequestID && receipt.ExpectedTransition == opts.ExpectedTransition {
-					if anchor != nil && anchor.ID != task.ID {
-						return nil, &PreconditionError{Reason: "request_id requires one task boundary for recover-agent"}
-					}
-					anchor = task
-				}
-			}
-		}
-		if anchor == nil {
-			return nil, &PreconditionError{Reason: "expected_transition requires a single affected task for recover-agent"}
-		}
+	agent, exists := claims.agent, claims.exists
+	anchor, err := recoverAgentAnchor(state, agentID, claims.all, opts)
+	if err != nil {
+		return nil, err
 	}
 	var request LifecycleRequest
 	if anchor != nil {
-		request, err = NewLifecycleRequest("recover-agent", anchor, agentID, nil, opts, struct {
-			Force  bool
-			Reason string
-		}{force, reason})
-		if err != nil {
-			return nil, err
-		}
-		receipt, err := checkOwnerEndingRequest(anchor, request)
-		if err != nil {
-			return nil, err
-		}
-		if receipt != nil {
-			return &RecoverAgentResult{LifecycleOutcome: LifecycleReplayOutcome(anchor, receipt, agentID), AgentID: agentID, TaskID: anchor.ID, AlreadyClean: true}, nil
+		var replay *RecoverAgentResult
+		request, replay, err = recoverAgentRequest(anchor, agentID, force, reason, opts)
+		if err != nil || replay != nil {
+			return replay, err
 		}
 	}
-	if !exists && len(doerTaskIDs) == 0 && len(reviewerTaskIDs) == 0 {
+	if !exists && len(claims.doers) == 0 && len(claims.reviewers) == 0 {
 		return &RecoverAgentResult{
 			LifecycleOutcome: NewLifecycleOutcome("recover-agent", anchor, models.LifecycleAlreadyCompleted, "stop", "none"),
 			AgentID:          agentID,
@@ -169,10 +156,10 @@ func recoverAgentLifecycle(projectRoot, agentID string, force bool, reason strin
 		taskID = *agent.CurrentTask
 	}
 	if taskID == "" {
-		if len(doerTaskIDs) > 0 {
-			taskID = doerTaskIDs[0]
-		} else if len(reviewerTaskIDs) > 0 {
-			taskID = reviewerTaskIDs[0]
+		if len(claims.doers) > 0 {
+			taskID = claims.doers[0]
+		} else if len(claims.reviewers) > 0 {
+			taskID = claims.reviewers[0]
 		}
 	}
 
@@ -181,147 +168,115 @@ func recoverAgentLifecycle(projectRoot, agentID string, force bool, reason strin
 		Role:    role,
 		TaskID:  taskID,
 	}
+	run := recoverAgentRun{agentID: agentID, reason: reason, role: role, result: result}
 
 	// Load resolver early — needed for both worktree removal and claim release.
-	var pipelineTransitions map[models.TaskStatus][]models.TaskStatus
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("pipeline config: %v", resolverErr))
 	} else {
-		pipelineTransitions = BuildPipelineTransitions(resolver)
+		run.resolver, run.transitions = resolver, BuildPipelineTransitions(resolver)
 	}
-	preserveAgent := false
 	if anchor != nil {
-		err := bb.Modify(func(current *models.State) error {
-			task := current.FindTask(anchor.ID)
-			if task == nil {
-				return fmt.Errorf("recovery task disappeared")
-			}
-			if currentAgent, ok := current.Agents[agentID]; ok != exists || currentAgent.Generation != agent.Generation {
-				return WrapLifecycleError("recover-agent", nil, fmt.Errorf("target registration changed"), models.LifecycleStaleCaller, "stop", "none")
-			}
-			return prepareOwnerEndingRequest(task, request)
-		})
-		if err != nil {
+		if err := recoverAgentPrepare(bb, anchor.ID, agentID, exists, agent.Generation, request); err != nil {
 			return nil, err
 		}
 	}
 
 	// Phase 2: Git side effects (outside lock) — remove worktrees for doer claims
-	if len(doerTaskIDs) > 0 {
+	if len(claims.doers) > 0 {
 		*effects = true
-		g := git.New(projectRoot)
-		for _, doerTaskID := range doerTaskIDs {
-			if err := g.RemoveWorktree(doerTaskID); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("worktree removal for %s: %v", doerTaskID, err))
-			} else {
-				result.WorktreeRemoved = true
-			}
-		}
+		recoverAgentRemoveWorktrees(git.New(projectRoot), claims.doers, result)
 	}
 
 	// Phase 3: State modify (atomic)
-	now := time.Now().UTC()
 	err = bb.Modify(func(state *models.State) error {
-		if currentAgent, ok := state.Agents[agentID]; ok != exists || currentAgent.Generation != agent.Generation {
-			return WrapLifecycleError("recover-agent", nil, fmt.Errorf("target registration changed"), models.LifecycleStaleCaller, "stop", "unknown")
-		}
-		if anchor != nil {
-			if err := ValidateLifecyclePreparation(state.FindTask(anchor.ID), request); err != nil {
-				return err
-			}
-		}
-		currentDoerTaskIDs, currentReviewerTaskIDs := TaskClaimsForAgent(state, agentID)
-		agentStillExists := false
-		if _, ok := state.Agents[agentID]; ok {
-			agentStillExists = true
-		}
-		if !agentStillExists && len(currentDoerTaskIDs) == 0 && len(currentReviewerTaskIDs) == 0 {
-			result.AlreadyClean = true
-			result.LifecycleOutcome = NewLifecycleOutcome("recover-agent", nil, models.LifecycleAlreadyCompleted, "stop", "none")
-			return errLifecycleReplay
-		}
-
-		if resolver == nil {
-			for _, ownedTaskID := range append(currentDoerTaskIDs, currentReviewerTaskIDs...) {
-				log.Printf("WARNING: recover-agent %s: claim release skipped for task %s — resolver not loaded", agentID, ownedTaskID)
-				result.Warnings = append(result.Warnings, fmt.Sprintf("claim release skipped for task %s — resolver not loaded", ownedTaskID))
-			}
-			if len(currentDoerTaskIDs) > 0 || len(currentReviewerTaskIDs) > 0 {
-				preserveAgent = true
-			}
-		} else {
-			for _, ownedTaskID := range currentDoerTaskIDs {
-				task := state.FindTask(ownedTaskID)
-				if task == nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("task %s not found in state", ownedTaskID))
-					continue
-				}
-				effectiveCoderRelease := resolveDoerClaimReleaseStatus(task, resolver)
-				released, err := releaseOneClaim(state, task, effectiveCoderRelease, pipelineTransitions, true, agentID, reason, now)
-				if err != nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("doer claim release for %s: %v", ownedTaskID, err))
-					preserveAgent = true
-					continue
-				}
-				if released {
-					result.ClaimReleased = true
-					// Clear worktree reference since we removed it
-					task.Worktree = nil
-				}
-			}
-			for _, ownedTaskID := range currentReviewerTaskIDs {
-				task := state.FindTask(ownedTaskID)
-				if task == nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("task %s not found in state", ownedTaskID))
-					continue
-				}
-				effectiveReviewerRelease, err := resolveReviewerClaimReleaseStatus(task, resolver)
-				if err != nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release for %s: %v", ownedTaskID, err))
-					preserveAgent = true
-					continue
-				}
-				released, err := releaseOneClaim(state, task, effectiveReviewerRelease, pipelineTransitions, true, agentID, reason, now)
-				if err != nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("reviewer claim release for %s: %v", ownedTaskID, err))
-					preserveAgent = true
-					continue
-				}
-				if released {
-					result.ClaimReleased = true
-				}
-			}
-		}
-
-		if agentStillExists && !preserveAgent {
-			delete(state.Agents, agentID)
-			result.AgentDeleted = true
-		} else if agentStillExists && preserveAgent {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("agent %s preserved because one or more claims could not be released", agentID))
-		}
-
-		recoveryNote := models.HumanNote{
-			Timestamp: now,
-			Message:   fmt.Sprintf("Agent %s recovered (%s): %s", agentID, role, reason),
-			For:       agentID,
-		}
-		recoveryNote.MarkSeenByOrchestrator(now) // audit record, not a request
-		state.HumanNotes = append(state.HumanNotes, recoveryNote)
-		if anchor != nil {
-			task := state.FindTask(anchor.ID)
-			models.AdvanceLifecycle(task)
-			var err error
-			result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-			return err
-		}
-		result.LifecycleOutcome = NewLifecycleOutcome("recover-agent", nil, models.LifecycleCompleted, "continue", "committed")
-		return nil
+		return recoverAgentComplete(state, run, claims, anchor, request, time.Now().UTC())
 	})
-
 	if err != nil && !isLifecycleReplay(err) {
 		return nil, fmt.Errorf("failed to recover agent: %w", err)
 	}
 
 	return result, nil
+}
+
+// recoverAgentPrepare rechecks the target registration and records the
+// owner-ending preparation on the anchor task.
+func recoverAgentPrepare(bb *db.Blackboard, anchorID, agentID string, exists bool, generation string, request LifecycleRequest) error {
+	if testRecoverAgentHooks != nil && testRecoverAgentHooks.beforePrepare != nil {
+		testRecoverAgentHooks.beforePrepare()
+	}
+	return bb.Modify(func(current *models.State) error {
+		task := current.FindTask(anchorID)
+		if task == nil {
+			return fmt.Errorf("recovery task disappeared")
+		}
+		if currentAgent, ok := current.Agents[agentID]; ok != exists || currentAgent.Generation != generation {
+			return WrapLifecycleError("recover-agent", nil, fmt.Errorf("target registration changed"), models.LifecycleStaleCaller, "stop", "none")
+		}
+		return prepareOwnerEndingRequest(task, request)
+	})
+}
+
+// recoverAgentRemoveWorktrees removes the worktree of every doer claim; a failed
+// removal is a warning, never an abort.
+func recoverAgentRemoveWorktrees(g *git.Git, doerTaskIDs []string, result *RecoverAgentResult) {
+	for _, doerTaskID := range doerTaskIDs {
+		if err := g.RemoveWorktree(doerTaskID); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("worktree removal for %s: %v", doerTaskID, err))
+		} else {
+			result.WorktreeRemoved = true
+		}
+	}
+	if testRecoverAgentHooks != nil && testRecoverAgentHooks.afterGitRemoval != nil {
+		testRecoverAgentHooks.afterGitRemoval()
+	}
+}
+
+// recoverAgentComplete is the completion transaction: it rechecks the
+// registration generation and preparation, releases the claims and removes the
+// agent unless a release failed.
+func recoverAgentComplete(state *models.State, run recoverAgentRun, claims recoverAgentClaims, anchor *models.Task, request LifecycleRequest, now time.Time) error {
+	agentID, result := run.agentID, run.result
+	if currentAgent, ok := state.Agents[agentID]; ok != claims.exists || currentAgent.Generation != claims.agent.Generation {
+		return WrapLifecycleError("recover-agent", nil, fmt.Errorf("target registration changed"), models.LifecycleStaleCaller, "stop", "unknown")
+	}
+	if anchor != nil {
+		if err := ValidateLifecyclePreparation(state.FindTask(anchor.ID), request); err != nil {
+			return err
+		}
+	}
+	currentDoerTaskIDs, currentReviewerTaskIDs := TaskClaimsForAgent(state, agentID)
+	_, agentStillExists := state.Agents[agentID]
+	if !agentStillExists && len(currentDoerTaskIDs) == 0 && len(currentReviewerTaskIDs) == 0 {
+		result.AlreadyClean = true
+		result.LifecycleOutcome = NewLifecycleOutcome("recover-agent", nil, models.LifecycleAlreadyCompleted, "stop", "none")
+		return errLifecycleReplay
+	}
+
+	preserveAgent := recoverAgentReleaseClaims(state, run, currentDoerTaskIDs, currentReviewerTaskIDs, now)
+
+	if agentStillExists && !preserveAgent {
+		delete(state.Agents, agentID)
+		result.AgentDeleted = true
+	} else if agentStillExists && preserveAgent {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("agent %s preserved because one or more claims could not be released", agentID))
+	}
+
+	recoveryNote := models.HumanNote{
+		Timestamp: now,
+		Message:   fmt.Sprintf("Agent %s recovered (%s): %s", agentID, run.role, run.reason),
+		For:       agentID,
+	}
+	recoveryNote.MarkSeenByOrchestrator(now) // audit record, not a request
+	state.HumanNotes = append(state.HumanNotes, recoveryNote)
+	if anchor != nil {
+		task := state.FindTask(anchor.ID)
+		models.AdvanceLifecycle(task)
+		var err error
+		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+		return err
+	}
+	result.LifecycleOutcome = NewLifecycleOutcome("recover-agent", nil, models.LifecycleCompleted, "continue", "committed")
+	return nil
 }
