@@ -893,7 +893,7 @@ match current source:
 |---|---|
 | [internal/ops/lifecycle_invocation.go:32-40](internal/ops/lifecycle_invocation.go#L32-L40) | `NewLifecycleInvocation` calls `db.For(...).Read()` at line 34 to capture sprint identity before returning. |
 | [internal/db/blackboard.go:121-134](internal/db/blackboard.go#L121-L134), [internal/filelock/filelock.go:150-153](internal/filelock/filelock.go#L150-L153) | The read takes the exclusive state lock before reading the state file. |
-| [internal/ops/mark_blocked.go:64,93-95](internal/ops/mark_blocked.go#L64-L95) | Invocation construction precedes structural validation at line 95, despite the adjacent no-state-path comment. |
+| [internal/ops/mark_blocked.go:90,154](internal/ops/mark_blocked.go#L90-L154) | Invocation construction (line 90, `markBlockedWithOptionalAuthority`) precedes structural validation (line 154, `markBlockedCall.normalizeInput`), despite the adjacent no-state-path comment. |
 | [internal/ops/submission_lifecycle.go:38](internal/ops/submission_lifecycle.go#L38), [internal/ops/submit_review.go:90-94](internal/ops/submit_review.go#L90-L94) | Submission constructs the observation before reaching the structural validator at line 93. |
 | [internal/ops/set_task_output.go:64,132-135](internal/ops/set_task_output.go#L64-L135) | The report's additional output-path observation holds: invocation construction precedes manifest validation at line 135. |
 | [internal/ops/handoff.go:50,67-69](internal/ops/handoff.go#L50-L69) | The report's additional handoff observation holds: invocation construction precedes structural validation at line 69. |
