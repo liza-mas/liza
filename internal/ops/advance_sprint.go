@@ -25,6 +25,12 @@ type AdvanceSprintResult struct {
 
 // sprintAdvancePlan holds validated, pre-computed data for a sprint advance.
 // Created by planSprintAdvance (read-only), applied by applySprintAdvance (mutates state).
+// Permissions of the sprint archive directory and the archived sprint file.
+const (
+	sprintArchiveDirMode  = 0o755
+	sprintArchiveFileMode = 0o644
+)
+
 type sprintAdvancePlan struct {
 	archivedSprint models.Sprint
 	newSprintID    string
@@ -150,11 +156,11 @@ func writeSprintArchive(archivePath string, sprint *models.Sprint) error {
 		return fmt.Errorf("failed to marshal sprint for archive: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(archivePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(archivePath), sprintArchiveDirMode); err != nil {
 		return fmt.Errorf("failed to create archive directory: %w", err)
 	}
 
-	if err := os.WriteFile(archivePath, data, 0644); err != nil {
+	if err := os.WriteFile(archivePath, data, sprintArchiveFileMode); err != nil {
 		return fmt.Errorf("failed to write archive file: %w", err)
 	}
 

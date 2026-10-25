@@ -95,7 +95,7 @@ func ReserveProviderWithAuthority(projectRoot string, input ReserveProviderInput
 	err = lifecycleMutation(bb, &authority)(func(state *models.State) error {
 		task := state.FindTask(input.TaskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: input.TaskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: input.TaskID}
 		}
 		if input.Release {
 			index := slices.Index(task.ProviderReservations, res)

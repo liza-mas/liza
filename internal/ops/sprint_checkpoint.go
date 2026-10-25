@@ -12,6 +12,9 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// sprintSummaryFileMode is the permission of the published sprint summary.
+const sprintSummaryFileMode = 0o644
+
 // ErrSprintAlreadyCheckpoint indicates the sprint is already at CHECKPOINT.
 var ErrSprintAlreadyCheckpoint = errors.New("sprint is already at CHECKPOINT")
 
@@ -206,7 +209,7 @@ func stageSprintSummary(dir, report string) (string, error) {
 		_ = os.Remove(stagedReportPath)
 		return "", fmt.Errorf("failed to stage sprint summary: %w", err)
 	}
-	if err := stagedReport.Chmod(0644); err != nil {
+	if err := stagedReport.Chmod(sprintSummaryFileMode); err != nil {
 		_ = stagedReport.Close()
 		_ = os.Remove(stagedReportPath)
 		return "", fmt.Errorf("failed to stage sprint summary: %w", err)

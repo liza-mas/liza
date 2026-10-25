@@ -18,6 +18,10 @@ const (
 	handoffOutputRefusal   = "output_validation"
 	handoffInputRefusal    = "selective_inheritance"
 	handoffProviderRefusal = "provider_retirement"
+
+	// planHandoffFailedAlertCategory is the alert category, and the first segment
+	// of every once-key, of a plan hand-off failure.
+	planHandoffFailedAlertCategory = "PLAN HANDOFF FAILED"
 )
 
 // Only initial pure refusals use this type. Recovery and graph/configuration
@@ -138,10 +142,10 @@ func (d PlanHandoffDomain) TransitionFailure(state *models.State, task *models.T
 	}
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
-		if entry.Event != models.TaskEventTransitionFailed || entry.Extra["transition"] != transition {
+		if entry.Event != models.TaskEventTransitionFailed || entry.Extra[transitionExtraKey] != transition {
 			continue
 		}
-		if index, present := entry.Extra["output_index"]; !present || index == nil {
+		if index, present := entry.Extra[outputIndexExtraKey]; !present || index == nil {
 			return nil
 		}
 		encoded, err := json.Marshal(entry.Extra)
@@ -202,10 +206,10 @@ func (d PlanHandoffDomain) recordFailure(state *models.State, task *models.Task,
 
 func writeHandoffFailureAlert(projectRoot string, failure PlanHandoffFailure, now time.Time) error {
 	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN HANDOFF FAILED",
-		OnceKey: "PLAN HANDOFF FAILED|" + failure.TaskID + "|" + failure.Transition + "|" + failure.Fingerprint,
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: planHandoffFailedAlertCategory,
+		OnceKey: planHandoffFailedAlertCategory + "|" + failure.TaskID + "|" + failure.Transition + "|" + failure.Fingerprint,
 		Message: fmt.Sprintf("task %s transition %s: %s; repair inputs and retry %s, or retire its unused handoff with %s", failure.TaskID, failure.Transition, failure.Error,
-			brand.Command("resume"), brand.Command("plan-check", failure.TaskID, "--replaced-by", "<merged-correction>")),
+			brand.Command(resumeOperation), brand.Command("plan-check", failure.TaskID, "--replaced-by", "<merged-correction>")),
 	})
 }
 
@@ -215,8 +219,8 @@ func writeHandoffFailureAlert(projectRoot string, failure PlanHandoffFailure, no
 func writeHandoffSkipAlert(projectRoot string, skipped TransitionFailure, now time.Time) error {
 	message := secretmask.New().MaskText(skipped.Error)
 	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN HANDOFF FAILED",
-		OnceKey: "PLAN HANDOFF FAILED|" + skipped.SourceTaskID + "|" + skipped.Transition + "|unclassified|" + lifecycleDigest([]byte(message)),
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: planHandoffFailedAlertCategory,
+		OnceKey: planHandoffFailedAlertCategory + "|" + skipped.SourceTaskID + "|" + skipped.Transition + "|unclassified|" + lifecycleDigest([]byte(message)),
 		Message: fmt.Sprintf("task %s transition %s was skipped: %s; it is retried at each pass until its inputs change", skipped.SourceTaskID, skipped.Transition, message),
 	})
 }

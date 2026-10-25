@@ -13,11 +13,25 @@ import (
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
+// History Extra keys of a replacement-committed event: written with the
+// replacement and read back to project a replayed completion from the recorded
+// evidence rather than from today's graph.
+const (
+	replacementExtraSourceNewTransition = "source_new_transition_id"
+	replacementExtraRetargetedConsumers = "retargeted_consumers"
+)
+
 // Diagnostic field names a replacement refusal can point at.
 const (
 	replaceFieldRequestID          = "request_id"
 	replaceFieldExpectedTransition = "expected_transition"
 	replaceFieldReplacementID      = "replacement.id"
+)
+
+// Members of the preserved_base object a refusal can point at.
+const (
+	replacePreservedFieldBaseCommit = "base_commit"
+	replacePreservedFieldWorktree   = "worktree"
 )
 
 // checkReplaceTaskRequest refuses a malformed request before any invocation
@@ -126,8 +140,8 @@ func checkReplacementAcceptance(projectRoot string, state *models.State, source 
 
 func replacementCompletionConsumers(source *models.Task, transitionID string) ([]string, bool) {
 	for _, entry := range source.History {
-		if entry.Event == models.TaskEventReplacementCommitted && entry.Extra["source_new_transition_id"] == transitionID {
-			consumers, ok := entry.Extra["retargeted_consumers"]
+		if entry.Event == models.TaskEventReplacementCommitted && entry.Extra[replacementExtraSourceNewTransition] == transitionID {
+			consumers, ok := entry.Extra[replacementExtraRetargetedConsumers]
 			// Return a copy of the original report, never infer from today's graph.
 			return append([]string{}, extraToStringSlice(consumers)...), ok
 		}
@@ -179,31 +193,31 @@ func validateReplacementBase(projectRoot string, input ReplaceTaskInput) (*Prese
 		return nil, NewLifecycleInvalidInputError(replaceTaskOperation, nil, []models.FieldDiagnostic{{SchemaVersion: 1, Field: "preserved_base." + field, Constraint: reason, ValueClass: models.FieldValueClassMalformed, SafeAction: models.FieldDiagnosticCorrectInput}}, fmt.Errorf("invalid preserved base: %s", reason))
 	}
 	if base.BaseCommit == "" {
-		return invalid("base_commit", "a resolvable commit is required")
+		return invalid(replacePreservedFieldBaseCommit, "a resolvable commit is required")
 	}
 	canonical := filepath.Join(paths.WorktreesDirName, input.Replacement.ID)
 	if base.Worktree != canonical {
-		return invalid("worktree", "canonical replacement worktree is required")
+		return invalid(replacePreservedFieldWorktree, "canonical replacement worktree is required")
 	}
 	gw := git.New(projectRoot)
 	commit, err := gw.GetCommitSHA(base.BaseCommit + "^{commit}")
 	if err != nil {
-		return invalid("base_commit", "must resolve to a commit")
+		return invalid(replacePreservedFieldBaseCommit, "must resolve to a commit")
 	}
 	if err := gw.ValidateWorktreeHealth(input.Replacement.ID); err != nil {
-		return invalid("worktree", "must exist and be healthy")
+		return invalid(replacePreservedFieldWorktree, "must exist and be healthy")
 	}
 	branch, err := gw.GetWorktreeBranch(gw.GetWorktreePath(input.Replacement.ID))
 	if err != nil || branch != paths.TaskBranchPrefix+input.Replacement.ID {
-		return invalid("worktree", "must be on the replacement task branch")
+		return invalid(replacePreservedFieldWorktree, "must be on the replacement task branch")
 	}
 	head, err := gw.GetWorktreeHEAD(input.Replacement.ID)
 	if err != nil {
-		return invalid("worktree", "HEAD must resolve")
+		return invalid(replacePreservedFieldWorktree, "HEAD must resolve")
 	}
 	ancestor, err := gw.IsAncestor(commit, head)
 	if err != nil || !ancestor {
-		return invalid("base_commit", "must be an ancestor of worktree HEAD")
+		return invalid(replacePreservedFieldBaseCommit, "must be an ancestor of worktree HEAD")
 	}
 	base.BaseCommit = commit
 	return &base, nil

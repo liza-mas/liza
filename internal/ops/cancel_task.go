@@ -139,7 +139,7 @@ func (p *cancelPass) admit() error {
 func (p *cancelPass) commit(state *models.State) error {
 	currentTask := state.FindTask(p.taskID)
 	if currentTask == nil {
-		return &errors.NotFoundError{Entity: "task", ID: p.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: p.taskID}
 	}
 	p.observed = currentTask
 	receipt, err := checkOwnerEndingRequest(currentTask, p.request)

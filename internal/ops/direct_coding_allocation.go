@@ -66,7 +66,7 @@ func validateDirectCodingGeneration(root string, state *models.State, task *mode
 		}
 		accepted := checkCreatedTaskAcceptance(root, state, &child)
 		check.parentFence = accepted.parentFence
-		if err := accepted.lifecycleError("proceed", task); err != nil {
+		if err := accepted.lifecycleError(proceedOperation, task); err != nil {
 			check.err = err
 			return check
 		}

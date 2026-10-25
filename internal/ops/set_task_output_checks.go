@@ -70,7 +70,7 @@ func loadSetTaskOutputPipeline(projectRoot string) (*pipeline.Resolver, []models
 // assigned to the writing agent. Both refusals carry lifecycle results.
 func checkSetTaskOutputWriter(task *models.Task, input *SetTaskOutputInput, pipelineExecuting []models.TaskStatus) error {
 	if !isExecutingStatus(task.Status, pipelineExecuting) {
-		return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+		return WrapLifecycleError(setTaskOutputOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
@@ -78,7 +78,7 @@ func checkSetTaskOutputWriter(task *models.Task, input *SetTaskOutputInput, pipe
 		if task.AssignedTo != nil {
 			currentAgent = *task.AssignedTo
 		}
-		return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
+		return WrapLifecycleError(setTaskOutputOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	return nil
 }

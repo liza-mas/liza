@@ -19,6 +19,9 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// addTaskOperation is the payload-schema and lifecycle operation of add-task.
+const addTaskOperation = "add-task"
+
 // AddTaskInput represents the input parameters for adding a task.
 type AddTaskInput struct {
 	PlanningChange          *models.PlanningChange          `json:"planning_change,omitempty"`
@@ -115,12 +118,12 @@ func addTaskWithOptionalAuthority(statePath, logPath string, input *AddTaskInput
 // acceptance and runtime-input admission checks.
 func prepareAddTask(statePath, projectRoot string, input *AddTaskInput) (models.Task, *pipeline.Resolver, error) {
 	// Structural preflight precedes pipeline reads and the state lock.
-	_, diagnostics, err := payloadschema.Validate("add-task", input)
+	_, diagnostics, err := payloadschema.Validate(addTaskOperation, input)
 	if err != nil {
 		return models.Task{}, nil, err
 	}
 	if len(diagnostics) > 0 {
-		return models.Task{}, nil, NewLifecycleInvalidInputError("add-task", nil, diagnostics, &PreconditionError{Reason: diagnostics[0].Constraint})
+		return models.Task{}, nil, NewLifecycleInvalidInputError(addTaskOperation, nil, diagnostics, &PreconditionError{Reason: diagnostics[0].Constraint})
 	}
 
 	resolver, _, err := loadResolver(projectRoot)
@@ -134,7 +137,7 @@ func prepareAddTask(statePath, projectRoot string, input *AddTaskInput) (models.
 	}
 
 	if diagnostics := runtimeInputsNeedStrictCarrier(&newTask); diagnostics != nil {
-		return models.Task{}, nil, runtimeInputAdmissionError("add-task", nil, diagnostics, nil)
+		return models.Task{}, nil, runtimeInputAdmissionError(addTaskOperation, nil, diagnostics, nil)
 	}
 	// An ad-hoc task has no parent, so a snapshot supplies only configuration;
 	// the Git reads stay outside the state lock, as at claim.
@@ -144,12 +147,12 @@ func prepareAddTask(statePath, projectRoot string, input *AddTaskInput) (models.
 			return models.Task{}, nil, fmt.Errorf("failed to read state for the acceptance check: %w", err)
 		}
 		if acceptanceCreationApplies(&newTask) {
-			if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError("add-task", nil); err != nil {
+			if err := checkCreatedTaskAcceptance(projectRoot, snapshot, &newTask).lifecycleError(addTaskOperation, nil); err != nil {
 				return models.Task{}, nil, err
 			}
 		}
 		diagnostics, err := checkRuntimeInputDeclarations(projectRoot, snapshot, []string{newTask.ID}, []runtimeInputCarrier{{inputs: newTask.RuntimeInputs, prerequisites: newTask.ValidationPrerequisites}})
-		if err := runtimeInputAdmissionError("add-task", nil, diagnostics, err); err != nil {
+		if err := runtimeInputAdmissionError(addTaskOperation, nil, diagnostics, err); err != nil {
 			return models.Task{}, nil, err
 		}
 	}
@@ -370,7 +373,7 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 					) {
 						return &PreconditionError{Reason: fmt.Sprintf(
 							"task %q shadows pipeline transition child %q[%d]; use %s/%s for transition %q instead of add-tasks",
-							input.ID, source.ID, outputIdx, brand.Command("proceed"), brand.Command("resume"), td.Name,
+							input.ID, source.ID, outputIdx, brand.Command(proceedOperation), brand.Command(resumeOperation), td.Name,
 						)}
 					}
 				}
@@ -381,7 +384,7 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 				) {
 					return &PreconditionError{Reason: fmt.Sprintf(
 						"task %q shadows pipeline transition child %q; use %s/%s for transition %q instead of add-tasks",
-						input.ID, source.ID, brand.Command("proceed"), brand.Command("resume"), td.Name,
+						input.ID, source.ID, brand.Command(proceedOperation), brand.Command(resumeOperation), td.Name,
 					)}
 				}
 			case models.CardinalityManyToOne:
@@ -395,7 +398,7 @@ func rejectManualPipelineChildTask(state *models.State, input *AddTaskInput, res
 				) {
 					return &PreconditionError{Reason: fmt.Sprintf(
 						"task %q shadows pipeline transition child cohort %q; use %s/%s for transition %q instead of add-tasks",
-						input.ID, cohortParentID, brand.Command("proceed"), brand.Command("resume"), td.Name,
+						input.ID, cohortParentID, brand.Command(proceedOperation), brand.Command(resumeOperation), td.Name,
 					)}
 				}
 			}

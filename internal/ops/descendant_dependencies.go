@@ -63,7 +63,7 @@ func descendantOutputRefusal(resolver *pipeline.Resolver, task *models.Task, out
 		if missing := models.MissingProviderDependencies(entry.ProviderDependencies, applied); len(missing) > 0 {
 			return &handoffInputError{class: handoffOutputRefusal, index: i, err: fmt.Errorf(
 				"task %s output[%d] does not carry its descendant_dependencies wait on %s %s outputs %v; re-author the output with %s",
-				task.ID, i, missing[0].ProviderTask, missing[0].Transition, missing[0].Outputs, brand.Command("set-task-output", task.ID))}
+				task.ID, i, missing[0].ProviderTask, missing[0].Transition, missing[0].Outputs, brand.Command(setTaskOutputOperation, task.ID))}
 		}
 	}
 	return nil

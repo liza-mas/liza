@@ -14,6 +14,10 @@ import (
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
+// addHumanNoteOperation is the operation value a note records in its provenance;
+// internal/agent matches it to recognise operator input in corrective context.
+const addHumanNoteOperation = "add-human-note"
+
 // AddHumanNoteResult acknowledges persisted operator input without echoing it.
 type AddHumanNoteResult struct {
 	Target    string    `json:"target"`
@@ -42,8 +46,8 @@ func AddHumanNote(projectRoot, target, message string) (*AddHumanNoteResult, err
 		Message: message,
 		For:     target,
 		Extra: map[string]any{
-			"source":    "operator_cli",
-			"operation": "add-human-note",
+			"source":    humanNoteSourceOperatorCLI,
+			"operation": addHumanNoteOperation,
 		},
 	}
 	if err := statehygiene.ValidateState(&models.State{HumanNotes: []models.HumanNote{note}}); err != nil {
@@ -51,8 +55,8 @@ func AddHumanNote(projectRoot, target, message string) (*AddHumanNoteResult, err
 	}
 	lp := paths.New(projectRoot)
 	if err := db.For(lp.StatePath()).Modify(func(state *models.State) error {
-		if target != "all" && state.FindTask(target) == nil {
-			return &errors.NotFoundError{Entity: "task", ID: target}
+		if target != humanNoteForAll && state.FindTask(target) == nil {
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: target}
 		}
 		note.Timestamp = time.Now().UTC()
 		state.HumanNotes = append(state.HumanNotes, note)
@@ -63,11 +67,11 @@ func AddHumanNote(projectRoot, target, message string) (*AddHumanNoteResult, err
 	result := &AddHumanNoteResult{Target: target, Timestamp: note.Timestamp, Bytes: len(message)}
 	entry := log.Entry{
 		Timestamp: note.Timestamp,
-		Agent:     "operator",
+		Agent:     actorOperator,
 		Action:    "human_note_added",
 		Detail:    fmt.Sprintf("Operator input recorded (%d bytes); no approval or task transition", len(message)),
 	}
-	if target != "all" {
+	if target != humanNoteForAll {
 		entry.Task = &target
 	}
 	if err := log.New(lp.LogPath()).Append(entry); err != nil {

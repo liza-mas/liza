@@ -1561,7 +1561,7 @@ func deferredFixInFlight(state *models.State, resolver *models.DependencyResolve
 		if discovery.By != models.DeferredValidationDiscoveryBy || discovery.Extra["culprit_task"] != culprit || discovery.Extra["command_sha256"] != commandSHA {
 			continue
 		}
-		if discovery.ConvertedToTask == nil || validDispositionSentinels[*discovery.ConvertedToTask] {
+		if discovery.ConvertedToTask == nil || discoveryDisposition(*discovery.ConvertedToTask).isSentinel() {
 			continue
 		}
 		fix := resolver.Resolve(*discovery.ConvertedToTask)

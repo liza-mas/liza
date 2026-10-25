@@ -316,7 +316,7 @@ func narrowSkipReason(child *models.Task, resolver *pipeline.Resolver, now time.
 	if child.Status != initial {
 		return fmt.Sprintf("status %s is not the initial status %s", child.Status, initial)
 	}
-	if child.AssignedTo != nil && !strings.HasPrefix(*child.AssignedTo, "$") &&
+	if child.AssignedTo != nil && !strings.HasPrefix(*child.AssignedTo, transitionSentinelPrefix) &&
 		child.LeaseExpires != nil && child.LeaseExpires.After(now) {
 		return fmt.Sprintf("claimed by %s with a live lease", *child.AssignedTo)
 	}

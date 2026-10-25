@@ -16,6 +16,20 @@ import (
 // defaultIntegrationBranch names the integration branch when state configures none.
 const defaultIntegrationBranch = "integration"
 
+// History Extra keys of transition events: written when a transition
+// generates, recovers, cycles or fails, and read back by the cycle idempotency
+// guard and by the hand-off failure observation.
+const (
+	transitionExtraKey   = "transition"
+	cycleMembersExtraKey = "cycle_members"
+	outputIndexExtraKey  = "output_index"
+)
+
+// baseCommitSnapshotRolePair is the role-pair whose first generated children
+// make the pass snapshot the goal base commit; a project that configures no
+// such role-pair never snapshots it.
+const baseCommitSnapshotRolePair = "coding-pair"
+
 // transitionPass is one ExecuteTransitionsReportWith pass. The entry operation
 // fills the inputs it reads before the state lock (Git and artifact reads must
 // not run inside Modify); the in-lock steps then collect, order and execute the
@@ -256,8 +270,8 @@ func (p *transitionPass) recordCycles(s *models.State, cycles [][]pendingTx, dow
 					Time:  p.now,
 					Event: models.TaskEventTransitionCycleBlocked,
 					Extra: map[string]any{
-						"transition":    tx.name,
-						"cycle_members": cycleMemberIDs,
+						transitionExtraKey:   tx.name,
+						cycleMembersExtraKey: cycleMemberIDs,
 					},
 				})
 			}
@@ -351,7 +365,7 @@ func (p *transitionPass) snapshotBaseCommit(s *models.State) {
 	}
 	for _, r := range p.results {
 		tDef, err := buildTransitionDefFromPipeline(p.resolver, r.TransitionName)
-		if err == nil && tDef.targetRolePair == "coding-pair" && len(r.ChildTaskIDs) > 0 {
+		if err == nil && tDef.targetRolePair == baseCommitSnapshotRolePair && len(r.ChildTaskIDs) > 0 {
 			head := p.integrationHEAD
 			s.Goal.BaseCommit = &head
 			return
@@ -578,8 +592,8 @@ func hasCycleBlockedEvent(task *models.Task, transitionName string, cycleMembers
 		if h.Event != models.TaskEventTransitionCycleBlocked {
 			continue
 		}
-		if trans, ok := h.Extra["transition"].(string); ok && trans == transitionName {
-			if slices.Equal(extraToStringSlice(h.Extra["cycle_members"]), cycleMembers) {
+		if trans, ok := h.Extra[transitionExtraKey].(string); ok && trans == transitionName {
+			if slices.Equal(extraToStringSlice(h.Extra[cycleMembersExtraKey]), cycleMembers) {
 				return true
 			}
 		}

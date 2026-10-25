@@ -60,7 +60,7 @@ func SetTaskOutputWithAuthorityAndOptions(projectRoot string, input *SetTaskOutp
 
 func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) (result *SetTaskOutputResult, retErr error) {
 	if input == nil {
-		return nil, WrapLifecycleError("set-task-output", nil, fmt.Errorf("output input is required"), models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+		return nil, WrapLifecycleError(setTaskOutputOperation, nil, fmt.Errorf("output input is required"), models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	invocation := NewLifecycleInvocation(projectRoot)
 	var outcome models.LifecycleOutcome
@@ -70,7 +70,7 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 		if errors.As(retErr, &invalid) {
 			failure, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 		}
-		retErr = WrapLifecycleError("set-task-output", nil, retErr, failure, action, LifecycleEffectsNone)
+		retErr = WrapLifecycleError(setTaskOutputOperation, nil, retErr, failure, action, LifecycleEffectsNone)
 		// The requested task ID remains useful when storage fails before a task
 		// observation is available; do not invent its status or ownership.
 		var lifecycleErr *LifecycleError
@@ -81,7 +81,7 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 		if result != nil {
 			warnings = &result.Warnings
 		}
-		invocation.FinishResult("set-task-output", outcome, &retErr, warnings)
+		invocation.FinishResult(setTaskOutputOperation, outcome, &retErr, warnings)
 	}()
 	if authority != nil {
 		if err := requireAuthorityActor(*authority, input.AgentID); err != nil {
@@ -97,6 +97,10 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 	}
 	return &SetTaskOutputResult{LifecycleOutcome: outcome, TaskID: input.TaskID, OutputCount: len(input.Output), StatePath: paths.New(projectRoot).StatePath(), Warnings: warnings}, nil
 }
+
+// setTaskOutputOperation is the lifecycle operation, error operation and command
+// name of set-task-output; payloadschema owns the spelling.
+const setTaskOutputOperation = payloadschema.SetTaskOutputOperation
 
 // Operational-error phase labels of set-task-output, in execution order.
 const (
@@ -131,7 +135,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		if task == nil {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s not found", input.TaskID)}
 		}
-		request, err := NewLifecycleRequest("set-task-output", task, input.AgentID, authority, input.Request, input.Output)
+		request, err := NewLifecycleRequest(setTaskOutputOperation, task, input.AgentID, authority, input.Request, input.Output)
 		if err != nil {
 			return err
 		}
@@ -168,7 +172,7 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 // OperationalError naming the phase it failed in.
 func setTaskOutputOperationalError(projectRoot string, input *SetTaskOutputInput, phase string, cause error) error {
 	details := map[string]any{
-		"operation": "set-task-output", "task_id": input.TaskID,
+		"operation": setTaskOutputOperation, "task_id": input.TaskID,
 		"state_path": paths.New(projectRoot).StatePath(), "output_count": len(input.Output),
 		"recovery_hint": "Inspect the task state and history before retrying; a later reset may clear a previously saved output.",
 	}
@@ -267,7 +271,7 @@ func validateSetTaskOutputManifest(output []models.OutputEntry) error {
 	for _, diagnostic := range diagnostics {
 		fields = append(fields, diagnostic.Field)
 	}
-	return NewLifecycleInvalidInputError("set-task-output", nil, diagnostics, &PreconditionError{
+	return NewLifecycleInvalidInputError(setTaskOutputOperation, nil, diagnostics, &PreconditionError{
 		Reason: fmt.Sprintf("task output manifest rejected by the %s schema at %s", payloadschema.SetTaskOutputOperation, strings.Join(fields, ", ")),
 	})
 }

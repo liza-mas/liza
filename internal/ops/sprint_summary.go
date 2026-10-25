@@ -137,7 +137,7 @@ func anomaliesSection(anomalies []models.Anomaly) string {
 func circuitBreakerSection(cb *models.CircuitBreaker) string {
 	s := "## Circuit Breaker\n\n"
 	s += fmt.Sprintf("- **Status:** %s\n", cb.Status)
-	if cb.Status == "TRIGGERED" && cb.CurrentTrigger != nil {
+	if cb.Status == circuitBreakerStatusTriggered && cb.CurrentTrigger != nil {
 		s += fmt.Sprintf("- **Pattern:** %s\n", cb.CurrentTrigger.Pattern)
 		s += fmt.Sprintf("- **Severity:** %s\n", cb.CurrentTrigger.Severity)
 	}
@@ -151,7 +151,7 @@ func nextStepsSection() string {
 	s += "- [ ] Address any blocked tasks\n"
 	s += "- [ ] Review anomalies and circuit breaker status\n"
 	s += "- [ ] Adjust sprint scope if needed\n"
-	s += fmt.Sprintf("- [ ] Resume sprint with `%s`\n", brand.Command("resume"))
+	s += fmt.Sprintf("- [ ] Resume sprint with `%s`\n", brand.Command(resumeOperation))
 	s += "\n"
 	return s
 }

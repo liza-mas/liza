@@ -83,7 +83,7 @@ func RepairArchRef(projectRoot, taskID, archRef, reason string) (*RepairArchRefR
 		}
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if task.ArchRef != "" {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s already has arch_ref %q; %s only fills an empty arch_ref", taskID, task.ArchRef, repairArchRefOperation)}
@@ -107,7 +107,7 @@ func RepairArchRef(projectRoot, taskID, archRef, reason string) (*RepairArchRefR
 			Note:   &note,
 			Extra: map[string]any{
 				"operation":   repairArchRefOperation,
-				"source":      "operator_cli",
+				"source":      humanNoteSourceOperatorCLI,
 				"arch_ref":    archRef,
 				"integration": integration,
 			},
@@ -121,7 +121,7 @@ func RepairArchRef(projectRoot, taskID, archRef, reason string) (*RepairArchRefR
 	result := &RepairArchRefResult{TaskID: taskID, ArchRef: archRef, Integration: integration}
 	if err := log.New(lp.LogPath()).Append(log.Entry{
 		Timestamp: now,
-		Agent:     "operator",
+		Agent:     actorOperator,
 		Action:    "arch_ref_repaired",
 		Task:      &taskID,
 		Detail:    fmt.Sprintf("%s: %s", archRef, reason),

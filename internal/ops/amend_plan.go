@@ -16,6 +16,9 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// amendReasonMaxBytes bounds the reason that begins an amendment.
+const amendReasonMaxBytes = 4096
+
 type AmendPlanInput struct {
 	TaskID, Reason, Apply, ReplacePending, WithdrawPending, ChangedBy string
 	Authority                                                         *models.AgentAuthority
@@ -90,8 +93,8 @@ func checkAmendPlanRequest(resolver *pipeline.Resolver, input AmendPlanInput) (s
 	if !input.Mode.IsValid() || (input.Apply != "" || input.WithdrawPending != "") && input.Mode != "" {
 		return "", &PreconditionError{Reason: "select a valid amendment mode only when beginning a correction"}
 	}
-	if input.Apply == "" && (strings.TrimSpace(input.Reason) == "" || len(input.Reason) > 4096) {
-		return "", &PreconditionError{Reason: "amend-plan requires a nonempty reason of at most 4096 bytes"}
+	if input.Apply == "" && (strings.TrimSpace(input.Reason) == "" || len(input.Reason) > amendReasonMaxBytes) {
+		return "", &PreconditionError{Reason: fmt.Sprintf("amend-plan requires a nonempty reason of at most %d bytes", amendReasonMaxBytes)}
 	}
 	return actor, nil
 }

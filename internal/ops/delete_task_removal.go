@@ -35,7 +35,7 @@ func checkDeleteBlockers(state *models.State, task *models.Task, taskID string) 
 func removeTaskInState(state *models.State, taskID string, force bool, reason string) error {
 	taskIndex := state.FindTaskIndex(taskID)
 	if taskIndex == -1 {
-		return &errors.NotFoundError{Entity: "task", ID: taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 
 	currentTask := &state.Tasks[taskIndex]
@@ -76,7 +76,7 @@ func appendDeleteAuditNote(state *models.State, taskID string, status models.Tas
 	humanNote := models.HumanNote{
 		Timestamp: now,
 		Message:   fmt.Sprintf("Task %s deleted (was %s): %s", taskID, status, reason),
-		For:       "all",
+		For:       humanNoteForAll,
 	}
 	humanNote.MarkSeenByOrchestrator(now) // audit record, not a request
 	state.HumanNotes = append(state.HumanNotes, humanNote)

@@ -256,7 +256,7 @@ func runtimeInputConsumerDiagnostics(resolver *pipeline.Resolver, producer *mode
 func checkOutputRuntimeInputs(state *models.State, resolver *pipeline.Resolver, task *models.Task, output []models.OutputEntry) error {
 	diagnostics := runtimeInputConsumerDiagnostics(resolver, task, output)
 	diagnostics = append(diagnostics, runtimeInputNameCollisions(state, []string{task.ID}, runtimeInputCarriersOfOutput(output))...)
-	return runtimeInputAdmissionError("set-task-output", task, diagnostics, nil)
+	return runtimeInputAdmissionError(setTaskOutputOperation, task, diagnostics, nil)
 }
 
 // runtimeInputAdmissionError reports refusals as field-attributed

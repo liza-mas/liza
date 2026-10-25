@@ -65,6 +65,19 @@ const (
 	obligationDriftStale obligationDriftChange = "stale"
 )
 
+// Detail keys of an obligation-content-drift anomaly: written when a drift is
+// recorded, read back to find an existing record and to widen it.
+const (
+	driftDetailPath            = "path"
+	driftDetailHeading         = "heading"
+	driftDetailChange          = "change"
+	driftDetailReviewedSection = "reviewed_section"
+	driftDetailCurrentSection  = "current_section"
+	driftDetailCarriers        = "carriers"
+	driftDetailObligations     = "obligations"
+	driftDetailReferenceIDs    = "reference_ids"
+)
+
 // driftRecorder is the driftAccumulator.record method the detectors feed.
 type driftRecorder func(key obligationDriftKey, change obligationDriftChange, reviewedSection, carrier, obligation string, referenceIDs []string)
 
@@ -140,16 +153,16 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 			if existing := findObligationDrift(s.Anomalies, drift.key); existing != nil {
 				// The section is already reported at this content. Widen who
 				// it affects; a later merge can pull in another carrier.
-				existing.Details["carriers"] = sortedKeys(drift.carriers)
-				existing.Details["obligations"] = sortedKeys(drift.obligations)
-				existing.Details["reference_ids"] = sortedKeys(drift.referenceIDs)
+				existing.Details[driftDetailCarriers] = sortedKeys(drift.carriers)
+				existing.Details[driftDetailObligations] = sortedKeys(drift.obligations)
+				existing.Details[driftDetailReferenceIDs] = sortedKeys(drift.referenceIDs)
 				// A later carrier can retarget onto a section already reported
 				// as a re-pin. The record must carry the stronger claim and
 				// the evidence it rests on, or the reviewer reads a
 				// substitution as a routine move.
 				if retargetOutranksRecord(drift, existing) {
-					existing.Details["change"] = string(drift.change)
-					existing.Details["reviewed_section"] = drift.reviewed
+					existing.Details[driftDetailChange] = string(drift.change)
+					existing.Details[driftDetailReviewedSection] = drift.reviewed
 				}
 				continue
 			}
@@ -158,14 +171,14 @@ func RecordObligationContentDrift(bb *db.Blackboard, projectRoot, integrationCom
 				Reporter:  agentIDOrSystem(reporter),
 				Type:      models.AnomalyTypeObligationContentDrifted,
 				Details: map[string]any{
-					"path":             drift.key.path,
-					"heading":          drift.key.heading,
-					"change":           string(drift.change),
-					"reviewed_section": drift.reviewed,
-					"current_section":  drift.key.current,
-					"carriers":         sortedKeys(drift.carriers),
-					"obligations":      sortedKeys(drift.obligations),
-					"reference_ids":    sortedKeys(drift.referenceIDs),
+					driftDetailPath:            drift.key.path,
+					driftDetailHeading:         drift.key.heading,
+					driftDetailChange:          string(drift.change),
+					driftDetailReviewedSection: drift.reviewed,
+					driftDetailCurrentSection:  drift.key.current,
+					driftDetailCarriers:        sortedKeys(drift.carriers),
+					driftDetailObligations:     sortedKeys(drift.obligations),
+					driftDetailReferenceIDs:    sortedKeys(drift.referenceIDs),
 				},
 			})
 			recorded = append(recorded,
@@ -368,9 +381,9 @@ func findObligationDrift(anomalies []models.Anomaly, key obligationDriftKey) *mo
 		if anomaly.Type != models.AnomalyTypeObligationContentDrifted {
 			continue
 		}
-		if anomaly.Details["path"] == key.path &&
-			anomaly.Details["heading"] == key.heading &&
-			anomaly.Details["current_section"] == key.current {
+		if anomaly.Details[driftDetailPath] == key.path &&
+			anomaly.Details[driftDetailHeading] == key.heading &&
+			anomaly.Details[driftDetailCurrentSection] == key.current {
 			return anomaly
 		}
 	}
@@ -382,7 +395,7 @@ func findObligationDrift(anomalies []models.Anomaly, key obligationDriftKey) *mo
 // persisted string, which is a plain string whether written in this process or
 // round-tripped through YAML.
 func retargetOutranksRecord(drift obligationDrift, recorded *models.Anomaly) bool {
-	return drift.change == obligationDriftRetargeted && recorded.Details["change"] != string(obligationDriftRetargeted)
+	return drift.change == obligationDriftRetargeted && recorded.Details[driftDetailChange] != string(obligationDriftRetargeted)
 }
 
 // allDriftRecorded reports whether every drift already has a record that the
@@ -397,7 +410,7 @@ func allDriftRecorded(anomalies []models.Anomaly, drifts []obligationDrift) bool
 			return false
 		}
 		for field, want := range map[string]map[string]bool{
-			"carriers": drift.carriers, "obligations": drift.obligations, "reference_ids": drift.referenceIDs,
+			driftDetailCarriers: drift.carriers, driftDetailObligations: drift.obligations, driftDetailReferenceIDs: drift.referenceIDs,
 		} {
 			if !slices.Equal(detailStrings(existing.Details[field]), sortedKeys(want)) {
 				return false

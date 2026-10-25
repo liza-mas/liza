@@ -49,7 +49,7 @@ func crashRecoveryEntry(now time.Time, transitionName string, recovered int, ext
 	if extra == nil {
 		extra = map[string]any{}
 	}
-	extra["transition"] = transitionName
+	extra[transitionExtraKey] = transitionName
 	extra["recovered_children"] = recovered
 	return models.TaskHistoryEntry{Time: now, Event: models.TaskEventTransitionCrashRecov, Extra: extra}
 }

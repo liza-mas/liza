@@ -273,8 +273,8 @@ func recordGeneratedTransition(s *models.State, task *models.Task, transitionNam
 	}
 
 	histExtra := map[string]any{
-		"transition": transitionName,
-		"children":   len(result.ChildTaskIDs),
+		transitionExtraKey: transitionName,
+		"children":         len(result.ChildTaskIDs),
 	}
 	if len(gen.siblings.skipped) > 0 {
 		histExtra["skipped_entries"] = skippedEntriesHistory(gen.output, gen.siblings)
@@ -294,14 +294,14 @@ func skippedEntriesHistory(output []models.OutputEntry, siblings outputSiblings)
 	skipped := make([]map[string]any, 0, len(siblings.skipped))
 	for i, reason := range siblings.skipped {
 		skipped = append(skipped, map[string]any{
-			"output_index": i,
-			"kind":         output[i].Kind,
-			"reason":       reason,
-			"remapped_to":  siblings.remapped[i],
+			outputIndexExtraKey: i,
+			"kind":              output[i].Kind,
+			"reason":            reason,
+			"remapped_to":       siblings.remapped[i],
 		})
 	}
 	slices.SortFunc(skipped, func(a, b map[string]any) int {
-		return cmp.Compare(a["output_index"].(int), b["output_index"].(int))
+		return cmp.Compare(a[outputIndexExtraKey].(int), b[outputIndexExtraKey].(int))
 	})
 	return skipped
 }

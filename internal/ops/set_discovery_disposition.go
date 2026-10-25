@@ -8,10 +8,18 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-// validDispositionSentinels are the allowed non-task-ID disposition values.
-var validDispositionSentinels = map[string]bool{
-	"deferred":  true,
-	"dismissed": true,
+// discoveryDisposition is a non-task-ID disposition of a discovery entry. The
+// stored ConvertedToTask stays a string; only the sentinel decision is typed.
+type discoveryDisposition string
+
+const (
+	discoveryDispositionDeferred  discoveryDisposition = "deferred"
+	discoveryDispositionDismissed discoveryDisposition = "dismissed"
+)
+
+// isSentinel reports whether the disposition is one of the two non-task values.
+func (d discoveryDisposition) isSentinel() bool {
+	return d == discoveryDispositionDeferred || d == discoveryDispositionDismissed
 }
 
 // SetDiscoveryDisposition sets the converted_to_task field on a discovery entry.
@@ -23,16 +31,15 @@ func SetDiscoveryDisposition(projectRoot, discoveryID, disposition string) error
 	if disposition == "" {
 		return &PreconditionError{Reason: "disposition is required"}
 	}
-	if !validDispositionSentinels[disposition] {
+	isTaskRef := !discoveryDisposition(disposition).isSentinel()
+	if isTaskRef {
 		if err := paths.ValidateTaskID(disposition); err != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("invalid disposition %q: must be a valid task ID, \"deferred\", or \"dismissed\"", disposition)}
+			return &PreconditionError{Reason: fmt.Sprintf("invalid disposition %q: must be a valid task ID, %q, or %q", disposition, discoveryDispositionDeferred, discoveryDispositionDismissed)}
 		}
 	}
 
 	lp := paths.New(projectRoot)
 	bb := db.For(lp.StatePath())
-
-	isTaskRef := !validDispositionSentinels[disposition]
 
 	return bb.Modify(func(state *models.State) error {
 		// Verify referenced task exists when disposition is a task ID.

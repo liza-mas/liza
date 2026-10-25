@@ -183,7 +183,7 @@ func narrowInheritedDependenciesWithOptionalAuthority(projectRoot, producerID, t
 		}()
 		producer := state.FindTask(req.producerID)
 		if producer == nil {
-			return &errors.NotFoundError{Entity: "task", ID: req.producerID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: req.producerID}
 		}
 		copy := *producer
 		observed = &copy

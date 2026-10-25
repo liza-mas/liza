@@ -12,6 +12,23 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
+// Completion-authorization vocabulary: the lock the completion → mutation →
+// read order starts with, the prefix of the progression lock label, and the
+// integration progress reason codes of a completion that is not (or no longer)
+// effectively complete. The codes reach PreconditionError details unchanged;
+// mode_change.go raises the state-changed code on its goal-complete writes.
+const (
+	integrationCompletionLockName    = "integration-completion"
+	completionProgressionLabelPrefix = "progression "
+	integrationIncompleteCode        = "integration_incomplete"
+	integrationStateChangedCode      = "integration_state_changed"
+)
+
+// legacyPlanningRolePair is the only planning role-pair recognised when a
+// project has no pipeline config (legacy projects); configured pipelines name
+// their own planning role-pairs and stay dynamic.
+const legacyPlanningRolePair = "code-planning-pair"
+
 type effectiveIntegrationCompletionAuthorization struct {
 	cohortFrozen         bool
 	integrationComplete  bool
@@ -43,7 +60,7 @@ func withEffectiveIntegrationCompletionLinearization(projectRoot, operation stri
 	if beforeEffectiveIntegrationCompletionLinearizationTestHook != nil {
 		beforeEffectiveIntegrationCompletionLinearizationTestHook(operation)
 	}
-	lock, err := projectFileLock(projectRoot, "integration-completion")
+	lock, err := projectFileLock(projectRoot, integrationCompletionLockName)
 	if err != nil {
 		return err
 	}
@@ -66,7 +83,7 @@ func withEffectiveIntegrationCompletionAuthorization(
 			return fn(&effectiveIntegrationCompletionAuthorization{})
 		}
 	}
-	return withEffectiveIntegrationCompletionLinearization(projectRoot, "progression "+operation, func() error {
+	return withEffectiveIntegrationCompletionLinearization(projectRoot, completionProgressionLabelPrefix+operation, func() error {
 		authorization, err := authorizeEffectiveIntegrationCompletion(projectRoot, requireSettled)
 		if err != nil {
 			return err
@@ -112,7 +129,7 @@ func authorizeEffectiveIntegrationCompletion(projectRoot string, requireSettled 
 			reason = progressReason(integrationProgressWaitingGlobalAnalysis)
 		}
 		if reason == nil {
-			reason = &IntegrationProgressReason{Code: "integration_incomplete"}
+			reason = &IntegrationProgressReason{Code: integrationIncompleteCode}
 		}
 		return nil, integrationCompletionPreconditionError(reason)
 	}
@@ -190,7 +207,7 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		return nil
 	}
 	if !authorization.cohortFrozen || !authorization.integrationComplete {
-		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
 	}
 	closure := state.Goal.Integration.Closure
 	// The outer completion lock excludes cooperating ref mutations here. Recheck
@@ -200,7 +217,7 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		closure.Generation != authorization.generation || closure.AnalysisKey != authorization.analysisKey ||
 		closure.SourceCommit != authorization.sourceCommit ||
 		len(state.Goal.Integration.MutationReceipts) != authorization.mutationReceiptCount {
-		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: "integration_state_changed"})
+		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
 	}
 	return nil
 }
@@ -367,7 +384,7 @@ func LoadDetectionContext(projectRoot string) (*PipelineDetectionContext, error)
 	}
 	var m2oInfos []ManyToOneTransitionInfo
 	for _, td := range resolver.AllTransitions() {
-		if td.Cardinality == "many-to-one" {
+		if td.Cardinality == models.CardinalityManyToOne {
 			srcPair, err := resolver.TransitionSourceRolePair(td.Name)
 			if err != nil {
 				continue
@@ -408,7 +425,7 @@ func LoadPhaseHandoffDetectionContext(projectRoot string) (*PipelineDetectionCon
 		if errors.Is(err, pipeline.ErrConfigNotFound) {
 			return &PipelineDetectionContext{
 				PlanningApprovedStatuses: map[string]models.TaskStatus{
-					"code-planning-pair": models.TaskStatusCodingPlanApproved,
+					legacyPlanningRolePair: models.TaskStatusCodingPlanApproved,
 				},
 			}, nil
 		}
@@ -439,10 +456,10 @@ func TransitionSourcePairs(projectRoot string) (map[string]bool, error) {
 // IsPlanningPair reports whether a role-pair is a transition source ("planning pair").
 // planningPairs is the set from TransitionSourcePairs / LoadDetectionContext.
 // When planningPairs is nil (legacy projects without pipeline config), falls back
-// to recognizing "code-planning-pair" as the only planning pair.
+// to recognizing legacyPlanningRolePair as the only planning pair.
 func IsPlanningPair(rolePair string, planningPairs map[string]bool) bool {
 	if planningPairs == nil {
-		return rolePair == "code-planning-pair"
+		return rolePair == legacyPlanningRolePair
 	}
 	return planningPairs[rolePair]
 }

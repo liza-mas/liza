@@ -32,10 +32,6 @@ type planReplacementTestHook struct {
 	afterRetire func(originalID string) error
 }
 
-// planReplacementActor records engine-driven retirements, like the other
-// supervisor repairs that have no acting agent.
-const planReplacementActor = "system"
-
 // planReplacements maps each original, in output order, to the children
 // generated for it. One original may be split across several outputs.
 type planReplacements struct {
@@ -246,7 +242,7 @@ func planReplacementPassBarrier(state *models.State, resolver *pipeline.Resolver
 		}
 		if len(holders) > 0 {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s cannot pass: its hand-off would retire %s while %s still wait on it; move or release that placement with %s, then pass again",
-				plan.ID, id, strings.Join(holders, ", "), brand.Command("reserve-provider"))}
+				plan.ID, id, strings.Join(holders, ", "), brand.Command(reserveProviderOperation))}
 		}
 	}
 	return nil
@@ -286,7 +282,7 @@ func applyPlanReplacements(bb *db.Blackboard, s *models.State, planID string, re
 		}
 		reason := fmt.Sprintf("replaced by plan %s", planID)
 		changed := secretmask.New().MaskText(strings.Join(set.changed[originalID], "; "))
-		if _, err := supersedeTaskInState(s, pb, original, children, reason, changed, planReplacementActor, nil, now); err != nil {
+		if _, err := supersedeTaskInState(s, pb, original, children, reason, changed, actorSystem, nil, now); err != nil {
 			return fmt.Errorf("retire %s: %w", originalID, err)
 		}
 		result.RetiredTaskIDs = append(result.RetiredTaskIDs, originalID)
@@ -396,7 +392,7 @@ func transferPlanReplacementPlacement(s *models.State, planID string, resolver *
 				res.ProviderTask = successorID
 				changed = true
 				reason := fmt.Sprintf("preserved writer placement in plan %s", planID)
-				actor := planReplacementActor
+				actor := actorSystem
 				holder.History = append(holder.History, models.TaskHistoryEntry{
 					Time: now, Event: models.TaskEventDependenciesRewritten, Agent: &actor, Reason: &reason,
 					Extra: map[string]any{"operation": "plan-declared-replacement", "provider_reservation_retargeted": map[string]any{

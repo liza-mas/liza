@@ -92,7 +92,7 @@ func (p *replacePass) replace(candidate *models.State, replacement models.Task) 
 		return nil, replacementAudit{}, err
 	}
 	consumers := replacementRewrittenConsumers(candidate, source.ID, historyStarts)
-	extra := map[string]any{"source_task_id": source.ID, models.ReplacementTaskIDExtra: replacement.ID, "source_prior_transition_id": p.request.ExpectedTransition, "retargeted_consumers": consumers, "request_id": p.request.RequestID}
+	extra := map[string]any{"source_task_id": source.ID, models.ReplacementTaskIDExtra: replacement.ID, "source_prior_transition_id": p.request.ExpectedTransition, replacementExtraRetargetedConsumers: consumers, "request_id": p.request.RequestID}
 	if p.base != nil {
 		extra["preserved_base_commit"] = p.base.BaseCommit
 	}
@@ -112,7 +112,7 @@ func (p *replacePass) project(candidate *models.State, source *models.Task, repl
 	}
 	// Extra is excluded from the transition digest; append the event before
 	// completion, then fill its new token without changing the boundary.
-	audit.extra["source_new_transition_id"] = outcome.TransitionID
+	audit.extra[replacementExtraSourceNewTransition] = outcome.TransitionID
 	p.result = &ReplaceTaskResult{LifecycleOutcome: outcome, SourceTaskID: source.ID, ReplacementTaskID: replacementID, SourceOriginalStatus: audit.originalStatus, RetargetedConsumers: audit.consumers}
 	return nil
 }

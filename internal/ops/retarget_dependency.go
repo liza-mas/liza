@@ -195,7 +195,7 @@ func (r *retargetRun) mutate(state *models.State) (callbackErr error) {
 func (r *retargetRun) admit(state *models.State) (*models.Task, LifecycleRequest, error) {
 	task := state.FindTask(r.taskID)
 	if task == nil {
-		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: "task", ID: r.taskID}
+		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: r.taskID}
 	}
 	copy := *task
 	r.observed = &copy

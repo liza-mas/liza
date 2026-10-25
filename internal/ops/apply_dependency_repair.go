@@ -188,7 +188,7 @@ func (r *applyRepairRun) mutate(state *models.State) (callbackErr error) {
 func (r *applyRepairRun) admit(state *models.State) (*models.Task, LifecycleRequest, error) {
 	source := state.FindTask(r.sourceTaskID)
 	if source == nil {
-		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: "task", ID: r.sourceTaskID}
+		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: r.sourceTaskID}
 	}
 	copy := *source
 	r.observed = &copy
@@ -272,7 +272,7 @@ func applyDependencyUpdatesInState(state *models.State, resolver *pipeline.Resol
 			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair to terminal task %s (%s)", task.ID, task.Status)}
 		}
 		if !slices.Equal(task.DependsOn, update.ExpectedDependsOn) {
-			return nil, WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, "requery", "none")
+			return nil, WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 		}
 		for _, dependencyID := range update.DesiredDependsOn {
 			if dependencyID == task.ID {

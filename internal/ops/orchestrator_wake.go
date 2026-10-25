@@ -94,7 +94,7 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 	// cascade wakes when a human annotates a dependency for unrelated reasons.
 	for i := range state.HumanNotes {
 		note := &state.HumanNotes[i]
-		if (note.For == task.ID || note.For == "all") && note.Timestamp.After(lastAssessment.Time) {
+		if (note.For == task.ID || note.For == humanNoteForAll) && note.Timestamp.After(lastAssessment.Time) {
 			return true
 		}
 	}
@@ -282,7 +282,7 @@ func dependencySatisfactionChangedAfterAssessment(state *models.State, result mo
 func CountActionableHypothesisExhaustedTasks(state *models.State) int {
 	count := 0
 	for i := range state.Tasks {
-		if len(state.Tasks[i].FailedBy) >= 2 &&
+		if len(state.Tasks[i].FailedBy) >= hypothesisExhaustionFailures &&
 			state.Tasks[i].Status != models.TaskStatusBlocked &&
 			!state.Tasks[i].Status.IsTerminal() &&
 			isTaskActionableSinceAssessment(&state.Tasks[i], state) {

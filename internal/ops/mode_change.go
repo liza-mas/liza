@@ -37,10 +37,6 @@ const (
 	// Linearization operation labels of the two goal-complete mode writes.
 	goalCompleteStopLinearization    = "goal-complete stop"
 	goalCompleteRestoreLinearization = "restore stale goal-complete stop"
-
-	// integrationStateChangedCode is the integration progress reason code of a
-	// completion that changed between verification and the mode write.
-	integrationStateChangedCode = "integration_state_changed"
 )
 
 // Persisted circuit-breaker statuses. models.CircuitBreaker.Status is a plain

@@ -14,6 +14,10 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
+// proceedOperation is the lifecycle operation, completion-lock label and command
+// name of the transition entry operations.
+const proceedOperation = "proceed"
+
 // errTransitionAlreadyExecuted is returned by proceedInner when the transition
 // has already been fully executed (idempotency guard). This is an expected
 // condition in ExecuteAvailableTransitions, not a configuration error.
@@ -215,7 +219,7 @@ func (r *proceedRun) commit(pf proceedPreflight, result *ProceedResult) error {
 		})
 	}
 	if pf.allocationCheck.commit == "" {
-		return withEffectiveIntegrationCompletionAuthorization(r.projectRoot, "proceed", false, mutate)
+		return withEffectiveIntegrationCompletionAuthorization(r.projectRoot, proceedOperation, false, mutate)
 	}
 	return withEffectiveIntegrationCompletionLinearization(r.projectRoot, "proceed direct coding allocation", func() error {
 		authorization, err := authorizeEffectiveIntegrationCompletion(r.projectRoot, false)
@@ -278,11 +282,11 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 		Time:  now,
 		Event: models.TaskEventTransitionExecuted,
 		Extra: map[string]any{
-			"transition":    transitionName,
-			"cardinality":   string(models.CardinalityManyToOne),
-			"cohort_size":   len(cohort),
-			"cohort_parent": sharedParentID,
-			"children":      1,
+			transitionExtraKey: transitionName,
+			"cardinality":      string(models.CardinalityManyToOne),
+			"cohort_size":      len(cohort),
+			"cohort_parent":    sharedParentID,
+			"children":         1,
 		},
 	})
 
@@ -599,18 +603,18 @@ func resolvePhaseRef(resolver *pipeline.Resolver, ref string) (models.TaskStatus
 		return "", fmt.Errorf("invalid transition reference %q: empty components", ref)
 	}
 
-	switch phase {
-	case "initial":
+	switch pipeline.StateCategory(phase) {
+	case pipeline.StateCategoryInitial:
 		return resolver.InitialStatus(pair)
-	case "executing":
+	case pipeline.StateCategoryExecuting:
 		return resolver.ExecutingStatus(pair)
-	case "submitted":
+	case pipeline.StateCategorySubmitted:
 		return resolver.SubmittedStatus(pair)
-	case "reviewing":
+	case pipeline.StateCategoryReviewing:
 		return resolver.ReviewingStatus(pair)
-	case "approved":
+	case pipeline.StateCategoryApproved:
 		return resolver.ApprovedStatus(pair)
-	case "rejected":
+	case pipeline.StateCategoryRejected:
 		return resolver.RejectedStatus(pair)
 	default:
 		return "", fmt.Errorf("unknown phase %q in reference %q", phase, ref)
