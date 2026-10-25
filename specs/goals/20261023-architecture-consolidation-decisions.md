@@ -1019,7 +1019,7 @@ only `cmd/liza` wiring with them. Gain estimate: about 13 h off the critical pat
 
 
 ### D59 — G8 at a boundary SHA behind the branch head: dispatch on a pinned ref (operator, standing delegation, 2026-10-25)
-Operator ruling under the standing delegation, 2026-10-25T04:45Z. Under D58, A3 keeps merging while the A2 boundary records its proofs, so
+Operator ruling under the standing delegation, 2026-10-25T04:38Z. Under D58, A3 keeps merging while the A2 boundary records its proofs, so
 `global-refactoring` has already moved past the A2 boundary SHA `b3356c3c6` (head `09d0121af`). A D52 dispatch on the branch would test the
 head, not the boundary SHA.
 - Ruling: when a boundary SHA is behind the branch head, the operator pushes `global-refactoring` and a branch `g8/<area>-<sha7>` pointing at the
