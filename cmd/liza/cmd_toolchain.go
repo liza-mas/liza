@@ -147,7 +147,7 @@ var toolchainConfigureCmd = &cobra.Command{
 			Exclude:           exclude,
 			GlobalDir:         globalDir,
 			InstallDir:        installDir,
-			AgentToolsMode:    agentToolsMode,
+			AgentToolsMode:    toolchain.AgentToolsMode(agentToolsMode),
 			WriteShellProfile: writeShellProfile,
 		})
 		if err != nil {

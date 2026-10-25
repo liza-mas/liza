@@ -378,6 +378,23 @@ func npmPrefixForBinDir(binDir, goos string) (string, error) {
 // hand, and the caller turns it into an actionable message rather than an error.
 var errNoPackagePath = errors.New("no package manager path")
 
+// PackageManager names a system package manager packageInstallCommand can
+// drive. Binary names for the generic runner and the catalog's
+// PackageNamesByManager keys stay strings; they are converted at those edges.
+type PackageManager string
+
+const (
+	PackageManagerWinget PackageManager = "winget"
+	PackageManagerScoop  PackageManager = "scoop"
+	PackageManagerChoco  PackageManager = "choco"
+	PackageManagerBrew   PackageManager = "brew"
+	PackageManagerAptGet PackageManager = "apt-get"
+	PackageManagerDnf    PackageManager = "dnf"
+	PackageManagerYum    PackageManager = "yum"
+	PackageManagerPacman PackageManager = "pacman"
+	PackageManagerZypper PackageManager = "zypper"
+)
+
 func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 	if tool.PackageName == "" {
 		return Command{}, fmt.Errorf("missing package name")
@@ -389,31 +406,39 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 	// Windows managers come first so they win on a host that has both, which is
 	// the case under Git Bash with scoop or a WSL-adjacent brew on PATH.
 	packageManagers := []struct {
-		binary string
+		binary PackageManager
 		build  func(name string) Command
 	}{
-		{"winget", func(name string) Command {
-			return Command{Name: "winget", Args: []string{
+		{PackageManagerWinget, func(name string) Command {
+			return Command{Name: string(PackageManagerWinget), Args: []string{
 				"install", "--exact", "--id", name,
 				"--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity",
 			}}
 		}},
-		{"scoop", func(name string) Command { return Command{Name: "scoop", Args: []string{"install", name}} }},
-		{"choco", func(name string) Command {
-			return Command{Name: "choco", Args: []string{"install", name, "-y", "--no-progress"}}
+		{PackageManagerScoop, func(name string) Command {
+			return Command{Name: string(PackageManagerScoop), Args: []string{"install", name}}
 		}},
-		{"brew", func(name string) Command { return Command{Name: "brew", Args: []string{"install", name}} }},
-		{"apt-get", func(name string) Command {
+		{PackageManagerChoco, func(name string) Command {
+			return Command{Name: string(PackageManagerChoco), Args: []string{"install", name, "-y", "--no-progress"}}
+		}},
+		{PackageManagerBrew, func(name string) Command {
+			return Command{Name: string(PackageManagerBrew), Args: []string{"install", name}}
+		}},
+		{PackageManagerAptGet, func(name string) Command {
 			packageEnv := toolEnvName("PACKAGE")
 			return Command{Name: "sh", Args: []string{"-c", `sudo apt-get update && sudo apt-get install -y "$` + packageEnv + `"`}, Env: map[string]string{packageEnv: name}}
 		}},
-		{"dnf", func(name string) Command { return Command{Name: "sudo", Args: []string{"dnf", "install", "-y", name}} }},
-		{"yum", func(name string) Command { return Command{Name: "sudo", Args: []string{"yum", "install", "-y", name}} }},
-		{"pacman", func(name string) Command {
-			return Command{Name: "sudo", Args: []string{"pacman", "-Sy", "--needed", name}}
+		{PackageManagerDnf, func(name string) Command {
+			return Command{Name: "sudo", Args: []string{string(PackageManagerDnf), "install", "-y", name}}
 		}},
-		{"zypper", func(name string) Command {
-			return Command{Name: "sudo", Args: []string{"zypper", "install", "-y", name}}
+		{PackageManagerYum, func(name string) Command {
+			return Command{Name: "sudo", Args: []string{string(PackageManagerYum), "install", "-y", name}}
+		}},
+		{PackageManagerPacman, func(name string) Command {
+			return Command{Name: "sudo", Args: []string{string(PackageManagerPacman), "-Sy", "--needed", name}}
+		}},
+		{PackageManagerZypper, func(name string) Command {
+			return Command{Name: "sudo", Args: []string{string(PackageManagerZypper), "install", "-y", name}}
 		}},
 	}
 
@@ -423,8 +448,8 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 	// it differently.
 	unknownPackageName := false
 	for _, candidate := range packageManagers {
-		names = append(names, candidate.binary)
-		path, err := runner.LookPath(candidate.binary)
+		names = append(names, string(candidate.binary))
+		path, err := runner.LookPath(string(candidate.binary))
 		if err != nil || path == "" {
 			continue
 		}
@@ -451,12 +476,12 @@ func packageInstallCommand(tool Tool, runner Runner) (Command, error) {
 // Unix managers share the plain name. The Windows managers identify packages by
 // publisher-qualified IDs, so they are only used when the catalog states the
 // identifier explicitly.
-func packageNameFor(tool Tool, manager string) (string, bool) {
-	if name, ok := tool.PackageNamesByManager[manager]; ok && name != "" {
+func packageNameFor(tool Tool, manager PackageManager) (string, bool) {
+	if name, ok := tool.PackageNamesByManager[string(manager)]; ok && name != "" {
 		return name, true
 	}
 	switch manager {
-	case "winget", "scoop", "choco":
+	case PackageManagerWinget, PackageManagerScoop, PackageManagerChoco:
 		return "", false
 	default:
 		return tool.PackageName, true

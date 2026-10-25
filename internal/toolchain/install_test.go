@@ -170,6 +170,123 @@ func TestPackageInstallCommandReportsNoPackagePathWhenNoManagerKnowsTheTool(t *t
 	}
 }
 
+// allPackageManagers lists every PackageManager in the preference order
+// packageInstallCommand tries them, with the command each one builds for a
+// package named "id-<manager>".
+var allPackageManagers = []struct {
+	manager PackageManager
+	name    string
+	args    []string
+}{
+	{PackageManagerWinget, "winget", []string{"install", "--exact", "--id", "id-winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}},
+	{PackageManagerScoop, "scoop", []string{"install", "id-scoop"}},
+	{PackageManagerChoco, "choco", []string{"install", "id-choco", "-y", "--no-progress"}},
+	{PackageManagerBrew, "brew", []string{"install", "id-brew"}},
+	{PackageManagerAptGet, "sh", []string{"-c", `sudo apt-get update && sudo apt-get install -y "$` + toolEnvName("PACKAGE") + `"`}},
+	{PackageManagerDnf, "sudo", []string{"dnf", "install", "-y", "id-dnf"}},
+	{PackageManagerYum, "sudo", []string{"yum", "install", "-y", "id-yum"}},
+	{PackageManagerPacman, "sudo", []string{"pacman", "-Sy", "--needed", "id-pacman"}},
+	{PackageManagerZypper, "sudo", []string{"zypper", "install", "-y", "id-zypper"}},
+}
+
+func packageToolNamingEveryManager() Tool {
+	names := map[string]string{}
+	for _, candidate := range allPackageManagers {
+		names[string(candidate.manager)] = "id-" + string(candidate.manager)
+	}
+	return Tool{ID: "example", PackageName: "example", PackageNamesByManager: names}
+}
+
+func TestPackageInstallCommandBuildsCommandForEveryPackageManager(t *testing.T) {
+	tool := packageToolNamingEveryManager()
+	for _, candidate := range allPackageManagers {
+		t.Run(string(candidate.manager), func(t *testing.T) {
+			runner := &fakeRunner{paths: map[string]string{string(candidate.manager): "/fake/" + string(candidate.manager)}}
+
+			got, err := packageInstallCommand(tool, runner)
+			if err != nil {
+				t.Fatalf("packageInstallCommand() error = %v", err)
+			}
+			if got.Name != candidate.name || !slices.Equal(got.Args, candidate.args) {
+				t.Fatalf("packageInstallCommand() = %q %q, want %q %q", got.Name, got.Args, candidate.name, candidate.args)
+			}
+			if candidate.manager == PackageManagerAptGet {
+				if got.Env[toolEnvName("PACKAGE")] != "id-apt-get" {
+					t.Fatalf("apt-get package env = %q, want id-apt-get", got.Env[toolEnvName("PACKAGE")])
+				}
+			} else if len(got.Env) != 0 {
+				t.Fatalf("packageInstallCommand() env = %v, want none", got.Env)
+			}
+		})
+	}
+}
+
+func TestPackageInstallCommandKeepsManagerPreferenceOrder(t *testing.T) {
+	tool := packageToolNamingEveryManager()
+	for i, preferred := range allPackageManagers {
+		paths := map[string]string{}
+		for _, later := range allPackageManagers[i:] {
+			paths[string(later.manager)] = "/fake/" + string(later.manager)
+		}
+
+		got, err := packageInstallCommand(tool, &fakeRunner{paths: paths})
+		if err != nil {
+			t.Fatalf("packageInstallCommand() with %s first error = %v", preferred.manager, err)
+		}
+		if got.Name != preferred.name || !slices.Equal(got.Args, preferred.args) {
+			t.Fatalf("packageInstallCommand() with %s first = %q %q, want %q %q", preferred.manager, got.Name, got.Args, preferred.name, preferred.args)
+		}
+	}
+}
+
+func TestPackageInstallCommandListsEveryCheckedManagerWhenNoneIsPresent(t *testing.T) {
+	_, err := packageInstallCommand(Tool{ID: "jq", PackageName: "jq"}, &fakeRunner{})
+	if err == nil {
+		t.Fatal("packageInstallCommand() error = nil, want missing package manager error")
+	}
+	var names []string
+	for _, candidate := range allPackageManagers {
+		names = append(names, string(candidate.manager))
+	}
+	if want := "(checked " + strings.Join(names, ", ") + ")"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %v, want it to contain %q", err, want)
+	}
+}
+
+func TestPackageNameForResolvesEveryManagerAndFallsBackForUnknownOnes(t *testing.T) {
+	plain := Tool{ID: "example", PackageName: "example"}
+	for _, candidate := range allPackageManagers {
+		t.Run(string(candidate.manager), func(t *testing.T) {
+			got, ok := packageNameFor(packageToolNamingEveryManager(), candidate.manager)
+			if !ok || got != "id-"+string(candidate.manager) {
+				t.Fatalf("packageNameFor(named) = %q, %v, want the catalog identifier", got, ok)
+			}
+
+			got, ok = packageNameFor(plain, candidate.manager)
+			switch candidate.manager {
+			case PackageManagerWinget, PackageManagerScoop, PackageManagerChoco:
+				if ok || got != "" {
+					t.Fatalf("packageNameFor(plain) = %q, %v, want no identifier for a Windows manager", got, ok)
+				}
+			default:
+				if !ok || got != "example" {
+					t.Fatalf("packageNameFor(plain) = %q, %v, want the shared plain name", got, ok)
+				}
+			}
+		})
+	}
+
+	got, ok := packageNameFor(plain, PackageManager("emerge"))
+	if !ok || got != "example" {
+		t.Fatalf("packageNameFor(unknown manager) = %q, %v, want the shared plain name", got, ok)
+	}
+	named := Tool{ID: "example", PackageName: "example", PackageNamesByManager: map[string]string{"emerge": "dev-lang/example"}}
+	got, ok = packageNameFor(named, PackageManager("emerge"))
+	if !ok || got != "dev-lang/example" {
+		t.Fatalf("packageNameFor(unknown manager with catalog id) = %q, %v, want the catalog identifier", got, ok)
+	}
+}
+
 func TestPackageInstallCommandRejectsURLPackage(t *testing.T) {
 	_, err := packageInstallCommand(Tool{ID: "tool", PackageName: "https://example.test/tool.rb"}, &fakeRunner{})
 	if err == nil {
