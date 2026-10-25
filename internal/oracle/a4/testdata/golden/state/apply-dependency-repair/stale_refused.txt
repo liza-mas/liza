@@ -1,0 +1,578 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+  - id: t2
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t2
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    depends_on: [t3]
+  - id: t3
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t3
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+  - id: m1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture m1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    handoff_events:
+      - {timestamp: "<INSTANT Z>", agent: coder-1, trigger: submission}
+      - {timestamp: "<INSTANT Z>", agent: code-reviewer-1, trigger: completion}
+  - id: b1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture b1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    blocked_reason: Dependency selection needs repair
+    blocked_questions: ["Which prerequisite should t2 use?"]
+    repair_request:
+      operation: apply-dependency-repair
+      target: b1
+      dependency_updates:
+        - task_id: t2
+          expected_depends_on: [t1]
+          desired_depends_on: [t3]
+      evidence: ["error=dependency selection no longer matches scope"]
+      validation: ["validate --json"]
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1, t2, t3, m1, b1]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+  - id: t2
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t2
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    depends_on: [t3]
+  - id: t3
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t3
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+  - id: m1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture m1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    handoff_events:
+      - {timestamp: "<INSTANT Z>", agent: coder-1, trigger: submission}
+      - {timestamp: "<INSTANT Z>", agent: code-reviewer-1, trigger: completion}
+  - id: b1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture b1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    blocked_reason: Dependency selection needs repair
+    blocked_questions: ["Which prerequisite should t2 use?"]
+    repair_request:
+      operation: apply-dependency-repair
+      target: b1
+      dependency_updates:
+        - task_id: t2
+          expected_depends_on: [t1]
+          desired_depends_on: [t3]
+      evidence: ["error=dependency selection no longer matches scope"]
+      validation: ["validate --json"]
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1, t2, t3, m1, b1]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# written files
+## .liza/lifecycle-metrics/<DIGEST 1>.json
+{
+  "counts": {
+    "apply-dependency-repair": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 1
+    },
+    "assess-blocked": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "assess-hypothesis-exhausted": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "cancel-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "claim-reviewer-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "claim-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "handoff": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "mark-blocked": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "narrow-inherited-dependencies": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "record-rejection-rca": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "recover-agent": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "recover-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "release-claim": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "repair-superseded-dependencies": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "replace-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "resume-rejection-rca": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "retarget-dependency": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "set-task-output": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "submit-for-review": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "submit-verdict": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "supersede-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "transition-attempt": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "unblock-task": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "validate-payload": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    },
+    "wt-merge": {
+      "ALREADY_COMPLETED": 0,
+      "ALREADY_TRANSITIONED": 0,
+      "COMPLETED": 0,
+      "CONFLICT": 0,
+      "FORBIDDEN": 0,
+      "INVALID_INPUT": 0,
+      "NO_CHANGE": 0,
+      "RETRYABLE": 0,
+      "STALE_CALLER": 0,
+      "STATE_CHANGED": 0
+    }
+  },
+  "last_updated": "<INSTANT Z>",
+  "observed_since": "<INSTANT Z>",
+  "sprint": {
+    "id": "sprint-1",
+    "number": 1,
+    "started": "<INSTANT Z>"
+  },
+  "version": 1
+}
