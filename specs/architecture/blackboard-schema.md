@@ -445,7 +445,7 @@ Required:
 
 Optional:
 - `plan_ref` (`string`): Path to the plan artifact (repo-relative). Set by doer via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped).
-- `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `proceed.go` during transitions.
+- `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `transition_children.go` during transitions.
 - `epic_ref` (`string`): Path to a concrete epic artifact (repo-relative). Specialized `epic-planning-pair` outputs use this for `us-writing-pair` children; epic master framework refs use `plan_ref`, not `epic_ref`.
 - `validation` (`[]string`): Ordered canonical validation commands for the generated child task. Commands are stored exactly as declared, must be single-line, non-empty, and must not have leading or trailing whitespace. Newly declared validation commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. Existing stored commands that violate this shape remain visible as task-declared executable guidance and are translated by consumers rather than edited in place. This field is distinct from `repair_request.validation`, which records validation for an orchestrator repair request.
 - `destructive_db` (`bool`): Optional safety marker for validation commands that may reset, drop, or otherwise destroy DB state. Defaults to false and is inert when omitted. When true, `validation` must be non-empty and every command must start with `LIZA_ALLOW_DESTRUCTIVE_DB=1 ` or `env LIZA_ALLOW_DESTRUCTIVE_DB=1 `. The marker is part of the canonical command and must not be translated away.
@@ -537,8 +537,8 @@ review/failure metadata; the doer updates output if repair changes the deliverab
 
 | Hop | Source | Target | Mechanism |
 |-----|--------|--------|-----------|
-| First | Architect's `output[]` entry `.arch_ref` | Code-planning child task `.arch_ref` | `proceed.go` `buildChildTask` copies `entry.ArchRef` |
-| Second | Parent code-planning task `.arch_ref` | Coding child task `.arch_ref` | `proceed.go` `buildOneToOneChild` / `buildChildTask` inherits `parent.ArchRef` as fallback when entry has no `arch_ref` |
+| First | Architect's `output[]` entry `.arch_ref` | Code-planning child task `.arch_ref` | `transition_children.go` `buildChildTask` copies `entry.ArchRef` |
+| Second | Parent code-planning task `.arch_ref` | Coding child task `.arch_ref` | `transition_children.go` `buildOneToOneChild` / `buildChildTask` inherits `parent.ArchRef` as fallback when entry has no `arch_ref` |
 
 Precedence: entry-level `arch_ref` takes priority over parent task `arch_ref`. This allows an output entry to override the inherited architecture document if needed.
 

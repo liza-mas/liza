@@ -1,12 +1,10 @@
 package ops
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"log"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,23 +23,6 @@ var errTransitionAlreadyExecuted = errors.New("transition already executed")
 // errManyToOneCohortIncomplete is returned while a many-to-one cohort still has
 // live members short of the required status: a normal wait, not a failure.
 var errManyToOneCohortIncomplete = errors.New("many-to-one cohort incomplete")
-
-// perSubtaskChildID returns the deterministic child task ID for a per-subtask transition.
-func perSubtaskChildID(parentID, transitionName string, index int) string {
-	return fmt.Sprintf("%s-%s-%d", parentID, transitionName, index)
-}
-
-// oneToOneChildID returns the deterministic child task ID for a one-to-one transition.
-func oneToOneChildID(parentID, transitionName string) string {
-	return fmt.Sprintf("%s-%s", parentID, transitionName)
-}
-
-// manyToOneChildID returns the deterministic child task ID for a many-to-one transition.
-// The cohort's shared parent ID is used as the anchor since all cohort members
-// are siblings created from the same upstream task.
-func manyToOneChildID(cohortParentID, transitionName string) string {
-	return fmt.Sprintf("%s-%s", cohortParentID, transitionName)
-}
 
 // collectNonTerminalByKind scans s.Tasks repo-wide (all goals, all sprints) and
 // returns a map of non-empty Kind → canonical non-terminal task ID. "Canonical"
@@ -81,8 +62,8 @@ type transitionDef struct {
 	requiredStatus models.TaskStatus
 	// targetStatus is the status assigned to child tasks.
 	targetStatus models.TaskStatus
-	// cardinality is "per-subtask" or "one-to-one".
-	cardinality string
+	// cardinality is how many children the transition creates per source task.
+	cardinality models.TransitionCardinality
 	// targetRolePair is the role-pair set on child tasks (pipeline goals only).
 	targetRolePair string
 	// doerDisplayName is the display name of the target role-pair's doer (pipeline only).
@@ -215,157 +196,15 @@ func Proceed(projectRoot, taskID, transitionName string) (*ProceedResult, error)
 	return result, nil
 }
 
-// findManyToOneCohort finds all sibling tasks that form a many-to-one cohort
-// with the trigger task. Siblings share a parent_task and the same role_pair.
-// Returns the cohort members (as pointers into state.Tasks) and the shared parent ID.
-func findManyToOneCohort(s *models.State, triggerTask *models.Task) ([]*models.Task, string, error) {
-	sharedParentID := triggerTask.CohortParentID()
-	if sharedParentID == "" {
-		return nil, "", fmt.Errorf("trigger task %q has no parent_task — cannot determine many-to-one cohort", triggerTask.ID)
-	}
-
-	cohort, err := manyToOneCohortMembers(s, sharedParentID, triggerTask.RolePair)
-	if err != nil {
-		return nil, "", err
-	}
-	if len(cohort) == 0 {
-		return nil, "", fmt.Errorf("no cohort members found for trigger task %q", triggerTask.ID)
-	}
-
-	// Sort for deterministic ordering
-	slices.SortFunc(cohort, func(a, b *models.Task) int {
-		return strings.Compare(a.ID, b.ID)
-	})
-
-	return cohort, sharedParentID, nil
-}
-
-// manyToOneCohortMembers returns the tasks of rolePair whose parents include
-// parentID, with each SUPERSEDED member represented by its successors. Every
-// supersession chain must stay within the cohort lineage and end at members
-// that are not superseded; otherwise the superseded work would silently drop
-// out of the fan-in, so the cohort is rejected.
-func manyToOneCohortMembers(s *models.State, parentID, rolePair string) ([]*models.Task, error) {
-	var members, superseded []*models.Task
-	lineage := make(map[string]*models.Task)
-	for i := range s.Tasks {
-		task := &s.Tasks[i]
-		if task.AmendsPlan != "" || task.RolePair != rolePair || !slices.Contains(task.EffectiveParentTasks(), parentID) {
-			continue
-		}
-		lineage[task.ID] = task
-		if task.Status == models.TaskStatusSuperseded {
-			superseded = append(superseded, task)
-			continue
-		}
-		members = append(members, task)
-	}
-	for _, task := range superseded {
-		if err := checkSupersessionChain(task, task.ID, lineage, map[string]bool{}, parentID, rolePair); err != nil {
-			return nil, err
-		}
-	}
-	return members, nil
-}
-
-// checkSupersessionChain walks task's successors depth-first and requires every
-// path to reach a live cohort member without revisiting a task on the path.
-func checkSupersessionChain(task *models.Task, origin string, lineage map[string]*models.Task, path map[string]bool, parentID, rolePair string) error {
-	if task.Status != models.TaskStatusSuperseded {
-		return nil
-	}
-	if path[task.ID] {
-		return fmt.Errorf("many-to-one cohort supersession chain from %q cycles back to %q", origin, task.ID)
-	}
-	if len(task.SupersededBy) == 0 {
-		return fmt.Errorf("many-to-one cohort member %q is SUPERSEDED without a successor", task.ID)
-	}
-	path[task.ID] = true
-	defer delete(path, task.ID)
-	for _, successorID := range task.SupersededBy {
-		successor := lineage[successorID]
-		if successor == nil {
-			return fmt.Errorf("many-to-one cohort member %q was superseded by %q, which does not carry cohort lineage (parent %s, role_pair %s)", task.ID, successorID, parentID, rolePair)
-		}
-		if err := checkSupersessionChain(successor, origin, lineage, path, parentID, rolePair); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// buildManyToOneChild creates a single child task from N parent cohort members.
-// The child's ParentTasks lists all cohort member IDs. SpecRef is inherited
-// from the cohort (all members share the same spec_ref via the pipeline chain).
-func buildManyToOneChild(childID string, cohort []*models.Task, sharedParentID string, tDef transitionDef, inheritedDeps []string, now time.Time) models.Task {
-	parentIDs := make([]string, len(cohort))
-	for i, member := range cohort {
-		parentIDs[i] = member.ID
-	}
-
-	doerName := tDef.doerDisplayName
-	if doerName == "" {
-		doerName = tDef.targetRolePair
-	}
-
-	specRef := cohort[0].SpecRef
-	// Doc-only: strip the section anchor at the many-to-one boundary. Members
-	// share the epic document, but a replacement may not carry epic_ref.
-	var epicRef string
-	for _, member := range cohort {
-		if member.EpicRef != "" {
-			epicRef = paths.SplitRefFile(member.EpicRef)
-			break
-		}
-	}
-
-	// Fan-in keeps the defect classification if any member carries it: a cohort
-	// mixing defect and feature parents still consolidates work whose root cause
-	// must be established downstream.
-	rcaRequired := false
-	for _, member := range cohort {
-		if member.RCARequired {
-			rcaRequired = true
-			break
-		}
-	}
-
-	return models.Task{
-		ID:          childID,
-		Type:        tDef.taskType,
-		RolePair:    tDef.targetRolePair,
-		Description: fmt.Sprintf("%s task consolidating %d approved tasks from %s", doerName, len(cohort), sharedParentID),
-		Status:      tDef.targetStatus,
-		Priority:    cohort[0].Priority,
-		ParentTasks: parentIDs,
-		SpecRef:     paths.NormalizeSpecRef(specRef),
-		EpicRef:     paths.NormalizeSpecRef(epicRef),
-		RCARequired: rcaRequired,
-		DoneWhen:    fmt.Sprintf("Complete %s work based on %d parent tasks from %s", doerName, len(cohort), sharedParentID),
-		Scope:       fmt.Sprintf("Consolidation of %d tasks from %s", len(cohort), sharedParentID),
-		DependsOn:   inheritedDeps,
-		Created:     now,
-		History:     []models.TaskHistoryEntry{},
-	}
-}
-
 // proceedManyToOneInner handles many-to-one transition logic. The trigger task
 // identifies the cohort (all siblings sharing a parent_task with the same role_pair).
 // The transition fires only when ALL cohort members are at the required status
 // (or MERGED, for the ExecuteAvailableTransitions path). Creates one child task
 // linked to all N cohort members and sets transitions_executed on all of them.
 func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
-	task := s.FindTask(taskID)
-	if task == nil {
-		return fmt.Errorf("task %q not found", taskID)
-	}
-	if resolver != nil && !resolver.TransitionApplies(transitionName, task.Output) {
-		return fmt.Errorf("transition %q is not selected by task %q output", transitionName, taskID)
-	}
-	if resolver != nil {
-		if err := validateDirectCodingAllocation(resolver, task, task.Output); err != nil {
-			return err
-		}
+	task, err := selectedTransitionTask(s, taskID, transitionName, resolver)
+	if err != nil {
+		return err
 	}
 	// Accept both the required status and MERGED (see Design Decision D3)
 	if task.Status != tDef.requiredStatus && task.Status != models.TaskStatusMerged {
@@ -377,92 +216,28 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 	if err != nil {
 		return fmt.Errorf("many-to-one cohort detection failed: %w", err)
 	}
-
-	// Validate all cohort members are ready. A member that can never merge is a
-	// failure wherever it sorts; only live members make this a normal wait.
-	var pending *models.Task
-	for _, member := range cohort {
-		if member.PlanGenerationFenced() {
-			return fmt.Errorf("task %q is fenced by a reviewed plan amendment", member.ID)
-		}
-		if member.Status == tDef.requiredStatus || member.Status == models.TaskStatusMerged {
-			continue
-		}
-		if member.Status.IsTerminal() {
-			return fmt.Errorf("many-to-one cohort cannot complete: member %q is %s", member.ID, member.Status)
-		}
-		if pending == nil {
-			pending = member
-		}
-	}
-	if pending != nil {
-		return fmt.Errorf("%w: member %q is at %s (need %s or MERGED)",
-			errManyToOneCohortIncomplete, pending.ID, pending.Status, tDef.requiredStatus)
+	if err := requireCohortReady(cohort, tDef.requiredStatus); err != nil {
+		return err
 	}
 
-	childID := manyToOneChildID(sharedParentID, tDef.taskSlug)
-
-	// Idempotency: check if any cohort member already has transition executed
-	anyExecuted := false
-	for _, member := range cohort {
-		if member.TransitionsExecuted[transitionName] {
-			anyExecuted = true
-			break
+	// Idempotency: a member already executed means a crash left the child, or
+	// not. An existing child is repaired; a missing one falls through to creation.
+	if cohortTransitionExecuted(cohort, transitionName) {
+		if existing := s.FindTask(manyToOneChildID(sharedParentID, tDef.taskSlug)); existing != nil {
+			return repairExistingCohortChild(s, resolver, existing, inheritedDeps, cohort, transitionName, sharedParentID)
 		}
 	}
 
-	if anyExecuted {
-		// Crash recovery: check if child exists
-		if existing := s.FindTask(childID); existing != nil {
-			mergedDeps := mergeInheritedDeps(existing.DependsOn, inheritedDeps.all)
-			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps)
-			if err != nil {
-				return err
-			}
-			mergedDeps = canonicalDeps
-			if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
-				return err
-			}
-			// Ensure all cohort members have transitions_executed set (repair partial)
-			for _, member := range cohort {
-				if member.TransitionsExecuted == nil {
-					member.TransitionsExecuted = make(map[string]bool)
-				}
-				member.TransitionsExecuted[transitionName] = true
-			}
-			existing.DependsOn = mergedDeps
-			return fmt.Errorf("%w: %q on cohort (parent %s)", errTransitionAlreadyExecuted, transitionName, sharedParentID)
-		}
-		// Child missing — fall through to create it (crash recovery)
-	}
-
-	child := buildManyToOneChild(childID, cohort, sharedParentID, tDef, inheritedDeps.all, now)
-	canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn)
+	child, err := newCohortChild(s, resolver, cohort, sharedParentID, tDef, inheritedDeps, now)
 	if err != nil {
 		return err
 	}
-	child.DependsOn = canonicalDeps
-	if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-		return err
-	}
-
 	// Set transitions_executed on ALL cohort members after child dependency validation.
-	for _, member := range cohort {
-		if member.TransitionsExecuted == nil {
-			member.TransitionsExecuted = make(map[string]bool)
-		}
-		member.TransitionsExecuted[transitionName] = true
-	}
+	markCohortExecuted(cohort, transitionName)
 
 	s.Tasks = append(s.Tasks, child)
-	result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-
-	// Populate CohortTaskIDs
-	cohortIDs := make([]string, len(cohort))
-	for i, member := range cohort {
-		cohortIDs[i] = member.ID
-	}
-	result.CohortTaskIDs = cohortIDs
+	result.ChildTaskIDs = append(result.ChildTaskIDs, child.ID)
+	result.CohortTaskIDs = cohortMemberIDs(cohort)
 
 	// Record history on the trigger task
 	task.History = append(task.History, models.TaskHistoryEntry{
@@ -470,7 +245,7 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 		Event: models.TaskEventTransitionExecuted,
 		Extra: map[string]any{
 			"transition":    transitionName,
-			"cardinality":   "many-to-one",
+			"cardinality":   string(models.CardinalityManyToOne),
 			"cohort_size":   len(cohort),
 			"cohort_parent": sharedParentID,
 			"children":      1,
@@ -487,34 +262,15 @@ func proceedManyToOneInner(s *models.State, taskID, transitionName string, tDef 
 //
 // The result.ChildTaskIDs slice is appended to with created child task IDs.
 func proceedInner(s *models.State, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
-	if task := s.FindTask(taskID); task != nil && task.PlanCheck != nil && resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName) {
-		if err := models.ValidatePlanValidationNotes(task.PlanCheck.Notes, len(task.Output)); err != nil {
-			return fmt.Errorf("task %s validation notes: %w", taskID, err)
-		}
-		if len(task.PlanCheck.Notes) > 0 && (task.PlanCheck.Verdict != models.PlanCheckPassed || tDef.cardinality != "per-subtask") {
-			return fmt.Errorf("validation notes require a passed per-subtask hand-off")
-		}
+	if err := admitTransitionSource(s, taskID, transitionName, tDef, resolver); err != nil {
+		return err
 	}
-	if task := s.FindTask(taskID); task != nil && task.PlanGenerationFenced() {
-		return fmt.Errorf("task %q is fenced by a reviewed plan amendment", task.ID)
-	}
-	if task := s.FindTask(taskID); task != nil && task.PlanHandoffRetired() {
-		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
-	}
-	if tDef.cardinality == "many-to-one" {
+	if tDef.cardinality == models.CardinalityManyToOne {
 		return proceedManyToOneInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)
 	}
-	task := s.FindTask(taskID)
-	if task == nil {
-		return fmt.Errorf("task %q not found", taskID)
-	}
-	if resolver != nil && !resolver.TransitionApplies(transitionName, task.Output) {
-		return fmt.Errorf("transition %q is not selected by task %q output", transitionName, taskID)
-	}
-	if resolver != nil {
-		if err := validateDirectCodingAllocation(resolver, task, task.Output); err != nil {
-			return err
-		}
+	task, err := selectedTransitionTask(s, taskID, transitionName, resolver)
+	if err != nil {
+		return err
 	}
 
 	if task.RolePair != tDef.sourceRolePair {
@@ -534,426 +290,60 @@ func proceedInner(s *models.State, taskID, transitionName string, tDef transitio
 		return fmt.Errorf("task %q is held for human action (%s); an operator must run plan-check %s --clear first", taskID, task.PlanCheck.Ask, taskID)
 	}
 
-	outputEntries := task.Output
-	selectedNotes := resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
-	outputChanged := false
-	switch tDef.cardinality {
-	case "per-subtask":
-		if len(task.Output) == 0 {
-			return fmt.Errorf("task %q has no output[] entries for per-subtask transition %q", taskID, transitionName)
-		}
-		canonicalOutput, changed, err := canonicalizedOutputTaskDependsOnForTarget(s, resolver, task, tDef.targetRolePair)
-		if err != nil {
-			return err
-		}
-		outputEntries = canonicalOutput
-		outputChanged = changed
-		for i, entry := range canonicalOutput {
-			if err := validateOutputEntry(entry, i, len(task.Output)); err != nil {
-				return &handoffInputError{class: handoffOutputRefusal, index: i, err: err}
-			}
-			// A stale declaration (ADR-0185, ADR-0186) must never reach a generated child.
-			for _, dep := range entry.ProviderDependencies {
-				switch id, child := staleProviderReference(s, resolver, dep); {
-				case child:
-					return &handoffInputError{class: handoffOutputRefusal, index: i, err: fmt.Errorf(
-						"output[%d] declares retired provider child %s; replan %s to re-author it", i, id, taskID)}
-				case id != "":
-					return &handoffInputError{class: handoffOutputRefusal, index: i, err: fmt.Errorf(
-						"output[%d] declares retired provider %s; replan %s to re-author it", i, dep.ProviderTask, taskID)}
-				}
-			}
-		}
-		if err := descendantOutputRefusal(resolver, task, canonicalOutput, transitionName); err != nil {
-			return err
-		}
-		if resolver != nil {
-			if err := validateDecompositionRootRCAClassification(resolver, task.RolePair, canonicalOutput); err != nil {
-				return err
-			}
-		}
-	case "one-to-one":
-		if task.SpecRef == "" {
-			return fmt.Errorf("task %q has empty spec_ref for one-to-one transition %q", taskID, transitionName)
-		}
-	default:
-		return fmt.Errorf("unsupported cardinality %q for transition %q", tDef.cardinality, transitionName)
+	gen, err := generateTransitionChildren(s, resolver, task, transitionName, tDef, inheritedDeps, now, result)
+	if err != nil {
+		return err
 	}
-
-	// Compute Kind-based dedup decision for per-subtask. skipEntry[i] present =>
-	// entry i is dedup'd; remapSibling[i] is the incumbent or first-occurrence
-	// task ID that takes entry i's place for downstream dep resolution.
-	var skipEntry map[int]string
-	var remapSibling map[int]string
-	var siblingIDs []string
-	retiring := declaredOriginals(outputEntries)
-	if tDef.cardinality == "per-subtask" {
-		inFlightByKind := collectNonTerminalByKind(s, retiring)
-		siblingIDs, skipEntry, remapSibling = resolvePerSubtaskSiblings(outputEntries, inFlightByKind, taskID, tDef.taskSlug)
-		replacements, err := groupPlanReplacements(outputEntries, siblingIDs, skipEntry)
-		if err != nil {
-			return err
-		}
-		result.replacements = replacements
-	}
-
-	var children []models.Task
-	var childIDs []string
-	switch tDef.cardinality {
-	case "per-subtask":
-		allowedMissingDeps := stringSet(siblingIDs)
-		for i, entry := range outputEntries {
-			if _, dedupd := remapSibling[i]; dedupd {
-				if selectedNotes && len(task.ValidationNotesForOutput(i)) > 0 {
-					return fmt.Errorf("validation notes select deduplicated output[%d]; no new child would receive them", i)
-				}
-				// Dep resolution still needs an ID; point at the incumbent so
-				// that downstream siblings with depends_on: [i] resolve to the
-				// real in-flight (or first-of-batch) task. Do NOT append a
-				// child for i.
-				continue
-			}
-			entryInherited, err := inheritedDeps.forEntry(entry, i)
-			if err != nil {
-				return &handoffInputError{class: handoffInputRefusal, index: i, err: err}
-			}
-			entryInherited = excludeRetiring(entryInherited, entry, retiring)
-			child := buildChildTask(siblingIDs[i], taskID, entry, tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
-			if selectedNotes {
-				child.ValidationNotes = task.ValidationNotesForOutput(i)
-			}
-			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
-			if err != nil {
-				return err
-			}
-			child.DependsOn = canonicalDeps
-			if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-				return err
-			}
-			children = append(children, child)
-			childIDs = append(childIDs, siblingIDs[i])
-		}
-	case "one-to-one":
-		childID := oneToOneChildID(taskID, tDef.taskSlug)
-		child := buildOneToOneChild(childID, taskID, task, tDef, inheritedDeps.all, now)
-		canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn)
-		if err != nil {
-			return err
-		}
-		child.DependsOn = canonicalDeps
-		if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-			return err
-		}
-		children = append(children, child)
-		childIDs = append(childIDs, childID)
-	}
-
-	// Set the crash-recovery marker only after child dependency validation.
-	if outputChanged {
-		task.Output = outputEntries
-	}
-	if task.TransitionsExecuted == nil {
-		task.TransitionsExecuted = make(map[string]bool)
-	}
-	task.TransitionsExecuted[transitionName] = true
-	for i, child := range children {
-		s.Tasks = append(s.Tasks, child)
-		result.ChildTaskIDs = append(result.ChildTaskIDs, childIDs[i])
-	}
-
-	histExtra := map[string]any{
-		"transition": transitionName,
-		"children":   len(result.ChildTaskIDs),
-	}
-	if len(skipEntry) > 0 {
-		skipped := make([]map[string]any, 0, len(skipEntry))
-		for i, reason := range skipEntry {
-			skipped = append(skipped, map[string]any{
-				"output_index": i,
-				"kind":         outputEntries[i].Kind,
-				"reason":       reason,
-				"remapped_to":  remapSibling[i],
-			})
-		}
-		slices.SortFunc(skipped, func(a, b map[string]any) int {
-			return cmp.Compare(a["output_index"].(int), b["output_index"].(int))
-		})
-		histExtra["skipped_entries"] = skipped
-	}
-	// Re-fetch the task pointer: s.Tasks appends above may have reallocated
-	// the backing array, invalidating the original pointer.
-	task = s.FindTask(taskID)
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventTransitionExecuted,
-		Extra: histExtra,
-	})
-
+	recordGeneratedTransition(s, task, transitionName, gen, now, result)
 	return nil
 }
 
-// recoverCrashedTransition handles crash recovery when a transition was already
-// marked as executed but some child tasks are missing. Returns
-// errTransitionAlreadyExecuted if all children already exist.
-func recoverCrashedTransition(s *models.State, task *models.Task, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
-	selectedNotes := resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
+// admitTransitionSource refuses a source task whose hand-off is invalid,
+// fenced by a plan amendment or retired, before any cardinality-specific work.
+func admitTransitionSource(s *models.State, taskID, transitionName string, tDef transitionDef, resolver *pipeline.Resolver) error {
+	task := s.FindTask(taskID)
+	if task == nil {
+		return nil
+	}
+	if task.PlanCheck != nil && selectsValidationNotes(resolver, task, transitionName) {
+		if err := models.ValidatePlanValidationNotes(task.PlanCheck.Notes, len(task.Output)); err != nil {
+			return fmt.Errorf("task %s validation notes: %w", taskID, err)
+		}
+		if len(task.PlanCheck.Notes) > 0 && (task.PlanCheck.Verdict != models.PlanCheckPassed || tDef.cardinality != models.CardinalityPerSubtask) {
+			return fmt.Errorf("validation notes require a passed per-subtask hand-off")
+		}
+	}
 	if task.PlanGenerationFenced() {
 		return fmt.Errorf("task %q is fenced by a reviewed plan amendment", task.ID)
 	}
-	switch tDef.cardinality {
-	case "per-subtask":
-		canonicalOutput, outputChanged, err := canonicalizedOutputTaskDependsOnForTarget(s, resolver, task, tDef.targetRolePair)
-		if err != nil {
-			return err
-		}
-		if err := descendantOutputRefusal(resolver, task, canonicalOutput, transitionName); err != nil {
-			return err
-		}
-		if resolver != nil {
-			if err := validateDecompositionRootRCAClassification(resolver, task.RolePair, canonicalOutput); err != nil {
-				return err
-			}
-		}
-		// Re-compute dedup decision against current repo-wide state. For skipped
-		// entries, siblingIDs[i] must point at the foreign incumbent so downstream
-		// dep resolution remaps correctly — mirrors proceedInner's per-subtask path.
-		retiring := declaredOriginals(canonicalOutput)
-		inFlightByKind := collectNonTerminalByKind(s, retiring)
-		siblingIDs, skipEntry, _ := resolvePerSubtaskSiblings(canonicalOutput, inFlightByKind, taskID, tDef.taskSlug)
-		replacements, err := groupPlanReplacements(canonicalOutput, siblingIDs, skipEntry)
-		if err != nil {
-			return err
-		}
-		result.replacements, result.recovering = replacements, true
-		allowedMissingDeps := stringSet(siblingIDs)
-		var missingChildren []int
-		var patches []dependencyPatch
-		providerMetadataRecovered := false
-		for i := range canonicalOutput {
-			// Foreign Kind incumbents remain untouched. Dedup can also point
-			// at our own child; recover a missing declaration on that child.
-			if _, skipped := skipEntry[i]; skipped {
-				if siblingIDs[i] != perSubtaskChildID(taskID, tDef.taskSlug, i) {
-					if selectedNotes && len(task.ValidationNotesForOutput(i)) > 0 {
-						return fmt.Errorf("validation notes select deduplicated output[%d]; no new child would receive them", i)
-					}
-					continue
-				}
-				own := s.FindTask(siblingIDs[i])
-				if own == nil || own.Status.IsTerminal() || models.GeneratedDeclarationsMatch(own, canonicalOutput[i]) {
-					continue
-				}
-			}
-			// (2) EXISTING — patch our OWN child's inherited deps.
-			existing := s.FindTask(siblingIDs[i])
-			if existing == nil {
-				// (3) CREATE — flagged for creation below.
-				missingChildren = append(missingChildren, i)
-			} else {
-				canonicalDeps, _, err := canonicalizeConcreteDependencyList(s, resolver, existing.ID, existing.RolePair, existing.DependsOn)
-				if err != nil {
-					return err
-				}
-				// The surviving child inherits exactly what the uninterrupted
-				// generation would have given it. Merging the whole-phase set
-				// here would silently widen a selective child back to the full
-				// barrier and leave it inconsistent with siblings recreated
-				// below through forEntry.
-				entryInherited, err := inheritedDeps.forEntry(canonicalOutput[i], i)
-				if err != nil {
-					return err
-				}
-				entryInherited = excludeRetiring(entryInherited, canonicalOutput[i], retiring)
-				mergedDeps := mergeInheritedDeps(canonicalDeps, entryInherited)
-				mergedDeps, _, err = canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps, allowedMissingDeps)
-				if err != nil {
-					return err
-				}
-				if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
-					return err
-				}
-				wanted := canonicalOutput[i]
-				declared := len(existing.ProviderDependencies) > 0 || len(existing.DescendantDependencies) > 0
-				if len(wanted.ProviderDependencies) > 0 || len(wanted.DescendantDependencies) > 0 || declared {
-					parents := existing.EffectiveParentTasks()
-					if existing.RolePair != tDef.targetRolePair || len(parents) != 1 || parents[0] != taskID {
-						return fmt.Errorf("cannot recover provider_dependencies on child %s with incorrect transition provenance", existing.ID)
-					}
-				}
-				// A matching child keeps its own declarations: an authorized
-				// deferral (ADR-0193) must not be re-imposed, claimed or not.
-				patch := dependencyPatch{taskID: existing.ID, dependsOn: mergedDeps,
-					providerDependencies:   models.CloneProviderDependencies(existing.ProviderDependencies),
-					descendantDependencies: models.CloneDescendantDependencies(existing.DescendantDependencies)}
-				if !models.GeneratedDeclarationsMatch(existing, wanted) {
-					unclaimedInitial := existing.Status == tDef.targetStatus && existing.AssignedTo == nil && existing.LeaseExpires == nil
-					if declared || !unclaimedInitial {
-						return fmt.Errorf("cannot recover provider_dependencies on conflicting or claimed child %s", existing.ID)
-					}
-					providerMetadataRecovered = true
-					patch.providerDependencies = models.CloneProviderDependencies(wanted.ProviderDependencies)
-					patch.descendantDependencies = models.CloneDescendantDependencies(wanted.DescendantDependencies)
-				}
-				patches = append(patches, patch)
-			}
-		}
-		if len(missingChildren) == 0 {
-			for _, patch := range patches {
-				if existing := s.FindTask(patch.taskID); existing != nil {
-					existing.DependsOn = patch.dependsOn
-					existing.ProviderDependencies = patch.providerDependencies
-					existing.DescendantDependencies = patch.descendantDependencies
-				}
-			}
-			if providerMetadataRecovered {
-				return nil
-			}
-			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
-		}
-		var children []models.Task
-		for _, idx := range missingChildren {
-			// Recovery resolves selections through the same path as normal
-			// generation, so a repaired child's depends_on is identical to
-			// the one the uninterrupted transition would have produced.
-			entryInherited, err := inheritedDeps.forEntry(canonicalOutput[idx], idx)
-			if err != nil {
-				return err
-			}
-			entryInherited = excludeRetiring(entryInherited, canonicalOutput[idx], retiring)
-			child := buildChildTask(siblingIDs[idx], taskID, canonicalOutput[idx], tDef.targetStatus, tDef.targetRolePair, tDef.taskType, siblingIDs, entryInherited, task.EpicRef, task.ArchRef, task.RCARequired, now)
-			if selectedNotes {
-				child.ValidationNotes = task.ValidationNotesForOutput(idx)
-			}
-			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn, allowedMissingDeps)
-			if err != nil {
-				return err
-			}
-			child.DependsOn = canonicalDeps
-			if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-				return err
-			}
-			children = append(children, child)
-		}
-		if outputChanged && len(missingChildren) > 0 {
-			task.Output = canonicalOutput
-		}
-		for _, patch := range patches {
-			if existing := s.FindTask(patch.taskID); existing != nil {
-				existing.DependsOn = patch.dependsOn
-				existing.ProviderDependencies = patch.providerDependencies
-				existing.DescendantDependencies = patch.descendantDependencies
-			}
-		}
-		for _, child := range children {
-			s.Tasks = append(s.Tasks, child)
-			result.ChildTaskIDs = append(result.ChildTaskIDs, child.ID)
-		}
-		// Re-fetch: the appends above may have reallocated s.Tasks, leaving
-		// the incoming task pointer stale.
-		task = s.FindTask(taskID)
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventTransitionCrashRecov,
-			Extra: map[string]any{
-				"transition":         transitionName,
-				"recovered_children": len(missingChildren),
-			},
-		})
-		return nil
-
-	case "one-to-one":
-		childID := oneToOneChildID(taskID, tDef.taskSlug)
-		if existing := s.FindTask(childID); existing != nil {
-			mergedDeps := mergeInheritedDeps(existing.DependsOn, inheritedDeps.all)
-			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps)
-			if err != nil {
-				return err
-			}
-			mergedDeps = canonicalDeps
-			if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
-				return err
-			}
-			existing.DependsOn = mergedDeps
-			return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
-		}
-		child := buildOneToOneChild(childID, taskID, task, tDef, inheritedDeps.all, now)
-		canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn)
-		if err != nil {
-			return err
-		}
-		child.DependsOn = canonicalDeps
-		if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-			return err
-		}
-		s.Tasks = append(s.Tasks, child)
-		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventTransitionCrashRecov,
-			Extra: map[string]any{
-				"transition":         transitionName,
-				"recovered_children": 1,
-			},
-		})
-		return nil
-
-	case "many-to-one":
-		cohort, sharedParentID, err := findManyToOneCohort(s, task)
-		if err != nil {
-			return fmt.Errorf("crash recovery cohort detection: %w", err)
-		}
-		childID := manyToOneChildID(sharedParentID, tDef.taskSlug)
-		if existing := s.FindTask(childID); existing != nil {
-			mergedDeps := mergeInheritedDeps(existing.DependsOn, inheritedDeps.all)
-			canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, existing.ID, existing.RolePair, mergedDeps)
-			if err != nil {
-				return err
-			}
-			mergedDeps = canonicalDeps
-			if err := validateDependencyDirection(s, resolver, existing.ID, existing.RolePair, mergedDeps); err != nil {
-				return err
-			}
-			for _, member := range cohort {
-				if member.TransitionsExecuted == nil {
-					member.TransitionsExecuted = make(map[string]bool)
-				}
-				member.TransitionsExecuted[transitionName] = true
-			}
-			existing.DependsOn = mergedDeps
-			return fmt.Errorf("%w: %q on cohort (parent %s)", errTransitionAlreadyExecuted, transitionName, sharedParentID)
-		}
-		child := buildManyToOneChild(childID, cohort, sharedParentID, tDef, inheritedDeps.all, now)
-		canonicalDeps, _, err := canonicalizeChildDependsOn(s, resolver, child.ID, child.RolePair, child.DependsOn)
-		if err != nil {
-			return err
-		}
-		child.DependsOn = canonicalDeps
-		if err := validateDependencyDirection(s, resolver, child.ID, child.RolePair, child.DependsOn); err != nil {
-			return err
-		}
-		s.Tasks = append(s.Tasks, child)
-		result.ChildTaskIDs = append(result.ChildTaskIDs, childID)
-		for _, member := range cohort {
-			if member.TransitionsExecuted == nil {
-				member.TransitionsExecuted = make(map[string]bool)
-			}
-			member.TransitionsExecuted[transitionName] = true
-		}
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventTransitionCrashRecov,
-			Extra: map[string]any{
-				"transition":         transitionName,
-				"cardinality":        "many-to-one",
-				"cohort_parent":      sharedParentID,
-				"recovered_children": 1,
-			},
-		})
-		return nil
-
-	default:
-		return fmt.Errorf("%w: %q on task %q", errTransitionAlreadyExecuted, transitionName, taskID)
+	if task.PlanHandoffRetired() {
+		return fmt.Errorf("task %q handoff was retired by %s", task.ID, task.RetiredBy())
 	}
+	return nil
+}
+
+// selectedTransitionTask returns the source task if the transition is selected
+// by its output and its direct coding allocation is valid.
+func selectedTransitionTask(s *models.State, taskID, transitionName string, resolver *pipeline.Resolver) (*models.Task, error) {
+	task := s.FindTask(taskID)
+	if task == nil {
+		return nil, fmt.Errorf("task %q not found", taskID)
+	}
+	if resolver != nil && !resolver.TransitionApplies(transitionName, task.Output) {
+		return nil, fmt.Errorf("transition %q is not selected by task %q output", transitionName, taskID)
+	}
+	if resolver != nil {
+		if err := validateDirectCodingAllocation(resolver, task, task.Output); err != nil {
+			return nil, err
+		}
+	}
+	return task, nil
+}
+
+// selectsValidationNotes reports whether the plan's passed hand-off notes
+// reach the children of this transition.
+func selectsValidationNotes(resolver *pipeline.Resolver, task *models.Task, transitionName string) bool {
+	return resolver != nil && NewPlanHandoffDomain(resolver).GatesTransition(task, transitionName)
 }
 
 // pendingTx represents a transition queued for execution in ExecuteAvailableTransitions.
@@ -963,52 +353,6 @@ type pendingTx struct {
 	name    string
 	tDef    transitionDef
 	origIdx int // original collection index for stable topo-sort tie-breaking
-}
-
-type dependencyPatch struct {
-	taskID                 string
-	dependsOn              []string
-	providerDependencies   []models.ProviderDependency
-	descendantDependencies []models.DescendantDependency
-}
-
-// isTransitionIncomplete checks if an executed transition has missing children.
-// Used to detect crash recovery needs in ExecuteAvailableTransitions phase 1b.
-func isTransitionIncomplete(s *models.State, task *models.Task, transName string, resolver *pipeline.Resolver) bool {
-	if !resolver.TransitionApplies(transName, task.Output) {
-		return false
-	}
-	if task.PlanHandoffRetired() {
-		return false
-	}
-	td, err := resolver.Transition(transName)
-	if err != nil {
-		return false
-	}
-	slug := td.TaskSlugOrName()
-	switch td.Cardinality {
-	case "per-subtask":
-		for i := 0; i < len(task.Output); i++ {
-			child := s.FindTask(perSubtaskChildID(task.ID, slug, i))
-			if child == nil || (!child.Status.IsTerminal() && !models.GeneratedDeclarationsMatch(child, task.Output[i])) {
-				return true
-			}
-		}
-	case "one-to-one":
-		if s.FindTask(oneToOneChildID(task.ID, slug)) == nil {
-			return true
-		}
-	case "many-to-one":
-		cohortParentID := task.CohortParentID()
-		if cohortParentID == "" {
-			return false
-		}
-		if s.FindTask(manyToOneChildID(task.ID, slug)) == nil &&
-			s.FindTask(manyToOneChildID(cohortParentID, slug)) == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // topoSortPending sorts pending transitions by task DependsOn relationships using
@@ -1667,294 +1011,12 @@ func buildTransitionDefFromPipeline(resolver *pipeline.Resolver, transitionName 
 		sourceRolePair:  sourcePair,
 		requiredStatus:  fromStatus,
 		targetStatus:    toStatus,
-		cardinality:     string(td.Cardinality),
+		cardinality:     td.Cardinality,
 		targetRolePair:  targetPair,
 		doerDisplayName: doerDisplay,
 		taskType:        childTaskType,
 		taskSlug:        td.TaskSlugOrName(),
 	}, nil
-}
-
-// buildChildTask creates a child task from an output entry.
-// siblingIDs maps output entry indices to their generated task IDs,
-// used to resolve DependsOn index references to actual task IDs.
-// inheritedDeps are phase-gate dependencies from upstream tasks' children.
-func buildChildTask(childID, parentID string, entry models.OutputEntry, targetStatus models.TaskStatus, targetRolePair string, taskType models.TaskType, siblingIDs, inheritedDeps []string, parentEpicRef, parentArchRef string, parentRCARequired bool, now time.Time) models.Task {
-	var deps []string
-	for _, ref := range entry.DependsOn {
-		idx, _ := strconv.Atoi(ref) // validated upstream in validateOutputEntry
-		deps = append(deps, siblingIDs[idx])
-	}
-	deps = append(deps, entry.TaskDependsOn...)
-	deps = append(deps, inheritedDeps...)
-	deps = dedupeStrings(deps)
-
-	epicRef := entry.EpicRef
-	if epicRef == "" {
-		epicRef = parentEpicRef
-	}
-
-	archRef := entry.ArchRef
-	if archRef == "" {
-		archRef = parentArchRef
-	}
-	rcaRequired := parentRCARequired
-	if entry.RCARequired != nil {
-		rcaRequired = *entry.RCARequired
-	}
-	var supersedes *string
-	if entry.Supersedes != "" {
-		supersedes = &entry.Supersedes
-	}
-
-	return models.Task{
-		ID:                      childID,
-		Type:                    taskType,
-		RolePair:                targetRolePair,
-		Description:             entry.Desc,
-		Status:                  targetStatus,
-		Priority:                1,
-		ParentTasks:             []string{parentID},
-		SpecRef:                 paths.NormalizeSpecRef(entry.SpecRef),
-		EpicRef:                 paths.NormalizeSpecRef(epicRef),
-		PlanRef:                 paths.NormalizeSpecRef(entry.PlanRef),
-		ArchRef:                 paths.NormalizeSpecRef(archRef),
-		Decomposition:           entry.Decomposition,
-		Kind:                    entry.Kind,
-		RCARequired:             rcaRequired,
-		DoneWhen:                entry.DoneWhen,
-		Validation:              slices.Clone(entry.Validation),
-		ValidationPrerequisites: models.CloneValidationPrerequisites(entry.ValidationPrerequisites),
-		RuntimeInputs:           models.CloneRuntimeInputs(entry.RuntimeInputs),
-		DestructiveDB:           entry.DestructiveDB,
-		Scope:                   entry.Scope,
-		DependsOn:               deps,
-		ProviderDependencies:    models.CloneProviderDependencies(entry.ProviderDependencies),
-		DescendantDependencies:  models.CloneDescendantDependencies(entry.DescendantDependencies),
-		Supersedes:              supersedes,
-		Created:                 now,
-		History:                 []models.TaskHistoryEntry{},
-	}
-}
-
-// buildOneToOneChild creates a child task for a one-to-one transition.
-// The parent task itself is the input — no output[] needed. The child's fields
-// describe the next phase's work, with spec_ref pointing to the parent's artifact.
-func buildOneToOneChild(childID, parentID string, parent *models.Task, tDef transitionDef, inheritedDeps []string, now time.Time) models.Task {
-	doerName := tDef.doerDisplayName
-	if doerName == "" {
-		doerName = tDef.targetRolePair
-	}
-
-	return models.Task{
-		ID:          childID,
-		Type:        tDef.taskType,
-		RolePair:    tDef.targetRolePair,
-		Description: fmt.Sprintf("%s task for: %s", doerName, parent.Description),
-		Status:      tDef.targetStatus,
-		Priority:    parent.Priority,
-		ParentTasks: []string{parentID},
-		SpecRef:     paths.NormalizeSpecRef(parent.SpecRef),
-		EpicRef:     parent.EpicRef,
-		PlanRef:     parent.PlanRef,
-		ArchRef:     parent.ArchRef,
-		RCARequired: parent.RCARequired,
-		DoneWhen:    fmt.Sprintf("Complete %s work based on parent task %s", doerName, parentID),
-		Scope:       fmt.Sprintf("Based on parent task %s", parentID),
-		DependsOn:   inheritedDeps,
-		Created:     now,
-		History:     []models.TaskHistoryEntry{},
-	}
-}
-
-// validateOutputEntry checks that an output entry has all required fields
-// and that DependsOn indices are valid references within [0, totalEntries).
-func validateOutputEntry(entry models.OutputEntry, index, totalEntries int) error {
-	if entry.Desc == "" {
-		return fmt.Errorf("output[%d] missing desc", index)
-	}
-	if entry.DoneWhen == "" {
-		return fmt.Errorf("output[%d] missing done_when", index)
-	}
-	if entry.Scope == "" {
-		return fmt.Errorf("output[%d] missing scope", index)
-	}
-	if entry.SpecRef == "" {
-		return fmt.Errorf("output[%d] missing spec_ref", index)
-	}
-	if err := models.ValidateKind(entry.Kind); err != nil {
-		return fmt.Errorf("output[%d] %w", index, err)
-	}
-	if err := models.ValidateValidationSafety(fmt.Sprintf("output[%d].validation", index), entry.Validation, entry.DestructiveDB); err != nil {
-		return err
-	}
-	if err := models.ValidateValidationPrerequisites(entry.Validation, entry.ValidationPrerequisites); err != nil {
-		return fmt.Errorf("output[%d]: %w", index, err)
-	}
-	if err := models.ValidateRuntimeInputs(entry.Validation, entry.RuntimeInputs); err != nil {
-		return fmt.Errorf("output[%d]: %w", index, err)
-	}
-	return models.ValidateDependsOn(entry.DependsOn, index, totalEntries)
-}
-
-// computeInheritedDeps derives phase-gate dependencies from upstream dependency tasks.
-// For each task in task.DependsOn that has executed the same transition, it collects
-// the child task IDs that were created by that transition. These become additional
-// DependsOn entries on downstream children, enforcing phase-gate ordering.
-//
-// Replanned dependencies are skipped: their executed-transition markers are
-// suppressive metadata rather than evidence of materialized children.
-// Different direct/legacy architecture routes cannot supply the same phase
-// barrier. Such inheritance requires explicit concrete writer ordering instead.
-//
-// Returns error if a non-replanned upstream transition is marked executed but
-// expected children are missing (crash inconsistency that must be recovered first).
-// inheritedDepSet is one transition's phase-gate dependencies, retained per
-// upstream task so that a child can narrow them.
-//
-// The whole-phase set (all) is what every child inherited before selective
-// inputs existed and is still what a child inherits when it declares no
-// intent. byUpstream is indexed by upstream task ID, and within an upstream by
-// that upstream's own output[] position — which is what an InputSelection
-// names, since the upstream's children usually do not exist at authoring time.
-type inheritedDepSet struct {
-	all        []string
-	byUpstream map[string][]string
-	// selectable is false for cardinalities that produce a single edge per
-	// upstream. There is no fan-out to narrow there, so a selection is inert
-	// rather than an error: inheriting the whole edge is a superset.
-	selectable bool
-}
-
-// forEntry returns the dependencies one generated child inherits.
-//
-// Fails closed. An unresolvable or out-of-range selection errors the
-// transition rather than yielding a smaller dependency set, because a planner
-// naming a prerequisite that cannot be resolved is a defect, and silently
-// dropping it produces a child that runs without inputs it declared.
-func (d inheritedDepSet) forEntry(entry models.OutputEntry, entryIndex int) ([]string, error) {
-	if !entry.InheritInputs.IsSelective() || !d.selectable {
-		return d.all, nil
-	}
-	if entry.InheritInputs.InheritsNothing() {
-		return nil, nil
-	}
-
-	var selected []string
-	for selectionIndex, selection := range entry.InheritInputs.Selections {
-		children, known := d.byUpstream[selection.UpstreamTask]
-		if !known {
-			// The upstream contributed no children to this transition: it is
-			// absent from depends_on, or it was replanned. Either way the
-			// named prerequisite does not exist and cannot be waited for.
-			return nil, fmt.Errorf(
-				"output[%d].inherit_inputs.selections[%d]: upstream task %q supplies no inherited children for this transition; "+
-					"it is not a dependency of the producing task, or its output was replaced",
-				entryIndex, selectionIndex, selection.UpstreamTask)
-		}
-		for _, output := range selection.Outputs {
-			if output >= len(children) {
-				return nil, fmt.Errorf(
-					"output[%d].inherit_inputs.selections[%d]: upstream task %q has %d output(s), cannot select index %d",
-					entryIndex, selectionIndex, selection.UpstreamTask, len(children), output)
-			}
-			selected = append(selected, children[output])
-		}
-	}
-	return selected, nil
-}
-
-func computeInheritedDeps(s *models.State, task *models.Task, transitionName string, resolver *pipeline.Resolver) (inheritedDepSet, error) {
-	td, err := resolver.Transition(transitionName)
-	if err != nil {
-		return inheritedDepSet{}, fmt.Errorf("cannot compute inherited deps: unknown transition %q: %w", transitionName, err)
-	}
-	slug := td.TaskSlugOrName()
-
-	set := inheritedDepSet{
-		byUpstream: map[string][]string{},
-		selectable: td.Cardinality == "per-subtask",
-	}
-	for _, depID := range task.DependsOn {
-		depTask := s.FindTask(depID)
-		if depTask == nil {
-			continue
-		}
-		// Replanned tasks carry executed-transition markers with no children by
-		// design: Replan marks every outbound transition to block it (replan.go
-		// "Invalidate old task output and block all outbound transitions"), and
-		// the replacement owns the downstream pipeline. Both transition-collection
-		// phases already skip them — as a transition source and as a crash-recovery
-		// target — so the marker must not be read here as evidence that children
-		// were materialized. Without this guard a replanned upstream fails every
-		// downstream transition permanently, and the same "replanned" marker
-		// excludes it from the recovery pass that would otherwise repair it.
-		// See GH #137.
-		if depTask.TransitionsExecuted["replanned"] {
-			continue
-		}
-		if task.EffectiveType() == models.TaskTypeArchitecture && depTask.EffectiveType() == models.TaskTypeArchitecture &&
-			(models.HasCodingAllocation(task.Output) || models.HasCodingAllocation(depTask.Output)) {
-			for _, upstreamRoute := range resolver.AllTransitions() {
-				sourcePair, err := resolver.TransitionSourceRolePair(upstreamRoute.Name)
-				if err != nil || sourcePair != depTask.RolePair || upstreamRoute.Name == transitionName ||
-					!resolver.TransitionApplies(upstreamRoute.Name, depTask.Output) {
-					continue
-				}
-				for i, entry := range task.Output {
-					if entry.InheritInputs.IsSelective() {
-						if _, selected := entry.InheritInputs.SelectionFor(depID); !selected {
-							continue
-						}
-					}
-					return inheritedDepSet{}, fmt.Errorf("output[%d] cannot inherit prerequisite %q across different architecture allocation routes %q and %q; declare explicit task_depends_on on the prerequisite writer tasks and use inherit_inputs mode none (or select only compatible upstreams); code-planning completion does not establish writer completion", i, depID, upstreamRoute.Name, transitionName)
-				}
-			}
-		}
-		if !depTask.TransitionsExecuted[transitionName] {
-			continue
-		}
-		switch td.Cardinality {
-		case "per-subtask":
-			for i := range depTask.Output {
-				childID := perSubtaskChildID(depID, slug, i)
-				if s.FindTask(childID) == nil {
-					return inheritedDepSet{}, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
-				}
-				// Recorded by upstream output position: that is what an
-				// InputSelection names.
-				set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-				set.all = append(set.all, childID)
-			}
-		case "one-to-one":
-			childID := oneToOneChildID(depID, slug)
-			if s.FindTask(childID) == nil {
-				return inheritedDepSet{}, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
-			}
-			set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-			set.all = append(set.all, childID)
-		case "many-to-one":
-			cohortParentID := depTask.CohortParentID()
-			if cohortParentID == "" {
-				continue
-			}
-			// Skip intra-cohort deps: when the dep task shares the same cohort
-			// parent, the many-to-one child is the same task being created,
-			// which would produce a circular self-dependency.
-			if cohortParentID == task.CohortParentID() {
-				continue
-			}
-			childID := manyToOneChildID(cohortParentID, slug)
-			if s.FindTask(childID) == nil {
-				return inheritedDepSet{}, fmt.Errorf("upstream task %s has transition %q executed but child %s missing (needs crash recovery)", depID, transitionName, childID)
-			}
-			if !slices.Contains(set.all, childID) {
-				set.byUpstream[depID] = append(set.byUpstream[depID], childID)
-				set.all = append(set.all, childID)
-			}
-		}
-	}
-	return set, nil
 }
 
 // AvailableManualTransitions returns the available manual transitions for a task.
@@ -1989,7 +1051,7 @@ func resolveTransitionDefFrom(resolver *pipeline.Resolver, cfg *pipeline.Pipelin
 
 	// Only manual transitions are executable via liza proceed.
 	// Auto transitions are reserved for supervisor execution.
-	if td.Trigger != "manual" {
+	if td.Trigger != models.TransitionTriggerManual {
 		return transitionDef{}, fmt.Errorf("transition %q has trigger %q; only manual transitions can be executed via proceed", transitionName, td.Trigger)
 	}
 
