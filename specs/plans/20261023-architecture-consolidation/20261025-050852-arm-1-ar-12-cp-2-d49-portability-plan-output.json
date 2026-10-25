@@ -1,0 +1,29 @@
+[
+  {
+    "desc": "Must: make the A3 lifecycle portable variants (TestOracleAssessBlockedVariants, TestOracleUnblockTaskVariants) independent of the Git version and launchable on Windows, with no assertion lost",
+    "done_when": "On Linux with Git 2.43 all five validation commands pass. rebase-on-refusal-conflict opts into a normaliser that replaces only the Git-produced rebase transcript after 'rebase conflict: ' on state golden lines 132 and 157 with one token, after asserting CONFLICT/could not apply and README in the raw text; the golden diff touches only those remainders. newEnvironment uses oracle.ChildEnv and a GOOS layout: Linux/macOS keep the git symlink, Windows installs a stdlib-only git.exe forwarding shim (sidecar host Git path outside PATH, no PATH lookup); the PATH dir holds one entry. Regressions R1-R5 (Windows layout extension, shim argv/stdin/exit/cwd/env fidelity with negative controls, scenario equivalence through the shim, normaliser variant and negative controls, environment names) pass and their recorded pre-correction runs fail. Neither driver gains a skip, build constraint or TestMain guard; proof-scope.md names both as portable; no production, other driver/fixture/golden, PROVENANCE or harness code change.",
+    "scope": "IN: internal/oracle/a3/lifecycle env_test.go, fixture_test.go, case_test.go, mask_test.go, unblock_task_variants_test.go (opt-in on one case), new testdata/gitshim/main.go, new regression *_test.go files, testdata/golden/state/unblock-task/rebase-on-refusal-conflict.txt lines 132 and 157; internal/testhelpers/oracle/proof-scope.md a3/lifecycle row and all-platform entry; acceptance manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-12-cp-2-d49-portability-lifecycle.json. OUT: production code; conventions_test.go and other drivers, fixtures, goldens; internal/testhelpers/oracle Go code; internal/oracle/PROVENANCE; .github; platform skips or build constraints; .cmd/.bat shims; -race; A2 files; the internal/agent Windows timing test.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261025-050852-arm-1-ar-12-cp-2-d49-portability-plan.md#Task 1: Make the A3 lifecycle portable variants independent of the Git version and launchable on Windows",
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {"upstream_task": "arm-1-ar-12-cp-2-d49-correction", "outputs": [0]}
+      ]
+    },
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a3/lifecycle/",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/lifecycle"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a3/lifecycle/", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git", "gcc", "sh", "gofmt", "find", "grep"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a3/lifecycle", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]}
+    ]
+  }
+]
