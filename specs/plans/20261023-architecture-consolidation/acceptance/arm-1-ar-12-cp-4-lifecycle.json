@@ -4,7 +4,7 @@
     {
       "obligation_id": "AC-lifecycle-vocab",
       "file": "internal/ops/lifecycle_result_test.go",
-      "assertion": "TestLifecycleDecisionConstantsKeepWireSpelling compares every LifecycleSafeAction and LifecycleEffects constant with an independent literal (continue, stop, requery, retry, correct_input, none, unknown, committed) and the two field-diagnostic actions with models.FieldDiagnostic*. Negative proof: changing the retry constant to 'retry_' failed it and was restored. No A3 call of WrapLifecycleError, NewLifecycleOutcome, lifecycleRequestError, retireFailedLifecyclePreparation or newDiagnosticLifecycleError passes a raw action or effects literal (AST scan of internal/ops: zero hits in the A3 file list).",
+      "assertion": "TestLifecycleDecisionConstantsKeepWireSpelling compares every LifecycleSafeAction and LifecycleEffects constant with an independent literal (continue, stop, requery, retry, correct_input, none, unknown, committed) and the two field-diagnostic actions with models.FieldDiagnostic*. Negative proof: changing the retry constant to 'retry_' failed it and was restored. No A3 call of WrapLifecycleError, NewLifecycleOutcome, lifecycleRequestError, retireFailedLifecyclePreparation or newDiagnosticLifecycleError passes a raw action or effects literal (AST scan of internal/ops: zero hits in the A3 file list), and no A3 file assigns one to a carrier feeding them or to a SafeAction/Effects field (grep of every quoted decision value across the A3 file list: the only remaining hits are the constant declarations and other vocabularies such as runtime-input bound, assessment dependency outcome and the mode_change.go goal-complete label).",
       "command_index": 0
     },
     {

@@ -129,7 +129,7 @@ func (c *markBlockedCall) classifyFailure(err error) error {
 	outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 	var invalid *PreconditionError
 	if stderrors.As(err, &invalid) {
-		outcome, action = models.LifecycleInvalidInput, "correct_input"
+		outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 	} else if c.mutationStarted {
 		effects = LifecycleEffectsUnknown
 	}

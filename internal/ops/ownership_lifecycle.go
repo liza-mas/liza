@@ -35,7 +35,7 @@ func (i *ownershipInvocation) finish(projectRoot string, err error) error {
 		outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 		var invalid *PreconditionError
 		if !i.effects && errors.As(err, &invalid) {
-			outcome, action = models.LifecycleInvalidInput, "correct_input"
+			outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 		}
 		if i.effects {
 			effects = LifecycleEffectsUnknown
