@@ -75,13 +75,15 @@ It states the target contract; the coding tasks of that scope implement it.
    duplication (K6) and adds no abstraction.
 
 5. **Persisted A1 carriers keep `string`; values cross by explicit
-   conversion.** `models.AgentToolConfig` backend and transport, and the
+   conversion in both directions.** `models.AgentToolConfig` backend and transport, and the
    configured SCIP languages, stay `string` because they are persisted or
-   configured A1 carriers and A2 does not retype them. The conversion to the
-   A2 type happens at the A2 boundary, by explicit `string` conversion. Exported
-   A2 parameters fed from those carriers keep their A2 types. Package-manager
-   generic command names and catalog map keys also stay strings, converted at
-   their boundary.
+   configured A1 carriers and A2 does not retype them. Values cross in two
+   directions, each by explicit conversion at the A2 boundary: on entry to a
+   typed A2 position (an exported A2 parameter fed from such a carrier, which
+   keeps its owning W-type), the carrier's `string` is converted to the W-type;
+   on output to a persisted A1 carrier, the typed value is converted back with
+   `string(value)`. Package-manager generic command names and catalog map keys
+   also stay strings, converted the same way at their boundary.
 
 6. **Inherited A1 invariants (ADR-0220) apply to every W-type.**
    - AC2: no `MarshalYAML`, `UnmarshalYAML`, `MarshalText`, `UnmarshalText`,
