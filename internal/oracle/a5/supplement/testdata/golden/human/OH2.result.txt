@@ -1,0 +1,6 @@
+outcome: integration_failed
+error: <none>
+worktree_head: candidate
+review_commit_is_head: true
+base_on_integration: false
+replayed_range: candidate

@@ -1,0 +1,6 @@
+outcome: not_applicable
+error: task task-1 orphaned-base heal is fenced: worktree HEAD <commit:extra> does not match the prepared heal — inspect git -C .worktrees/task-1 status and log --oneline <commit:orphan>..HEAD, finish or abort any rebase in progress, then restore with git -C .worktrees/task-1 reset --hard <commit:candidate> or git -C .worktrees/task-1 rebase --onto integration <commit:orphan>, then run liza update-review-commit task-1
+worktree_head: extra
+review_commit_is_head: false
+base_on_integration: false
+replayed_range: extra, candidate

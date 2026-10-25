@@ -62,8 +62,14 @@ type caseInput struct {
 	WorktreeBranch   string       `json:"worktree_branch,omitempty"`
 	IntegrationAfter []recipeStep `json:"integration_after,omitempty"`
 	WorktreeIntact   bool         `json:"worktree_intact,omitempty"`
-	Step             step         `json:"step"`
-	Modes            []string     `json:"modes"`
+	// WorktreeAfter appends labelled commits to the task branch after the
+	// candidate commit. IntegrationRewind hard-resets the integration branch to
+	// a labelled commit before IntegrationAfter, so a commit the task branched
+	// from leaves integration (an orphaned base).
+	WorktreeAfter     []recipeStep `json:"worktree_after,omitempty"`
+	IntegrationRewind string       `json:"integration_rewind,omitempty"`
+	Step              step         `json:"step"`
+	Modes             []string     `json:"modes"`
 }
 
 // This allocation is independent of fixture discovery: removing a manifest or a
@@ -103,6 +109,13 @@ type caseInput struct {
 // change the state once the awaiting reviewer's reservation is observable, so they run the
 // exported operation in-process and record its result next to the state effect.
 //
+// OH*: HealOrphanedReviewBase on a submitted task whose base_commit left the integration
+// branch (a repository delta: integration rewound past it and moved on). Outcome -> case:
+// healed OH1 (state and replayed range); integration_failed OH2 (the replay conflicts, the
+// worktree is restored); fenced OH3 (a heal preparation whose effect is neither proven nor
+// proven absent). The interrupted-rebase fence, the process-death windows and the lost
+// acknowledgement need test hooks or kill points and stay mapped to the white-box heal tests.
+//
 // Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
 //
 //	registration_required VR1; worktree_unavailable VR13 (no path), VR14 (not a
@@ -131,6 +144,7 @@ var inventory = map[string]string{
 	"AW9": "json human state", "AW10": "json state", "AW11": "json human state",
 	"RW1": "json human state", "RW2": "json human state", "RW3": "json human state", "RW4": "json human state",
 	"RW5": "state result", "RW6": "state result",
+	"OH1": "state result", "OH2": "state result", "OH3": "state result",
 }
 
 func loadCases(t *testing.T) []caseInput {

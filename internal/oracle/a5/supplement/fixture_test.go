@@ -72,6 +72,10 @@ func materialise(t *testing.T, c caseInput) *fixture {
 	if c.WorktreeBranch != "" {
 		f.git(t, wt, "checkout", "-q", "-b", c.WorktreeBranch)
 	}
+	f.commitRecipeIn(t, wt, c.WorktreeAfter)
+	if c.IntegrationRewind != "" {
+		f.git(t, f.project, "reset", "--hard", f.labels[c.IntegrationRewind])
+	}
 	f.commitRecipe(t, c.IntegrationAfter)
 	state := mergeFixture(t, []byte(f.resolve(string(base.State))), []byte(f.resolve(string(c.Delta))))
 	writeFixtureState(t, f, state)
@@ -81,20 +85,26 @@ func materialise(t *testing.T, c caseInput) *fixture {
 // commitRecipe commits each recipe step to the integration branch of the project.
 func (f *fixture) commitRecipe(t testing.TB, steps []recipeStep) {
 	t.Helper()
+	f.commitRecipeIn(t, f.project, steps)
+}
+
+// commitRecipeIn commits each recipe step to the branch checked out in dir.
+func (f *fixture) commitRecipeIn(t testing.TB, dir string, steps []recipeStep) {
+	t.Helper()
 	for _, r := range steps {
 		paths := []string{".gitignore"}
 		for path, contents := range r.Files {
-			write(t, filepath.Join(f.project, path), []byte(f.resolve(contents)))
+			write(t, filepath.Join(dir, path), []byte(f.resolve(contents)))
 			paths = append(paths, path)
 		}
 		sort.Strings(paths)
-		f.git(t, f.project, append([]string{"add"}, paths...)...)
+		f.git(t, dir, append([]string{"add"}, paths...)...)
 		if len(r.Remove) > 0 {
-			f.git(t, f.project, append([]string{"rm", "-q", "--"}, r.Remove...)...)
+			f.git(t, dir, append([]string{"rm", "-q", "--"}, r.Remove...)...)
 		}
-		f.git(t, f.project, "commit", "--allow-empty", "-m", r.Label)
+		f.git(t, dir, "commit", "--allow-empty", "-m", r.Label)
 		if r.Label != "" {
-			f.labels[r.Label] = f.git(t, f.project, "rev-parse", "HEAD")
+			f.labels[r.Label] = f.git(t, dir, "rev-parse", "HEAD")
 		}
 	}
 }
@@ -196,4 +206,11 @@ func pathExists(path, dir string) bool {
 	}
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// gitSucceeds reports whether the Git command exits zero.
+func (f *fixture) gitSucceeds(dir string, args ...string) bool {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	return cmd.Run() == nil
 }
