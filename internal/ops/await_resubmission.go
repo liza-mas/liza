@@ -174,7 +174,7 @@ func enterAwaitResubmission(projectRoot, taskID, agentID string, authority *mode
 	// Verify agent exists in state (early exits below bypass acquireReviewOwnership
 	// which would otherwise catch nonexistent agents).
 	if _, ok := state.Agents[agentID]; !ok {
-		return nil, nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return nil, nil, &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 	}
 
 	// Verify agent was the last rejecting reviewer (even for early exits).

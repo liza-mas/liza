@@ -37,6 +37,10 @@ const (
 	// acceptanceSecretEntryName names the pseudo-variable under which known
 	// credentials are fed to the shared masker.
 	acceptanceSecretEntryName = "SECRET_ACCEPTANCE"
+	// acceptanceEnvSuffixURL and acceptanceEnvSuffixDSN mark an inherited variable
+	// as a connection string, whose value is a credential to mask.
+	acceptanceEnvSuffixURL = "URL"
+	acceptanceEnvSuffixDSN = "DSN"
 )
 
 var errAcceptanceOutputLimit = errors.New("acceptance execution output limit exceeded")
@@ -223,8 +227,8 @@ func acceptanceExecutionMaskWith(environ []string, declared []string) func(strin
 			continue
 		}
 		upper := strings.ToUpper(key)
-		connection := strings.HasSuffix(upper, "URL") || strings.HasSuffix(upper, "DSN")
-		generation := key == brand.EnvName("AGENT_GENERATION") || key == brand.LegacyEnvName("AGENT_GENERATION")
+		connection := strings.HasSuffix(upper, acceptanceEnvSuffixURL) || strings.HasSuffix(upper, acceptanceEnvSuffixDSN)
+		generation := key == brand.EnvName(agentGenerationEnvSuffix) || key == brand.LegacyEnvName(agentGenerationEnvSuffix)
 		if connection || generation || secretmask.IsSecretKey(key) {
 			credentials = append(credentials, value)
 		}

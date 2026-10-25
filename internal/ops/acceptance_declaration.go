@@ -171,7 +171,7 @@ func reviewDeclaredAllocation(g *git.Git, root string, state *models.State, task
 	}
 	if source == nil {
 		if driftedReference != "" {
-			return nil, acceptanceSourceRefusal(task, AcceptanceFaultAllocation, fmt.Sprintf("requires allocation by a direct independently approved merged planning parent; approved-proof reference %q has drifted — an authorized orchestrator may inspect the changed content and use %s to reaffirm this transition", driftedReference, brand.Command("reaffirm-proof", task.ID, driftedReference)))
+			return nil, acceptanceSourceRefusal(task, AcceptanceFaultAllocation, fmt.Sprintf("requires allocation by a direct independently approved merged planning parent; approved-proof reference %q has drifted — an authorized orchestrator may inspect the changed content and use %s to reaffirm this transition", driftedReference, brand.Command(reaffirmProofOperation, task.ID, driftedReference)))
 		}
 		return nil, acceptanceSourceRefusal(task, AcceptanceFaultAllocation, "requires allocation by a direct independently approved merged planning parent")
 	}

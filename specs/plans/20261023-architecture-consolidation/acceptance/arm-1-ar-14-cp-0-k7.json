@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-k7-inventory",
+      "approved_reference_id": "a5-k7"
+    },
+    {
+      "obligation_id": "AC-k7",
+      "file": "internal/ops/k7_a5_vocabulary_test.go",
+      "assertion": "TestA5AcceptanceFaultKeepsWireSpelling pins the only A5-owned typed set no test pinned (AcceptanceFault: content, allocation, runtime_input, admission_slot, batch_timeout) by literal expectations independent of the constants. TestA5NamedValuesKeepTheirSpelling pins every value this task named or adopted (reconcile, reaffirm and await operations, the task-review lock key, quarantined-verdict, pending-verdict and request ID formats, the lock labels, the .json extensions, the AGENT_ID and AGENT_GENERATION suffixes, the URL and DSN suffixes, the preflight operation, the 500-byte heal cause limit and the 5 minute heartbeat default) against the literal it replaced. TestA5ReconcileDispositionsAreOwnerAccepted ties the refuted and superseded names to models.IsVerdictDisposition, and TestA5ComposedTextKeepsItsBytes proves the composed reaffirm refusal, file names, IDs and lock key equal the old bytes. The other A5 typed sets keep their existing pins, listed in the inventory's table 3c: TestAwaitVerdictVocabularyKeepsItsValues, TestAwaitResubmissionVocabularyKeepsItsValues, TestVerdictNamedValuesKeepTheirValues, TestValidationReadinessVocabularyKeepsWireSpelling and TestReviewOwnershipNamedValuesKeepTheirSpelling. Negative proof, restored: changing the refuted spelling to refute failed TestA5NamedValuesKeepTheirSpelling and TestA5ReconcileDispositionsAreOwnerAccepted.",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-callers",
+      "approved_reference_id": "moves"
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a5/oracle_test.go",
+      "assertion": "TestOracleA5 and the supplement oracle run live against their unchanged goldens under make test: every substitution keeps its value, so error text, lock names, history keys, file names and persisted state are unchanged (git diff of internal/oracle against the integration HEAD is empty).",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-k1",
+      "approved_reference_id": "a5-k1"
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "goal-docs"
+    },
+    {
+      "obligation_id": "AC-sequence",
+      "approved_reference_id": "a5-proof"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "test target (go test ./...) runs the ops, archguard and oracle suites including the new spelling tests; lint, test-e2e and the race run over ops, commands, cmd/liza and agent are mandatory with it.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    }
+  ]
+}

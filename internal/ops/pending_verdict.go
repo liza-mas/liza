@@ -31,6 +31,16 @@ const (
 	// up to the maximum.
 	pendingVerdictRetryInitialDelay = 100 * time.Millisecond
 	pendingVerdictRetryMaxDelay     = 5 * time.Second
+	// An envelope is named by the hex SHA-256 of its bytes; the drain reads back
+	// only files with the extension and rejects a name that is not its digest.
+	pendingVerdictFileExt        = ".json"
+	pendingVerdictFileNameFormat = "%x" + pendingVerdictFileExt
+	// pendingVerdictRequestIDFormat names a request the outbox mints for a
+	// verdict that carried none.
+	pendingVerdictRequestIDFormat = "verdict-%x"
+	// The two lock labels order publication and cleanup of the outbox directory.
+	publishPendingVerdictLockOperation = "publish-pending-verdict"
+	removePendingVerdictLockOperation  = "remove-pending-verdict"
 )
 
 // This private outbox includes the original generation so a replacement can
@@ -72,7 +82,7 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 	}
 	if request.RequestID == "" {
 		identity, _ := json.Marshal(request)
-		request.RequestID = fmt.Sprintf("verdict-%x", sha256.Sum256(identity))
+		request.RequestID = fmt.Sprintf(pendingVerdictRequestIDFormat, sha256.Sum256(identity))
 	}
 	entry := pendingVerdict{TaskID: taskID, Verdict: verdict, Reason: sanitizeVerdictReason(reason, state, authority),
 		Impact: impact, ReviewCommit: reviewCommit, Authority: authority, Request: request}
@@ -140,9 +150,9 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 	if err := os.MkdirAll(dir, pendingVerdictDirMode); err != nil {
 		return "", err
 	}
-	filename := filepath.Join(dir, fmt.Sprintf("%x.json", sha256.Sum256(data)))
+	filename := filepath.Join(dir, fmt.Sprintf(pendingVerdictFileNameFormat, sha256.Sum256(data)))
 	var published string
-	err = filelock.New(dir).WithLockOperation("publish-pending-verdict", func() error {
+	err = filelock.New(dir).WithLockOperation(publishPendingVerdictLockOperation, func() error {
 		var publishErr error
 		published, publishErr = publishPendingVerdictFile(filename, data)
 		return publishErr
@@ -218,7 +228,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), pendingVerdictFileExt) {
 			continue
 		}
 		filename := filepath.Join(pendingVerdictDir(projectRoot), entry.Name())
@@ -277,7 +287,7 @@ func readPendingVerdictFile(filename string) (data []byte, err error) {
 
 func removePendingVerdictFile(filename string) error {
 	// Publication and cleanup share a lock; submission runs outside it.
-	return filelock.New(filepath.Dir(filename)).WithLockOperation("remove-pending-verdict", func() error {
+	return filelock.New(filepath.Dir(filename)).WithLockOperation(removePendingVerdictLockOperation, func() error {
 		return retrySharingViolation(func() error { return os.Remove(filename) })
 	})
 }
@@ -296,7 +306,7 @@ func readPendingVerdict(filename string) (pendingVerdict, error) {
 	if len(data) > maxPendingVerdictBytes || json.Unmarshal(data, &pending) != nil {
 		return pending, fmt.Errorf("invalid private verdict envelope")
 	}
-	if filepath.Base(filename) != fmt.Sprintf("%x.json", sha256.Sum256(data)) {
+	if filepath.Base(filename) != fmt.Sprintf(pendingVerdictFileNameFormat, sha256.Sum256(data)) {
 		return pending, fmt.Errorf("private verdict envelope checksum mismatch")
 	}
 	pending.Request.GenerationDigest = pending.GenerationDigest

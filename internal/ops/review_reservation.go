@@ -115,18 +115,18 @@ func acquireReviewOwnershipSnapshotChecked(bb *db.Blackboard, agentID, taskID st
 	err := modifyLifecycleState(bb, authority, func(s *models.State) error {
 		agent, ok := s.Agents[agentID]
 		if !ok {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
+			return &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 		}
 		task := s.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if err := RequireWorkAdmitted(s, awaitResubmissionOperation); err != nil {
 			return err
 		}
 
 		if task.ReviewingBy != nil && *task.ReviewingBy != agentID {
-			return WrapLifecycleError("claim-reviewer-task", task, fmt.Errorf("review ownership changed"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+			return WrapLifecycleError(claimReviewerTaskOperation, task, fmt.Errorf("review ownership changed"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 		}
 		if (task.ReviewingBy != nil && (retained == nil || !retained.heldBy(s, task, agentID))) ||
 			(task.ReviewingBy == nil && retained != nil) {

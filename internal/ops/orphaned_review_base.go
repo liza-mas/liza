@@ -43,6 +43,10 @@ var (
 	errOrphanHealAbandonedForTest = stderrors.New("orphaned-base heal abandoned by test hook")
 )
 
+// orphanedBaseHealCauseLimit bounds the failure cause quoted in the diagnostic
+// of a deterministic INTEGRATION_FAILED routing.
+const orphanedBaseHealCauseLimit = 500
+
 // OrphanedBaseHealOutcome is what one heal invocation did to the task.
 type OrphanedBaseHealOutcome string
 
@@ -213,7 +217,7 @@ func (h *orphanHeal) admit(state *models.State, task *models.Task) error {
 		}
 	}
 	if task == nil {
-		return &lizaerrors.NotFoundError{Entity: "task", ID: h.in.TaskID}
+		return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: h.in.TaskID}
 	}
 	if _, err := requireRegisteredClaimAgent(state, h.in.AgentID, h.in.Role); err != nil {
 		return err
@@ -523,7 +527,7 @@ func (h *orphanHeal) publish(observed *models.Task, request LifecycleRequest, ta
 	return modifyLifecycleState(h.bb, h.in.Authority, func(state *models.State) error {
 		live := state.FindTask(h.in.TaskID)
 		if live == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: h.in.TaskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: h.in.TaskID}
 		}
 		if err := ValidateLifecyclePreparation(live, request); err != nil {
 			return err
@@ -582,7 +586,7 @@ func (h *orphanHeal) fail(observed *models.Task, request LifecycleRequest, oldHe
 	}
 	if deterministic {
 		if cause != nil {
-			reason = fmt.Sprintf("%s: %s", reason, truncateForDiagnostics(cause.Error(), 500))
+			reason = fmt.Sprintf("%s: %s", reason, truncateForDiagnostics(cause.Error(), orphanedBaseHealCauseLimit))
 		}
 		return h.routeIntegrationFailed(observed, &request, nil, reason)
 	}
@@ -690,7 +694,7 @@ var errOrphanHealSettled = stderrors.New("orphaned-base heal preparation settled
 // TaskTransitionID does not cover.
 func sameOrphanHealBoundary(observed, live *models.Task) error {
 	if live == nil {
-		return &lizaerrors.NotFoundError{Entity: "task", ID: observed.ID}
+		return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: observed.ID}
 	}
 	if live.Status != observed.Status ||
 		!reflect.DeepEqual(live.ReviewingBy, observed.ReviewingBy) ||

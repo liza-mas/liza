@@ -149,7 +149,7 @@ func (a *verdictAttempt) prepareCleanSourceVerification(task *models.Task) error
 func (a *verdictAttempt) apply(state *models.State) error {
 	task := state.FindTask(a.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: a.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: a.taskID}
 	}
 	if err := a.revalidate(state, task); err != nil {
 		return err

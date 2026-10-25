@@ -139,7 +139,7 @@ func (s *submissionRun) publish(receipt *models.AcceptanceReceipt) (models.Lifec
 func (s *submissionRun) commitSubmission(current *models.State, receipt *models.AcceptanceReceipt, now time.Time) (models.LifecycleOutcome, error) {
 	task := current.FindTask(s.taskID)
 	if task == nil {
-		return models.LifecycleOutcome{}, &errors.NotFoundError{Entity: "task", ID: s.taskID}
+		return models.LifecycleOutcome{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: s.taskID}
 	}
 	s.invocation.task = task
 	if err := s.guardCommit(current, task, receipt); err != nil {

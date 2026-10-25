@@ -144,7 +144,7 @@ func enterAwaitVerdict(projectRoot, taskID, agentID string, authority *models.Ag
 	// Verify agent exists in state (early exits below bypass acquireAwaitOwnership
 	// which would otherwise catch nonexistent agents).
 	if _, ok := state.Agents[agentID]; !ok {
-		return entry.end(nil, &errors.NotFoundError{Entity: "agent", ID: agentID})
+		return entry.end(nil, &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID})
 	}
 	submission, _ := latestSubmissionByAgent(task, agentID)
 	entry = awaitVerdictEntry{
@@ -368,7 +368,7 @@ func acquireAwaitOwnership(bb *db.Blackboard, agentID, taskID string, authority 
 	return modifyLifecycleState(bb, authority, func(s *models.State) error {
 		agent, ok := s.Agents[agentID]
 		if !ok {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
+			return &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 		}
 		agent.Status = models.AgentStatusWaiting
 		agent.CurrentTask = &taskID

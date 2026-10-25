@@ -333,8 +333,8 @@ func findVerdictAfterSubmission(task *models.Task, submission submittedReview) (
 }
 
 func updatedReviewCommit(entry models.TaskHistoryEntry, current string) string {
-	oldCommit, _ := entry.Extra["old_review_commit"].(string)
-	newCommit, _ := entry.Extra["new_review_commit"].(string)
+	oldCommit, _ := entry.Extra[oldReviewCommitExtraKey].(string)
+	newCommit, _ := entry.Extra[newReviewCommitExtraKey].(string)
 	if newCommit != "" && (current == "" || oldCommit == "" || oldCommit == current) {
 		return newCommit
 	}

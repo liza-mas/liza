@@ -326,8 +326,8 @@ func (p *ValidationPreflight) observeSession(agent models.Agent, session *Valida
 		checkErr = validationError(validationCodeConfigurationChanged)
 	}
 	if session == nil {
-		id := brand.LookupEnv(os.Getenv, "AGENT_ID").Value
-		generation := brand.LookupEnv(os.Getenv, "AGENT_GENERATION").Value
+		id := brand.LookupEnv(os.Getenv, agentIDEnvSuffix).Value
+		generation := brand.LookupEnv(os.Getenv, agentGenerationEnvSuffix).Value
 		if id != p.agentID || generation == "" || generation != agent.Generation {
 			checkErr = validationError(validationCodeCurrentSessionRequired)
 		}
@@ -490,7 +490,7 @@ func checkAgentRuntimeInputReadiness(projectRoot string, bb *db.Blackboard, stat
 	_ = bb.Modify(func(current *models.State) error {
 		now := time.Now().UTC()
 		for _, refusal := range refusals {
-			appendRuntimeInputAnomaly(current, task.ID, refusal.declaration.ID, refusal.code, "preflight", refusal.bound, agentID, now)
+			appendRuntimeInputAnomaly(current, task.ID, refusal.declaration.ID, refusal.code, runtimeInputPreflightOperation, refusal.bound, agentID, now)
 		}
 		return nil
 	})

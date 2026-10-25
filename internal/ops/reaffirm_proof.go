@@ -16,6 +16,10 @@ import (
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
+// reaffirmProofOperation names the operation in the role capability that
+// authorizes it, in its refusal and in the command an operator is told to run.
+const reaffirmProofOperation = "reaffirm-proof"
+
 // ReaffirmProofResult reports what the decision was recorded against, so the
 // caller can show which transition it authorized rather than only that it
 // succeeded.
@@ -57,8 +61,8 @@ func ReaffirmProof(projectRoot, taskID, referenceID, expectedSection, reason str
 			return err
 		}
 		capabilities, err := resolver.EffectiveRoleCapabilities(state.Agents[authority.ID].Role)
-		if err != nil || capabilities.RoleType != roles.RoleTypeOrchestrator || !slices.Contains(capabilities.AllowedOperations, "reaffirm-proof") {
-			return &PreconditionError{Reason: "reaffirm-proof requires a registered orchestrator with the reaffirm-proof capability"}
+		if err != nil || capabilities.RoleType != roles.RoleTypeOrchestrator || !slices.Contains(capabilities.AllowedOperations, reaffirmProofOperation) {
+			return &PreconditionError{Reason: reaffirmProofOperation + " requires a registered orchestrator with the " + reaffirmProofOperation + " capability"}
 		}
 		task := state.FindTask(taskID)
 		if task == nil {

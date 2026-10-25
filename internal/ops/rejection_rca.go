@@ -239,7 +239,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 		}()
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		copy := *task
 		observed = &copy

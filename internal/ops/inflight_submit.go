@@ -23,6 +23,10 @@ const submitGraceMargin = 10 * time.Minute
 // inflightSubmitNonceBytes is the random part of a marker's file name.
 const inflightSubmitNonceBytes = 8
 
+// inflightSubmitFileExt ends every marker's file name; the reader accepts only
+// names with the agent's prefix and this extension.
+const inflightSubmitFileExt = ".json"
+
 // MaxInflightSubmitGrace bounds the time any in-flight submit marker can keep
 // a session alive past its execution timeout: the largest acceptance batch,
 // the submit slot wait floor and the margin.
@@ -60,7 +64,7 @@ func writeInflightSubmitMarker(projectRoot string, authority models.AgentAuthori
 	}
 	nonce := make([]byte, inflightSubmitNonceBytes)
 	_, err := rand.Read(nonce)
-	path := filepath.Join(paths.New(projectRoot).InflightSubmitDir(), prefix+hex.EncodeToString(nonce)+".json")
+	path := filepath.Join(paths.New(projectRoot).InflightSubmitDir(), prefix+hex.EncodeToString(nonce)+inflightSubmitFileExt)
 	var data []byte
 	if err == nil {
 		data, err = json.Marshal(inflightSubmitMarker{
@@ -125,7 +129,7 @@ func liveInflightSubmitMarkers(projectRoot string, authority models.AgentAuthori
 	var live []inflightSubmitMarker
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".json") {
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, inflightSubmitFileExt) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, name))

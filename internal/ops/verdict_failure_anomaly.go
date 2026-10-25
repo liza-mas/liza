@@ -109,7 +109,7 @@ func boundedString(text string, limit int) string {
 
 func agentIDOrSystem(agentID string) string {
 	if agentID == "" {
-		return "system"
+		return actorSystem
 	}
 	return agentID
 }
@@ -126,7 +126,7 @@ func recordStaleVerdictAnomaly(bb *db.Blackboard, taskID, agentID string, author
 	return modifyLifecycleState(bb, authority, func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {
 			return nil

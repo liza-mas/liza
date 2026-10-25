@@ -134,7 +134,7 @@ func (c *reviewerClaim) snapshotCandidates(state *models.State) ([]*models.Task,
 func (c *reviewerClaim) namedCandidate(state *models.State) (*models.Task, error) {
 	task := state.FindTask(c.input.TaskID)
 	if task == nil {
-		return nil, &lizaerrors.NotFoundError{Entity: "task", ID: c.input.TaskID}
+		return nil, &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: c.input.TaskID}
 	}
 	c.invocation.observe(task)
 	expectedRole, err := c.pb.resolver.ReviewerRole(task.RolePair)

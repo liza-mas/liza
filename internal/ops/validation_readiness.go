@@ -53,6 +53,10 @@ const (
 	validationMethodDirect validationMethod = "direct"
 )
 
+// runtimeInputPreflightOperation is the operation the preflight records on a
+// runtime-input unavailability anomaly, where a gate records its own operation.
+const runtimeInputPreflightOperation = "preflight"
+
 // validation_execution policy values a session and a tool's configuration
 // carry. models keeps the configured value as a plain string, so ops names the
 // two values its checks compare.

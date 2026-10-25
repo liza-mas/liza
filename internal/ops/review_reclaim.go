@@ -109,7 +109,7 @@ func (r *reclaimTransaction) admit(s *models.State) (*models.Task, error) {
 	}
 	task := s.FindTask(r.taskID)
 	if task == nil {
-		return nil, &errors.NotFoundError{Entity: "task", ID: r.taskID}
+		return nil, &errors.NotFoundError{Entity: notFoundEntityTask, ID: r.taskID}
 	}
 	if r.reservation != nil && !r.reservation.heldBy(s, task, r.agentID) {
 		r.lostStatus = task.Status
@@ -170,7 +170,7 @@ func (r *reclaimTransaction) assign(s *models.State, task *models.Task) error {
 
 	agent, ok := s.Agents[r.agentID]
 	if !ok {
-		return &errors.NotFoundError{Entity: "agent", ID: r.agentID}
+		return &errors.NotFoundError{Entity: notFoundEntityAgent, ID: r.agentID}
 	}
 	agent.Status = models.AgentStatusReviewing
 	agent.CurrentTask = &r.taskID

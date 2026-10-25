@@ -14,6 +14,9 @@ import (
 )
 
 const (
+	// awaitVerdictOperation names the await in the lifecycle errors it raises.
+	awaitVerdictOperation = "await-verdict"
+
 	// awaitBudgetExhaustedReason is the audit reason when a wait ends at budget
 	// exhaustion and the departed doer's assignment is dropped.
 	awaitBudgetExhaustedReason = "await budget exhausted; doer session ended"
@@ -182,7 +185,7 @@ func releaseDepartedDoerAssignment(projectRoot, taskID, agentID string, authorit
 	return modifyLifecycleState(bb, authority, func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if expectedTransition != "" {
 			currentSubmission, found := latestSubmissionByAgent(task, agentID)
@@ -197,7 +200,7 @@ func releaseDepartedDoerAssignment(projectRoot, taskID, agentID string, authorit
 				return nil
 			}
 			if models.TaskTransitionID(task) != expectedTransition {
-				return WrapLifecycleError("await-verdict", task, fmt.Errorf("await ownership changed before paused exit"), models.LifecycleStateChanged, LifecycleSafeActionStop, LifecycleEffectsNone)
+				return WrapLifecycleError(awaitVerdictOperation, task, fmt.Errorf("await ownership changed before paused exit"), models.LifecycleStateChanged, LifecycleSafeActionStop, LifecycleEffectsNone)
 			}
 		}
 		if agent, ok := state.Agents[agentID]; ok && agent.Status == models.AgentStatusWaiting &&

@@ -214,7 +214,7 @@ func (s *submissionRun) recordPreparation() error {
 	if err := modifyLifecycleState(s.bb, s.authority, func(current *models.State) error {
 		live := current.FindTask(s.taskID)
 		if live == nil {
-			return &errors.NotFoundError{Entity: "task", ID: s.taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: s.taskID}
 		}
 		if live.Status != s.expectedStatus || live.AssignedTo == nil || *live.AssignedTo != s.agentID {
 			return &LifecycleError{Outcome: NewLifecycleOutcome(s.request.Operation, live, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone), Err: fmt.Errorf("submission ownership changed before preparation")}
@@ -383,7 +383,7 @@ func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, authori
 	return modifyLifecycleState(bb, authority, func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if err := ValidateLifecyclePreparation(t, request); err != nil {
 			return err

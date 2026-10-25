@@ -22,6 +22,13 @@ const (
 	// submitTimeoutRequestIDLength is how much of the settled transition names
 	// the request of the batch-timeout block.
 	submitTimeoutRequestIDLength = 16
+	// submitFinalizeLockOperation labels the task lock the final comparison holds.
+	submitFinalizeLockOperation = "submit-for-review-finalize"
+	// agentIDEnvSuffix and agentGenerationEnvSuffix are the suffixes brand turns
+	// into the session's identity variables. brand names neither, so ops names
+	// them once for the A5 files that read or cite them.
+	agentIDEnvSuffix         = "AGENT_ID"
+	agentGenerationEnvSuffix = "AGENT_GENERATION"
 )
 
 // preparedSubmission keeps warning-only indexing outside task locking while
@@ -85,7 +92,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		return nil, &PreconditionError{Reason: "commit ref is required"}
 	}
 	if agentID == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName(agentIDEnvSuffix))}
 	}
 	invocation.progress = startSubmitProgress(taskID)
 	defer invocation.progress.finish()
@@ -129,7 +136,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			defer removeMarker()
 		}
 		warnings := prepared.refresh()
-		commitErr := lock.WithLockOperation("submit-for-review-finalize", func() error {
+		commitErr := lock.WithLockOperation(submitFinalizeLockOperation, func() error {
 			var inner error
 			result, inner = prepared.complete()
 			return inner

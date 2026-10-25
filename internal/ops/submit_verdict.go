@@ -282,7 +282,7 @@ func validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewComm
 			"payload rejected by the %s schema, version %d: %s %s",
 			payloadschema.SubmitVerdictOperation, version, diagnostics[0].Field, diagnostics[0].Constraint)}
 	}
-	return NewLifecycleInvalidInputError("submit-verdict", nil, diagnostics, preconditionErr)
+	return NewLifecycleInvalidInputError(payloadschema.SubmitVerdictOperation, nil, diagnostics, preconditionErr)
 }
 
 // verdictPreconditionError runs the operation's own checks on the normalized
@@ -302,7 +302,7 @@ func validateVerdictInput(taskID, verdict, reason, agentID, impact string) error
 		return &PreconditionError{Reason: "verdict is required"}
 	}
 	if agentID == "" {
-		return &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
+		return &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName(agentIDEnvSuffix))}
 	}
 
 	if v := submittedVerdict(verdict); v != submittedVerdictApproved && v != submittedVerdictRejected {

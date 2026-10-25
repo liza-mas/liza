@@ -218,7 +218,7 @@ func (u *reviewCommitUpdate) prepareAcceptance(state *models.State, task *models
 func (u *reviewCommitUpdate) apply(state *models.State) error {
 	task := state.FindTask(u.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: u.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: u.taskID}
 	}
 
 	// Re-check status inside lock
