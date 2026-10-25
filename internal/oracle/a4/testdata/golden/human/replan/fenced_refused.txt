@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: replan failed: modification function failed: validation failed: cannot replan a correction or an original with a pending amendment; use amend-plan --replace-pending for recovery

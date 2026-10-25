@@ -1,0 +1,329 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: cp-1
+    type: planning
+    role_pair: code-planning-pair
+    description: Fixture cp-1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history:
+      - {time: "<INSTANT Z>", event: replanned, note: "replaced by cp-1-replan-1"}
+    transitions_executed:
+      replanned: true
+      code-plan-to-coding: true
+    handoff_events:
+      - {timestamp: "<INSTANT Z>", agent: code-planner-1, trigger: submission}
+      - {timestamp: "<INSTANT Z>", agent: code-plan-reviewer-1, trigger: completion}
+    output:
+      - desc: One
+        done_when: One completed
+        scope: One bounded unit
+        spec_ref: specs/vision.md
+        plan_ref: "specs/plans/p.md#Task 1: One"
+  - id: cp-1-replan-1
+    type: planning
+    role_pair: code-planning-pair
+    description: Fixture cp-1-replan-1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    handoff_events:
+      - {timestamp: "<INSTANT Z>", agent: code-planner-1, trigger: submission}
+      - {timestamp: "<INSTANT Z>", agent: code-plan-reviewer-1, trigger: completion}
+    output:
+      - desc: One
+        done_when: One completed
+        scope: One bounded unit
+        spec_ref: specs/vision.md
+        plan_ref: "specs/plans/p.md#Task 1: One"
+    supersedes: cp-1
+    planning_change: {kind: replan, trigger: unknown, original_task_id: cp-1}
+  - id: cp-2
+    type: planning
+    role_pair: code-planning-pair
+    description: Fixture cp-2
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    depends_on: [cp-1]
+    handoff_events:
+      - {timestamp: "<INSTANT Z>", agent: code-planner-1, trigger: submission}
+      - {timestamp: "<INSTANT Z>", agent: code-plan-reviewer-1, trigger: completion}
+    output:
+      - desc: One
+        done_when: One completed
+        scope: One bounded unit
+        spec_ref: specs/vision.md
+        plan_ref: "specs/plans/p.md#Task 1: One"
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [cp-1, cp-1-replan-1, cp-2]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: goal-1
+    description: A4 oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <INSTANT Z>
+    status: IN_PROGRESS
+    alignment_history:
+        - timestamp: <INSTANT Z>
+          event: replan
+          summary: 'Replanned task cp-2 → cp-2-replan-1 (role_pair: code-planning-pair, spec: specs/vision.md): Scope changed'
+tasks:
+    - id: cp-1
+      type: planning
+      role_pair: code-planning-pair
+      description: Fixture cp-1
+      status: MERGED
+      priority: 1
+      iteration: 1
+      output:
+        - desc: One
+          done_when: One completed
+          scope: One bounded unit
+          spec_ref: specs/vision.md
+          plan_ref: 'specs/plans/p.md#Task 1: One'
+      transitions_executed:
+        code-plan-to-coding: true
+        replanned: true
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      handoff_events:
+        - timestamp: <INSTANT Z>
+          agent: code-planner-1
+          trigger: submission
+        - timestamp: <INSTANT Z>
+          agent: code-plan-reviewer-1
+          trigger: completion
+      created: <INSTANT Z>
+      history:
+        - time: <INSTANT Z>
+          event: replanned
+          note: replaced by cp-1-replan-1
+    - id: cp-1-replan-1
+      type: planning
+      role_pair: code-planning-pair
+      description: Fixture cp-1-replan-1
+      status: MERGED
+      priority: 1
+      iteration: 1
+      output:
+        - desc: One
+          done_when: One completed
+          scope: One bounded unit
+          spec_ref: specs/vision.md
+          plan_ref: 'specs/plans/p.md#Task 1: One'
+      planning_change:
+        kind: replan
+        trigger: unknown
+        original_task_id: cp-1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      supersedes: cp-1
+      handoff_events:
+        - timestamp: <INSTANT Z>
+          agent: code-planner-1
+          trigger: submission
+        - timestamp: <INSTANT Z>
+          agent: code-plan-reviewer-1
+          trigger: completion
+      created: <INSTANT Z>
+      history: []
+    - id: cp-2
+      type: planning
+      role_pair: code-planning-pair
+      description: Fixture cp-2
+      status: MERGED
+      priority: 1
+      iteration: 1
+      output:
+        - desc: One
+          done_when: One completed
+          scope: One bounded unit
+          spec_ref: specs/vision.md
+          plan_ref: 'specs/plans/p.md#Task 1: One'
+      transitions_executed:
+        code-plan-to-coding: true
+        replanned: true
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      depends_on:
+        - cp-1
+      handoff_events:
+        - timestamp: <INSTANT Z>
+          agent: code-planner-1
+          trigger: submission
+        - timestamp: <INSTANT Z>
+          agent: code-plan-reviewer-1
+          trigger: completion
+      created: <INSTANT Z>
+      history:
+        - time: <INSTANT Z>
+          event: replanned
+          note: 'replaced by cp-2-replan-1: Scope changed'
+    - id: cp-2-replan-1
+      type: planning
+      role_pair: code-planning-pair
+      description: |-
+        Fixture cp-2
+
+        Replan reason (from orchestrator-1): Scope changed
+      status: DRAFT_CODING_PLAN
+      priority: 1
+      planning_change:
+        kind: replan
+        trigger: unknown
+        original_task_id: cp-2
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      supersedes: cp-2
+      depends_on:
+        - cp-1-replan-1
+      created: <INSTANT Z>
+      history:
+        - time: <INSTANT Z>
+          event: dependencies_rewritten
+          agent: orchestrator-1
+          note: dependency on replanned cp-1 follows its successor cp-1-replan-1
+          operation: replan
+          replacement_dependency: cp-1-replan-1
+          replanned_dependency: cp-1
+agents:
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        heartbeat: <INSTANT Z>
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - cp-1
+            - cp-1-replan-1
+            - cp-2
+            - cp-2-replan-1
+        stretch: []
+    timeline:
+        started: <INSTANT Z>
+        deadline: <INSTANT Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <INSTANT Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING
+# written files

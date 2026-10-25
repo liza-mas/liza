@@ -1,0 +1,8 @@
+exit_code: 0
+--- stdout
+Replanned: cp-2 → cp-2-replan-1
+Role pair: code-planning-pair
+Spec ref: specs/vision.md
+Planner agents will pick up the new task.
+--- stderr
+warning: task cp-2-replan-1: dependency on replanned cp-1 follows its successor cp-1-replan-1
