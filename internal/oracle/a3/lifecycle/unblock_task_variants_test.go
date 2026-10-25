@@ -31,7 +31,7 @@ func TestOracleUnblockTaskVariants(t *testing.T) {
 		lifecycleCase{name: "budget-exception-refusal-non-coding-task", fixture: "blocked-planning", args: with("--budget-exception", "7200", "--budget-ruling", "D-oracle-1"), mutating: true},
 		lifecycleCase{name: "rebase-on-success", fixture: "blocked+integration-ahead", args: with("--rebase-on", "integration"), mutating: true},
 		lifecycleCase{name: "rebase-on-refusal-tracked-changes", fixture: "blocked+dirty-worktree", args: with("--rebase-on", "integration"), mutating: true},
-		lifecycleCase{name: "rebase-on-refusal-conflict", fixture: "blocked+integration-conflict", args: with("--rebase-on", "integration"), mutating: true},
+		lifecycleCase{name: "rebase-on-refusal-conflict", fixture: "blocked+integration-conflict", args: with("--rebase-on", "integration"), mutating: true, gitTranscript: true},
 		lifecycleCase{name: "assign-to-success", fixture: "blocked", args: with("--assign-to", "coder-1"), mutating: true},
 		lifecycleCase{name: "assign-to-refusal-unregistered-agent", fixture: "blocked", args: with("--assign-to", "coder-9"), mutating: true},
 		lifecycleCase{name: "new-iteration-success", fixture: "blocked", args: with("--new-iteration"), mutating: true},

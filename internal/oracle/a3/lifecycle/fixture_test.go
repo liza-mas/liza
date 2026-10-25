@@ -41,7 +41,7 @@ func readFile(t *testing.T, path string) []byte {
 
 func (r environment) git(t *testing.T, args ...string) string {
 	t.Helper()
-	res := r.command(t, filepath.Join(r.path, "git"), args...)
+	res := r.command(t, r.gitBin, args...)
 	if res.exit != 0 {
 		t.Fatalf("fixture git %s: exit %d: %s", args[0], res.exit, res.stderr)
 	}
@@ -51,10 +51,10 @@ func (r environment) git(t *testing.T, args ...string) string {
 // buildFixture renders the state fixture named name. A name may carry recipes,
 // "state+recipe+recipe", that arrange the Git side of the fixture before the
 // before snapshot (see applyRecipe); plain names behave as before.
-func buildFixture(t *testing.T, bin, name, caller string) fixture {
+func buildFixture(t *testing.T, bin, name, caller string, install gitInstall) fixture {
 	t.Helper()
 	name, recipes, _ := strings.Cut(name, "+")
-	f := fixture{environment: newEnvironment(t, caller), commits: map[string]string{}}
+	f := fixture{environment: newEnvironmentWith(t, caller, install, ""), commits: map[string]string{}}
 	f.git(t, "init", "-b", "main")
 	writeFile(t, filepath.Join(f.project, "README"), []byte("Lifecycle oracle fixture\n"))
 	writeFile(t, filepath.Join(f.project, "specs", "vision.md"), []byte("# Lifecycle oracle\n"))

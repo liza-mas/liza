@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,31 @@ type lifecycleCase struct {
 	// receipt's expected_transition varies between runs. Only a case that needs
 	// it opts in; every other receipt digest stays a digit-for-digit assertion.
 	maskBoundaries bool
+	// gitTranscript marks a case whose final state freezes Git's own rebase
+	// conflict output, which differs between Git versions. Production-owned
+	// text stays asserted; only the Git-produced remainder is normalised
+	// (maskGitTranscript). Every other case compares its text unchanged.
+	gitTranscript bool
+	// gitShim installs the forwarding Git shim on any host, to prove that the
+	// platform-neutral launch yields the committed goldens (R3). Without it a
+	// case uses the platform's layout.
+	gitShim bool
+}
+
+func (c lifecycleCase) gitInstall() gitInstall {
+	if c.gitShim {
+		return shimLayout(runtime.GOOS)
+	}
+	return gitLayout(runtime.GOOS)
+}
+
+// normaliseState applies the case's opt-in determinism edits to a masked state
+// text.
+func (c lifecycleCase) normaliseState(text string) (string, error) {
+	if !c.gitTranscript {
+		return text, nil
+	}
+	return maskGitTranscript(text)
 }
 
 func runCases(t *testing.T, command string, cases ...lifecycleCase) {
@@ -68,7 +94,7 @@ func runCase(t *testing.T, bin, command string, c lifecycleCase) {
 			label = "human"
 		}
 		t.Run(label, func(t *testing.T) {
-			f := buildFixture(t, bin, c.fixture, c.caller)
+			f := buildFixture(t, bin, c.fixture, c.caller, c.gitInstall())
 			for _, file := range c.setupFiles {
 				if filepath.IsAbs(file.name) || filepath.Clean(file.name) != file.name || file.name == ".." || strings.HasPrefix(file.name, ".."+string(filepath.Separator)) {
 					t.Fatal("setup file must stay under TMPDIR")
@@ -144,6 +170,10 @@ func runCase(t *testing.T, bin, command string, c lifecycleCase) {
 			stateMask := newRunMask()
 			before := stateMask.text(f.before)
 			after := stateMask.text(final + "\n# git\n" + gitEffects(f.gitBefore, f.snapshot(t)) + "# lifecycle outcomes\n" + outcomeLines(t, f.project) + fmt.Sprintf("# exit %d\n", results[len(results)-1].exit))
+			after, err := c.normaliseState(after)
+			if err != nil {
+				t.Fatalf("case %s: %v", name, err)
+			}
 			if mode == jsonMode {
 				jsonAfter = after
 				oracle.CheckState(t, name+".txt", []byte(before), []byte(after))

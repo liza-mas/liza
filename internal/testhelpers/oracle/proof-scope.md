@@ -19,7 +19,7 @@ Opt-in sensitivity and regeneration proofs are listed last; they never run by de
 |---|---|---|---|---|
 | A2 | every test file under `a2/artifact` and `a2/cli` | `//go:build linux` | POSIX shell stubs and file modes; `runtime.GOOS` branches in producers | AC3, `specs/arch-plan/20261023-architecture-consolidation/20261023-182300-arm-1-ar-2.md#Constraints` |
 | A3 | `a3/control` (all tests, through `linuxOnly` in `normalise_test.go`) | `t.Skip` off Linux | process liveness, POSIX permissions | OC3/TC1, `20261023-183344-arm-1-ar-3.md#Constraints` |
-| A3 | `a3/lifecycle` (`env_test.go`) | `t.Skip` off Linux | process and timezone proof | OC3, `20261023-183344-arm-1-ar-3.md#Constraints` |
+| A3 | `a3/lifecycle` (`env_test.go`, through `linuxOnly`), except `TestOracleUnblockTaskVariants` and `TestOracleAssessBlockedVariants` and the portability regressions (`portability_test.go`, `transcript_test.go`), which run on all three platforms | `t.Skip` off Linux | process and timezone proof | OC3, `20261023-183344-arm-1-ar-3.md#Constraints`; the exceptions: D53 and `20261025-050852-arm-1-ar-12-cp-2-d49-portability-plan.md#Task 1` |
 | A7 | `a7/install` (`main_test.go`, `skipUnlessLinux`) | `t.Skip` off Linux | installed-tree modes, symlinks | OC3, `20261023-181043-arm-1-ar-7.md#Constraints` |
 | A7 | `a7/present` (`main_test.go`) | `t.Skip` off Linux | process identity, Git symlinks | OC3, `20261023-181043-arm-1-ar-7.md#Constraints` |
 | A9 | `TestOracleA9OrchestratorReap` (`orchestrator_test.go`), with `orchreap_linux_test.go`, `reap_linux_test.go`, `signals_linux_test.go`, `signals_reap_linux_test.go` | `t.Skip` and `//go:build linux` | child subreaper, reaping | D45, files named |
@@ -43,6 +43,7 @@ The `refused` subtest of `TestOracleRepairSupersededDependencies` stays portable
 
 - White-box suites (everything outside `internal/oracle/**`) run on Linux, Windows and macOS.
 - A1 `a1/persist` and the `sample` goldens carry no build constraint or platform skip; `a1/persist` branches on `runtime.GOOS` for Windows environment names (`tamper_test.go`). `a1/cli` runs on Linux and macOS only (see Windows-skipped scopes).
+- A3 lifecycle `TestOracleUnblockTaskVariants` and `TestOracleAssessBlockedVariants`: no skip or build constraint. Their Git-produced rebase transcript is normalised (`maskGitTranscript`) and the fixture reaches Git through `testdata/gitshim` as `git.exe` on Windows (D53; D57 excludes a `.cmd` shim).
 - Non-Linux twins (`umask_other_test.go` in `a3/control` and `a7/install`, `orchreap_other_test.go`, `reap_other_test.go`, `signals_other_test.go` in `a9`) exist so each package compiles off Linux; they add no proof.
 
 ## Opt-in proofs

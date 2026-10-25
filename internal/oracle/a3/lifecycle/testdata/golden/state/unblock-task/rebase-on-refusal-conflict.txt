@@ -129,7 +129,7 @@ tasks:
         target: task-1
         command: git -C .worktrees/task-1 rebase <commit:integration>
         evidence:
-            - "command=git -C .worktrees/task-1 rebase <commit:integration> target_ref=integration target_sha=<commit:integration> exit_code=1 stderr=rebase conflict: Rebasing (1/1)\rAuto-merging README\nCONFLICT (content): Merge conflict in README\nerror: could not apply e5d6113... task edit\nhint: Resolve all conflicts manually, mark them as resolved with\nhint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\".\nhint: You can instead skip this commit: run \"git rebase --skip\".\nhint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\".\nCould not apply e5d6113... task edit"
+            - "command=git -C .worktrees/task-1 rebase <commit:integration> target_ref=integration target_sha=<commit:integration> exit_code=1 stderr=rebase conflict: <git-rebase-conflict-output>"
         validation:
             - git -C .worktrees/task-1 status --short
             - git -C .worktrees/task-1 rebase <commit:integration>
@@ -154,7 +154,7 @@ tasks:
             rebase_target_ref: integration
             rebase_target_sha: <commit:integration>
             recovery_hint: resolve the unblock-time rebase conflict in the task worktree, then retry unblock-task
-            stdout_stderr_excerpt: "rebase conflict: Rebasing (1/1)\rAuto-merging README\nCONFLICT (content): Merge conflict in README\nerror: could not apply e5d6113... task edit\nhint: Resolve all conflicts manually, mark them as resolved with\nhint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\".\nhint: You can instead skip this commit: run \"git rebase --skip\".\nhint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\".\nCould not apply e5d6113... task edit"
+            stdout_stderr_excerpt: "rebase conflict: <git-rebase-conflict-output>"
 agents:
     coder-1:
         role: coder

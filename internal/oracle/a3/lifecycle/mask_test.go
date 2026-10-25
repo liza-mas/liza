@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -238,4 +239,102 @@ func outcomeLines(t *testing.T, project string) string {
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "")
+}
+
+// gitTranscriptToken stands for the Git-produced remainder of a rebase
+// conflict message.
+const gitTranscriptToken = "<git-rebase-conflict-output>"
+
+var (
+	// A scalar line: indentation, an optional sequence dash and mapping key,
+	// then either a double-quoted scalar or a literal-block header. The CLI's
+	// YAML encoder double-quotes a transcript holding a carriage return (Git's
+	// progress output) and writes it as a literal block otherwise.
+	quotedScalarRE = regexp.MustCompile(`^(\s*(?:-\s+)?(?:[\w-]+:\s+)?)"((?:[^"\\]|\\.)*)"\s*$`)
+	blockScalarRE  = regexp.MustCompile(`^(\s*(?:-\s+)?(?:[\w-]+:\s+)?)\|[-+]?\s*$`)
+	quoteEscaper   = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+)
+
+// transcriptPrefixEnd returns where the production-owned text of an evidence
+// or excerpt scalar ends and the Git-produced remainder starts, or false for
+// any other scalar.
+func transcriptPrefixEnd(scalar string) (int, bool) {
+	const excerpt = "rebase conflict: "
+	if strings.HasPrefix(scalar, excerpt) {
+		return len(excerpt), true
+	}
+	if strings.HasPrefix(scalar, "command=") {
+		const marker = "stderr=" + excerpt
+		if i := strings.Index(scalar, marker); i >= 0 {
+			return i + len(marker), true
+		}
+	}
+	return 0, false
+}
+
+// maskGitTranscript replaces, in every unblock rebase-conflict evidence and
+// excerpt scalar of a state text, the remainder after the production-owned
+// "rebase conflict: " prefix with one token, in the double-quoted form. The
+// remainder is Git's own output, which differs between Git versions in
+// progress output, hint wording, abbreviations and final lines. Production's
+// classification (internal/git runRebase) and the fixture's conflicted path
+// are asserted on the raw remainder first, and failures name the missing fact,
+// never Git output. Text outside those scalars is returned unchanged.
+func maskGitTranscript(text string) (string, error) {
+	lines := strings.Split(text, "\n")
+	var out []string
+	masked := 0
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		if m := quotedScalarRE.FindStringSubmatch(line); m != nil {
+			if end, ok := transcriptPrefixEnd(m[2]); ok {
+				if err := checkTranscript(m[2][end:]); err != nil {
+					return "", err
+				}
+				out = append(out, m[1]+`"`+m[2][:end]+gitTranscriptToken+`"`)
+				masked++
+				continue
+			}
+		}
+		if m := blockScalarRE.FindStringSubmatch(line); m != nil {
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			end := i + 1
+			for end < len(lines) && (strings.TrimSpace(lines[end]) == "" || len(lines[end])-len(strings.TrimLeft(lines[end], " ")) > indent) {
+				end++
+			}
+			if end > i+1 {
+				first := strings.TrimLeft(lines[i+1], " ")
+				if prefixEnd, ok := transcriptPrefixEnd(first); ok {
+					rest := []string{first[prefixEnd:]}
+					for _, l := range lines[i+2 : end] {
+						rest = append(rest, strings.TrimLeft(l, " "))
+					}
+					if err := checkTranscript(strings.Join(rest, "\n")); err != nil {
+						return "", err
+					}
+					out = append(out, m[1]+`"`+quoteEscaper.Replace(first[:prefixEnd])+gitTranscriptToken+`"`)
+					masked++
+					i = end - 1
+					continue
+				}
+			}
+		}
+		out = append(out, line)
+	}
+	if masked == 0 {
+		return "", errors.New("no unblock rebase conflict transcript found in the state text")
+	}
+	return strings.Join(out, "\n"), nil
+}
+
+// checkTranscript asserts the facts of a rebase conflict that production and
+// the fixture imply, and nothing else about Git's wording.
+func checkTranscript(remainder string) error {
+	if !strings.Contains(remainder, "CONFLICT") && !strings.Contains(remainder, "could not apply") {
+		return errors.New("rebase conflict transcript lacks the CONFLICT or could not apply marker production classifies on")
+	}
+	if !strings.Contains(remainder, "README") {
+		return errors.New("rebase conflict transcript does not name the conflicted path README")
+	}
+	return nil
 }
