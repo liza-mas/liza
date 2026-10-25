@@ -24,8 +24,16 @@ func TestProxyRealChildFilesystemResponseBoundary(t *testing.T) {
 	defer inW.Close()
 	defer outR.Close()
 	defer outW.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The child is a race-instrumented test binary: under a loaded host its start
+	// alone can exceed a few seconds. Expiry closes the host pipes so a late child
+	// fails the decodes instead of hanging them.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	go func() {
+		<-ctx.Done()
+		_ = outR.Close()
+		_ = inW.Close()
+	}()
 	done := make(chan error, 1)
 	go func() {
 		done <- Run(ctx, Config{Command: []string{os.Args[0], "-test.run=^TestACPAdapterHelper$"}, Store: store, Metadata: toolresult.Result{TaskID: "DEV-778"}, In: inR, Out: outW, Dir: t.TempDir()})
