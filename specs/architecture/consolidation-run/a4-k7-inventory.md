@@ -25,10 +25,10 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 
 | Outcome | Count |
 |---|---|
-| Substitution sites in this task (table 2: adopted, named or typed use sites) | 163 |
-| Constant and type declarations added by this task (table 2) | 42 |
-| Pre-existing named owner constants in A4 files (table 3b) | 52 |
-| Retained literals classified R5/J22 (table 3, grouped by file and reason) | 1663 |
+| Substitution sites in this task (table 2: adopted, named or typed use sites) | 176 |
+| Constant and type declarations added by this task (table 2) | 47 |
+| Pre-existing named owner constants in A4 files (table 3b) | 49 |
+| Retained literals classified R5/J22 (table 3, grouped by file and reason) | 1661 |
 | Unclassified / deferred | 0 |
 
 ## 1. A4 files
@@ -55,7 +55,7 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 | `plan_check.go` | area partition | 282 | 55 | 0 | 0 | 5 |
 | `plan_replacement.go` | area partition | 460 | 47 | 3 | 0 | 0 |
 | `plan_handoff.go` | area partition | 369 | 39 | 0 | 0 | 8 |
-| `plan_handoff_failure.go` | area partition | 226 | 58 | 7 | 1 | 4 |
+| `plan_handoff_failure.go` | area partition | 238 | 58 | 20 | 6 | 1 |
 | `plan_handoff_undecided.go` | area partition | 182 | 30 | 5 | 1 | 1 |
 | `amend_plan.go` | area partition | 268 | 65 | 2 | 1 | 0 |
 | `contract_amendment.go` | area partition | 71 | 16 | 0 | 0 | 0 |
@@ -205,14 +205,32 @@ One row per changed line and constant. `A3 conformance` rows are in A3 files; al
 | `pipeline_ops.go:387` | J2 | R1 | adopted | `models.CardinalityManyToOne` | "many-to-one" | A1 models |
 | `pipeline_ops.go:428` | J14 | R4 | named | `legacyPlanningRolePair` | "code-planning-pair" | A4 pipeline_ops.go |
 | `pipeline_ops.go:462` | J14 | R4 | named | `legacyPlanningRolePair` | "code-planning-pair" | A4 pipeline_ops.go |
-| `plan_handoff_failure.go:24` | J20 | R4 | declaration of named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
-| `plan_handoff_failure.go:145` | J18 | R4 | named | `transitionExtraKey` | "transition" | A4 transition_pass.go |
-| `plan_handoff_failure.go:148` | J18 | R4 | named | `outputIndexExtraKey` | "output_index" | A4 transition_pass.go |
-| `plan_handoff_failure.go:209` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
-| `plan_handoff_failure.go:210` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
-| `plan_handoff_failure.go:212` | J19 | R1 | adopted | `resumeOperation` | "resume" (command hint) | A3 mode_change.go |
+| `plan_handoff_failure.go:19` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:24` | J11 | R4 | declaration of typed | `handoffOutputRefusal` | "output_validation" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:24` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:25` | J11 | R4 | declaration of typed | `handoffInputRefusal` | "selective_inheritance" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:25` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:26` | J11 | R4 | declaration of typed | `handoffProviderRefusal` | "provider_retirement" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:26` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:30` | J15 | R4 | declaration of named | `reservationTransferPolicyVersion` | 1 | A4 plan_handoff_failure.go (D-89 retirement admission policy version, fingerprint material) |
+| `plan_handoff_failure.go:31` | J15 | R4 | declaration of named | `selectedChildLineagePolicyVersion` | 1 | A4 plan_handoff_failure.go (D-167 retirement admission policy version, fingerprint material) |
+| `plan_handoff_failure.go:35` | J20 | R4 | declaration of named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:41` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:65` | J11 | R4 | typed | `handoffRefusalClass` | three untyped string constants selecting fingerprint and retirement branches (`handoffInputError.class`); the exported `PlanHandoffFailure.Class` stays `string`, converted at the boundary | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:66` | J11 | R4 | typed | `handoffInputRefusal` | "selective_inheritance" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:66` | J11 | R4 | typed | `handoffOutputRefusal` | "output_validation" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:66` | J11 | R4 | typed | `handoffProviderRefusal` | "provider_retirement" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:90` | J11 | R4 | typed | `handoffInputRefusal` | "selective_inheritance" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:124` | J11 | R4 | typed | `handoffProviderRefusal` | "provider_retirement" | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:139` | J15 | R4 | named | `reservationTransferPolicyVersion` | 1 | A4 plan_handoff_failure.go (D-89 retirement admission policy version, fingerprint material) |
+| `plan_handoff_failure.go:139` | J15 | R4 | named | `selectedChildLineagePolicyVersion` | 1 | A4 plan_handoff_failure.go (D-167 retirement admission policy version, fingerprint material) |
+| `plan_handoff_failure.go:157` | J18 | R4 | named | `transitionExtraKey` | "transition" | A4 transition_pass.go |
+| `plan_handoff_failure.go:160` | J18 | R4 | named | `outputIndexExtraKey` | "output_index" | A4 transition_pass.go |
+| `plan_handoff_failure.go:221` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
 | `plan_handoff_failure.go:222` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
-| `plan_handoff_failure.go:223` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:224` | J19 | R1 | adopted | `resumeOperation` | "resume" (command hint) | A3 mode_change.go |
+| `plan_handoff_failure.go:234` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
+| `plan_handoff_failure.go:235` | J20 | R4 | named | `planHandoffFailedAlertCategory` | "PLAN HANDOFF FAILED" (4 uses) | A4 plan_handoff_failure.go |
 | `plan_handoff_undecided.go:20` | J20 | R4 | declaration of named | `planDispositionMissingAlertCategory` | "PLAN DISPOSITION MISSING" (2 uses) | A4 plan_handoff_undecided.go |
 | `plan_handoff_undecided.go:65` | J9 | R1/R2 | adopted | `humanNoteForAll` | "all" | A3 assess_blocked_fingerprint.go |
 | `plan_handoff_undecided.go:175` | J20 | R4 | named | `planDispositionMissingAlertCategory` | "PLAN DISPOSITION MISSING" (2 uses) | A4 plan_handoff_undecided.go |
@@ -418,11 +436,11 @@ Each row lists every line of one file carrying literals of one class. The class 
 | `plan_handoff.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 203,208,272,276,278,302,304,306,343,351,362,365 |
 | `plan_handoff.go` | J21 | R5 | classified | arity, zero or one test or index: arithmetic identity | 94,94 |
 | `plan_handoff.go` | J21 | R5 | classified | empty-string test: absence of an optional value | 94,201,201,211,214,233,239,242,253,253,277,282,292,294,296,299,331 |
-| `plan_handoff_failure.go` | J18 | R5 | classified | detail, history or hash-material key: persisted field name, written here; no A4 decision reads it back by spelling from state (in-function map assembly stays here; readers in other areas: table 7) | 100,101,102,107,107,107,108,108,108,109,109,109,110,110,122,123,123,123,123,127,127 |
-| `plan_handoff_failure.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 210,210,210,211,223,223,223,224 |
-| `plan_handoff_failure.go` | J20 | R5 | classified | rendered operator command name in guidance text (command identities are not closed into a type, A3 I22) | 212,212,212 |
-| `plan_handoff_failure.go` | J21 | R5 | classified | arity, zero or one test or index: arithmetic identity | 51,73,127,127,143,143,183 |
-| `plan_handoff_failure.go` | J21 | R5 | classified | empty-string test: absence of an optional value | 52,55,59,63,67,81,81,87,116,118,132,156,159,194 |
+| `plan_handoff_failure.go` | J18 | R5 | classified | detail, history or hash-material key: persisted field name, written here; no A4 decision reads it back by spelling from state (in-function map assembly stays here; readers in other areas: table 7) | 112,113,114,119,119,119,120,120,120,121,121,121,122,122,134,135,135,135,135,139,139 |
+| `plan_handoff_failure.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 222,222,222,223,235,235,235,236 |
+| `plan_handoff_failure.go` | J20 | R5 | classified | rendered operator command name in guidance text (command identities are not closed into a type, A3 I22) | 224,224,224 |
+| `plan_handoff_failure.go` | J21 | R5 | classified | arity, zero or one test or index: arithmetic identity | 62,85,155,155,195 |
+| `plan_handoff_failure.go` | J21 | R5 | classified | empty-string test: absence of an optional value | 63,67,71,75,79,93,93,99,128,130,144,168,171,206 |
 | `plan_handoff_undecided.go` | J18 | R5 | classified | detail, history or hash-material key: persisted field name, written here; no A4 decision reads it back by spelling from state (in-function map assembly stays here; readers in other areas: table 7) | 70,70,70,71,71,71,72,72,75,76 |
 | `plan_handoff_undecided.go` | J20 | R5 | classified | display or note label | 164 |
 | `plan_handoff_undecided.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 172,176,176,177 |
@@ -551,7 +569,7 @@ Named by earlier scopes or by A3 inside the A4 files; retained, adopted nowhere 
 | `plan_amendment_begin.go` | `amendCorrectionIDSuffix`, `replanCorrectionIDSuffix` |
 | `plan_check.go` | `PlanCheckActionPass`, `PlanCheckActionHold`, `PlanCheckActionClear`, `PlanCheckActionReplace`, `PlanCheckActionRetire` |
 | `plan_handoff.go` | `PlanHandoffNotSource`, `PlanHandoffOutOfDomain`, `PlanHandoffNeedsReview`, `PlanHandoffPassed`, `PlanHandoffWaitingUpstream`, `PlanHandoffNeedsReconciliation`, `PlanHandoffHeld`, `PlanHandoffAmendmentReady` |
-| `plan_handoff_failure.go` | `handoffFailureVersion`, `handoffOutputRefusal`, `handoffInputRefusal`, `handoffProviderRefusal` |
+| `plan_handoff_failure.go` | `handoffFailureVersion` |
 | `plan_handoff_undecided.go` | `handoffUndecidedVersion` |
 | `repair_arch_ref.go` | `repairArchRefOperation` |
 | `repair_superseded_dependencies.go` | `repairSupersededDependenciesOperation` |
@@ -666,7 +684,7 @@ Unchanged A3 sites with the same value, listed not edited: `lifecycle_metrics.go
 
 | Commitment | Evidence at this HEAD | Result |
 |---|---|---|
-| scope2-k7 / scope3-k7: consume A1/A3 vocabulary, never redefine a set; convert typed values to `string` at `any`/history/anomaly sinks | `grep` of defined string types in the 60 files finds only ops-owned sets (`PlanCheckAction`, `TransitionAdmission`, `obligationDriftChange`, `narrowAction`, `PlanHandoffClass`, `upstreamKind`, `reservationChange`, and the new `discoveryDisposition`); no V1–V12 type is re-declared; typed cardinality enters history through `string(models.CardinalityManyToOne)` (`proceed.go`, `transition_recovery.go`) | delivered |
+| scope2-k7 / scope3-k7: consume A1/A3 vocabulary, never redefine a set; convert typed values to `string` at `any`/history/anomaly sinks | `grep` of defined string types in the 60 files finds only ops-owned sets (`PlanCheckAction`, `TransitionAdmission`, `obligationDriftChange`, `narrowAction`, `PlanHandoffClass`, `upstreamKind`, `reservationChange`, the new `discoveryDisposition` and the new `handoffRefusalClass`); no V1–V12 type is re-declared; typed cardinality enters history through `string(models.CardinalityManyToOne)` (`proceed.go`, `transition_recovery.go`) | delivered |
 | scope2-k7 / scope3-k7: undelivered owner constants leave the literal for Scope 6 | the literals this left (`replanned` marker, operator provenance, `all`, circuit-breaker status, completion codes) are resolved in tables 2 and 5 | reconciled |
 | scope4-k7: adopt delivered A3 safe-action/effects and A1 cardinality constants in touched functions | one residual raw pair in `apply_dependency_repair.go` (`"requery"`, `"none"` into `WrapLifecycleError`) and one raw `"many-to-one"` in `pipeline_ops.go` remained; both adopted here | residuals fixed (table 2) |
 | scope4-k7: `replanned` marker and operator provenance have no delivered constant | `models.ReplannedTransition`, A3 `humanNoteSourceOperatorCLI`/`actorOperator` exist | adopted (table 2) |
