@@ -11,6 +11,27 @@ import (
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
+// ObjectType is a Git object kind as `git cat-file` and `git ls-tree` name
+// it. Only the kinds the package branches on are declared; any other kind
+// git reports passes through as its raw spelling.
+type ObjectType string
+
+const (
+	ObjectTypeBlob   ObjectType = "blob"
+	ObjectTypeCommit ObjectType = "commit"
+)
+
+// BatchStatus is the unresolved answer of a `git cat-file --batch[-check]`
+// line. The set is open: git's other statuses ("ambiguous", "excluded") pass
+// through as their raw spelling.
+type BatchStatus string
+
+const (
+	BatchStatusMissing   BatchStatus = "missing"
+	BatchStatusSubmodule BatchStatus = "submodule"
+	BatchStatusDeleted   BatchStatus = "deleted"
+)
+
 // catFileObject is one answer from a `git cat-file --batch[-check]` session.
 // Missing reports that the name did not resolve to an object (git prints
 // "<name> missing", or "ambiguous" for an ambiguous short name); the other
@@ -18,11 +39,11 @@ import (
 type catFileObject struct {
 	Name    string
 	OID     string
-	Type    string
+	Type    ObjectType
 	Size    int64
 	Content []byte
 	Missing bool
-	Status  string
+	Status  BatchStatus
 }
 
 // catFileBatchable reports whether name can be sent as one line on a
@@ -90,9 +111,9 @@ func parseCatFileBatch(names []string, output []byte, withContent bool) ([]catFi
 		}
 
 		fields := strings.Fields(header)
-		if len(fields) == 2 && fields[1] == "submodule" {
+		if len(fields) == 2 && BatchStatus(fields[1]) == BatchStatusSubmodule {
 			// A gitlink whose commit is not in this repository.
-			results = append(results, catFileObject{Name: name, OID: fields[0], Missing: true, Status: "submodule"})
+			results = append(results, catFileObject{Name: name, OID: fields[0], Missing: true, Status: BatchStatusSubmodule})
 			continue
 		}
 		if len(fields) != 3 {
@@ -102,7 +123,7 @@ func parseCatFileBatch(names []string, output []byte, withContent bool) ([]catFi
 		if err != nil || size < 0 {
 			return nil, fmt.Errorf("malformed cat-file batch size for %q: %q", name, header)
 		}
-		object := catFileObject{Name: name, OID: fields[0], Type: fields[1], Size: size}
+		object := catFileObject{Name: name, OID: fields[0], Type: ObjectType(fields[1]), Size: size}
 		if withContent {
 			if int64(len(rest)) < size+1 {
 				return nil, fmt.Errorf("cat-file batch output truncated inside the content of %q", name)
@@ -121,9 +142,9 @@ func parseCatFileBatch(names []string, output []byte, withContent bool) ([]catFi
 	return results, nil
 }
 
-func unresolvedBatchStatus(header, name string) (string, bool) {
-	for _, status := range []string{"missing", "ambiguous", "excluded"} {
-		if header == name+" "+status {
+func unresolvedBatchStatus(header, name string) (BatchStatus, bool) {
+	for _, status := range []BatchStatus{BatchStatusMissing, "ambiguous", "excluded"} {
+		if header == name+" "+string(status) {
 			return status, true
 		}
 	}

@@ -857,7 +857,7 @@ func readBoundedEntry(g *git.Git, path string, entry git.TreeEntry, present bool
 	if !present || (entry.Mode != "100644" && entry.Mode != "100755") {
 		return "", "", &acceptanceArtifactRefusal{"acceptance artifact must be a present regular committed file: " + path}
 	}
-	if entry.Type != "blob" || entry.OID == "" {
+	if entry.Type != git.ObjectTypeBlob || entry.OID == "" {
 		return "", "", &acceptanceArtifactRefusal{"cannot resolve acceptance artifact: " + path}
 	}
 	blob := entry.OID

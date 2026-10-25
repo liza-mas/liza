@@ -37,7 +37,7 @@ func (g *Git) TreePathMode(treeish, path string) (mode string, present bool, err
 // Size is -1 for entries git does not size (trees and gitlinks).
 type TreeEntry struct {
 	Mode string
-	Type string
+	Type ObjectType
 	OID  string
 	Size int64
 }
@@ -67,7 +67,7 @@ func (g *Git) TreeEntryAt(treeish, path string) (entry TreeEntry, present bool, 
 	if !ok || len(fields) != 4 {
 		return TreeEntry{}, false, fmt.Errorf("malformed tree entry for %q at %q: %q", path, treeish, records[0])
 	}
-	entry = TreeEntry{Mode: fields[0], Type: fields[1], OID: fields[2], Size: -1}
+	entry = TreeEntry{Mode: fields[0], Type: ObjectType(fields[1]), OID: fields[2], Size: -1}
 	if fields[3] != "-" {
 		size, parseErr := strconv.ParseInt(fields[3], 10, 64)
 		if parseErr != nil || size < 0 {
@@ -120,12 +120,12 @@ func (g *Git) ObjectType(oid string) (objectType string, present bool, err error
 	}
 	object := objects[0]
 	if object.Missing {
-		if object.Status == "missing" {
+		if object.Status == BatchStatusMissing {
 			return "", false, nil
 		}
 		return "", false, fmt.Errorf("failed to inspect object %q: object %s", oid, object.Status)
 	}
-	return object.Type, true, nil
+	return string(object.Type), true, nil
 }
 
 // ReadBlob returns the exact bytes of path at revision without consulting the
@@ -149,7 +149,7 @@ func (g *Git) ReadBlob(revision, path string) (string, error) {
 	if object.Missing {
 		return "", fmt.Errorf("failed to resolve blob OID for %q at %q: %s", path, revision, g.missingBlobReason(revision, object.Status))
 	}
-	if object.Type != "blob" {
+	if object.Type != ObjectTypeBlob {
 		return "", fmt.Errorf("object for %q at %q is %s, not a blob", path, revision, object.Type)
 	}
 	return string(object.Content), nil
@@ -225,7 +225,7 @@ func (g *Git) BlobOIDs(lookups []BlobPath) ([]ObjectIDResult, error) {
 		switch {
 		case object.Missing:
 			results[i].Err = fmt.Errorf("failed to resolve blob OID for %q at %q: %s", lookup.Path, lookup.Revision, g.missingBlobReason(lookup.Revision, object.Status))
-		case object.Type != "blob":
+		case object.Type != ObjectTypeBlob:
 			results[i].Err = fmt.Errorf("object for %q at %q is %s, not a blob", lookup.Path, lookup.Revision, object.Type)
 		default:
 			results[i].OID = object.OID
@@ -239,9 +239,9 @@ func (g *Git) BlobOIDs(lookups []BlobPath) ([]ObjectIDResult, error) {
 // remedies differ, so one more lookup of the revision's tree decides; it runs
 // only on this error path. Any other status, or a failed probe, is reported
 // as Git gave it.
-func (g *Git) missingBlobReason(revision, status string) string {
-	if status != "missing" {
-		return "object " + status
+func (g *Git) missingBlobReason(revision string, status BatchStatus) string {
+	if status != BatchStatusMissing {
+		return "object " + string(status)
 	}
 	objects, err := g.catFileBatch([]string{revision + "^{tree}"}, false)
 	if err != nil {
@@ -304,7 +304,7 @@ func (g *Git) ResolveCommits(refs []string) ([]ObjectIDResult, error) {
 		switch {
 		case object.Missing:
 			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: object %s", refs[i], object.Status)
-		case object.Type != "commit":
+		case object.Type != ObjectTypeCommit:
 			results[i].Err = fmt.Errorf("failed to resolve commit ref %q: resolved to %s", refs[i], object.Type)
 		default:
 			results[i].OID = object.OID
