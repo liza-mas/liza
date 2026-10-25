@@ -10,7 +10,7 @@
     {
       "obligation_id": "AC-named-values",
       "file": "internal/ops/k7_vocabulary_test.go",
-      "assertion": "TestK7BlockerQuestionBoundary (3 questions accepted, 4 refused with \"maximum 3 questions allowed per blocking protocol\"), TestK7HypothesisExhaustionBoundary (0 and 1 failed_by do not block, 2 and 3 do), TestK7LimitEscalationAttemptBoundary (attempt MaxTaskAttempt-1 opens a new attempt, MaxTaskAttempt blocks), TestK7VocabularyNumericValues (every named size, limit and bound keeps its value) and TestK7VocabularySpelling (every typed vocabulary, lock label, actor, operation name, alert category and git mode keeps its literal spelling).",
+      "assertion": "TestK7BlockerQuestionBoundary (3 questions accepted, 4 refused with \"maximum 3 questions allowed per blocking protocol\"), TestK7HypothesisExhaustionBoundary (0 and 1 failed_by do not block, 2 and 3 do), TestK7LimitEscalationAttemptBoundary (attempt MaxTaskAttempt-1 opens a new attempt, MaxTaskAttempt blocks), TestK7VocabularyNumericValues (every named size, limit and bound keeps its value) and TestK7VocabularySpelling (every typed vocabulary, lock label, actor, operation name, alert category and git mode keeps its literal spelling). TestK7TransitionSentinelPrefixGuardsClaims (a \"$transitioning\" sentinel is refused by the shared \"$\" prefix guard), TestK7RuntimeOwnerLabelSeparatesLedgerFromTasks (the ledger owner marker is kept apart from task IDs) and TestK7ProjectScopedLockNameIsDotlessAndSuffixed (project and agent-lifecycle lock names keep their byte form).",
       "command_index": 0
     },
     {

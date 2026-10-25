@@ -24,8 +24,12 @@ type TransitionAttemptResult struct {
 	InitialStatus   models.TaskStatus
 }
 
+// transitionSentinelPrefix marks an AssignedTo that is a sentinel, not an agent
+// ID: a task carrying one is mid-transition and owned by no agent.
+const transitionSentinelPrefix = "$"
+
 // transitioning is the sentinel value for AssignedTo during attempt transition.
-const transitioning = "$transitioning"
+const transitioning = transitionSentinelPrefix + "transitioning"
 
 // transitionTestHooks provides injection points for testing intermediate states
 // in TransitionToNewAttempt. Nil in production — zero overhead.

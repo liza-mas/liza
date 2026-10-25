@@ -132,7 +132,8 @@ func TestK7VocabularySpelling(t *testing.T) {
 				goalCompleteStopLinearization, goalCompleteRestoreLinearization, integrationStateChangedCode,
 				lifecycleMetricsFileExt, postWorktreeDetectionMatch, configConflictExistingValue,
 				runtimeInputNoBoundInstance, stateLockHoldUnblockPrefix, stateLockHoldRequestPrefix,
-				string(lifecycleTaskStatusUnobserved),
+				string(lifecycleTaskStatusUnobserved), transitionSentinelPrefix, transitioning,
+				runtimeInputLedgerOwner,
 			},
 			want: []string{
 				"claim-task", "task-claim-worktree", "claim-task-worktree",
@@ -151,7 +152,8 @@ func TestK7VocabularySpelling(t *testing.T) {
 				"goal-complete stop", "restore stale goal-complete stop", "integration_state_changed",
 				".json", "match", "existing_value",
 				"none", "unblock_", "state-lock-hold-",
-				"UNKNOWN",
+				"UNKNOWN", "$", "$transitioning",
+				"the runtime-input ledger",
 			},
 		},
 	}
@@ -284,5 +286,44 @@ func TestK7LimitEscalationAttemptBoundary(t *testing.T) {
 	last, hit := classifyLimitEscalation(5, 5, 0, 10, models.MaxTaskAttempt)
 	if !hit || last.action != LimitActionBlocked {
 		t.Errorf("attempt %d: hit=%v action=%v, want blocked", models.MaxTaskAttempt, hit, last.action)
+	}
+}
+
+// A sentinel AssignedTo is owned by no agent: the claim guard refuses it by
+// prefix, so every sentinel spelling must start with the shared prefix.
+func TestK7TransitionSentinelPrefixGuardsClaims(t *testing.T) {
+	t.Parallel()
+
+	if !strings.HasPrefix(transitioning, transitionSentinelPrefix) {
+		t.Fatalf("sentinel %q lacks the prefix %q", transitioning, transitionSentinelPrefix)
+	}
+	assignedTo := transitioning
+	task := &models.Task{ID: "task-1", Status: models.TaskStatusReady, AssignedTo: &assignedTo}
+	_, err := selectClaimStrategy(task, claimStatuses{}, "coder")
+	if err == nil || !strings.Contains(err.Error(), "task task-1 is in transition (assigned_to: $transitioning)") {
+		t.Fatalf("error = %v, want the in-transition refusal", err)
+	}
+}
+
+func TestK7RuntimeOwnerLabelSeparatesLedgerFromTasks(t *testing.T) {
+	t.Parallel()
+
+	if got := runtimeOwnerLabel(runtimeInputLedgerOwner); got != "the runtime-input ledger" {
+		t.Errorf("ledger label = %q, want the owner unchanged", got)
+	}
+	if got := runtimeOwnerLabel("task-7"); got != "task task-7" {
+		t.Errorf("task label = %q, want %q", got, "task task-7")
+	}
+}
+
+func TestK7ProjectScopedLockNameIsDotlessAndSuffixed(t *testing.T) {
+	t.Parallel()
+
+	name := projectScopedLockName("purpose")
+	if strings.HasPrefix(name, ".") || !strings.HasSuffix(name, "-purpose") {
+		t.Errorf("lock name = %q, want a dotless project prefix and the -purpose suffix", name)
+	}
+	if got := projectScopedLockName(agentLifecycleLockPrefix + "abc"); !strings.HasSuffix(got, "-agent-lifecycle-abc") {
+		t.Errorf("agent lifecycle lock name = %q, want the -agent-lifecycle-abc suffix", got)
 	}
 }

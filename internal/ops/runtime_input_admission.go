@@ -17,6 +17,10 @@ const (
 	gitModeExecutableFile = "100755"
 )
 
+// runtimeInputLedgerOwner is the owner recorded for a variable name held by a
+// ledger instance rather than a task; runtimeOwnerLabel tells it from a task ID.
+const runtimeInputLedgerOwner = "the runtime-input ledger"
+
 // runtimeInputsStrictReason refuses runtime inputs on anything but a strict
 // acceptance task: only its submit gate runs the canonical commands that
 // consume them (ADR-0169).
@@ -159,7 +163,7 @@ func runtimeInputNameCollisions(state *models.State, owners []string, carriers [
 	for _, instance := range state.RuntimeInputs {
 		for _, name := range instance.Names {
 			if _, known := runtimeOwners[name]; !known {
-				runtimeOwners[name] = "the runtime-input ledger"
+				runtimeOwners[name] = runtimeInputLedgerOwner
 			}
 		}
 	}
@@ -201,7 +205,7 @@ func runtimeInputNameCollisions(state *models.State, owners []string, carriers [
 }
 
 func runtimeOwnerLabel(owner string) string {
-	if owner == "the runtime-input ledger" {
+	if owner == runtimeInputLedgerOwner {
 		return owner
 	}
 	return "task " + owner

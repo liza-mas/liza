@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/filelock"
-	"github.com/liza-mas/liza/internal/paths"
 )
 
 var agentLifecycleLockTimeoutNanos atomic.Int64
@@ -80,6 +79,6 @@ func agentLifecycleLock(projectRoot, agentID string) (*filelock.FileLock, error)
 	if absErr != nil {
 		return nil, fmt.Errorf("resolve project root for agent lifecycle lock: %w", absErr)
 	}
-	lockName := strings.TrimPrefix(paths.ProjectDirName(), ".") + "-" + agentLifecycleLockPrefix + key
+	lockName := projectScopedLockName(agentLifecycleLockPrefix + key)
 	return filelock.New(filepath.Join(filepath.Clean(root), lockName)), nil
 }

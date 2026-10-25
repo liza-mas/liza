@@ -44,7 +44,7 @@ func RepairInvalidDoerOwnership(statePath, projectRoot, logPath, reason string) 
 			if revertStatus == "" {
 				continue
 			}
-			if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, "$") {
+			if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, transitionSentinelPrefix) {
 				continue
 			}
 

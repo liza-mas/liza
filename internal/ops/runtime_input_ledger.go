@@ -30,6 +30,10 @@ const (
 	runtimeInputCodeUnavailable runtimeInputCode = "runtime_input_unavailable"
 )
 
+// runtimeInputRefusalSeparator joins a refusal code to the input it refuses in
+// the evidence reason ("runtime_input_consumed:w03").
+const runtimeInputRefusalSeparator = ":"
+
 // runtimeInputNoBoundInstance is the bound value of an input with no instance
 // recorded for the task.
 const runtimeInputNoBoundInstance = "none"
@@ -339,7 +343,7 @@ func runtimeInputOperatorAction(taskID, inputID string) string {
 func runtimeInputRefusalError(taskID string, refusals []runtimeInputResolution, claim *AcceptanceClaimObservation) *AcceptanceEvidenceError {
 	codes := make([]string, len(refusals))
 	for i, refusal := range refusals {
-		codes[i] = string(refusal.code) + ":" + refusal.declaration.ID
+		codes[i] = string(refusal.code) + runtimeInputRefusalSeparator + refusal.declaration.ID
 	}
 	return &AcceptanceEvidenceError{
 		TaskID: taskID, Field: "runtime_inputs", Reason: strings.Join(codes, ", "),

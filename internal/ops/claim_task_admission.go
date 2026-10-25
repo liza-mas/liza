@@ -212,7 +212,7 @@ func establishClaimRequest(bb *db.Blackboard, statePath string, state *models.St
 func selectClaimStrategy(task *models.Task, statuses claimStatuses, runtimeRole string) (claimStrategy, error) {
 	// Sentinel guard: reject claims on tasks in transition (e.g. "$transitioning"
 	// during TransitionToNewAttempt). Defense-in-depth — IsClaimable also checks this.
-	if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, "$") {
+	if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, transitionSentinelPrefix) {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is in transition (assigned_to: %s)", task.ID, *task.AssignedTo)}
 	}
 	switch task.Status {
