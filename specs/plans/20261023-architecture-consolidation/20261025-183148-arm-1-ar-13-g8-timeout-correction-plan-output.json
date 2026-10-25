@@ -1,0 +1,57 @@
+[
+  {
+    "desc": "Must: give the macOS compatibility lane's two non-race go test recipes (test-units-nosync, ci-test-slow-nosync) an explicit -timeout 30m, matching the race and integration recipes",
+    "done_when": "Validation commands 1 and 2 exit 1 at 1e7807b06 and the red run is recorded in the acceptance manifest; after the edit commands 0-3 pass, command 0 prints go test -timeout 30m on both non-race recipes with the package list and integration line unchanged, and the diff touches only Makefile lines 155 and 158 plus the new manifest, which cites the Task 1 disproof route. No G8 claim.",
+    "scope": "IN: Makefile test-units-nosync and ci-test-slow-nosync recipe lines (timeout flag only); specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-13-g8-timeout-correction.json. OUT: every other Makefile line (CI_UNIT_PACKAGES, -j2, prerequisites, race/integration/test-nosync targets, help text), tests, assertions, fixtures, goldens, .github, production Go, boundary evidence, installed binaries, -race, G8 claims.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md#Non-Functional Constraints",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261025-183148-arm-1-ar-13-g8-timeout-correction-plan.md#Task 1: Give the macOS compatibility lane's non-race go test runs an explicit 30-minute budget",
+    "inherit_inputs": {
+      "mode": "selected",
+      "selections": [
+        {
+          "upstream_task": "arm-1-ar-13-cp-5",
+          "outputs": [2]
+        }
+      ]
+    },
+    "validation": [
+      "make -n ci-test-compat-nosync",
+      "sh -c \"make -n test-units-nosync | grep -E '^go test -timeout 30m '\"",
+      "sh -c \"make -n ci-test-slow-nosync | grep -x -F 'go test -timeout 30m ./cmd/liza/'\"",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test"
+    ],
+    "validation_prerequisites": [
+      {
+        "command": "make -n ci-test-compat-nosync",
+        "executables": ["make"],
+        "env": [],
+        "probes": [["make", "--version"]]
+      },
+      {
+        "command": "sh -c \"make -n test-units-nosync | grep -E '^go test -timeout 30m '\"",
+        "executables": ["sh", "make", "grep"],
+        "env": [],
+        "probes": [["make", "--version"], ["grep", "--version"]]
+      },
+      {
+        "command": "sh -c \"make -n ci-test-slow-nosync | grep -x -F 'go test -timeout 30m ./cmd/liza/'\"",
+        "executables": ["sh", "make", "grep"],
+        "env": [],
+        "probes": [["make", "--version"], ["grep", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": ["env", "make", "go", "git", "sh", "gofmt", "find", "grep"],
+        "env": ["HOME", "PATH"],
+        "probes": [["go", "version"], ["git", "--version"]]
+      }
+    ]
+  }
+]
