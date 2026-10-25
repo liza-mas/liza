@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: amend-plan failed: modification function failed: validation failed: a correction is already pending; apply it or replace-pending after merge/cancellation

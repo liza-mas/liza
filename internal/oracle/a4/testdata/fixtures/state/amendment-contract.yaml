@@ -1,0 +1,126 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: arch-a
+    type: architecture
+    role_pair: architecture-pair
+    description: Fixture arch-a
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    assigned_to: architect-1
+    approved_by: architecture-reviewer-1
+    base_commit: "{{COMMIT:base}}"
+    review_commit: "{{COMMIT:arch}}"
+    merge_commit: "{{COMMIT:merge-arch}}"
+    history:
+      - {time: "2020-01-01T00:00:00Z", event: submitted_for_review, agent: architect-1, commit: "{{COMMIT:arch}}"}
+      - {time: "2020-01-01T00:00:00Z", event: approved, agent: architecture-reviewer-1, commit: "{{COMMIT:arch}}"}
+      - {time: "2020-01-01T00:00:00Z", event: merged, agent: architecture-reviewer-1, commit: "{{COMMIT:merge-arch}}"}
+    handoff_events:
+      - {timestamp: "2020-01-01T00:00:00Z", agent: architect-1, trigger: submission}
+      - {timestamp: "2020-01-01T00:00:00Z", agent: architecture-reviewer-1, trigger: completion}
+    output:
+      - desc: One
+        done_when: One completed
+        scope: One bounded unit
+        spec_ref: specs/vision.md
+        arch_ref: "specs/architecture/a.md#Scope 1: One"
+    plan_amendment:
+      pending: arch-a-amend-1
+      corrections: [arch-a-amend-1]
+      original_output:
+        - desc: One
+          done_when: One completed
+          scope: One bounded unit
+          spec_ref: specs/vision.md
+          arch_ref: "specs/architecture/a.md#Scope 1: One"
+  - id: arch-a-amend-1
+    type: architecture
+    role_pair: architecture-pair
+    description: Fixture arch-a-amend-1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: MERGED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    assigned_to: architect-2
+    approved_by: architecture-reviewer-2
+    base_commit: "{{COMMIT:merge-arch}}"
+    review_commit: "{{COMMIT:amend}}"
+    merge_commit: "{{COMMIT:merge-amend}}"
+    history:
+      - {time: "2020-01-01T00:00:00Z", event: submitted_for_review, agent: architect-2, commit: "{{COMMIT:amend}}"}
+      - {time: "2020-01-01T00:00:00Z", event: approved, agent: architecture-reviewer-2, commit: "{{COMMIT:amend}}"}
+      - {time: "2020-01-01T00:00:00Z", event: merged, agent: architecture-reviewer-2, commit: "{{COMMIT:merge-amend}}"}
+    handoff_events:
+      - {timestamp: "2020-01-01T00:00:00Z", agent: architect-1, trigger: submission}
+      - {timestamp: "2020-01-01T00:00:00Z", agent: architecture-reviewer-1, trigger: completion}
+    output:
+      - desc: One
+        done_when: One completed
+        scope: One bounded unit
+        spec_ref: specs/vision.md
+        arch_ref: "specs/architecture/a.md#Scope 1: One"
+    amends_plan: arch-a
+    amendment_mode: contract
+    planning_change: {kind: correction, trigger: unknown, original_task_id: arch-a}
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: 2020-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [arch-a, arch-a-amend-1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING

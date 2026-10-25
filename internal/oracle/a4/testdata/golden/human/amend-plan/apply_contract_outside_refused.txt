@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: amend-plan failed: modification function failed: validation failed: bounded contract amendment: candidate changes text outside referenced contract sections: specs/architecture/a.md
