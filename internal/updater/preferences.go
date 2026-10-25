@@ -11,10 +11,17 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-const (
-	channelStable = "stable"
-	channelMain   = "main"
+// Channel is the update channel. It holds any string: unknown values load
+// from flags, environment and preferences as today and are refused by
+// validateChannel.
+type Channel string
 
+const (
+	channelStable Channel = "stable"
+	channelMain   Channel = "main"
+)
+
+const (
 	channelEnvSuffix = "UPDATE_CHANNEL"
 	checkEnvSuffix   = "CHECK_UPDATE"
 	skipEnvSuffix    = "SKIP_AUTO_UPDATE"
@@ -42,13 +49,13 @@ func checkUpdateEnvEnabled(cfg Config) bool {
 }
 
 type preferences struct {
-	CheckUpdate *bool  `json:"check_update,omitempty"`
-	Channel     string `json:"channel,omitempty"`
+	CheckUpdate *bool   `json:"check_update,omitempty"`
+	Channel     Channel `json:"channel,omitempty"`
 }
 
 type parsedUpdateFlags struct {
 	checkUpdate  *bool
-	channel      string
+	channel      Channel
 	settingsOnly bool
 }
 
@@ -78,7 +85,7 @@ func readUpdatePreferences() preferences {
 	if err := json.Unmarshal(data, &prefs); err != nil {
 		return preferences{}
 	}
-	prefs.Channel = strings.ToLower(strings.TrimSpace(prefs.Channel))
+	prefs.Channel = normalizeChannel(string(prefs.Channel))
 	return prefs
 }
 
@@ -145,14 +152,14 @@ func parseUpdateFlags(args []string) (parsedUpdateFlags, error) {
 			if i+1 >= len(args) || args[i+1] == "--" {
 				return flags, &FatalError{fmt.Errorf("--update-channel requires a value (valid values: stable, main)")}
 			}
-			channel := strings.ToLower(strings.TrimSpace(args[i+1]))
+			channel := normalizeChannel(args[i+1])
 			flags.channel = channel
 			if err := validateChannel(channel); err != nil {
 				return flags, err
 			}
 			i++
 		case strings.HasPrefix(arg, "--update-channel="):
-			channel := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--update-channel=")))
+			channel := normalizeChannel(strings.TrimPrefix(arg, "--update-channel="))
 			flags.channel = channel
 			if err := validateChannel(channel); err != nil {
 				return flags, err
@@ -181,7 +188,7 @@ func SavedUpdateSettingsSummary() string {
 	if channel == "" {
 		channel = channelStable
 	}
-	return fmt.Sprintf("Update settings saved: check_update=%s, channel=%s\n", checkUpdate, channel)
+	return fmt.Sprintf("Update settings saved: check_update=%s, channel=%s\n", checkUpdate, string(channel))
 }
 
 func writeUpdatePreferences(prefs preferences) error {
@@ -192,7 +199,7 @@ func writeUpdatePreferences(prefs preferences) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create global %s config dir: %w", brand.NameTitle, err)
 	}
-	prefs.Channel = strings.ToLower(strings.TrimSpace(prefs.Channel))
+	prefs.Channel = normalizeChannel(string(prefs.Channel))
 	data, err := json.MarshalIndent(prefs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode update preferences: %w", err)
@@ -204,23 +211,28 @@ func writeUpdatePreferences(prefs preferences) error {
 	return nil
 }
 
-func validateChannel(channel string) error {
-	channel = strings.ToLower(strings.TrimSpace(channel))
+// normalizeChannel is the permissive boundary conversion from raw input.
+func normalizeChannel(raw string) Channel {
+	return Channel(strings.ToLower(strings.TrimSpace(raw)))
+}
+
+func validateChannel(channel Channel) error {
+	channel = normalizeChannel(string(channel))
 	if channel != channelStable && channel != channelMain {
-		return &FatalError{fmt.Errorf("invalid update channel %q (valid values: stable, main)", channel)}
+		return &FatalError{fmt.Errorf("invalid update channel %q (valid values: stable, main)", string(channel))}
 	}
 	return nil
 }
 
-func updateChannel(cfg Config) string {
+func updateChannel(cfg Config) Channel {
 	if channel, ok := updateChannelFlag(cfg.Args); ok {
 		return channel
 	}
 	if cfg.Channel != "" {
-		return strings.ToLower(strings.TrimSpace(cfg.Channel))
+		return normalizeChannel(string(cfg.Channel))
 	}
 	if envChannel := envValueForSuffix(cfg, channelEnvSuffix); envChannel != "" {
-		return strings.ToLower(strings.TrimSpace(envChannel))
+		return normalizeChannel(envChannel)
 	}
 	if prefs := readUpdatePreferences(); prefs.Channel != "" {
 		return prefs.Channel
@@ -228,7 +240,7 @@ func updateChannel(cfg Config) string {
 	return channelStable
 }
 
-func updateChannelFlag(args []string) (string, bool) {
+func updateChannelFlag(args []string) (Channel, bool) {
 	flags, err := parseUpdateFlags(args)
 	if err != nil {
 		return "", false

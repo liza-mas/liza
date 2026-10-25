@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "W6",
+      "file": "internal/updater/updater_test.go",
+      "assertion": "TestWriteUpdatePreferencesChannelBytes writes a typed preferences channel and asserts the exact persisted bytes and the typed round trip; TestUpdateChannelFlagOverridesEnv, TestUpdateChannelEnvOverridesSavedPreference, TestUpdateChannelStopsAtDoubleDash, TestUpdateChannelLastWins and TestDisableUpdateChecksPreservesSavedChannel keep selection precedence and saved-channel preservation over the Channel-typed Config, flag, environment and preference carriers.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-types",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-callers",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-unknown",
+      "file": "internal/updater/updater_test.go",
+      "assertion": "TestValidateChannel, TestMaybeUpdateAndReexecInvalidChannelFatal, TestMaybeUpdateAndReexecInvalidEnvChannelFatal and TestLookupCandidateInvalidChannelReturnsFatalError refuse unknown flag, environment and Config channels with the unchanged FatalError message; TestUnknownSavedChannelLoadsThenIsRefused loads an unknown saved channel as today and refuses it at the same validation boundary with the same message.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a2/cli/update_test.go",
+      "assertion": "TestOracleA2UpdateSettings (C-14) runs the settings-only flags and the preferences file live against unchanged goldens, fixtures, twins and PROVENANCE, together with the remaining oracles.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-guards",
+      "file": "internal/testguard/archguard/k4_guard_test.go",
+      "assertion": "TestK4ImportDirectionGuard and TestS1SizeGuard run under make lint: the change adds no import edge, package or size offender.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-policy",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    },
+    {
+      "obligation_id": "AC-order",
+      "approved_reference_id": "arch-files"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a2-context"
+    }
+  ]
+}

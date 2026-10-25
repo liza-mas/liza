@@ -40,7 +40,7 @@ type Config struct {
 	Stderr         io.Writer
 	IsInteractive  func() bool
 	CheckUpdate    bool
-	Channel        string
+	Channel        Channel
 	InstallTimeout time.Duration
 	LookupLatest   func(context.Context) (string, error)
 	LookupMain     func(context.Context) (string, error)
@@ -59,7 +59,7 @@ type Config struct {
 }
 
 type candidate struct {
-	Channel string
+	Channel Channel
 	Current string
 	Latest  string
 	Ref     string

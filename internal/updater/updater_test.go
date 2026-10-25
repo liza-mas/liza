@@ -1513,7 +1513,7 @@ func TestUpdateChannelStopsAtDoubleDash(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want string
+		want Channel
 	}{
 		{name: "channel before --", args: []string{"liza", "--update-channel=main", "version", "--", "--update-channel=stable"}, want: "main"},
 		{name: "channel after -- ignored", args: []string{"liza", "version", "--", "--update-channel=main"}, want: "stable"},
@@ -1534,7 +1534,7 @@ func TestUpdateChannelStopsAtDoubleDash(t *testing.T) {
 func TestValidateChannel(t *testing.T) {
 	tests := []struct {
 		name    string
-		channel string
+		channel Channel
 		wantErr bool
 	}{
 		{name: "stable", channel: "stable", wantErr: false},
@@ -1608,7 +1608,7 @@ func TestUpdateChannelLastWins(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want string
+		want Channel
 	}{
 		{name: "stable then main", args: []string{"liza", "--update-channel=stable", "--update-channel=main", "version"}, want: "main"},
 		{name: "main then stable", args: []string{"liza", "--update-channel=main", "--update-channel=stable", "version"}, want: "stable"},
@@ -1641,6 +1641,56 @@ func TestLookupCandidateInvalidChannelReturnsFatalError(t *testing.T) {
 	var fatalErr *FatalError
 	if !errors.As(err, &fatalErr) {
 		t.Fatal("lookupCandidate with invalid channel should return FatalError")
+	}
+}
+
+func TestWriteUpdatePreferencesChannelBytes(t *testing.T) {
+	home := tempHome(t)
+	enabled := true
+
+	if err := writeUpdatePreferences(preferences{CheckUpdate: &enabled, Channel: Channel(" MAIN ")}); err != nil {
+		t.Fatalf("writeUpdatePreferences returned error: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(home, paths.GlobalDirName(), updatePrefs))
+	if err != nil {
+		t.Fatalf("read prefs: %v", err)
+	}
+	want := "{\n  \"check_update\": true,\n  \"channel\": \"main\"\n}\n"
+	if string(got) != want {
+		t.Fatalf("preference bytes = %q, want %q", got, want)
+	}
+	if prefs := readPrefsForTest(t, home); prefs.Channel != channelMain {
+		t.Fatalf("round-trip channel = %q, want %q", prefs.Channel, channelMain)
+	}
+}
+
+func TestUnknownSavedChannelLoadsThenIsRefused(t *testing.T) {
+	home := tempHome(t)
+	writePrefsForTest(t, home, preferences{Channel: "Beta"})
+
+	if got := readUpdatePreferences().Channel; got != "beta" {
+		t.Fatalf("loaded saved channel = %q, want beta", got)
+	}
+	if got := updateChannel(Config{Env: []string{}}); got != "beta" {
+		t.Fatalf("updateChannel = %q, want beta", got)
+	}
+
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Env:            []string{},
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+	})
+	var fatalErr *FatalError
+	if !errors.As(err, &fatalErr) {
+		t.Fatalf("saved unknown channel error = %v, want FatalError", err)
+	}
+	want := `invalid update channel "beta" (valid values: stable, main)`
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 
