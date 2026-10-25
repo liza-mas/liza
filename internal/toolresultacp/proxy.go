@@ -179,8 +179,8 @@ func decodeParams(m wireMessage) map[string]json.RawMessage {
 }
 
 func (p *proxy) fromHost(m wireMessage) error {
-	method := field(m, "method")
-	if method == "initialize" {
+	method := Method(field(m, "method"))
+	if method == MethodInitialize {
 		params := decodeParams(m)
 		var caps map[string]json.RawMessage
 		_ = json.Unmarshal(params["clientCapabilities"], &caps)
@@ -190,7 +190,7 @@ func (p *proxy) fromHost(m wireMessage) error {
 		p.terminalEnabled = enabled
 		p.mu.Unlock()
 	}
-	if method == "session/new" {
+	if method == MethodSessionNew {
 		params := decodeParams(m)
 		var cwd string
 		_ = json.Unmarshal(params["cwd"], &cwd)
@@ -198,7 +198,7 @@ func (p *proxy) fromHost(m wireMessage) error {
 		p.newSessions[string(m["id"])] = cwd
 		p.mu.Unlock()
 	}
-	if method == "session/prompt" {
+	if method == MethodSessionPrompt {
 		params := decodeParams(m)
 		var sid string
 		_ = json.Unmarshal(params["sessionId"], &sid)
@@ -206,7 +206,7 @@ func (p *proxy) fromHost(m wireMessage) error {
 		delete(p.cancelled, sid)
 		p.mu.Unlock()
 	}
-	if method == "session/cancel" {
+	if method == MethodSessionCancel {
 		params := decodeParams(m)
 		var sid string
 		_ = json.Unmarshal(params["sessionId"], &sid)
@@ -247,7 +247,7 @@ func (p *proxy) fromHost(m wireMessage) error {
 }
 
 func (p *proxy) fromAgent(m wireMessage) error {
-	method := field(m, "method")
+	method := Method(field(m, "method"))
 	if method == "" {
 		p.mu.Lock()
 		cwd, ok := p.newSessions[string(m["id"])]
@@ -263,7 +263,7 @@ func (p *proxy) fromAgent(m wireMessage) error {
 		}
 		p.mu.Unlock()
 	}
-	if method == "fs/read_text_file" && m["id"] != nil {
+	if method == MethodFSReadTextFile && m["id"] != nil {
 		params := decodeParams(m)
 		meta := p.config.Metadata
 		meta.Tool = "read"
@@ -273,7 +273,7 @@ func (p *proxy) fromAgent(m wireMessage) error {
 		p.reads[string(m["id"])] = meta
 		p.mu.Unlock()
 	}
-	if strings.HasPrefix(method, "terminal/") && m["id"] != nil {
+	if strings.HasPrefix(string(method), terminalMethodPrefix) && m["id"] != nil {
 		p.workers.Add(1)
 		go func() {
 			defer p.workers.Done()
@@ -291,7 +291,7 @@ func (p *proxy) fromAgent(m wireMessage) error {
 	return p.host.send(m)
 }
 
-func (p *proxy) terminalCall(method string, params json.RawMessage) (any, error) {
+func (p *proxy) terminalCall(method Method, params json.RawMessage) (any, error) {
 	var req terminalRequest
 	if json.Unmarshal(params, &req) != nil {
 		return nil, errors.New("invalid terminal arguments")
@@ -302,7 +302,7 @@ func (p *proxy) terminalCall(method string, params json.RawMessage) (any, error)
 	if !enabled {
 		return nil, errors.New("terminal capability is disabled")
 	}
-	if method == "terminal/create" {
+	if method == MethodTerminalCreate {
 		p.mu.Lock()
 		dir := p.sessions[req.SessionID]
 		cancelled := p.cancelled[req.SessionID]
@@ -335,9 +335,9 @@ func (p *proxy) terminalCall(method string, params json.RawMessage) (any, error)
 		return nil, errors.New("unknown terminal")
 	}
 	switch method {
-	case "terminal/output":
+	case MethodTerminalOutput:
 		return t.output(p.config.Store, p.config.Metadata)
-	case "terminal/wait_for_exit":
+	case MethodTerminalWait:
 		select {
 		case <-t.done:
 			t.mu.Lock()
@@ -346,10 +346,10 @@ func (p *proxy) terminalCall(method string, params json.RawMessage) (any, error)
 		case <-p.ctx.Done():
 			return nil, p.ctx.Err()
 		}
-	case "terminal/kill":
+	case MethodTerminalKill:
 		_ = killProcess(t.cmd)
 		return map[string]any{}, nil
-	case "terminal/release":
+	case MethodTerminalRelease:
 		t.close()
 		p.mu.Lock()
 		delete(p.terminals, req.TerminalID)
