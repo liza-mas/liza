@@ -2,8 +2,9 @@
 // tool registry (catalog merged with agent_tools), CLI, profile and model
 // selection, role-model validation, launch-plan rendering, executable
 // prerequisites and the default-role validation policy. It starts no process,
-// registers nothing and touches no worktree, so the agent runtime, process
-// spawning and presentation share it without importing one another.
+// registers nothing; opted-in launches refresh their contract files through
+// embedded. The agent runtime, process spawning and presentation share it
+// without importing one another.
 package agentlaunch
 
 import (
@@ -89,6 +90,8 @@ type LaunchPlan struct {
 	ACPXSetModeArgs      []string
 	ACPXPromptArgs       []string
 	ACPXEventMode        string
+	// SystemPromptContracts: Args inject the contracts (use-system-prompt mode).
+	SystemPromptContracts bool
 }
 
 type LaunchPlanRequest struct {
@@ -233,37 +236,46 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if err != nil {
 		return LaunchPlan{}, err
 	}
+	systemPromptContracts := false
+	if provider := systemPromptProvider(req.ProjectRoot, req.AgentID, toolName, tool); provider != "" {
+		args, err = injectSystemPromptArgs(args, provider, req.ProjectRoot)
+		if err != nil {
+			return LaunchPlan{}, fmt.Errorf("%s system prompt contracts: %w", toolName, err)
+		}
+		systemPromptContracts = true
+	}
 	acpx, err := expandACPXArgs(toolName, tool, vars)
 	if err != nil {
 		return LaunchPlan{}, err
 	}
 
 	return LaunchPlan{
-		ToolName:             toolName,
-		Directory:            req.ProjectRoot,
-		ProfileName:          req.ProfileName,
-		Model:                base.model,
-		Backend:              base.backend,
-		Executable:           base.executable,
-		Args:                 args,
-		PromptTransport:      base.transport,
-		PromptFile:           req.PromptFile,
-		EnvFiles:             append([]string(nil), tool.EnvFiles...),
-		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0,
-		ValidationExecution:  tool.ValidationExecution,
-		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
-		ContractKey:          strings.TrimSpace(tool.ContractKey),
-		UsesStdin:            base.transport == providers.PromptTransportStdin,
-		UsesPromptFile:       base.transport == providers.PromptTransportFile,
-		RequiresCodexWrapper: toolName == "codex",
-		ProviderKey:          strings.TrimSpace(tool.ProviderKey),
-		ACPXAgent:            acpxAgent,
-		ACPXSessionName:      sessionName,
-		ACPXShowArgs:         acpx.show,
-		ACPXEnsureArgs:       acpx.ensure,
-		ACPXSetModeArgs:      acpx.setMode,
-		ACPXPromptArgs:       acpx.prompt,
-		ACPXEventMode:        strings.TrimSpace(tool.ACPXEventMode),
+		ToolName:              toolName,
+		Directory:             req.ProjectRoot,
+		ProfileName:           req.ProfileName,
+		Model:                 base.model,
+		Backend:               base.backend,
+		Executable:            base.executable,
+		Args:                  args,
+		PromptTransport:       base.transport,
+		PromptFile:            req.PromptFile,
+		EnvFiles:              append([]string(nil), tool.EnvFiles...),
+		OptionalEnvFiles:      len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0,
+		ValidationExecution:   tool.ValidationExecution,
+		RequiredExecutables:   append([]string(nil), tool.RequiredExecutables...),
+		ContractKey:           strings.TrimSpace(tool.ContractKey),
+		UsesStdin:             base.transport == providers.PromptTransportStdin,
+		UsesPromptFile:        base.transport == providers.PromptTransportFile,
+		RequiresCodexWrapper:  toolName == "codex",
+		ProviderKey:           strings.TrimSpace(tool.ProviderKey),
+		ACPXAgent:             acpxAgent,
+		ACPXSessionName:       sessionName,
+		ACPXShowArgs:          acpx.show,
+		ACPXEnsureArgs:        acpx.ensure,
+		ACPXSetModeArgs:       acpx.setMode,
+		ACPXPromptArgs:        acpx.prompt,
+		ACPXEventMode:         strings.TrimSpace(tool.ACPXEventMode),
+		SystemPromptContracts: systemPromptContracts,
 	}, nil
 }
 

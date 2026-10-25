@@ -218,6 +218,57 @@ Liza never overwrites user-owned contract files. If a preferred global path is
 occupied, initialization retains or creates the provider's repo contract. A
 managed repo link is removed only after the active global link is verified.
 
+### Optional: contracts in the system prompt
+
+By default every agent session reads the contracts with tool calls, and the
+`enforce-init.sh` hook blocks other tools until it has. That is about 70 KB
+re-read by every agent, every session. Opt a project into delivering them in
+the CLI system prompt instead:
+
+```bash
+liza use-system-prompt            # enable (re-run to refresh)
+liza use-system-prompt --dry-run  # show what would change
+liza use-system-prompt --revert   # restore forced reads
+```
+
+The command builds `.liza/system-prompts/{multi_agent,pairing,subagent}.md`
+verbatim from the installed contracts (plus the project `GUARDRAILS.md`, and
+for pairing `REPOSITORY.md`/`docs/USAGE.md`) and writes the marker
+`.liza/system-prompt-mode.json`. It does not edit `.claude/settings.json` or
+`.codex/hooks.json`. It refreshes installed `enforce-init.sh`/`session-context.sh`
+scripts that predate this binary, since those would still gate injected
+sessions. `--revert` removes the files and the marker.
+
+Multi-agent sessions on the `claude` and `codex` CLIs then receive
+`multi_agent.md` in their system prompt (`--append-system-prompt-file` with
+`--exclude-dynamic-system-prompt-sections` for Claude, `-c
+developer_instructions=…` for Codex) and run with
+`LIZA_SYSTEM_PROMPT_CONTRACTS=1`, which lets them past the `enforce-init.sh` gate and drops the read instruction
+from the session-start context. The file is rebuilt at each launch when a source
+changed. Its header says the contracts carry the weight of files read at session
+start and do not outrank your own `CLAUDE.md`/`AGENTS.md`. The prefix is
+identical for every agent, so agents of one burst reuse the provider prompt cache
+and skip the contract-read turns. Codex takes the
+contracts as one command-line argument, so a Codex launch fails with a clear
+error once it reaches the 128 KiB Linux argument limit; keep `GUARDRAILS.md`
+lean or revert. That value replaces any `developer_instructions` set in your
+Codex config for these sessions. On Windows the whole command line is capped at
+32,767 characters, below the contracts, so Codex keeps the forced reads there;
+Claude reads the file and is injected on every OS.
+
+Every other session keeps the gate and reads the contracts as before: other
+providers, ACPX launches, Codex on Windows, and pairing sessions. See
+[ADR-0236](specs/architecture/ADR/0236-opt-in-contracts-in-the-cli-system-prompt.md). Claude has no settings key that
+appends to the system prompt, so for an interactive Claude pairing session start
+it yourself with:
+
+```bash
+LIZA_SYSTEM_PROMPT_CONTRACTS=1 claude --append-system-prompt-file .liza/system-prompts/pairing.md
+```
+
+Re-run `liza use-system-prompt` after editing `REPOSITORY.md` or
+`docs/USAGE.md` to refresh `pairing.md`.
+
 ## Manual Provider Notes
 
 Claude and Codex are the recommended providers. OpenCode is supported through

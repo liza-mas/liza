@@ -15,6 +15,13 @@
 
 input=$(cat)
 
+# The launcher sets this only when it put the contracts in the system prompt
+# (`__BRAND_BINARY_NAME__ use-system-prompt`): the reads this gate forces are done.
+brand_system_prompt_contracts_var="__BRAND_ENV_PREFIX__""_SYSTEM_PROMPT_CONTRACTS"
+if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
+  exit 0
+fi
+
 # Extract a top-level JSON string value without jq, preserving escaped quotes.
 json_val() {
   local key="$1" rest value ch escape=0

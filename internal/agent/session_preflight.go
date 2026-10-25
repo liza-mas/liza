@@ -20,9 +20,12 @@ import (
 
 // resolveLaunchEnvironment refreshes configured overlays once. Subsequent
 // subprocesses consume this snapshot, including executable lookup against PATH.
+// It never carries the system-prompt bypass: an injected parent would otherwise
+// open the gate for every session it starts. CLI launches that inject re-add it.
 func resolveLaunchEnvironment(plan agentlaunch.LaunchPlan, root, agentID, generation string, frozen []string) ([]string, error) {
 	if frozen != nil {
-		return scrubRuntimeInputNames(root, append([]string{}, frozen...))
+		env, err := scrubRuntimeInputNames(root, append([]string{}, frozen...))
+		return systemPromptContractsEnv(env, false), err
 	}
 	env, err := sessionvalidation.ResolveEnvironment(os.Environ(), root, plan.EnvFiles, plan.OptionalEnvFiles)
 	if err != nil {
@@ -50,7 +53,7 @@ func resolveLaunchEnvironment(plan agentlaunch.LaunchPlan, root, agentID, genera
 		}
 	}
 	env = withClaudeCommandCeiling(plan, env)
-	return scrubDeniedNames(agentProcessEnv(env, agentID, generation), deny), nil
+	return systemPromptContractsEnv(scrubDeniedNames(agentProcessEnv(env, agentID, generation), deny), false), nil
 }
 
 // claudeCommandCeilingName caps the timeout a Claude Bash call may request,

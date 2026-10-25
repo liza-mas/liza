@@ -892,6 +892,8 @@ func sessionContextHookEnv(extraEnv []string) []string {
 			continue
 		case strings.HasPrefix(item, "LIZA_ENABLE_SEMBLE="):
 			continue
+		case strings.HasPrefix(item, brand.EnvName("SYSTEM_PROMPT_CONTRACTS")+"="):
+			continue // set when the suite runs inside an injected agent session
 		}
 		env = append(env, item)
 	}
