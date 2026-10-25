@@ -1,0 +1,52 @@
+{
+  "id": "SB1",
+  "base": "legacy",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "READY_FOR_REVIEW",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "assigned_to": "coder-1",
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          }
+        ],
+        "review_commit": "{{commit:candidate}}"
+      }
+    ]
+  },
+  "step": {
+    "agent": "coder-1",
+    "args": [
+      "submit-for-review",
+      "task-1",
+      "{{commit:candidate}}"
+    ],
+    "exit": 1,
+    "contains": "is not IMPLEMENTING_CODE"
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

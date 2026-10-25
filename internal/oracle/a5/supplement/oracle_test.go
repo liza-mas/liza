@@ -53,14 +53,31 @@ type caseInput struct {
 	Delta json.RawMessage `json:"state_delta"`
 	// RecipeExtra appends labelled integration commits to the base recipe.
 	RecipeExtra []recipeStep `json:"recipe_extra,omitempty"`
-	Step        step         `json:"step"`
-	Modes       []string     `json:"modes"`
+	// CandidateFiles replaces the candidate commit's files (default feature.go
+	// and feature_test.go); WorktreeBranch moves the task worktree onto a new
+	// branch after the candidate commit; IntegrationAfter appends integration
+	// commits once the task worktree exists. WorktreeIntact asserts that the step
+	// left the worktree on the candidate, clean and not mid-rebase.
+	CandidateFiles   []string     `json:"candidate_files,omitempty"`
+	WorktreeBranch   string       `json:"worktree_branch,omitempty"`
+	IntegrationAfter []recipeStep `json:"integration_after,omitempty"`
+	WorktreeIntact   bool         `json:"worktree_intact,omitempty"`
+	Step             step         `json:"step"`
+	Modes            []string     `json:"modes"`
 }
 
 // This allocation is independent of fixture discovery: removing a manifest or a
 // capture mode must fail instead of silently shrinking the pinned surface.
 //
 // SA*: a submit refused by loadDeclaredAcceptanceInput (allocation review).
+// SB*: a submit refused before any effect by the preconditions and Git checks of
+// prepareSubmitForReview, or routed to INTEGRATION_FAILED by a rebase conflict.
+//
+// Submission refusal -> case: status not executing SB1; no pre-execution
+// checkpoint SB2; commit ref not the worktree HEAD SB3, unresolvable SB8;
+// worktree on the wrong branch SB4; no test file under TDD SB5; rebase conflict
+// SB6; task without a worktree SB7. Tool, HEAD-read and live-HEAD race failures
+// stay mapped to their white-box tests.
 // VR*: a validation preflight refused or recorded by prepareValidationPreflight.
 //
 // Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
@@ -79,6 +96,8 @@ var inventory = map[string]string{
 	"SA1": "json human state", "SA2": "json human state", "SA3": "json human state", "SA4": "json human state",
 	"SA5": "json human state", "SA6": "json human state", "SA7": "json human state", "SA8": "json human state",
 	"SA9": "json human state", "SA10": "json human state",
+	"SB1": "json human state", "SB2": "json human state", "SB3": "json human state", "SB4": "json human state",
+	"SB5": "json human state", "SB6": "json human state", "SB7": "json human state", "SB8": "json human state",
 	"VR1": "state", "VR2": "state alerts", "VR3": "state alerts", "VR4": "state alerts",
 	"VR5": "state alerts", "VR6": "state alerts", "VR7": "state alerts", "VR8": "state alerts",
 	"VR9": "state alerts", "VR10": "state alerts", "VR11": "state alerts", "VR12": "state alerts",
@@ -138,6 +157,9 @@ func TestOracleA5Supplement(t *testing.T) {
 						t.Fatalf("%s step did not reach %q: %s %s", c.ID, c.Step.Contains, r.Stdout, r.Stderr)
 					}
 					capture(t, f, c, mode, r, before, read(t, f.statePath()))
+					if c.WorktreeIntact {
+						f.requireWorktreeIntact(t)
+					}
 				})
 			}
 		})

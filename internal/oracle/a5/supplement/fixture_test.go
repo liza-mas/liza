@@ -50,7 +50,32 @@ func materialise(t *testing.T, c caseInput) *fixture {
 	f.git(t, f.project, "config", "user.name", "Oracle")
 	f.git(t, f.project, "config", "user.email", "oracle@example.invalid")
 	write(t, filepath.Join(f.project, ".gitignore"), []byte(".liza/\n.worktrees/\n"))
-	for _, r := range append(base.Recipe, c.RecipeExtra...) {
+	f.commitRecipe(t, append(base.Recipe, c.RecipeExtra...))
+	wt := filepath.Join(f.project, ".worktrees/task-1")
+	f.git(t, f.project, "worktree", "add", "-b", "task/task-1", wt, "integration")
+	candidate := c.CandidateFiles
+	if candidate == nil {
+		candidate = []string{"feature.go", "feature_test.go"}
+	}
+	for _, path := range candidate {
+		write(t, filepath.Join(wt, path), []byte("package fixture\n"))
+	}
+	f.git(t, wt, append([]string{"add"}, candidate...)...)
+	f.git(t, wt, "commit", "-m", "candidate")
+	f.labels["candidate"] = f.git(t, wt, "rev-parse", "HEAD")
+	if c.WorktreeBranch != "" {
+		f.git(t, wt, "checkout", "-q", "-b", c.WorktreeBranch)
+	}
+	f.commitRecipe(t, c.IntegrationAfter)
+	state := mergeFixture(t, []byte(f.resolve(string(base.State))), []byte(f.resolve(string(c.Delta))))
+	writeFixtureState(t, f, state)
+	return f
+}
+
+// commitRecipe commits each recipe step to the integration branch of the project.
+func (f *fixture) commitRecipe(t testing.TB, steps []recipeStep) {
+	t.Helper()
+	for _, r := range steps {
 		paths := []string{".gitignore"}
 		for path, contents := range r.Files {
 			write(t, filepath.Join(f.project, path), []byte(f.resolve(contents)))
@@ -66,17 +91,6 @@ func materialise(t *testing.T, c caseInput) *fixture {
 			f.labels[r.Label] = f.git(t, f.project, "rev-parse", "HEAD")
 		}
 	}
-	wt := filepath.Join(f.project, ".worktrees/task-1")
-	f.git(t, f.project, "worktree", "add", "-b", "task/task-1", wt, "integration")
-	for _, path := range []string{"feature.go", "feature_test.go"} {
-		write(t, filepath.Join(wt, path), []byte("package fixture\n"))
-	}
-	f.git(t, wt, "add", "feature.go", "feature_test.go")
-	f.git(t, wt, "commit", "-m", "candidate")
-	f.labels["candidate"] = f.git(t, wt, "rev-parse", "HEAD")
-	state := mergeFixture(t, []byte(f.resolve(string(base.State))), []byte(f.resolve(string(c.Delta))))
-	writeFixtureState(t, f, state)
-	return f
 }
 
 // resolve substitutes the project root and the labelled commits.
@@ -147,4 +161,33 @@ func (f *fixture) normaliser() *oracle.Normaliser {
 		n.Literal(sha[:7], "<commit:"+label+">")
 	}
 	return n
+}
+
+// requireWorktreeIntact fails unless the task worktree is still on its task
+// branch at the candidate commit, with a clean tree and no rebase in progress.
+func (f *fixture) requireWorktreeIntact(t testing.TB) {
+	t.Helper()
+	wt := filepath.Join(f.project, ".worktrees/task-1")
+	if head := f.git(t, wt, "rev-parse", "HEAD"); head != f.labels["candidate"] {
+		t.Errorf("worktree HEAD %s, want the candidate %s", head, f.labels["candidate"])
+	}
+	if branch := f.git(t, wt, "rev-parse", "--abbrev-ref", "HEAD"); branch != "task/task-1" {
+		t.Errorf("worktree branch %s, want task/task-1", branch)
+	}
+	if status := f.git(t, wt, "status", "--porcelain"); status != "" {
+		t.Errorf("worktree is not clean: %s", status)
+	}
+	for _, dir := range []string{"rebase-merge", "rebase-apply"} {
+		if gitDir := f.git(t, wt, "rev-parse", "--git-path", dir); pathExists(gitDir, wt) {
+			t.Errorf("worktree has a rebase in progress (%s)", dir)
+		}
+	}
+}
+
+func pathExists(path, dir string) bool {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }

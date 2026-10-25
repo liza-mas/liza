@@ -1,0 +1,30 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "none",
+        "operation": "submit-for-review",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "task-1",
+        "task_status": "IMPLEMENTING_CODE",
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: INVALID_INPUT (safe_action=correct_input): validation failed: task task-1: pre-execution checkpoint required before submission (use \"liza write-checkpoint task-1\")"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "none",
+      "operation": "submit-for-review",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "task-1",
+      "task_status": "IMPLEMENTING_CODE",
+      "transition_id": "<ID>"
+    }
+  }
+}

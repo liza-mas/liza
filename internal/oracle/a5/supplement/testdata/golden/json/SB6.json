@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "effects": "unknown",
+        "operation": "submit-for-review",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "task-1",
+        "task_status": "INTEGRATION_FAILED",
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: STATE_CHANGED (safe_action=requery): integration failed: merge conflict"
+    },
+    "ok": false,
+    "result": {
+      "effects": "unknown",
+      "operation": "submit-for-review",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "task-1",
+      "task_status": "INTEGRATION_FAILED",
+      "transition_id": "<ID>"
+    }
+  }
+}
