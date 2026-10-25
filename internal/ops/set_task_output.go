@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
@@ -59,7 +60,7 @@ func SetTaskOutputWithAuthorityAndOptions(projectRoot string, input *SetTaskOutp
 
 func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority) (result *SetTaskOutputResult, retErr error) {
 	if input == nil {
-		return nil, WrapLifecycleError("set-task-output", nil, fmt.Errorf("output input is required"), models.LifecycleInvalidInput, "correct_input", "none")
+		return nil, WrapLifecycleError("set-task-output", nil, fmt.Errorf("output input is required"), models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	invocation := NewLifecycleInvocation(projectRoot)
 	var outcome models.LifecycleOutcome
@@ -97,83 +98,34 @@ func setTaskOutputResult(projectRoot string, input *SetTaskOutputInput, authorit
 	return &SetTaskOutputResult{LifecycleOutcome: outcome, TaskID: input.TaskID, OutputCount: len(input.Output), StatePath: paths.New(projectRoot).StatePath(), Warnings: warnings}, nil
 }
 
+// Operational-error phase labels of set-task-output, in execution order.
+const (
+	setTaskOutputPhaseValidate     = "validate-output"
+	setTaskOutputPhaseLoadPipeline = "load-pipeline"
+	setTaskOutputPhasePersist      = "persist-output"
+)
+
 func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutputInput, authority *models.AgentAuthority, outcome *models.LifecycleOutcome, warnings *[]string) (retErr error) {
-	phase := "validate-output"
+	phase := setTaskOutputPhaseValidate
 	defer func() {
-		if retErr == nil {
-			return
+		if retErr != nil {
+			retErr = setTaskOutputOperationalError(projectRoot, input, phase, retErr)
 		}
-		details := map[string]any{
-			"operation": "set-task-output", "task_id": input.TaskID,
-			"state_path": paths.New(projectRoot).StatePath(), "output_count": len(input.Output),
-			"recovery_hint": "Inspect the task state and history before retrying; a later reset may clear a previously saved output.",
-		}
-		// Preserve opted-in diagnostics (including generation fencing) while
-		// exposing only the OS error text, never arbitrary wrapped payloads.
-		var detailed interface{ SafeDetails() map[string]any }
-		if errors.As(retErr, &detailed) {
-			for key, value := range detailed.SafeDetails() {
-				if _, exists := details[key]; !exists {
-					details[key] = value
-				}
-			}
-		}
-		var errno syscall.Errno
-		if errors.As(retErr, &errno) {
-			details["cause"] = errno.Error()
-		}
-		retErr = &OperationalError{Phase: phase, Message: "failed to set task output", Details: details, Err: retErr}
 	}()
-	if input.TaskID == "" {
-		return &PreconditionError{Reason: "task_id is required"}
-	}
-	if input.AgentID == "" {
-		return &PreconditionError{Reason: "agent_id is required"}
-	}
-	// The manifest's structure is validated once, by the schema the preflight
-	// uses, before any state is read or locked. Only rules that need a task ID,
-	// live state or the pipeline resolver remain below.
-	if err := validateSetTaskOutputManifest(input.Output); err != nil {
+	if err := checkSetTaskOutputInput(input); err != nil {
 		return err
 	}
-	for i, entry := range input.Output {
-		if err := validateTaskDependsOn(entry.TaskDependsOn, i); err != nil {
-			return &PreconditionError{Reason: err.Error()}
-		}
-		if entry.Supersedes != "" {
-			if err := paths.ValidateTaskID(entry.Supersedes); err != nil {
-				return &PreconditionError{Reason: fmt.Sprintf("output[%d].supersedes: %v", i, err)}
-			}
-		}
-	}
+	normalizeSetTaskOutputRefs(input.Output)
 
-	// Normalize spec_ref and plan_ref on each output entry to strip worktree prefixes.
-	// Mutates input.Output in-place; callers do not reuse the slice.
-	for i := range input.Output {
-		input.Output[i].SpecRef = paths.NormalizeSpecRef(input.Output[i].SpecRef)
-		input.Output[i].EpicRef = paths.NormalizeSpecRef(input.Output[i].EpicRef)
-		input.Output[i].PlanRef = paths.NormalizeSpecRef(input.Output[i].PlanRef)
-		input.Output[i].ArchRef = paths.NormalizeSpecRef(input.Output[i].ArchRef)
-		input.Output[i].TaskDependsOn = normalizeTaskDependsOn(input.Output[i].TaskDependsOn)
-	}
+	bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, input.Request)
 
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, input.Request)
-
-	// Collect pipeline executing statuses
-	phase = "load-pipeline"
-	resolver, _, err := loadResolver(projectRoot)
+	phase = setTaskOutputPhaseLoadPipeline
+	resolver, pipelineExecuting, err := loadSetTaskOutputPipeline(projectRoot)
 	if err != nil {
-		return fmt.Errorf("failed to load pipeline config: %w", err)
-	}
-	var pipelineExecuting []models.TaskStatus
-	for _, rpName := range resolver.RolePairNames() {
-		if es, err := resolver.ExecutingStatus(rpName); err == nil {
-			pipelineExecuting = append(pipelineExecuting, es)
-		}
+		return err
 	}
 
-	phase = "persist-output"
+	phase = setTaskOutputPhasePersist
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(input.TaskID)
 		if task == nil {
@@ -192,96 +144,17 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 			return errLifecycleReplay
 		}
 
-		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-
-		if task.AssignedTo == nil || *task.AssignedTo != input.AgentID {
-			currentAgent := "none"
-			if task.AssignedTo != nil {
-				currentAgent = *task.AssignedTo
-			}
-			return WrapLifecycleError("set-task-output", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s (currently assigned to: %s)", input.TaskID, input.AgentID, currentAgent)}, models.LifecycleStaleCaller, "stop", "none")
-		}
-
-		if err := validateDirectCodingAllocation(resolver, task, input.Output); err != nil {
+		if err := checkSetTaskOutputWriter(task, input, pipelineExecuting); err != nil {
 			return err
 		}
-		if err := validateDecompositionRootOutput(state, resolver, task.RolePair, input.Output); err != nil {
+		if err := checkSetTaskOutputAgainstState(state, resolver, task, input.Output); err != nil {
 			return err
 		}
-		if task.MaxOutputs > 0 && len(input.Output) > task.MaxOutputs {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s max_outputs is %d, so %d output entries are refused: writers selecting its outputs by index would miss the extra ones (D-80)", task.ID, task.MaxOutputs, len(input.Output))}
-		}
-
-		for i, entry := range input.Output {
-			for _, depID := range entry.TaskDependsOn {
-				depTask := state.FindTask(depID)
-				if depTask == nil {
-					return &PreconditionError{Reason: fmt.Sprintf("output[%d].task_depends_on references non-existent task %q", i, depID)}
-				}
-				if depTask.Status.IsTerminal() && depTask.Status != models.TaskStatusMerged {
-					return &PreconditionError{Reason: fmt.Sprintf("output[%d].task_depends_on references terminal non-MERGED task %q (status: %s)", i, depID, depTask.Status)}
-				}
-			}
-		}
-
-		if err := validateInheritInputsAgainstState(resolver, task, input.Output); err != nil {
-			return err
-		}
-
-		consumerRolePairs, err := resolver.OutputConsumerRolePairsForOutput(task.RolePair, input.Output)
+		output, gateWarnings, err := prepareCheckedSetTaskOutput(state, resolver, task, input)
 		if err != nil {
 			return err
 		}
-		for _, consumerRolePair := range consumerRolePairs {
-			for i, entry := range input.Output {
-				if err := validateDependencyDirection(state, resolver, fmt.Sprintf("%s output[%d]", task.ID, i), consumerRolePair, entry.TaskDependsOn); err != nil {
-					return err
-				}
-			}
-		}
-		for i, entry := range input.Output {
-			if err := validateOutputSupersedes(state, task, consumerRolePairs, i, entry); err != nil {
-				return err
-			}
-		}
-		if err := checkOutputRuntimeInputs(state, resolver, task, input.Output); err != nil {
-			return err
-		}
-
-		output, gateWarnings, err := prepareDescendantOutput(resolver, task, input.Output)
-		if err != nil {
-			return err
-		}
-		// Draft output may keep a stale declaration (ADR-0188), so validation
-		// accepts it; new output must never author one.
-		if stale := staleOutputDeclaration(state, resolver, output); stale != "" {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s %s; select the replacement's output instead", input.TaskID, stale)}
-		}
-		previousCount := len(task.Output)
-		if task.AmendsPlan != "" {
-			original := state.FindTask(task.AmendsPlan)
-			if original == nil || original.PlanAmendment == nil || original.PlanAmendment.Pending != task.ID {
-				return &PreconditionError{Reason: "correction is not the original's pending amendment"}
-			}
-			if err := models.ValidateAmendmentOutputForMode(original.Output, output, task.AmendmentMode); err != nil {
-				return &PreconditionError{Reason: err.Error()}
-			}
-		}
-		task.Output = output
-		// Provider output may become known after its consumers were authored.
-		// Validate that prospective graph before publishing either side.
-		if models.HasProviderDependencies(state) || task.AmendsPlan != "" {
-			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
-				return &PreconditionError{Reason: fmt.Sprintf("task output leaves an invalid state: %v", err)}
-			}
-		}
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
-			Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
-		})
-		*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+		*outcome, err = persistSetTaskOutput(state, bb, projectRoot, task, request, input, output)
 		*warnings = gateWarnings
 		return err
 	})
@@ -289,6 +162,52 @@ func setTaskOutputWithOptionalAuthority(projectRoot string, input *SetTaskOutput
 		return nil
 	}
 	return err
+}
+
+// setTaskOutputOperationalError projects a failed attempt into an
+// OperationalError naming the phase it failed in.
+func setTaskOutputOperationalError(projectRoot string, input *SetTaskOutputInput, phase string, cause error) error {
+	details := map[string]any{
+		"operation": "set-task-output", "task_id": input.TaskID,
+		"state_path": paths.New(projectRoot).StatePath(), "output_count": len(input.Output),
+		"recovery_hint": "Inspect the task state and history before retrying; a later reset may clear a previously saved output.",
+	}
+	// Preserve opted-in diagnostics (including generation fencing) while
+	// exposing only the OS error text, never arbitrary wrapped payloads.
+	var detailed interface{ SafeDetails() map[string]any }
+	if errors.As(cause, &detailed) {
+		for key, value := range detailed.SafeDetails() {
+			if _, exists := details[key]; !exists {
+				details[key] = value
+			}
+		}
+	}
+	var errno syscall.Errno
+	if errors.As(cause, &errno) {
+		details["cause"] = errno.Error()
+	}
+	return &OperationalError{Phase: phase, Message: "failed to set task output", Details: details, Err: cause}
+}
+
+// persistSetTaskOutput stores checked output on the task, validates the
+// candidate when provider or amendment declarations make it necessary, appends
+// the output-set history entry and completes the lifecycle request. It runs
+// inside the mutation that performed the state checks.
+func persistSetTaskOutput(state *models.State, bb *db.Blackboard, projectRoot string, task *models.Task, request LifecycleRequest, input *SetTaskOutputInput, output []models.OutputEntry) (models.LifecycleOutcome, error) {
+	previousCount := len(task.Output)
+	task.Output = output
+	// Provider output may become known after its consumers were authored.
+	// Validate that prospective graph before publishing either side.
+	if models.HasProviderDependencies(state) || task.AmendsPlan != "" {
+		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
+			return models.LifecycleOutcome{}, &PreconditionError{Reason: fmt.Sprintf("task output leaves an invalid state: %v", err)}
+		}
+	}
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time: time.Now().UTC(), Event: models.TaskEventOutputSet, Agent: &input.AgentID,
+		Extra: map[string]any{"previous_output_count": previousCount, "output_count": len(input.Output)},
+	})
+	return CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 }
 
 // prepareDescendantOutput checks output-level descendant declarations and
