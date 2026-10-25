@@ -29,6 +29,23 @@ func TestOracleAddTasks(t *testing.T) {
 	}
 }
 
+// TestOracleAddTasksDelivery freezes the dead-end delivery rule (D-33) that
+// TestOracleAddTasks does not reach: a story with its architecture companion
+// commits as one unit with positional results, and a story without a
+// companion is refused beside the rest of the batch.
+func TestOracleAddTasksDelivery(t *testing.T) {
+	for _, c := range []struct {
+		name, file, contains string
+	}{
+		{"delivery_group", "add-tasks-delivery-group.json", "arch-1"},
+		{"delivery_refused", "add-tasks-delivery-refused.json", "cannot be delivered on its own"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			runCase(t, oracleCase{name: "add-tasks/" + c.name, fixture: "base", identity: "orch", json: true, contains: c.contains, args: []string{"add-tasks", "--tasks-file", "@input:" + c.file}})
+		})
+	}
+}
+
 func TestOracleSetTaskOutput(t *testing.T) {
 	for _, name := range []string{"success", "refused"} {
 		t.Run(name, func(t *testing.T) {

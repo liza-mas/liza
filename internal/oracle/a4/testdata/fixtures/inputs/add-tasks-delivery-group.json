@@ -1,0 +1,21 @@
+[
+  {
+    "id": "us-1",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "us-writing-pair",
+    "priority": 1
+  },
+  {
+    "id": "arch-1",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "architecture-main-pair",
+    "priority": 1,
+    "depends": ["us-1"]
+  }
+]
