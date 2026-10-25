@@ -4,23 +4,17 @@ import (
 	stderrors "errors"
 	"fmt"
 	"os"
-	"runtime/debug"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/identity"
-	activitylog "github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/secretmask"
-	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 // statWorktreePath is a seam for the "stat failed for a reason other than
@@ -47,10 +41,14 @@ type VerdictResult struct {
 // impactOrder defines the ordering for impact levels.
 // Higher index = higher impact. Used by ResolveEffectiveImpact.
 var impactOrder = map[string]int{
-	"standard":     0,
-	"significant":  1,
-	"architecture": 2,
+	string(pipeline.ReviewImpactStandard):     0,
+	string(pipeline.ReviewImpactSignificant):  1,
+	string(pipeline.ReviewImpactArchitecture): 2,
 }
+
+// verdictImpactExtraKey is the history Extra key a verdict and a checkpoint
+// record their impact under; ResolveEffectiveImpact reads it back.
+const verdictImpactExtraKey = "impact"
 
 type submitVerdictTestHooks struct {
 	beforeModify     func()
@@ -75,7 +73,7 @@ func IsValidImpact(v string) bool {
 // last rejection, returning the maximum impact found.
 // Ordering: standard < significant < architecture; default: "standard".
 func ResolveEffectiveImpact(history []models.TaskHistoryEntry) string {
-	maxImpact := "standard"
+	maxImpact := string(pipeline.ReviewImpactStandard)
 	maxRank := 0
 
 	// Iterate in reverse; stop at the last rejection boundary.
@@ -91,7 +89,7 @@ func ResolveEffectiveImpact(history []models.TaskHistoryEntry) string {
 			continue
 		}
 
-		if v, ok := entry.Extra["impact"].(string); ok && v != "" {
+		if v, ok := entry.Extra[verdictImpactExtraKey].(string); ok && v != "" {
 			if rank, known := impactOrder[v]; known && rank > maxRank {
 				maxRank = rank
 				maxImpact = v
@@ -123,55 +121,15 @@ func SubmitVerdictWithAuthorityAndOptions(projectRoot, taskID, verdict, reason s
 
 func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (result *VerdictResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
-	defer func() {
-		outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
-		var invalid *PreconditionError
-		if stderrors.As(retErr, &invalid) {
-			outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
-		}
-		var quarantined *QuarantinedVerdictError
-		if stderrors.As(retErr, &quarantined) {
-			effects = LifecycleEffectsCommitted
-		}
-		retErr = WrapLifecycleError("submit-verdict", nil, retErr, outcome, action, effects)
-		var completed models.LifecycleOutcome
-		if result != nil {
-			completed = result.LifecycleOutcome
-		}
-		invocation.FinishResult("submit-verdict", completed, &retErr, nil)
-	}()
-	if err := ValidateLifecycleRequestOptions(opts); err != nil {
-		return nil, &PreconditionError{Reason: err.Error()}
-	}
-	if err := validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit, authority); err != nil {
+	defer func() { retErr = finishVerdictLifecycle(invocation, result, retErr) }()
+	verdict, reviewCommit, err := admitVerdictRequest(taskID, verdict, reason, agentID, authority, impact, reviewCommit, opts)
+	if err != nil {
 		return nil, err
 	}
-	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
-	if _, err := identity.ExtractRole(agentID); err != nil {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid agent ID: %v", err)}
-	}
-	retErr = WithProjectLifecycleSharedLock(projectRoot, "submit-verdict", func() error {
-		err := withTaskReviewLock(projectRoot, taskID, "submit-verdict", func() error {
-			bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts)
-			safeReason := reason
-			if authority != nil {
-				state, _, err := readTaskState(bb, taskID)
-				if err != nil {
-					return err
-				}
-				if err := RequireAgentAuthority(state, *authority); err != nil {
-					if authority.Generation == "" {
-						return err
-					}
-					return quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, *authority)
-				}
-				safeReason = sanitizeVerdictReason(reason, state, *authority)
-			}
+	retErr = WithProjectLifecycleSharedLock(projectRoot, payloadschema.SubmitVerdictOperation, func() error {
+		err := withTaskReviewLock(projectRoot, taskID, payloadschema.SubmitVerdictOperation, func() error {
 			var err error
-			result, err = submitVerdict(projectRoot, taskID, verdict, safeReason, agentID, authority, impact, reviewCommit, reason, false, opts)
-			if authority != nil && IsAgentAuthorityError(err) && authority.Generation != "" {
-				return quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, *authority)
-			}
+			result, err = submitVerdictUnderReviewLock(projectRoot, taskID, verdict, reason, agentID, authority, impact, reviewCommit, opts)
 			return err
 		})
 		if err != nil || result == nil || result.pendingAttemptReason == "" {
@@ -179,48 +137,124 @@ func submitVerdictLifecycle(projectRoot, taskID, verdict, reason, agentID string
 		}
 		// Review lock is released before taking the ownership lock. The verdict
 		// completion token prevents this follow-up from ending a newer claim.
-		result.NewAttemptTriggered = false
-		_, err = transitionToNewAttemptAfterVerdict(projectRoot, taskID, result.pendingAttemptReason, authority, result.CompletedTransitionID, opts)
-		state, readErr := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts).Read()
-		var task *models.Task
-		if readErr == nil && authority != nil {
-			readErr = RequireAgentAuthority(state, *authority)
-		}
-		if IsAgentAuthorityError(readErr) {
-			err = readErr // Current authority loss always requires stop.
-		}
-		if readErr == nil {
-			task = state.FindTask(taskID)
-		}
-		if err != nil {
-			failure := fmt.Errorf("rejection committed but attempt transition failed: %w", err)
-			// The verdict already committed. Record the follow-up failure here,
-			// after the review lock is released, without treating it as success.
-			lp := paths.New(projectRoot)
-			recordSubmitVerdictFailure(RequestBlackboard(lp.StatePath(), authority, opts), lp.LogPath(), taskID, agentID, authority, verdict, failure)
-			failureKind, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
-			if IsAgentAuthorityError(err) {
-				task = nil
-				failureKind, action = models.LifecycleStaleCaller, LifecycleSafeActionStop
-			}
-			outcome := NewLifecycleOutcome("submit-verdict", task, failureKind, action, LifecycleEffectsCommitted)
-			outcome.CompletedTransitionID, outcome.RequestID = result.CompletedTransitionID, result.RequestID
-			result = nil
-			return &LifecycleError{Outcome: outcome, Err: failure}
-		}
-		if task == nil {
-			outcome := NewLifecycleOutcome("submit-verdict", nil, models.LifecycleStateChanged, "requery", "committed")
-			outcome.CompletedTransitionID, outcome.RequestID = result.CompletedTransitionID, result.RequestID
-			result = nil
-			return &LifecycleError{Outcome: outcome, Err: fmt.Errorf("rejection and attempt transition committed but current task state is unavailable")}
-		}
-		result.NewAttemptTriggered = true
-		completed := result.CompletedTransitionID
-		result.LifecycleOutcome = NewLifecycleOutcome("submit-verdict", task, models.LifecycleCompleted, "continue", "committed")
-		result.CompletedTransitionID, result.RequestID = completed, opts.RequestID
-		return nil
+		result, err = rolloverAfterRejection(projectRoot, taskID, agentID, verdict, authority, opts, result)
+		return err
 	})
 	return result, retErr
+}
+
+// finishVerdictLifecycle classifies a failed verdict call into its lifecycle
+// error and records the invocation's result.
+func finishVerdictLifecycle(invocation *LifecycleInvocation, result *VerdictResult, retErr error) error {
+	outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
+	var invalid *PreconditionError
+	if stderrors.As(retErr, &invalid) {
+		outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
+	}
+	var quarantined *QuarantinedVerdictError
+	if stderrors.As(retErr, &quarantined) {
+		effects = LifecycleEffectsCommitted
+	}
+	retErr = WrapLifecycleError(payloadschema.SubmitVerdictOperation, nil, retErr, outcome, action, effects)
+	var completed models.LifecycleOutcome
+	if result != nil {
+		completed = result.LifecycleOutcome
+	}
+	invocation.FinishResult(payloadschema.SubmitVerdictOperation, completed, &retErr, nil)
+	return retErr
+}
+
+// admitVerdictRequest refuses a malformed request before any lock or state
+// read and returns the normalized verdict and review commit.
+func admitVerdictRequest(taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (string, string, error) {
+	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+		return "", "", &PreconditionError{Reason: err.Error()}
+	}
+	if err := validateVerdictPayload(taskID, verdict, reason, agentID, impact, reviewCommit, authority); err != nil {
+		return "", "", err
+	}
+	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
+	if _, err := identity.ExtractRole(agentID); err != nil {
+		return "", "", &PreconditionError{Reason: fmt.Sprintf("invalid agent ID: %v", err)}
+	}
+	return verdict, reviewCommit, nil
+}
+
+// submitVerdictUnderReviewLock runs the verdict call for an admitted request.
+// A caller whose registration generation is no longer current leaves only
+// quarantined evidence.
+func submitVerdictUnderReviewLock(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (*VerdictResult, error) {
+	bb := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts)
+	safeReason := reason
+	if authority != nil {
+		state, _, err := readTaskState(bb, taskID)
+		if err != nil {
+			return nil, err
+		}
+		if err := RequireAgentAuthority(state, *authority); err != nil {
+			if authority.Generation == "" {
+				return nil, err
+			}
+			return nil, quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, *authority)
+		}
+		safeReason = sanitizeVerdictReason(reason, state, *authority)
+	}
+	result, err := submitVerdict(projectRoot, taskID, verdict, safeReason, agentID, authority, impact, reviewCommit, reason, false, opts)
+	if authority != nil && IsAgentAuthorityError(err) && authority.Generation != "" {
+		return result, quarantineFencedVerdict(bb, taskID, verdict, reason, reviewCommit, *authority)
+	}
+	return result, err
+}
+
+// rolloverAfterRejection runs the attempt transition a committed rejection
+// asked for and projects the final lifecycle result. A follow-up failure after
+// the verdict committed is recorded and reported, never treated as success.
+func rolloverAfterRejection(projectRoot, taskID, agentID, verdict string, authority *models.AgentAuthority, opts LifecycleRequestOptions, result *VerdictResult) (*VerdictResult, error) {
+	result.NewAttemptTriggered = false
+	_, err := transitionToNewAttemptAfterVerdict(projectRoot, taskID, result.pendingAttemptReason, authority, result.CompletedTransitionID, opts)
+	state, readErr := RequestBlackboard(paths.New(projectRoot).StatePath(), authority, opts).Read()
+	var task *models.Task
+	if readErr == nil && authority != nil {
+		readErr = RequireAgentAuthority(state, *authority)
+	}
+	if IsAgentAuthorityError(readErr) {
+		err = readErr // Current authority loss always requires stop.
+	}
+	if readErr == nil {
+		task = state.FindTask(taskID)
+	}
+	if err != nil {
+		failure := fmt.Errorf("rejection committed but attempt transition failed: %w", err)
+		// The verdict already committed. Record the follow-up failure here,
+		// after the review lock is released, without treating it as success.
+		lp := paths.New(projectRoot)
+		recordSubmitVerdictFailure(RequestBlackboard(lp.StatePath(), authority, opts), lp.LogPath(), taskID, agentID, authority, verdict, failure)
+		failureKind, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
+		if IsAgentAuthorityError(err) {
+			task = nil
+			failureKind, action = models.LifecycleStaleCaller, LifecycleSafeActionStop
+		}
+		outcome := NewLifecycleOutcome(payloadschema.SubmitVerdictOperation, task, failureKind, action, LifecycleEffectsCommitted)
+		outcome.CompletedTransitionID, outcome.RequestID = result.CompletedTransitionID, result.RequestID
+		return nil, &LifecycleError{Outcome: outcome, Err: failure}
+	}
+	if task == nil {
+		outcome := NewLifecycleOutcome(payloadschema.SubmitVerdictOperation, nil, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsCommitted)
+		outcome.CompletedTransitionID, outcome.RequestID = result.CompletedTransitionID, result.RequestID
+		return nil, &LifecycleError{Outcome: outcome, Err: fmt.Errorf("rejection and attempt transition committed but current task state is unavailable")}
+	}
+	result.NewAttemptTriggered = true
+	completed := result.CompletedTransitionID
+	result.LifecycleOutcome = NewLifecycleOutcome(payloadschema.SubmitVerdictOperation, task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
+	result.CompletedTransitionID, result.RequestID = completed, opts.RequestID
+	return result, nil
+}
+
+// verdictRequestPayload is the intent a verdict request's identity hashes. The
+// direct call and the durable outbox must build it the same way, or a replayed
+// verdict would carry a different payload digest than the one it saved.
+func verdictRequestPayload(verdict, reason, impact, reviewCommit string) map[string]string {
+	return map[string]string{"verdict": verdict, "reason": reason, "impact": impact, "review_commit": reviewCommit}
 }
 
 // validateVerdictPayload rejects a structurally invalid verdict before any
@@ -271,803 +305,191 @@ func validateVerdictInput(taskID, verdict, reason, agentID, impact string) error
 		return &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
 	}
 
-	if verdict != "APPROVED" && verdict != "REJECTED" {
+	if v := submittedVerdict(verdict); v != submittedVerdictApproved && v != submittedVerdictRejected {
 		return &PreconditionError{Reason: "verdict must be APPROVED or REJECTED"}
 	}
 
-	if verdict == "REJECTED" && strings.TrimSpace(reason) == "" {
+	if submittedVerdict(verdict) == submittedVerdictRejected && strings.TrimSpace(reason) == "" {
 		return &PreconditionError{Reason: "rejection reason is required for REJECTED verdict"}
 	}
 
 	if !IsValidImpact(impact) {
 		return &PreconditionError{Reason: "invalid impact value (must be standard, significant, or architecture)"}
 	}
-	if verdict == "REJECTED" {
+	if submittedVerdict(verdict) == submittedVerdictRejected {
 		return validateVerdictReasonSize(reason)
 	}
 	return nil
 }
 
+// verdictAttempt is one verdict call under the task review lock. It carries the
+// request, the resolved pipeline and what the transaction decided between the
+// phases: snapshot preconditions, reviewed-commit check, the atomic transition
+// (verdict_transition.go) and the failure projection (verdict_failure_anomaly.go).
+type verdictAttempt struct {
+	projectRoot, taskID, agentID string
+	verdict                      submittedVerdict
+	reason                       string // sanitized; what a rejection records
+	authority                    *models.AgentAuthority
+	impact, reviewCommit         string
+	requestReason                string // as supplied; the request identity hashes it
+	opts                         LifecycleRequestOptions
+
+	bb      *db.Blackboard
+	logPath string
+	// recordFailure is cleared by every refusal that carries its own outcome or
+	// belongs to a concurrent winner, so only unexpected failures leave an anomaly.
+	recordFailure bool
+
+	request         LifecycleRequest
+	pipe            *verdictPipeline
+	effectiveImpact string
+	cleanSource     *cleanIntegrationSourceVerification
+	now             time.Time
+	effects         verdictEffects
+}
+
 func submitVerdict(projectRoot, taskID, verdict, reason, agentID string, authority *models.AgentAuthority, impact, reviewCommit, requestReason string, completionLinearized bool, opts LifecycleRequestOptions) (result *VerdictResult, retErr error) {
 	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts)
-	recordFailure := true
-	defer func() {
-		// Invalid requests and lifecycle recovery responses carry their own
-		// outcome; they must not release claims or create failure anomalies.
-		var lifecycleErr *LifecycleError
-		if isSubmitVerdictPreconditionError(retErr) || IsAgentAuthorityError(retErr) || stderrors.As(retErr, &lifecycleErr) {
-			return
-		}
-		if retErr != nil && recordFailure {
-			recordSubmitVerdictFailure(bb, lp.LogPath(), taskID, agentID, authority, verdict, retErr)
-		}
-	}()
-
-	if _, err := identity.ExtractRole(agentID); err != nil {
-		return nil, fmt.Errorf("invalid agent ID %s: %w", agentID, err)
+	a := &verdictAttempt{
+		projectRoot: projectRoot, taskID: taskID, agentID: agentID, verdict: submittedVerdict(verdict), reason: reason,
+		authority: authority, impact: impact, reviewCommit: reviewCommit, requestReason: requestReason, opts: opts,
+		bb: RequestBlackboard(lp.StatePath(), authority, opts), logPath: lp.LogPath(), recordFailure: true,
 	}
+	defer func() { a.projectFailure(retErr) }()
+	return a.run(completionLinearized)
+}
 
-	// Phase 1: Read state and validate preconditions
-	initialState, task, err := readTaskStateForSubmitVerdict(bb, taskID)
-	if err != nil {
+// run executes the phases in their fixed order: snapshot preconditions, pipeline
+// and standing, impact, reviewed-commit check, optional completion
+// linearization, clean-source verification, then the atomic transition.
+func (a *verdictAttempt) run(completionLinearized bool) (*VerdictResult, error) {
+	if _, err := identity.ExtractRole(a.agentID); err != nil {
+		return nil, fmt.Errorf("invalid agent ID %s: %w", a.agentID, err)
+	}
+	state, task, replay, err := a.readSnapshot()
+	if err != nil || replay != nil {
+		return replay, err
+	}
+	if err := validateVerdictReviewBoundary(state, task, string(a.verdict), a.reviewCommit); err != nil {
 		return nil, err
 	}
-	if authority != nil {
-		if err := RequireAgentAuthority(initialState, *authority); err != nil {
-			return nil, err
-		}
-	}
-	request, err := NewLifecycleRequest("submit-verdict", task, agentID, authority, opts, map[string]string{"verdict": verdict, "reason": requestReason, "impact": impact, "review_commit": reviewCommit})
-	if err != nil {
+	if err := a.resolvePipeline(task); err != nil {
 		return nil, err
 	}
-	if opts.verdictPayloadDigest != "" {
-		request.PayloadDigest = opts.verdictPayloadDigest
-	}
-	receipt, err := CheckLifecycleRequest(task, request, initialState.Agents)
-	if err != nil {
-		recordFailure = false
-		return nil, err
-	}
-	if receipt != nil {
-		return &VerdictResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, Verdict: receipt.Projection.Verdict, AgentID: agentID}, nil
-	}
-
-	if err := validateVerdictReviewBoundary(initialState, task, verdict, reviewCommit); err != nil {
-		return nil, err
-	}
-
-	// Resolve expected statuses from pipeline config
-	resolver, _, resolverErr := loadResolver(projectRoot)
-	if resolverErr != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
-	}
-	if task.RolePair == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
-	}
-	expectedReviewingStatus, err := resolver.ReviewingStatus(task.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-	}
-	// Also accept reviewing_2 (second review in quorum flow).
-	expectedReviewing2Status, _ := resolver.Reviewing2Status(task.RolePair)
-	approvedStatus, err := resolver.ApprovedStatus(task.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-	}
-	rejectedStatus, err := resolver.RejectedStatus(task.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-	}
-
-	// Resolve quorum states (optional — may not exist if quorum is always 1)
-	partiallyApprovedStatus, _ := resolver.PartiallyApprovedStatus(task.RolePair)
-
-	// Resolve clean state (optional — only integration-pair declares this)
-	cleanStatus, _ := resolver.CleanStatus(task.RolePair)
-
-	pipelineTransitions := BuildPipelineTransitions(resolver)
-
 	// Fast-fail before git operations; re-checked authoritatively inside Modify.
-	if !isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {
-		recordFailure = false
-		return nil, WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+	if err := a.checkStandingBeforeGit(task); err != nil {
+		return nil, err
 	}
-	if task.ReviewingBy == nil || *task.ReviewingBy != agentID {
-		recordFailure = false
-		return nil, WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: "only the assigned reviewer can submit a verdict"}, models.LifecycleStaleCaller, "stop", "none")
+	if err := a.resolveEffectiveImpact(task); err != nil {
+		return nil, err
 	}
-
-	// Resolve effective impact from history and enforce escalation.
-	effectiveImpact := ResolveEffectiveImpact(task.History)
-	if impact != "" {
-		// Enforce: verdict impact must be >= resolved effective impact (never downgrade)
-		if impactOrder[impact] < impactOrder[effectiveImpact] {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot downgrade impact from %q to %q — impact can only escalate", effectiveImpact, impact)}
-		}
-		effectiveImpact = impact
+	if err := a.checkReviewedCommit(task); err != nil {
+		return nil, err
 	}
-
-	// Phase 2: Validate ReviewCommit exists and matches worktree HEAD
-	if task.ReviewCommit == nil {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit — cannot submit verdict", taskID)}
+	if !completionLinearized && a.isCleanIntegrationApproval(task) {
+		return a.runLinearized()
 	}
-
-	g := git.New(projectRoot)
-	wtPath := g.GetWorktreePath(taskID)
-	if _, statErr := statWorktreePath(wtPath); os.IsNotExist(statErr) {
-		// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
-	} else if statErr != nil {
-		return nil, fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
-	} else {
-		wtHEAD, headErr := g.GetWorktreeHEAD(taskID)
-		if headErr != nil {
-			return nil, fmt.Errorf("failed to get worktree HEAD: %w", headErr)
-		}
-		if *task.ReviewCommit != wtHEAD {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)}
-		}
+	a.now = time.Now().UTC()
+	if err := a.prepareCleanSourceVerification(task); err != nil {
+		return nil, err
 	}
-
-	if !completionLinearized && verdict == "APPROVED" && task.IntegrationAnalysis != nil &&
-		task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseGlobal && len(task.Output) == 0 {
-		callbackEntered := false
-		linearizationErr := withEffectiveIntegrationCompletionLinearization(projectRoot, "clean integration verdict "+taskID, func() error {
-			callbackEntered = true
-			result, retErr = submitVerdict(projectRoot, taskID, verdict, reason, agentID, authority, impact, reviewCommit, requestReason, true, opts)
-			return retErr
-		})
-		if callbackEntered {
-			recordFailure = false
-		}
-		return result, linearizationErr
-	}
-
-	// Phase 3: Atomic state update
-	now := time.Now().UTC()
-	escalatedToBlocked := false
-	blockedReasonOut := ""
-	rejectionRCAGated := false
-	newAttemptNeeded := false
-	newAttemptReason := ""
-	var lifecycleOutcome models.LifecycleOutcome
-	var replayed bool
-	var cleanSourceVerification *cleanIntegrationSourceVerification
-	if verdict == "APPROVED" && task.IntegrationAnalysis != nil &&
-		task.IntegrationAnalysis.Phase == models.IntegrationAnalysisPhaseGlobal && len(task.Output) == 0 {
-		effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
-		if qErr != nil {
-			return nil, fmt.Errorf("failed to resolve quorum: %w", qErr)
-		}
-		if task.ApprovalCount()+1 >= effectiveQuorum {
-			verification, verificationErr := verifyCleanIntegrationSourceForVerdict(projectRoot, task.IntegrationAnalysis.SourceCommit)
-			if verificationErr != nil {
-				return nil, fmt.Errorf("failed to verify clean integration source: %w", verificationErr)
-			}
-			cleanSourceVerification = &verification
-		}
-	}
-
 	if testSubmitVerdictHooks != nil && testSubmitVerdictHooks.beforeModify != nil {
 		testSubmitVerdictHooks.beforeModify()
 	}
+	return a.commit()
+}
 
-	err = modifyLifecycleState(bb, authority, func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+// readSnapshot reads the task and checks the caller's authority, the request
+// identity and any retained receipt. A replayed receipt is returned as the
+// result without a transaction.
+func (a *verdictAttempt) readSnapshot() (*models.State, *models.Task, *VerdictResult, error) {
+	initialState, task, err := readTaskStateForSubmitVerdict(a.bb, a.taskID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if a.authority != nil {
+		if err := RequireAgentAuthority(initialState, *a.authority); err != nil {
+			return nil, nil, nil, err
 		}
-		receipt, checkErr := CheckLifecycleRequest(task, request, state.Agents)
-		if checkErr != nil {
-			recordFailure = false
-			if gateErr := rejectionRCAGateObservedError(task); gateErr != nil {
-				return gateErr
-			}
-			return checkErr
-		}
-		if receipt != nil {
-			lifecycleOutcome, replayed = LifecycleReplayOutcome(task, receipt, agentID), true
-			return errLifecycleReplay
-		}
+	}
+	request, err := NewLifecycleRequest(payloadschema.SubmitVerdictOperation, task, a.agentID, a.authority, a.opts, verdictRequestPayload(string(a.verdict), a.requestReason, a.impact, a.reviewCommit))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if a.opts.verdictPayloadDigest != "" {
+		request.PayloadDigest = a.opts.verdictPayloadDigest
+	}
+	receipt, err := CheckLifecycleRequest(task, request, initialState.Agents)
+	if err != nil {
+		a.recordFailure = false
+		return nil, nil, nil, err
+	}
+	a.request = request
+	if receipt != nil {
+		return initialState, task, &VerdictResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, a.agentID), TaskID: a.taskID, Verdict: receipt.Projection.Verdict, AgentID: a.agentID}, nil
+	}
+	return initialState, task, nil, nil
+}
 
-		if err := validateVerdictReviewBoundary(state, task, verdict, reviewCommit); err != nil {
-			return err
-		}
+// checkReviewedCommit requires the review commit to match the worktree HEAD, so
+// the verdict covers the commit that was reviewed.
+func (a *verdictAttempt) checkReviewedCommit(task *models.Task) error {
+	if task.ReviewCommit == nil {
+		return &PreconditionError{Reason: fmt.Sprintf("task %s has no review_commit — cannot submit verdict", a.taskID)}
+	}
+	g := git.New(a.projectRoot)
+	wtPath := g.GetWorktreePath(a.taskID)
+	if _, statErr := statWorktreePath(wtPath); os.IsNotExist(statErr) {
+		// Worktree absent on disk (e.g. tests without real worktrees) — skip check.
+		return nil
+	} else if statErr != nil {
+		return fmt.Errorf("failed to stat worktree %s: %w", wtPath, statErr)
+	}
+	wtHEAD, headErr := g.GetWorktreeHEAD(a.taskID)
+	if headErr != nil {
+		return fmt.Errorf("failed to get worktree HEAD: %w", headErr)
+	}
+	if *task.ReviewCommit != wtHEAD {
+		return &PreconditionError{Reason: fmt.Sprintf("review_commit %s does not match worktree HEAD %s — worktree was modified after submission", *task.ReviewCommit, wtHEAD)}
+	}
+	return nil
+}
 
-		if !isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {
-			recordFailure = false
-			return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in a reviewing state (current status: %s)", taskID, task.Status)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
-		}
-		if task.ReviewingBy == nil || *task.ReviewingBy != agentID {
-			recordFailure = false
-			return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: "review assignment changed"}, models.LifecycleStaleCaller, "stop", "none")
-		}
-		var previousLifecycleState *models.State
-		projectedIntegrationEvidence := false
-		if task.IntegrationAnalysis != nil {
-			previousLifecycleState = snapshotIntegrationLifecycleState(state)
-		}
-
-		transitionTask := func(to models.TaskStatus) error {
-			return task.TransitionWith(to, pipelineTransitions)
-		}
-
-		if verdict == "APPROVED" {
-			if task.AmendsPlan != "" {
-				if err := rejectStaleDraftOutput(state, resolver, task); err != nil {
-					recordFailure = false
-					return err
-				}
-			}
-			// Approved output reaches MERGED without another verdict (ADR-0188).
-			if stale := staleOutputDeclaration(state, resolver, task.Output); stale != "" {
-				recordFailure = false
-				return &PreconditionError{Reason: fmt.Sprintf("task %s %s; it must be re-authored before approval: submit REJECTED citing the stale declaration", taskID, stale)}
-			}
-			// A fresh approval supersedes any stale integration attempt metadata
-			// from an earlier failed merge/submission path. Keep review_commit:
-			// wt-merge still needs the approved commit boundary.
-			task.MergeCommit = nil
-			task.IntegrationFailure = nil
-
-			// Build approval from agent registry and append to approvals list
-			provider, model := "", ""
-			if agent, ok := state.Agents[agentID]; ok {
-				provider, model = agent.Provider, agent.Model
-			}
-			task.Approvals = append(task.Approvals, models.Approval{
-				Agent:     agentID,
-				Provider:  provider,
-				Model:     model,
-				Timestamp: now,
-			})
-
-			// Build history entry with optional impact in Extra
-			historyEntry := models.TaskHistoryEntry{
-				Time:   now,
-				Event:  models.TaskEventApproved,
-				Agent:  &agentID,
-				Commit: task.ReviewCommit,
-			}
-			if impact != "" {
-				historyEntry.Extra = map[string]any{"impact": impact}
-			}
-			task.History = append(task.History, historyEntry)
-
-			// Evaluate quorum: determine if more approvals are needed.
-			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
-			if qErr != nil {
-				return fmt.Errorf("failed to resolve quorum: %w", qErr)
-			}
-
-			if task.ApprovalCount() < effectiveQuorum {
-				// Quorum not met — need partially_approved state to continue
-				if partiallyApprovedStatus == "" {
-					return fmt.Errorf("quorum %d requires partially-approved state but none declared for %q", effectiveQuorum, task.RolePair)
-				}
-				if err := transitionTask(partiallyApprovedStatus); err != nil {
-					return err
-				}
-			} else {
-				// Quorum met — route to clean or approved
-				targetStatus := approvedStatus
-				if cleanStatus != "" && len(task.Output) == 0 {
-					targetStatus = cleanStatus
-				}
-				if err := transitionTask(targetStatus); err != nil {
-					return err
-				}
-				if task.IntegrationAnalysis != nil {
-					if err := validateIntegrationAnalysisRolePair(task); err != nil {
-						return err
-					}
-					if err := appendIntegrationVerdictEvidence(state, task, cleanSourceVerification); err != nil {
-						return err
-					}
-					projectedIntegrationEvidence = true
-				}
-			}
-
-			// Derived field for backward compatibility
-			task.ApprovedBy = &agentID
-			task.RejectionReason = nil
-		} else {
-			if err := transitionTask(rejectedStatus); err != nil {
-				return err
-			}
-
-			// Rejection at any stage clears all approvals (spec: both reviewers re-review)
-			task.RejectionReason = &reason
-			task.ReviewCyclesCurrent++
-			task.ReviewCyclesTotal++
-
-			gatingCommit := ""
-			if task.ReviewCommit != nil {
-				gatingCommit = *task.ReviewCommit
-			}
-			task.History = append(task.History, models.TaskHistoryEntry{
-				Time:   now,
-				Event:  models.TaskEventRejected,
-				Agent:  &agentID,
-				Reason: &reason,
-				Commit: task.ReviewCommit,
-			})
-			clearAttemptState(task, attemptStateReviewRejection)
-
-			// Refresh lease — coder needs time to address rejection.
-			// If escalation triggers below, lease is cleared along with assignment.
-			renewLease(state, task)
-
-			reviewLimit := effectiveReviewCycleLimit(state.Config)
-			iterationLimit := effectiveCoderIterationLimit(task, state.Config)
-
-			escalation, shouldEscalate := classifyLimitEscalation(
-				task.ReviewCyclesCurrent,
-				reviewLimit,
-				task.Iteration,
-				iterationLimit,
-				task.EffectiveAttempt(),
-			)
-			threshold := models.EffectiveHighChurnRejectionThreshold(state.Config)
-			switch {
-			case shouldEscalate && escalation.action == LimitActionBlocked:
-				if err := blockRejectedTask(state, task, transitionTask, agentID, now, escalation.reason, escalation.questions, nil); err != nil {
-					return err
-				}
-				escalatedToBlocked = true
-				blockedReasonOut = escalation.reason
-			case shouldEscalate && escalation.action == LimitActionNewAttempt:
-				// Capture for post-Modify call — cannot nest bb.Modify
-				newAttemptNeeded = true
-				newAttemptReason = escalation.reason
-			case task.RejectionRCAGateDue(threshold):
-				// The existing limits keep precedence; the gate fires only on a
-				// verdict they let through. Concurrent resubmission is settled by
-				// this transaction: a second verdict re-reads the task here and
-				// observes the gate already open.
-				firstRejectionAt := firstDurableRejectionAt(task)
-				seedRejectionRCAGate(task, threshold, now, gatingCommit)
-				record := task.RejectionRCA
-				blockedReason := rejectionRCAGateReason(record.RejectionCount, threshold)
-				if err := blockRejectedTask(state, task, transitionTask, agentID, now, blockedReason, rejectionRCAGateQuestions(), map[string]any{
-					"blocked_class":      models.BlockedReasonRejectionRCARequired,
-					"threshold":          record.Threshold,
-					"rejection_count":    record.RejectionCount,
-					"gated_at":           record.GatedAt.Format(time.RFC3339),
-					"first_rejection_at": firstRejectionAt.Format(time.RFC3339),
-				}); err != nil {
-					return err
-				}
-				escalatedToBlocked = true
-				blockedReasonOut = blockedReason
-				rejectionRCAGated = true
-			}
-		}
-
-		task.ReviewingBy = nil
-		task.ReviewLeaseExpires = nil
-		state.ReleaseAgent(agentID)
-
-		if projectedIntegrationEvidence {
-			if task.AssignedTo != nil {
-				assignedAgentID := *task.AssignedTo
-				assignedAgent, ok := state.Agents[assignedAgentID]
-				if ok && assignedAgent.Status == models.AgentStatusWaiting && assignedAgent.CurrentTask != nil && *assignedAgent.CurrentTask == task.ID {
-					// The await command keeps the agent WAITING until process exit, but
-					// a completed task is no longer a valid current-task reference.
-					assignedAgent.CurrentTask = nil
-					state.Agents[assignedAgentID] = assignedAgent
-				}
-			}
-			if testSubmitVerdictHooks != nil && testSubmitVerdictHooks.beforeValidation != nil {
-				testSubmitVerdictHooks.beforeValidation(state)
-			}
-			if err := validateIntegrationLifecycleCandidate(projectRoot, bb.ReadSnapshot, previousLifecycleState, state); err != nil {
-				return err
-			}
-		}
-
-		var completeErr error
-		lifecycleOutcome, completeErr = CompleteLifecycleRequest(task, request, models.LifecycleProjection{Verdict: verdict}, state.Agents)
-		return completeErr
+// runLinearized re-enters the verdict under the completion lock, which orders a
+// clean integration verdict against integration movement.
+func (a *verdictAttempt) runLinearized() (result *VerdictResult, err error) {
+	callbackEntered := false
+	linearizationErr := withEffectiveIntegrationCompletionLinearization(a.projectRoot, "clean integration verdict "+a.taskID, func() error {
+		callbackEntered = true
+		result, err = submitVerdict(a.projectRoot, a.taskID, string(a.verdict), a.reason, a.agentID, a.authority, a.impact, a.reviewCommit, a.requestReason, true, a.opts)
+		return err
 	})
+	if callbackEntered {
+		a.recordFailure = false
+	}
+	return result, linearizationErr
+}
 
-	if isLifecycleReplay(err) && replayed {
-		return &VerdictResult{LifecycleOutcome: lifecycleOutcome, TaskID: taskID, Verdict: verdict, AgentID: agentID}, nil
+// commit runs the atomic verdict transaction and projects its result.
+func (a *verdictAttempt) commit() (*VerdictResult, error) {
+	err := modifyLifecycleState(a.bb, a.authority, a.apply)
+	if isLifecycleReplay(err) && a.effects.replayed {
+		return &VerdictResult{LifecycleOutcome: a.effects.outcome, TaskID: a.taskID, Verdict: string(a.verdict), AgentID: a.agentID}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to submit verdict: %w", err)
 	}
-
 	return &VerdictResult{
-		pendingAttemptReason: newAttemptReason,
-		LifecycleOutcome:     lifecycleOutcome,
-		TaskID:               taskID,
-		Verdict:              verdict,
-		AgentID:              agentID,
-		Reason:               reason,
-		EscalatedToBlocked:   escalatedToBlocked,
-		BlockedReason:        blockedReasonOut,
-		RejectionRCAGated:    rejectionRCAGated,
-		NewAttemptTriggered:  !escalatedToBlocked && newAttemptNeeded,
+		pendingAttemptReason: a.effects.newAttemptReason,
+		LifecycleOutcome:     a.effects.outcome,
+		TaskID:               a.taskID,
+		Verdict:              string(a.verdict),
+		AgentID:              a.agentID,
+		Reason:               a.reason,
+		EscalatedToBlocked:   a.effects.escalatedToBlocked,
+		BlockedReason:        a.effects.blockedReason,
+		RejectionRCAGated:    a.effects.rejectionRCAGated,
+		NewAttemptTriggered:  !a.effects.escalatedToBlocked && a.effects.newAttemptNeeded,
 	}, nil
-}
-
-// blockRejectedTask escalates a just-rejected task to BLOCKED: it records the
-// reason and questions, clears the doer's lease and assignment, releases the
-// doer if it still holds the task, and appends the blocked event with the
-// caller's detail keys. Both the limit path and the churn gate use it so the
-// two escalations cannot drift in what they clear.
-func blockRejectedTask(state *models.State, task *models.Task, transition func(models.TaskStatus) error, agentID string, now time.Time, reason string, questions []string, extra map[string]any) error {
-	if err := transition(models.TaskStatusBlocked); err != nil {
-		return err
-	}
-	task.BlockedReason = &reason
-	task.BlockedQuestions = questions
-	task.LeaseExpires = nil
-
-	if task.AssignedTo != nil {
-		assignedDoer := *task.AssignedTo
-		if assignedDoer != agentID {
-			if a, ok := state.Agents[assignedDoer]; ok {
-				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
-					state.ReleaseAgent(assignedDoer)
-				}
-			}
-		}
-	}
-	task.AssignedTo = nil
-
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:   now,
-		Event:  models.TaskEventBlocked,
-		Agent:  &agentID,
-		Reason: &reason,
-		Extra:  extra,
-	})
-	return nil
-}
-
-// seedRejectionRCAGate opens a new RCA cycle on the task. Any earlier cycle's
-// caller fields and disposition are dropped: the live record always describes
-// the current cycle, and the previous one survives in history.
-func seedRejectionRCAGate(task *models.Task, threshold int, now time.Time, gatingCommit string) {
-	task.RejectionRCA = &models.RejectionRCARecord{
-		SchemaVersion:  models.RejectionRCASchemaVersion,
-		Threshold:      threshold,
-		RejectionCount: task.DurableRejectionCount(),
-		GatedAt:        now,
-		GatingCommit:   gatingCommit,
-	}
-}
-
-// firstDurableRejectionAt is the time of the earliest rejection event
-// DurableRejectionCount would count; the gating rejection is already in
-// history, so there is always one.
-func firstDurableRejectionAt(task *models.Task) time.Time {
-	var first time.Time
-	for _, entry := range task.History {
-		if entry.Time.IsZero() || (entry.Event != models.TaskEventRejected && entry.Event != models.TaskEventReviewVerdictRejected) {
-			continue
-		}
-		if first.IsZero() || entry.Time.Before(first) {
-			first = entry.Time
-		}
-	}
-	return first
-}
-
-func rejectionRCAGateReason(rejectionCount, threshold int) string {
-	return fmt.Sprintf("%s: %d durable rejections reached the high-churn threshold %d; a classified RCA and a recovery disposition are required before this task is restored",
-		models.BlockedReasonRejectionRCARequired, rejectionCount, threshold)
-}
-
-func rejectionRCAGateQuestions() []string {
-	return []string{
-		"Which cause dominated the rejections: product_defect, capability_failure, lifecycle_retry or unknown?",
-		"Which recovery path should resume the task: implementation_correction, capability_reroute, lifecycle_repair, rescope or human_override?",
-	}
-}
-
-// rejectionRCAGateObservedError is the verdict outcome for a caller that
-// reaches the locked callback after a concurrent rejection already gated the
-// task: the task moved past this operation into a gated BLOCKED, so the
-// caller stops rather than requeries.
-func rejectionRCAGateObservedError(task *models.Task) error {
-	if !task.RejectionRCAGateOpen() || task.Status != models.TaskStatusBlocked {
-		return nil
-	}
-	return WrapLifecycleError("submit-verdict", task, &PreconditionError{Reason: fmt.Sprintf(
-		"task %s is already gated (%s) by a concurrent rejection; no further verdict applies until the RCA is recorded and resumed",
-		task.ID, models.BlockedReasonRejectionRCARequired)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-}
-
-func validateIntegrationAnalysisRolePair(task *models.Task) error {
-	if task == nil || task.IntegrationAnalysis == nil {
-		return nil
-	}
-	wantRolePair, err := analysisRolePair(task.IntegrationAnalysis.Phase)
-	if err != nil {
-		return fmt.Errorf("task %s has invalid integration analysis phase %q", task.ID, task.IntegrationAnalysis.Phase)
-	}
-	if task.RolePair != wantRolePair {
-		return fmt.Errorf("task %s integration analysis phase %q requires role_pair %q, got %q", task.ID, task.IntegrationAnalysis.Phase, wantRolePair, task.RolePair)
-	}
-	return nil
-}
-
-func appendIntegrationVerdictEvidence(state *models.State, task *models.Task, verification *cleanIntegrationSourceVerification) error {
-	metadata := task.IntegrationAnalysis
-	if metadata == nil || task.ReviewCommit == nil {
-		return fmt.Errorf("task %s integration analysis verdict requires metadata and review commit", task.ID)
-	}
-	if state.Goal.Integration == nil {
-		state.Goal.Integration = &models.IntegrationLifecycle{}
-	}
-	verdict := models.IntegrationAnalysisVerdictFindings
-	if len(task.Output) == 0 {
-		verdict = models.IntegrationAnalysisVerdictClean
-	}
-
-	switch metadata.Phase {
-	case models.IntegrationAnalysisPhaseSlice:
-		state.Goal.Integration.Coverage = append(state.Goal.Integration.Coverage, models.IntegrationCoverageRecord{
-			PlanTaskID: metadata.OriginatingPlanTaskID,
-			Kind:       models.IntegrationCoverageSliceReport,
-			SliceReport: &models.IntegrationSliceReport{
-				AnalysisTaskID: task.ID,
-				AnalysisKey:    metadata.Key,
-				Verdict:        verdict,
-				SourceCommit:   metadata.SourceCommit,
-				ReportCommit:   *task.ReviewCommit,
-			},
-		})
-	case models.IntegrationAnalysisPhaseGlobal:
-		if verdict == models.IntegrationAnalysisVerdictClean && (verification == nil || verification.SourceCommit != metadata.SourceCommit) {
-			return fmt.Errorf("task %s clean integration source was not verified", task.ID)
-		}
-		state.Goal.Integration.GlobalGenerations = append(state.Goal.Integration.GlobalGenerations, models.IntegrationGlobalGeneration{
-			Generation:     metadata.Generation,
-			AnalysisTaskID: task.ID,
-			AnalysisKey:    metadata.Key,
-			Verdict:        verdict,
-			SourceCommit:   metadata.SourceCommit,
-			ReportCommit:   *task.ReviewCommit,
-		})
-		if verdict == models.IntegrationAnalysisVerdictClean && verification.Effective {
-			state.Goal.Integration.Closure = &models.IntegrationClosure{
-				Status:       models.IntegrationClosureStatusClean,
-				Generation:   metadata.Generation,
-				AnalysisKey:  metadata.Key,
-				SourceCommit: metadata.SourceCommit,
-			}
-		}
-	default:
-		return fmt.Errorf("task %s has invalid integration analysis phase %q", task.ID, metadata.Phase)
-	}
-	return nil
-}
-
-// validateIntegrationLifecycleCandidate refuses violations the verdict adds,
-// judged against baseline, the locked pre-image. previous is only the
-// lifecycle snapshot for the append-only transition check: its Agents map
-// aliases the candidate's, so it cannot serve as the delta baseline.
-func validateIntegrationLifecycleCandidate(projectRoot string, baseline func() (*models.State, error), previous, candidate *models.State) error {
-	if err := statevalidate.ValidateCandidate(candidate, baseline, projectRoot, false, os.Stderr); err != nil {
-		return fmt.Errorf("invalid integration lifecycle candidate: %w", err)
-	}
-	normalizeEmptyIntegrationPrefixes(previous, candidate)
-	if err := statevalidate.ValidateIntegrationLifecycleTransition(previous, candidate); err != nil {
-		return fmt.Errorf("invalid integration lifecycle transition: %w", err)
-	}
-	return nil
-}
-
-func normalizeEmptyIntegrationPrefixes(previous, candidate *models.State) {
-	if previous.Goal.Integration == nil || candidate.Goal.Integration == nil {
-		return
-	}
-	// reflect.DeepEqual distinguishes nil and empty slices. Normalize only an
-	// append's zero-length before image so the transition validator compares
-	// evidence values rather than their in-memory slice representation.
-	if previous.Goal.Integration.Coverage == nil && len(candidate.Goal.Integration.Coverage) > 0 {
-		previous.Goal.Integration.Coverage = []models.IntegrationCoverageRecord{}
-	}
-	if previous.Goal.Integration.GlobalGenerations == nil && len(candidate.Goal.Integration.GlobalGenerations) > 0 {
-		previous.Goal.Integration.GlobalGenerations = []models.IntegrationGlobalGeneration{}
-	}
-	if previous.Goal.Integration.MutationReceipts == nil && len(candidate.Goal.Integration.MutationReceipts) > 0 {
-		previous.Goal.Integration.MutationReceipts = []models.IntegrationMutationReceipt{}
-	}
-}
-
-func snapshotIntegrationLifecycleState(state *models.State) *models.State {
-	previous := *state
-	previous.Goal = state.Goal
-	previous.Tasks = slices.Clone(state.Tasks)
-	for i := range previous.Tasks {
-		metadata := state.Tasks[i].IntegrationAnalysis
-		if metadata == nil {
-			continue
-		}
-		metadataCopy := *metadata
-		metadataCopy.RootTaskIDs = slices.Clone(metadata.RootTaskIDs)
-		metadataCopy.DescendantChanges = slices.Clone(metadata.DescendantChanges)
-		metadataCopy.AffectedPaths = slices.Clone(metadata.AffectedPaths)
-		metadataCopy.SourceSnapshotPaths = slices.Clone(metadata.SourceSnapshotPaths)
-		previous.Tasks[i].IntegrationAnalysis = &metadataCopy
-	}
-
-	lifecycle := state.Goal.Integration
-	if lifecycle == nil {
-		return &previous
-	}
-	lifecycleCopy := *lifecycle
-	if lifecycle.PrematureRecovery != nil {
-		recoveryCopy := *lifecycle.PrematureRecovery
-		recoveryCopy.PreviousContributingSet.Scopes = slices.Clone(lifecycle.PrematureRecovery.PreviousContributingSet.Scopes)
-		lifecycleCopy.PrematureRecovery = &recoveryCopy
-	}
-	if lifecycle.ContributingSet != nil {
-		setCopy := *lifecycle.ContributingSet
-		setCopy.Scopes = slices.Clone(lifecycle.ContributingSet.Scopes)
-		for i := range setCopy.Scopes {
-			setCopy.Scopes[i].RootTaskIDs = slices.Clone(lifecycle.ContributingSet.Scopes[i].RootTaskIDs)
-		}
-		lifecycleCopy.ContributingSet = &setCopy
-	}
-	lifecycleCopy.Coverage = slices.Clone(lifecycle.Coverage)
-	for i := range lifecycleCopy.Coverage {
-		lifecycleCopy.Coverage[i].ApprovalAttestations = slices.Clone(lifecycle.Coverage[i].ApprovalAttestations)
-		for j := range lifecycleCopy.Coverage[i].ApprovalAttestations {
-			lifecycleCopy.Coverage[i].ApprovalAttestations[j].Validation = slices.Clone(lifecycle.Coverage[i].ApprovalAttestations[j].Validation)
-		}
-		if lifecycle.Coverage[i].SliceReport != nil {
-			reportCopy := *lifecycle.Coverage[i].SliceReport
-			lifecycleCopy.Coverage[i].SliceReport = &reportCopy
-		}
-	}
-	lifecycleCopy.GlobalGenerations = slices.Clone(lifecycle.GlobalGenerations)
-	lifecycleCopy.MutationReceipts = slices.Clone(lifecycle.MutationReceipts)
-	if lifecycle.Closure != nil {
-		closureCopy := *lifecycle.Closure
-		lifecycleCopy.Closure = &closureCopy
-	}
-	previous.Goal.Integration = &lifecycleCopy
-	return &previous
-}
-
-func recordSubmitVerdictFailure(bb *db.Blackboard, logPath, taskID, agentID string, authority *models.AgentAuthority, verdict string, err error) {
-	errorText := boundedMaskedErrorString(err, 2048)
-	stack := boundedMaskedString(string(debug.Stack()), 4096)
-	anomalyErr := recordSubmitVerdictFailureAnomaly(bb, taskID, agentID, authority, verdict, err, errorText)
-	logSubmitVerdictError(logPath, taskID, agentID, verdict, errorText, stack, boundedMaskedErrorString(anomalyErr, 1024))
-}
-
-func logSubmitVerdictError(logPath, taskID, agentID, verdict string, errorText string, stack string, anomalyErrText string) {
-	if logPath == "" || errorText == "" {
-		return
-	}
-	detail := fmt.Sprintf("verdict=%s error=%s", verdict, errorText)
-	if anomalyErrText != "" {
-		detail += fmt.Sprintf(" anomaly_recording_error=%s", anomalyErrText)
-	}
-	if stack != "" {
-		detail += fmt.Sprintf(" stack=%s", stack)
-	}
-	_ = activitylog.New(logPath).Append(activitylog.Entry{
-		Agent:  agentIDOrSystem(agentID),
-		Action: "submit_verdict_failed",
-		Task:   optionalTaskID(taskID),
-		Detail: detail,
-	})
-}
-
-func recordSubmitVerdictFailureAnomaly(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, verdict string, err error, errorText string) error {
-	if bb == nil || err == nil || isSubmitVerdictPreconditionError(err) {
-		return nil
-	}
-
-	return modifyLifecycleState(bb, authority, func(state *models.State) error {
-		state.Anomalies = append(state.Anomalies, models.Anomaly{
-			Timestamp: time.Now().UTC(),
-			Task:      taskID,
-			Reporter:  agentIDOrSystem(agentID),
-			Type:      "submit_verdict_failed",
-			Details: map[string]any{
-				"verdict": verdict,
-				"error":   errorText,
-			},
-		})
-		return nil
-	})
-}
-
-func isSubmitVerdictPreconditionError(err error) bool {
-	var precondition *PreconditionError
-	return stderrors.As(err, &precondition)
-}
-
-func boundedMaskedErrorString(err error, limit int) string {
-	if err == nil {
-		return ""
-	}
-	return boundedMaskedString(err.Error(), limit)
-}
-
-func boundedMaskedString(text string, limit int) string {
-	return boundedString(secretmask.New().MaskText(text), limit)
-}
-
-func boundedString(text string, limit int) string {
-	if limit <= 0 || len([]byte(text)) <= limit {
-		return text
-	}
-	bytes := []byte(text)
-	return string(bytes[:limit]) + "... [truncated]"
-}
-
-func agentIDOrSystem(agentID string) string {
-	if agentID == "" {
-		return "system"
-	}
-	return agentID
-}
-
-func optionalTaskID(taskID string) *string {
-	if taskID == "" {
-		return nil
-	}
-	return &taskID
-}
-
-func isReviewingStatus(status, expectedReviewingStatus, expectedReviewing2Status models.TaskStatus) bool {
-	return status == expectedReviewingStatus ||
-		(expectedReviewing2Status != "" && status == expectedReviewing2Status)
-}
-
-func recordStaleVerdictAnomaly(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, verdict, reason, impact string, expectedReviewingStatus, expectedReviewing2Status models.TaskStatus) error {
-	now := time.Now().UTC()
-	return modifyLifecycleState(bb, authority, func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		if isReviewingStatus(task.Status, expectedReviewingStatus, expectedReviewing2Status) {
-			return nil
-		}
-
-		appendStaleVerdictAnomaly(state, task, taskID, agentID, verdict, reason, impact, now)
-
-		return nil
-	})
-}
-
-func appendStaleVerdictAnomaly(state *models.State, task *models.Task, taskID, agentID, verdict, reason, impact string, now time.Time) {
-	details := map[string]any{
-		"attempted_verdict": verdict,
-		"current_status":    string(task.Status),
-	}
-	if reason != "" {
-		details["reason"] = reason
-	}
-	if impact != "" {
-		details["impact"] = impact
-	}
-	if task.ReviewCommit != nil {
-		details["review_commit"] = *task.ReviewCommit
-	}
-
-	state.Anomalies = append(state.Anomalies, models.Anomaly{
-		Timestamp: now,
-		Task:      taskID,
-		Reporter:  agentID,
-		Type:      "stale_verdict",
-		Details:   details,
-	})
-
-	if agent, ok := state.Agents[agentID]; ok && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-		state.ReleaseAgent(agentID)
-	}
 }

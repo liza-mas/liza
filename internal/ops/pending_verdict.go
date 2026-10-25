@@ -18,9 +18,20 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 )
 
-const maxPendingVerdictBytes = 16 * 1024
+const (
+	maxPendingVerdictBytes = 16 * 1024
+	// pendingVerdictDirName is the private outbox directory under the runtime
+	// directory; pendingVerdictDirMode keeps it owner-only.
+	pendingVerdictDirName = "pending-verdicts"
+	pendingVerdictDirMode = 0o700
+	// A drain retries a contended state lock from the initial delay, doubling it
+	// up to the maximum.
+	pendingVerdictRetryInitialDelay = 100 * time.Millisecond
+	pendingVerdictRetryMaxDelay     = 5 * time.Second
+)
 
 // This private outbox includes the original generation so a replacement can
 // replay only as the original caller (and be quarantined), never impersonate it.
@@ -33,7 +44,7 @@ type pendingVerdict struct {
 }
 
 func pendingVerdictDir(projectRoot string) string {
-	return filepath.Join(paths.New(projectRoot).LizaDir(), "pending-verdicts")
+	return filepath.Join(paths.New(projectRoot).LizaDir(), pendingVerdictDirName)
 }
 
 func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (*VerdictResult, error) {
@@ -54,8 +65,8 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 		return nil, fmt.Errorf("read verdict boundary: %w", err)
 	}
 	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
-	request, err := NewLifecycleRequest("submit-verdict", state.FindTask(taskID), authority.ID, &authority, opts,
-		map[string]string{"verdict": verdict, "reason": reason, "impact": impact, "review_commit": reviewCommit})
+	request, err := NewLifecycleRequest(payloadschema.SubmitVerdictOperation, state.FindTask(taskID), authority.ID, &authority, opts,
+		verdictRequestPayload(verdict, reason, impact, reviewCommit))
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +96,8 @@ func (p pendingVerdict) submit(projectRoot string, retryContexts ...context.Cont
 		return nil, fmt.Errorf("read pending verdict boundary: %w", err)
 	}
 	if state.FindTask(p.TaskID) == nil {
-		return nil, WrapLifecycleError("submit-verdict", nil, &PreconditionError{Reason: "task is no longer in live state"},
-			models.LifecycleAlreadyTransitioned, "stop", "none")
+		return nil, WrapLifecycleError(payloadschema.SubmitVerdictOperation, nil, &PreconditionError{Reason: "task is no longer in live state"},
+			models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	opts := LifecycleRequestOptions{RequestID: p.Request.RequestID, ExpectedTransition: p.Request.ExpectedTransition,
 		verdictPayloadDigest: p.Request.PayloadDigest}
@@ -105,16 +116,17 @@ func (p pendingVerdict) settled(result *VerdictResult, err error) bool {
 		return true
 	}
 	var lifecycle *LifecycleError
-	if errors.As(err, &lifecycle) && lifecycle.Outcome.Effects == "none" && lifecycle.Outcome.Outcome == models.LifecycleInvalidInput {
+	noEffects := string(LifecycleEffectsNone)
+	if errors.As(err, &lifecycle) && lifecycle.Outcome.Effects == noEffects && lifecycle.Outcome.Outcome == models.LifecycleInvalidInput {
 		return true // A deterministic refusal requires a corrected request.
 	}
 	var precondition *PreconditionError
-	if errors.As(err, &precondition) && (!errors.As(err, &lifecycle) || lifecycle.Outcome.Effects == "none") {
+	if errors.As(err, &precondition) && (!errors.As(err, &lifecycle) || lifecycle.Outcome.Effects == noEffects) {
 		return true // Invalid input/state cannot improve by replaying this request.
 	}
 	return errors.As(err, &lifecycle) && (lifecycle.Outcome.Outcome == models.LifecycleAlreadyTransitioned ||
 		lifecycle.Outcome.Outcome == models.LifecycleStaleCaller ||
-		(lifecycle.Outcome.Outcome == models.LifecycleStateChanged && lifecycle.Outcome.Effects == "none" &&
+		(lifecycle.Outcome.Outcome == models.LifecycleStateChanged && lifecycle.Outcome.Effects == noEffects &&
 			lifecycle.Outcome.TransitionID != "" && lifecycle.Outcome.TransitionID != p.Request.ExpectedTransition))
 }
 
@@ -125,7 +137,7 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 		return "", fmt.Errorf("private verdict envelope exceeds its bounded encoding")
 	}
 	dir := pendingVerdictDir(projectRoot)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, pendingVerdictDirMode); err != nil {
 		return "", err
 	}
 	filename := filepath.Join(dir, fmt.Sprintf("%x.json", sha256.Sum256(data)))
@@ -228,7 +240,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 		if _, err := savePendingVerdict(projectRoot, pending); err != nil {
 			return fmt.Errorf("finish pending verdict publication: %w", err)
 		}
-		delay := 100 * time.Millisecond
+		delay := pendingVerdictRetryInitialDelay
 		for {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -250,7 +262,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 				return ctx.Err()
 			case <-timer.C:
 			}
-			delay = min(delay*2, 5*time.Second)
+			delay = min(delay*2, pendingVerdictRetryMaxDelay)
 		}
 	}
 	return nil
@@ -292,7 +304,7 @@ func readPendingVerdict(filename string) (pendingVerdict, error) {
 		return pending, fmt.Errorf("invalid private verdict identity")
 	}
 	if pending.Authority.Generation == "" || pending.Request.RequestID == "" || pending.Request.Actor != pending.Authority.ID ||
-		pending.Request.Operation != "submit-verdict" || !lifecycleDigestValid(pending.Request.PayloadDigest) ||
+		pending.Request.Operation != payloadschema.SubmitVerdictOperation || !lifecycleDigestValid(pending.Request.PayloadDigest) ||
 		pending.Request.GenerationDigest != generationFingerprint(pending.Authority.Generation) {
 		return pending, fmt.Errorf("invalid private verdict authority")
 	}

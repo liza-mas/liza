@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/statevalidate"
@@ -287,7 +288,7 @@ func requireReconciledVerdicts(state *models.State, task *models.Task, commit st
 		if !related && !ambiguous {
 			continue
 		}
-		conflict := finding.Verdict == "REJECTED"
+		conflict := submittedVerdict(finding.Verdict) == submittedVerdictRejected
 		for _, entry := range task.History {
 			if entry.Event != models.TaskEventRejected || entry.Commit == nil {
 				continue
@@ -308,7 +309,7 @@ func validateVerdictReviewBoundary(state *models.State, task *models.Task, verdi
 	if reviewedCommit != "" && (task.ReviewCommit == nil || !strings.EqualFold(*task.ReviewCommit, reviewedCommit)) {
 		return &PreconditionError{Reason: "review-commit does not match the current task review boundary; re-read and review the submitted commit"}
 	}
-	if verdict == "APPROVED" && task.ReviewCommit != nil {
+	if submittedVerdict(verdict) == submittedVerdictApproved && task.ReviewCommit != nil {
 		return requireReconciledVerdicts(state, task, *task.ReviewCommit)
 	}
 	return nil
@@ -331,7 +332,7 @@ func ReconcileVerdict(projectRoot, taskID, findingID, disposition, reason string
 				return err
 			}
 			capabilities, err := resolver.EffectiveRoleCapabilities(state.Agents[authority.ID].Role)
-			if err != nil || capabilities.RoleType != "orchestrator" || !slices.Contains(capabilities.AllowedOperations, "reconcile-verdict") {
+			if err != nil || capabilities.RoleType != roles.RoleTypeOrchestrator || !slices.Contains(capabilities.AllowedOperations, "reconcile-verdict") {
 				return &PreconditionError{Reason: "reconcile-verdict requires a registered orchestrator with the reconcile-verdict capability"}
 			}
 			if state.FindTask(taskID) == nil {

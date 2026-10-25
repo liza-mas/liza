@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/referencecontract"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
@@ -56,7 +57,7 @@ func ReaffirmProof(projectRoot, taskID, referenceID, expectedSection, reason str
 			return err
 		}
 		capabilities, err := resolver.EffectiveRoleCapabilities(state.Agents[authority.ID].Role)
-		if err != nil || capabilities.RoleType != "orchestrator" || !slices.Contains(capabilities.AllowedOperations, "reaffirm-proof") {
+		if err != nil || capabilities.RoleType != roles.RoleTypeOrchestrator || !slices.Contains(capabilities.AllowedOperations, "reaffirm-proof") {
 			return &PreconditionError{Reason: "reaffirm-proof requires a registered orchestrator with the reaffirm-proof capability"}
 		}
 		task := state.FindTask(taskID)
