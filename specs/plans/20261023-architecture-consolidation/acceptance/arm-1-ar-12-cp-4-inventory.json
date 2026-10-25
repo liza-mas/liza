@@ -34,13 +34,7 @@
     {
       "obligation_id": "AC-race",
       "file": "internal/agent/claim_breaker_test.go",
-      "assertion": "go test -race ./internal/ops/ ./internal/agent/ runs the TestClaimBreaker* suite (including the []ops.ReviewClaimClass loop) and the strategy_reviewer and claiming tests over the typed ReviewClaimClass.",
-      "command_index": 3
-    },
-    {
-      "obligation_id": "AC-race",
-      "file": "internal/ops/k7_digest_test.go",
-      "assertion": "go test -race ./internal/ops/ runs the admission-slot, work-admission and state-lock-hold suites (blocked_episode_phase_hold_test.go, admission_slot_test.go) plus the K7 digest and vocabulary tests over the named lock labels and typed hold reasons.",
+      "assertion": "go test -race ./internal/ops/ ./internal/agent/ runs the TestClaimBreaker* suite (including the []ops.ReviewClaimClass loop) and the strategy_reviewer and claiming tests over the typed ReviewClaimClass, and in internal/ops the admission-slot, work-admission and state-lock-hold suites (admission_slot_test.go, blocked_episode_phase_hold_test.go) plus k7_digest_test.go and k7_vocabulary_test.go over the named lock labels and typed hold reasons.",
       "command_index": 3
     },
     {
