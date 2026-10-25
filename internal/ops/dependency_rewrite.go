@@ -355,7 +355,7 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 		return true
 	}
 	for _, transition := range resolver.AllTransitions() {
-		if transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, task.Output) {
+		if transition.Cardinality != models.CardinalityPerSubtask || !resolver.TransitionApplies(transition.Name, task.Output) {
 			continue
 		}
 		sourceRolePair, err := resolver.TransitionSourceRolePair(transition.Name)
@@ -378,6 +378,10 @@ func operationalOutputMayBeConsumed(state *models.State, resolver *pipeline.Reso
 	}
 	return false
 }
+
+// prerequisiteConsumerNotExecuting is the `details.prerequisite` of the refusal
+// rejectUnmetDependencyOnExecutingConsumer returns.
+const prerequisiteConsumerNotExecuting = "consumer_not_executing"
 
 // rejectUnmetDependencyOnExecutingConsumer refuses a dependency update that
 // would give an executing task an unmet dependency (D13). State validation
@@ -410,10 +414,10 @@ func rejectUnmetDependencyOnExecutingConsumer(state *models.State, resolver *pip
 	return WrapLifecycleError(operation, task, &PreconditionError{
 		Reason: fmt.Sprintf("task %s is executing (%s): a dependency update cannot add unmet dependencies %s; wait until it leaves execution or block it first", task.ID, task.Status, strings.Join(unmet, ", ")),
 		Details: map[string]any{
-			"prerequisite":       "consumer_not_executing",
+			"prerequisite":       prerequisiteConsumerNotExecuting,
 			"task_id":            task.ID,
 			"status":             string(task.Status),
 			"unmet_dependencies": unmet,
 		},
-	}, models.LifecycleAlreadyTransitioned, "stop", "none")
+	}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 }

@@ -18,6 +18,18 @@ import (
 
 const reserveProviderOperation = "reserve-provider"
 
+// reservationChange names one committed reservation change. The spelling is
+// both the history Extra key recordReservationChange writes and the activity
+// log action reservationLogAction selects.
+type reservationChange string
+
+const (
+	reservationChangeAdded        reservationChange = "provider_reservation_added"
+	reservationChangeReleased     reservationChange = "provider_reservation_released"
+	reservationChangeAddedWithCap reservationChange = "provider_reservation_added_with_cap"
+	reservationChangeCapTightened reservationChange = "provider_max_outputs_tightened"
+)
+
 // ReserveProviderInput places an existing writer after every child a provider
 // generates (D-80, ADR-0195), or withdraws that placement.
 type ReserveProviderInput struct {
@@ -94,7 +106,7 @@ func ReserveProviderWithAuthority(projectRoot string, input ReserveProviderInput
 				return &PreconditionError{Reason: fmt.Sprintf("task %s is terminal (%s); its reservations are audit history", task.ID, task.Status)}
 			}
 			task.ProviderReservations = slices.Delete(task.ProviderReservations, index, index+1)
-			recordReservationChange(task, res, authority.ID, input.Reason, now, "provider_reservation_released")
+			recordReservationChange(task, res, authority.ID, input.Reason, now, reservationChangeReleased)
 			result.Changed = true
 		} else {
 			changed, err := addReservation(state, resolver, task, res, authority.ID, input.Reason, now)
@@ -125,23 +137,31 @@ func ReserveProviderWithAuthority(projectRoot string, input ReserveProviderInput
 		return nil, fmt.Errorf("%s: %w", reserveProviderOperation, err)
 	}
 	if result.Changed {
-		action := "provider_reservation_added"
-		switch {
-		case input.Release:
-			action = "provider_reservation_released"
-		case result.CapChanged && reservationAdded:
-			action = "provider_reservation_added_with_cap"
-		case result.CapChanged:
-			action = "provider_max_outputs_tightened"
-		}
+		action := reservationLogAction(input.Release, result.CapChanged, reservationAdded)
 		if err := log.New(lp.LogPath()).Append(log.Entry{
-			Timestamp: now, Agent: authority.ID, Action: action, Task: &input.TaskID,
+			Timestamp: now, Agent: authority.ID, Action: string(action), Task: &input.TaskID,
 			Detail: fmt.Sprintf("%s at %s: %s", input.ProviderTask, input.Transition, input.Reason),
 		}); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
 		}
 	}
 	return result, nil
+}
+
+// reservationLogAction selects the activity-log action of a committed change:
+// a release, a placement with or without a cap tightened beside it, or a cap
+// tightened on its own.
+func reservationLogAction(release, capChanged, reservationAdded bool) reservationChange {
+	switch {
+	case release:
+		return reservationChangeReleased
+	case capChanged && reservationAdded:
+		return reservationChangeAddedWithCap
+	case capChanged:
+		return reservationChangeCapTightened
+	default:
+		return reservationChangeAdded
+	}
 }
 
 // reserveSuccessorsInState places each named successor after every child
@@ -187,7 +207,7 @@ func addReservation(state *models.State, resolver *pipeline.Resolver, task *mode
 		return false, &PreconditionError{Reason: fmt.Sprintf("writer %s is %s and assigned or leased; placement before a writer that started is no longer possible, so the placement needs a new decision", task.ID, task.Status)}
 	}
 	task.ProviderReservations = append(task.ProviderReservations, res)
-	recordReservationChange(task, res, agentID, reason, now, "provider_reservation_added")
+	recordReservationChange(task, res, agentID, reason, now, reservationChangeAdded)
 	return true, nil
 }
 
@@ -238,7 +258,7 @@ func tightenProviderCap(state *models.State, res models.ProviderReservation, max
 	return true, nil
 }
 
-func recordReservationChange(task *models.Task, res models.ProviderReservation, agentID, reason string, now time.Time, change string) {
+func recordReservationChange(task *models.Task, res models.ProviderReservation, agentID, reason string, now time.Time, change reservationChange) {
 	note := fmt.Sprintf("%s: %s at %s", change, res.ProviderTask, res.Transition)
 	task.History = append(task.History, models.TaskHistoryEntry{
 		Time:   now,
@@ -248,7 +268,7 @@ func recordReservationChange(task *models.Task, res models.ProviderReservation, 
 		Note:   &note,
 		Extra: map[string]any{
 			"operation":          reserveProviderOperation,
-			change:               map[string]any{"provider_task": res.ProviderTask, "transition": res.Transition},
+			string(change):       map[string]any{"provider_task": res.ProviderTask, "transition": res.Transition},
 			"rewrote_depends_on": false,
 		},
 	})
@@ -283,7 +303,7 @@ func soleOutgoingSubtaskTransition(resolver *pipeline.Resolver, rolePair string,
 	var found []string
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err == nil && source == rolePair && transition.Cardinality == "per-subtask" && resolver.TransitionApplies(transition.Name, output) {
+		if err == nil && source == rolePair && transition.Cardinality == models.CardinalityPerSubtask && resolver.TransitionApplies(transition.Name, output) {
 			found = append(found, transition.Name)
 		}
 	}

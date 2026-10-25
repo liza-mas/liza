@@ -824,3 +824,39 @@ func TestCapChangeIsRecorded_D80(t *testing.T) {
 		t.Fatalf("cap change not recorded on the provider: %+v", last)
 	}
 }
+
+// K7: the provider-wait vocabulary keeps the spelling the history, activity log
+// and refusal details carried as literals. The expectations are literals, not
+// the constants under test.
+func TestProviderWaitVocabularySpelling(t *testing.T) {
+	for change, want := range map[reservationChange]string{
+		reservationChangeAdded:        "provider_reservation_added",
+		reservationChangeReleased:     "provider_reservation_released",
+		reservationChangeAddedWithCap: "provider_reservation_added_with_cap",
+		reservationChangeCapTightened: "provider_max_outputs_tightened",
+	} {
+		if string(change) != want {
+			t.Errorf("reservation change = %q, want %q", change, want)
+		}
+	}
+	if prerequisiteConsumerNotExecuting != "consumer_not_executing" {
+		t.Errorf("prerequisite = %q, want consumer_not_executing", prerequisiteConsumerNotExecuting)
+	}
+	if models.CardinalityPerSubtask != "per-subtask" {
+		t.Errorf("per-subtask cardinality = %q", models.CardinalityPerSubtask)
+	}
+	for _, tc := range []struct {
+		name                       string
+		release, capChanged, added bool
+		want                       reservationChange
+	}{
+		{"placement", false, false, true, reservationChangeAdded},
+		{"release", true, false, false, reservationChangeReleased},
+		{"placement with cap", false, true, true, reservationChangeAddedWithCap},
+		{"cap tightened alone", false, true, false, reservationChangeCapTightened},
+	} {
+		if got := reservationLogAction(tc.release, tc.capChanged, tc.added); got != tc.want {
+			t.Errorf("%s: log action = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
