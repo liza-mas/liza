@@ -99,7 +99,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners)
   - [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc)
   - [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc)
-  - [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc)
   - [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates)
   - [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership)
   - [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity)
@@ -176,12 +175,11 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | STRUCTURAL DEBT | [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) |
-| **medium** | STRUCTURAL DEBT | [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) |
 | **medium** | CROSS-CUTTING | [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates) |
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 35 medium, 16 low — 68 open issues total. *(2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 34 medium, 16 low — 67 open issues total. *(2026-10-25: the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -1292,18 +1290,6 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Direction:** Separate observation, diagnosis, repair policy, lifecycle actions, and rendering while preserving the command's public behavior and existing tests.
 
-### Split embedded.go by Artifact Family (1,530 LOC)
-
-**Skill:** code-quality-assessment
-**Category:** RECOMMENDATION (P1 — new 2026-07-24)
-**Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#15-split-internalembeddedembeddedgo-by-artifact-family)
-
-**Issue:** `internal/embedded/embedded.go` is 1,530 LOC and combines global corpus writing, Claude JSON merging, Codex TOML and permission handling, hook installation, stale MCP cleanup, pipeline/guardrail installation, and project artifact generation.
-
-**Implication:** These responsibilities operate on different schemas and change for different reasons. Co-location increases the blast radius of provider-specific changes and makes artifact installation behavior harder to review.
-
-**Direction:** Keep the package API stable while splitting implementation by artifact family: global corpus, Claude settings, Codex settings and permissions, hooks, project artifacts, and stale-artifact cleanup.
-
 ### CI Does Not Enforce Cross-Language Quality Gates
 
 **Skill:** code-quality-assessment
@@ -1349,6 +1335,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-07-25:** [Role Pair Field as Single Point of Configuration Truth](#role-pair-field-as-single-point-of-configuration-truth), [Task Type Registry Only Supports Coding Workflows](#task-type-registry-only-supports-coding-workflows), [Task Type Registry is Partial Abstraction](#task-type-registry-is-partial-abstraction), [Orchestrator Role Dissolution Without Replacement](#orchestrator-role-dissolution-without-replacement), [Supervisor Wait-Claim-Spawn Loop](#supervisor-wait-claim-spawn-loop), [Implicit Orchestrator Provenance Default](#implicit-orchestrator-provenance-default), [Orchestrator State Change Verification is Non-Binding](#orchestrator-state-change-verification-is-non-binding), [`one-to-one` Transition Child Field Generation Unspecified](#one-to-one-transition-child-field-generation-unspecified), [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments), [Bootstrap Artifact Path Drift](#bootstrap-artifact-path-drift), [Review Lease Orphaning Without Automatic Reclamation](#review-lease-orphaning-without-automatic-reclamation), [Self-Reported Validation](#self-reported-validation), [Hypothesis Exhaustion Without Root Cause](#hypothesis-exhaustion-without-root-cause), and [Supervisor Contention](#supervisor-contention).
 - **2026-08-20:** [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated).
 - **2026-09-20:** [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) — help alignment and regression coverage (`43dacebcfd2e61d37456f5104690999202388c95`).
+- **2026-10-25:** [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) — concern-file split with an unchanged exported API (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`).
 
 ---
 
@@ -1375,10 +1362,19 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [Supervisor Contention](#supervisor-contention) | STRESS POINT | 2026-07-25 — supervisors are per-agent; blackboard writes lock and integration updates use CAS |
 | [Integration Closure Is Not Revalidated](#integration-closure-is-not-revalidated) | FEEDBACK | 2026-08-20 — ADR-0113; `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace`; merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d` |
 | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) | FRAGILITY | 2026-09-20 — CLI help requires `spec_ref`; `TestMutationCommandWiring` pins required and optional fields (`43dacebcfd2e61d37456f5104690999202388c95`) |
+| [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) | STRUCTURAL DEBT | 2026-10-25 — `embedded.go` split into artifact-family files with the 38 exported declarations unchanged (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`); A2 boundary record `specs/architecture/consolidation-run/boundary-a2.md` |
 
 ---
 
 ## Fix Details
+
+### Split embedded.go by Artifact Family (1,530 LOC)
+
+**Resolution:** `20d654f7bdbe151fa3e3674c2f034048e9a01ed1` (`refactor(embedded): split embedded.go into concern files`) replaced the 1,842-line `internal/embedded/embedded.go` (the file had grown beyond the 1,530 LOC in the title) with a 128-line file and concern files for the global corpus (`global_corpus.go`), Claude settings (`claude_settings.go`), Codex permissions and hooks (`codex_permissions.go`, `codex_hooks.go`, `toml_edit.go`), project artifacts (`project_artifacts.go`), stale-artifact cleanup (`stale_artifacts.go`), and the Copilot, OpenCode and write-policy helpers. The largest file is 344 lines.
+
+**Evidence:** The 38 exported `func`/`type`/`var`/`const` declarations of the package are identical at the starting commit `96c9ad69aee983ce2b929dd681b6ba43bf920535` and at `b3356c3c62742eebd20cfcaa3b36d6c66172c149`; the change touched only `.go` files, so no embedded artifact changed and `make sync-embedded` leaves the tree unchanged; `make test`, `make lint` and `go test -race ./internal/embedded/...` are green at that revision. See [A2 boundary record](consolidation-run/boundary-a2.md#g6--architectural-issues-resolved-by-a2).
+
+**Related:** [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) stays open.
 
 ### SetTaskOutput spec_ref Validation Gap
 
