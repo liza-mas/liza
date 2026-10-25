@@ -65,7 +65,7 @@ func NewPlanHandoffDomain(resolver *pipeline.Resolver) PlanHandoffDomain {
 		resolver:         resolver,
 	}
 	for _, td := range resolver.AllTransitions() {
-		if td.Trigger != "manual" || (td.Cardinality != "per-subtask" && td.Cardinality != "one-to-one") {
+		if td.Trigger != models.TransitionTriggerManual || (td.Cardinality != models.CardinalityPerSubtask && td.Cardinality != models.CardinalityOneToOne) {
 			continue
 		}
 		source, err := resolver.TransitionSourceRolePair(td.Name)
@@ -112,7 +112,7 @@ func (d PlanHandoffDomain) Pending(task *models.Task) bool {
 	if !d.InDomain(task) {
 		return IsUnconsumedPlanningOutput(task, d.planningPairs)
 	}
-	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted[models.ReplannedTransition] || task.PlanHandoffRetired() {
 		return false
 	}
 	for _, name := range d.selectedGatedTransitions(task) {
@@ -179,7 +179,7 @@ func HasHeldPlan(state *models.State) bool {
 	for _, id := range state.Sprint.Scope.Planned {
 		task := state.FindTask(id)
 		if task != nil && task.Status == models.TaskStatusMerged &&
-			task.PlanCheckVerdictOf() == models.PlanCheckHeld && !task.TransitionsExecuted["replanned"] {
+			task.PlanCheckVerdictOf() == models.PlanCheckHeld && !task.TransitionsExecuted[models.ReplannedTransition] {
 			return true
 		}
 	}
@@ -250,7 +250,7 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 // It never authorizes generation or releases a hold; apply/recovery still
 // revalidate their full admission boundaries under the state lock.
 func (d PlanHandoffDomain) ReadyPlanCorrection(state *models.State, task *models.Task) *models.Task {
-	if state == nil || task == nil || task.Status != models.TaskStatusMerged || task.AmendsPlan != "" || task.PlanAmendment == nil || task.PlanAmendment.Pending == "" || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+	if state == nil || task == nil || task.Status != models.TaskStatusMerged || task.AmendsPlan != "" || task.PlanAmendment == nil || task.PlanAmendment.Pending == "" || task.TransitionsExecuted[models.ReplannedTransition] || task.PlanHandoffRetired() {
 		return nil
 	}
 	correction := state.FindTask(task.PlanAmendment.Pending)
@@ -339,7 +339,7 @@ func (d PlanHandoffDomain) upstreamBlocker(state *models.State, task *models.Tas
 		if visiting[depID] || !d.InDomain(dep) || dep.Status != models.TaskStatusMerged {
 			continue
 		}
-		if dep.TransitionsExecuted["replanned"] {
+		if dep.TransitionsExecuted[models.ReplannedTransition] {
 			note(upstreamReconcile, fmt.Sprintf("upstream %s was replanned", depID))
 			continue
 		}

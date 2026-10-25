@@ -142,7 +142,7 @@ func retiredByChildren(task *models.Task, children []string) bool {
 // artifact files the transition does not touch.
 func proceedTransaction(bb *db.Blackboard, s *models.State, projectRoot, taskID, transitionName string, tDef transitionDef, inheritedDeps inheritedDepSet, resolver *pipeline.Resolver, now time.Time, result *ProceedResult) error {
 	plan := s.FindTask(taskID)
-	if plan == nil || ((tDef.cardinality != "per-subtask" || len(declaredOriginals(plan.Output)) == 0) && !models.HasProviderDependencies(s)) {
+	if plan == nil || ((tDef.cardinality != models.CardinalityPerSubtask || len(declaredOriginals(plan.Output)) == 0) && !models.HasProviderDependencies(s)) {
 		return proceedInner(s, taskID, transitionName, tDef, inheritedDeps, resolver, now, result)
 	}
 	candidate := db.CloneState(s)
@@ -216,7 +216,7 @@ func planReplacementPriorState(s *models.State, originalID string, uniqueSuccess
 func planReplacementPassBarrier(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, plan *models.Task) error {
 	perSubtask := false
 	for _, name := range domain.selectedGatedTransitions(plan) {
-		if definition, err := buildTransitionDefFromPipeline(resolver, name); err == nil && definition.cardinality == "per-subtask" {
+		if definition, err := buildTransitionDefFromPipeline(resolver, name); err == nil && definition.cardinality == models.CardinalityPerSubtask {
 			perSubtask = true
 		}
 	}

@@ -12,7 +12,6 @@ var areaA4 = Area{
 		{Key: Key{File: "internal/ops/delete_task.go", Func: "DeleteTask"}, Ceiling: 119},
 		{Key: Key{File: "internal/ops/narrow_inherited_dependencies.go", Func: "narrowInheritedDependenciesWithOptionalAuthority"}, Ceiling: 305},
 		{Key: Key{File: "internal/ops/obligation_drift.go", Func: "detectObligationDrift"}, Ceiling: 142},
-		{Key: Key{File: "internal/ops/plan_check.go", Func: "RecordPlanCheck"}, Ceiling: 129},
 		{Key: Key{File: "internal/ops/repair_superseded_dependencies.go", Func: "repairSupersededDependenciesWithOptionalAuthority"}, Ceiling: 131},
 		{Key: Key{File: "internal/ops/replace_task.go", Func: "ReplaceTaskWithAuthorityAndOptions"}, Ceiling: 211},
 		{Key: Key{File: "internal/ops/retarget_dependency.go", Func: "retargetDependencyWithOptionalAuthority"}, Ceiling: 194},

@@ -1,10 +1,8 @@
 package ops
 
 import (
-	stderrors "errors"
 	"fmt"
 	"io"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
@@ -85,90 +84,16 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 	result := &PlanCheckResult{TaskID: input.TaskID, Action: input.Action}
 	mutate := func(state *models.State) error {
 		*result = PlanCheckResult{TaskID: input.TaskID, Action: input.Action}
-		if input.Action == PlanCheckActionPass {
-			if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
-				return &PreconditionError{Reason: fmt.Sprintf("plan-check provider dependencies: %v", err)}
-			}
+		task, class, blocker, err := admitPlanCheck(state, resolver, domain, input)
+		if err != nil {
+			return err
 		}
-		task := state.FindTask(input.TaskID)
-		if task == nil {
-			return &PreconditionError{Reason: fmt.Sprintf("task %q not found", input.TaskID)}
+		next, err := decidePlanCheck(state, resolver, domain, task, class, blocker, input, actor)
+		if err != nil {
+			return err
 		}
-		if task.AmendsPlan != "" || task.PlanGenerationFenced() && (input.Action == PlanCheckActionPass || input.Action == PlanCheckActionReplace || input.Action == PlanCheckActionRetire) {
-			return &PreconditionError{Reason: "plan-check cannot pass/retire a pending amendment or disposition a correction task"}
-		}
-		if err := validatePlanNoteSelection(state, resolver, domain, task, input.Notes); err != nil {
-			return &PreconditionError{Reason: err.Error()}
-		}
-		class, blocker := domain.Classify(state, task)
-		retiring := input.Action == PlanCheckActionReplace || input.Action == PlanCheckActionRetire
-		if task.PlanHandoffRetired() && !retiring {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be revived", task.ID, task.RetiredBy())}
-		}
-		var next planCheckChange
-		var changeErr error
-		if input.Action == PlanCheckActionRetire && task.PlanCheckVerdictOf() == models.PlanCheckRetired &&
-			strings.TrimSpace(task.PlanCheck.Ruling) == "" {
-			// A binary predating the ruling field dropped it on rewrite. The
-			// hand-off is already retired, so this only restores the ruling and
-			// keeps the retirement's actor and time; the history entry records
-			// who restored it and when.
-			ruling := strings.TrimSpace(input.Ruling)
-			check := *task.PlanCheck
-			check.Ruling = ruling
-			next = planCheckChange{check: &check, note: "retirement ruling restored: " + ruling, changed: true}
-		} else if retiring {
-			if err := rejectReferencedProviderRetirement(state, resolver, task.ID, retirePermanently); err != nil {
-				return err
-			}
-			next, changeErr = retirePlanHandoff(state, domain, task, input, actor)
-			if changeErr == nil && next.changed {
-				changeErr = routeStaleProviderConsumers(state, resolver, task.ID, retirePermanently, actor, time.Now().UTC())
-			}
-		} else if input.Action == PlanCheckActionClear && task.PlanCheckVerdictOf() == models.PlanCheckHeld &&
-			(class == PlanHandoffNotSource || class == PlanHandoffOutOfDomain) {
-			// A hold placed while the plan still awaited hand-off outlives it
-			// once the plan expands or its fence lifts. Clearing only drops the
-			// disposition: a plan that awaits no hand-off generates nothing.
-			next = planCheckChange{note: "hold cleared (plan no longer awaits hand-off)", changed: true}
-		} else {
-			switch class {
-			case PlanHandoffNotSource:
-				return &PreconditionError{Reason: fmt.Sprintf(
-					"task %s has no plan awaiting hand-off: it must be a MERGED planning task with output whose children do not exist yet and that was not replanned", task.ID)}
-			case PlanHandoffOutOfDomain:
-				return &PreconditionError{Reason: fmt.Sprintf(
-					"task %s has no reviewed hand-off (its transitions are automatic, many-to-one, or it has no output); it transitions without a plan-check", task.ID)}
-			}
-			next, changeErr = planCheckTransition(task, class, blocker, input, actor)
-			var refusal *PreconditionError
-			if input.Action == PlanCheckActionPass && stderrors.As(changeErr, &refusal) {
-				refusal.Reason += lineageRepairHint(state, resolver, task)
-			}
-			if input.Action == PlanCheckActionPass && changeErr == nil && next.changed {
-				changeErr = planReplacementPassBarrier(state, resolver, domain, task)
-			}
-		}
-		if changeErr != nil {
-			return changeErr
-		}
-		if next.changed {
-			task.PlanCheck = next.check
-			note := next.note
-			task.History = append(task.History, models.TaskHistoryEntry{
-				Time:  time.Now().UTC(),
-				Event: models.TaskEventPlanCheck,
-				Agent: &actor,
-				Note:  &note,
-			})
-		}
-		result.Changed = next.changed
-		result.Verdict = task.PlanCheckVerdictOf()
-		if task.PlanCheck != nil {
-			result.ReplacedBy = task.PlanCheck.ReplacedBy
-			result.Ruling = task.PlanCheck.Ruling
-		}
-		result.Class, result.Blocker = domain.Classify(state, task)
+		persistPlanCheck(task, next, actor)
+		projectPlanCheckResult(result, state, domain, task, next.changed)
 		return nil
 	}
 	if input.Authority != nil {
@@ -179,22 +104,83 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 	if err != nil {
 		return nil, fmt.Errorf("plan-check failed: %w", err)
 	}
+	return finishPlanCheck(lp, actor, input, result)
+}
 
-	if result.Changed {
-		logger := log.New(lp.LogPath())
-		entry := log.Entry{
-			Timestamp: time.Now().UTC(),
-			Agent:     actor,
-			Action:    "plan_check",
-			Task:      &result.TaskID,
-			Detail:    fmt.Sprintf("plan-check %s → %s", input.Action, planCheckVerdictLabel(result.Verdict)),
+// admitPlanCheck is the locked admission of a request, in its refusal order:
+// the provider graph a pass relies on, the task, the amendment fence, the note
+// selection and a retired hand-off, which only a retiring action may revisit.
+// It returns the task with its domain classification for the decision step.
+func admitPlanCheck(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, input PlanCheckInput) (*models.Task, PlanHandoffClass, string, error) {
+	if input.Action == PlanCheckActionPass {
+		if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
+			return nil, "", "", &PreconditionError{Reason: fmt.Sprintf("plan-check provider dependencies: %v", err)}
 		}
-		if logErr := logger.Append(entry); logErr != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", logErr))
-		}
-		if valErr := statevalidate.ValidateStateFile(lp.StatePath(), false, io.Discard); valErr != nil {
-			return nil, &PostWriteValidationError{Err: valErr}
-		}
+	}
+	task := state.FindTask(input.TaskID)
+	if task == nil {
+		return nil, "", "", &PreconditionError{Reason: fmt.Sprintf("task %q not found", input.TaskID)}
+	}
+	if task.AmendsPlan != "" || task.PlanGenerationFenced() && (input.Action == PlanCheckActionPass || input.Action == PlanCheckActionReplace || input.Action == PlanCheckActionRetire) {
+		return nil, "", "", &PreconditionError{Reason: "plan-check cannot pass/retire a pending amendment or disposition a correction task"}
+	}
+	if err := validatePlanNoteSelection(state, resolver, domain, task, input.Notes); err != nil {
+		return nil, "", "", &PreconditionError{Reason: err.Error()}
+	}
+	class, blocker := domain.Classify(state, task)
+	retiring := input.Action == PlanCheckActionReplace || input.Action == PlanCheckActionRetire
+	if task.PlanHandoffRetired() && !retiring {
+		return nil, "", "", &PreconditionError{Reason: fmt.Sprintf("task %s handoff was retired by %s; it cannot be revived", task.ID, task.RetiredBy())}
+	}
+	return task, class, blocker, nil
+}
+
+// persistPlanCheck stores a changed disposition with its history entry. A
+// replay or no-op decision persists nothing.
+func persistPlanCheck(task *models.Task, next planCheckChange, actor string) {
+	if !next.changed {
+		return
+	}
+	task.PlanCheck = next.check
+	note := next.note
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  time.Now().UTC(),
+		Event: models.TaskEventPlanCheck,
+		Agent: &actor,
+		Note:  &note,
+	})
+}
+
+// projectPlanCheckResult reports the disposition after the request and
+// re-classifies the plan against the post-change state.
+func projectPlanCheckResult(result *PlanCheckResult, state *models.State, domain PlanHandoffDomain, task *models.Task, changed bool) {
+	result.Changed = changed
+	result.Verdict = task.PlanCheckVerdictOf()
+	if task.PlanCheck != nil {
+		result.ReplacedBy = task.PlanCheck.ReplacedBy
+		result.Ruling = task.PlanCheck.Ruling
+	}
+	result.Class, result.Blocker = domain.Classify(state, task)
+}
+
+// finishPlanCheck runs after the commit: the activity log, whose failure is a
+// warning, then the post-write validation of a changed state.
+func finishPlanCheck(lp paths.LizaPaths, actor string, input PlanCheckInput, result *PlanCheckResult) (*PlanCheckResult, error) {
+	if !result.Changed {
+		return result, nil
+	}
+	entry := log.Entry{
+		Timestamp: time.Now().UTC(),
+		Agent:     actor,
+		Action:    "plan_check",
+		Task:      &result.TaskID,
+		Detail:    fmt.Sprintf("plan-check %s → %s", input.Action, planCheckVerdictLabel(result.Verdict)),
+	}
+	if logErr := log.New(lp.LogPath()).Append(entry); logErr != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", logErr))
+	}
+	if valErr := statevalidate.ValidateStateFile(lp.StatePath(), false, io.Discard); valErr != nil {
+		return nil, &PostWriteValidationError{Err: valErr}
 	}
 	return result, nil
 }
@@ -212,7 +198,7 @@ func validatePlanNoteSelection(state *models.State, resolver *pipeline.Resolver,
 		if err != nil {
 			return err
 		}
-		if definition.cardinality != "per-subtask" {
+		if definition.cardinality != models.CardinalityPerSubtask {
 			return fmt.Errorf("validation notes require a per-subtask hand-off")
 		}
 		_, _, remap := resolvePerSubtaskSiblings(task.Output, collectNonTerminalByKind(state, declaredOriginals(task.Output)), task.ID, definition.taskSlug)
@@ -274,207 +260,10 @@ func requireOrchestratorType(resolver *pipeline.Resolver, agentID string) error 
 	if err != nil {
 		return err
 	}
-	if roleType != "orchestrator" {
+	if roleType != roles.RoleTypeOrchestrator {
 		return fmt.Errorf("role %s has type %s", role, roleType)
 	}
 	return nil
-}
-
-type planCheckChange struct {
-	check   *models.PlanCheck
-	note    string
-	changed bool
-}
-
-// retirePlanHandoff ends an unused hand-off by a merged correction (replace)
-// or by a ruling that leaves it with no replacement (retire). Both share the
-// unused-hand-off checks; only retire may end a hold, and only replace names
-// a successor.
-func retirePlanHandoff(state *models.State, domain PlanHandoffDomain, original *models.Task, input PlanCheckInput, actor string) (planCheckChange, error) {
-	refuse := func(reason string) (planCheckChange, error) {
-		return planCheckChange{}, &PreconditionError{Reason: reason}
-	}
-	retire := input.Action == PlanCheckActionRetire
-	ruling := strings.TrimSpace(input.Ruling)
-	if original.PlanHandoffRetired() {
-		verdict := original.PlanCheckVerdictOf()
-		if retire && verdict == models.PlanCheckRetired && original.PlanCheck.Ruling == ruling ||
-			!retire && verdict == models.PlanCheckReplaced && original.PlanCheck.ReplacedBy == input.ReplacedBy {
-			return planCheckChange{}, nil
-		}
-		return refuse(fmt.Sprintf("task %s handoff was already retired by %s", original.ID, original.RetiredBy()))
-	}
-	if !domain.InDomain(original) || !domain.Pending(original) {
-		if !retire {
-			return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff", original.ID))
-		}
-		if reason := deliveredCohortlessSourceRefusal(state, domain.resolver, original); reason != "" {
-			return refuse(fmt.Sprintf("task %s must have an unused MERGED reviewed handoff, or be an outputless many-to-one source outside any cohort whose downstream work merged: %s", original.ID, reason))
-		}
-	}
-	if original.PlanCheckVerdictOf() == models.PlanCheckHeld && !retire {
-		return refuse(fmt.Sprintf("task %s is held; operator plan-check %s --clear is required first", original.ID, original.ID))
-	}
-	for name, executed := range original.TransitionsExecuted {
-		if executed {
-			return refuse(fmt.Sprintf("task %s already executed %s; delivered output cannot be retired", original.ID, name))
-		}
-	}
-	for i := range state.Tasks {
-		candidate := &state.Tasks[i]
-		if slices.Contains(candidate.EffectiveParentTasks(), original.ID) {
-			return refuse(fmt.Sprintf("task %s already generated child %s", original.ID, candidate.ID))
-		}
-		if candidate.PlanHandoffRetired() || candidate.TransitionsExecuted["replanned"] ||
-			(candidate.Status.IsTerminal() && !domain.Pending(candidate)) {
-			continue
-		}
-		if candidate.ID != input.ReplacedBy && candidate.RolePair == original.RolePair &&
-			slices.Contains(candidate.DependsOn, original.ID) {
-			// Its transition inherits only from same-pair upstreams that ran it: the
-			// original never will, and nothing redirects the edge to the correction.
-			if retire {
-				return refuse(fmt.Sprintf("task %s depends on %s and would inherit no phase gate once it is retired; retarget or replan it before retirement", candidate.ID, original.ID))
-			}
-			return refuse(fmt.Sprintf("task %s depends on %s and would inherit no phase gate from %s; retarget or replan it before retirement", candidate.ID, original.ID, input.ReplacedBy))
-		}
-		for index, output := range candidate.Output {
-			if output.InheritInputs == nil {
-				continue
-			}
-			for selection, selected := range output.InheritInputs.Selections {
-				if selected.UpstreamTask == original.ID {
-					return refuse(fmt.Sprintf("task %s output[%d].inherit_inputs.selections[%d] still selects %s; retarget and review that plan before retirement", candidate.ID, index, selection, original.ID))
-				}
-			}
-		}
-	}
-	if retire {
-		return planCheckChange{
-			check: &models.PlanCheck{Verdict: models.PlanCheckRetired, Ruling: ruling, By: actor, At: time.Now().UTC()},
-			note:  "unused handoff retired by ruling " + ruling, changed: true,
-		}, nil
-	}
-	correction := state.FindTask(input.ReplacedBy)
-	if correction == nil || correction.ID == original.ID || correction.Status != models.TaskStatusMerged ||
-		correction.RolePair != original.RolePair || !domain.InDomain(correction) || correction.PlanHandoffRetired() ||
-		correction.TransitionsExecuted["replanned"] || correction.PlanCheckVerdictOf() == models.PlanCheckHeld {
-		return refuse("replacement must be a distinct MERGED correction with output in the same reviewed role-pair, neither held, replanned nor retired")
-	}
-	return planCheckChange{
-		check: &models.PlanCheck{Verdict: models.PlanCheckReplaced, ReplacedBy: correction.ID, By: actor, At: time.Now().UTC()},
-		note:  "unused handoff replaced by " + correction.ID, changed: true,
-	}, nil
-}
-
-// deliveredCohortlessSourceRefusal admits, for retire only, an outputless
-// source of a many-to-one transition that has no cohort parent: the engine can
-// never run that transition for it (D-225). The ruling judges delivery; its
-// direct downstream tasks in other role-pairs are the evidence it rests on, at
-// least one merged and none live. It returns why task does not qualify, or "".
-func deliveredCohortlessSourceRefusal(state *models.State, resolver *pipeline.Resolver, task *models.Task) string {
-	switch {
-	case task.Status != models.TaskStatusMerged:
-		return "it is not MERGED"
-	case len(task.Output) > 0:
-		return "it has output"
-	case task.CohortParentID() != "":
-		return "it belongs to the cohort of " + task.CohortParentID()
-	case !hasUnexecutedManyToOne(resolver, task):
-		return "no unexecuted many-to-one transition leaves " + task.RolePair
-	}
-	delivered := false
-	for i := range state.Tasks {
-		dependent := &state.Tasks[i]
-		if dependent.RolePair == task.RolePair || !slices.Contains(dependent.DependsOn, task.ID) {
-			continue
-		}
-		if !dependent.Status.IsTerminal() {
-			return fmt.Sprintf("downstream task %s is not terminal", dependent.ID)
-		}
-		delivered = delivered || dependent.Status == models.TaskStatusMerged
-	}
-	if !delivered {
-		return fmt.Sprintf("no MERGED downstream task outside %s depends on it", task.RolePair)
-	}
-	return ""
-}
-
-func hasUnexecutedManyToOne(resolver *pipeline.Resolver, task *models.Task) bool {
-	if resolver == nil {
-		return false
-	}
-	for _, transition := range resolver.AllTransitions() {
-		if transition.Cardinality != "many-to-one" || task.TransitionsExecuted[transition.Name] || !transition.AppliesTo(task.Output) {
-			continue
-		}
-		if source, err := resolver.TransitionSourceRolePair(transition.Name); err == nil && source == task.RolePair {
-			return true
-		}
-	}
-	return false
-}
-
-func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
-	current := task.PlanCheckVerdictOf()
-	now := time.Now().UTC()
-	switch input.Action {
-	case PlanCheckActionPass:
-		switch {
-		case current == models.PlanCheckHeld:
-			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
-				"task %s is held for human action (%s); only an operator plan-check %s --clear releases it", task.ID, task.PlanCheck.Ask, task.ID)}
-		case current == models.PlanCheckPassed:
-			if !slices.Equal(task.PlanCheck.Notes, input.Notes) {
-				return planCheckChange{}, &PreconditionError{Reason: "passed plan has different validation notes; an operator must clear and recheck it before generation"}
-			}
-			return planCheckChange{}, nil
-		case class == PlanHandoffNeedsReview && blocker != "":
-			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
-				"task %s cannot pass while %s; replan or hold it instead", task.ID, blocker)}
-		}
-		return planCheckChange{
-			check:   &models.PlanCheck{Verdict: models.PlanCheckPassed, By: actor, At: now, Notes: slices.Clone(input.Notes)},
-			note:    "passed",
-			changed: true,
-		}, nil
-	case PlanCheckActionHold:
-		ask := strings.TrimSpace(input.Ask)
-		if current == models.PlanCheckHeld {
-			if task.PlanCheck.Ask == ask {
-				return planCheckChange{}, nil
-			}
-			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
-				"task %s is already held for %q; an operator must clear it before a different hold", task.ID, task.PlanCheck.Ask)}
-		}
-		return planCheckChange{
-			check:   &models.PlanCheck{Verdict: models.PlanCheckHeld, Ask: ask, By: actor, At: now},
-			note:    "held: " + ask,
-			changed: true,
-		}, nil
-	default: // clear
-		if current == "" {
-			return planCheckChange{}, nil
-		}
-		return planCheckChange{note: "cleared " + string(current), changed: true}, nil
-	}
-}
-
-// lineageRepairHint names the retarget-dependency repair for each direct edge
-// to a replanned upstream that mergedPlanLineageRepair would admit, so a
-// refused pass points at the metadata repair instead of a replan.
-func lineageRepairHint(state *models.State, resolver *pipeline.Resolver, task *models.Task) string {
-	var hints []string
-	for _, dep := range task.DependsOn {
-		successor, ok := liveReplanSuccessor(state, dep)
-		if ok && mergedPlanLineageRepair(state, resolver, task, dep, []string{successor.ID}) == nil {
-			hints = append(hints, fmt.Sprintf("retarget-dependency %s %s %s", task.ID, dep, successor.ID))
-		}
-	}
-	if len(hints) == 0 {
-		return ""
-	}
-	return "; its output already targets the replan successor, so repair the stale edge instead: " + strings.Join(hints, " and ")
 }
 
 func planCheckVerdictLabel(verdict models.PlanCheckVerdict) string {

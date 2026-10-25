@@ -51,7 +51,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 		return ""
 	}
 	td, err := d.resolver.Transition(failure.Transition)
-	if err != nil || td.Cardinality != "per-subtask" {
+	if err != nil || td.Cardinality != models.CardinalityPerSubtask {
 		return ""
 	}
 	resolved, err := buildTransitionDefFromPipeline(d.resolver, failure.Transition)
@@ -94,7 +94,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 			}
 			upstreams[upstream.ID] = map[string]any{
 				"executed":  upstream.TransitionsExecuted[failure.Transition],
-				"replanned": upstream.TransitionsExecuted["replanned"],
+				"replanned": upstream.TransitionsExecuted[models.ReplannedTransition],
 				"children":  children,
 			}
 		}
