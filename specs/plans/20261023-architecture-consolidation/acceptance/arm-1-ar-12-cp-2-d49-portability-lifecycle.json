@@ -10,7 +10,7 @@
     {
       "obligation_id": "AC-launch",
       "file": "internal/oracle/a3/lifecycle/portability_test.go",
-      "assertion": "R1 TestLifecycleGitLayout (windows entry is a git.exe shim, linux/darwin keep the git symlink), R2 TestLifecycleGitShimFidelity (argv round trip, stdin, exit status and stderr, working directory, fixture identity and dates, conflicting rebase equal to direct host Git) and R3 TestLifecycleGitShimScenarios (rebase-on-refusal-conflict and assess-blocked unchanged-no-change run with the shim forced on this host match the committed goldens); make lint runs GOOS=windows go vet.",
+      "assertion": "R1 TestLifecycleGitLayout (windows entry is a git.exe shim, linux/darwin keep the git symlink), R2 TestLifecycleGitShimFidelity (argv round trip, stdin, exit status and stderr, working directory, fixture identity and dates, conflicting rebase equal to direct host Git, also for a project reached through a symlink: TestLifecycleGitShimFidelityAliasedRoot, TestLifecyclePathSpellingsMask) and R3 TestLifecycleGitShimScenarios (rebase-on-refusal-conflict and assess-blocked unchanged-no-change run with the shim forced on this host match the committed goldens); make lint runs GOOS=windows go vet.",
       "command_index": 0
     },
     {

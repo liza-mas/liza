@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -113,6 +114,42 @@ func TestLifecycleGitLayout(t *testing.T) {
 
 const shimPackage = "./internal/oracle/a3/lifecycle/testdata/gitshim"
 
+// pathSpellings lists the ways Git can print a directory: as given, with
+// slashes (Git for Windows), and with symlinks resolved (a symlinked temporary
+// root on macOS, or an alias), longest first so that a spelling that contains
+// another is replaced whole.
+func pathSpellings(dir string) []string {
+	seen := map[string]bool{}
+	var spellings []string
+	add := func(candidate string) {
+		for _, spelling := range []string{candidate, filepath.ToSlash(candidate)} {
+			if spelling != "" && !seen[spelling] {
+				seen[spelling] = true
+				spellings = append(spellings, spelling)
+			}
+		}
+	}
+	add(dir)
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		add(resolved)
+	}
+	sort.SliceStable(spellings, func(i, j int) bool { return len(spellings[i]) > len(spellings[j]) })
+	return spellings
+}
+
+// maskPaths replaces every spelling of the disposable project with a token,
+// ignoring case on Windows, where paths are case-insensitive.
+func maskPaths(text string, spellings []string) string {
+	for _, spelling := range spellings {
+		pattern := regexp.QuoteMeta(spelling)
+		if runtime.GOOS == "windows" {
+			pattern = "(?i)" + pattern
+		}
+		text = regexp.MustCompile(pattern).ReplaceAllLiteralString(text, "<PROJECT>")
+	}
+	return text
+}
+
 // shimResults runs a Git sequence with bin as the fixture's Git in a fresh
 // environment and returns each probe's result, keyed by probe name. The
 // sequence covers what the lifecycle drivers need from Git through the shim:
@@ -122,6 +159,7 @@ const shimPackage = "./internal/oracle/a3/lifecycle/testdata/gitshim"
 func shimResults(t *testing.T, r environment, bin string) map[string]commandResult {
 	t.Helper()
 	results := map[string]commandResult{}
+	spellings := pathSpellings(r.project)
 	run := func(name, dir, stdin string, args ...string) {
 		t.Helper()
 		at := r
@@ -129,8 +167,7 @@ func shimResults(t *testing.T, r environment, bin string) map[string]commandResu
 			at.project = dir
 		}
 		res := at.commandStdin(t, bin, stdin, args...)
-		res.stdout = strings.ReplaceAll(res.stdout, r.project, "<PROJECT>")
-		res.stderr = strings.ReplaceAll(res.stderr, r.project, "<PROJECT>")
+		res.stdout, res.stderr = maskPaths(res.stdout, spellings), maskPaths(res.stderr, spellings)
 		results[name] = res
 	}
 	readme := filepath.Join(r.project, "README")
@@ -159,14 +196,25 @@ func shimResults(t *testing.T, r environment, bin string) map[string]commandResu
 
 // shimDivergences names the probes on which the shim differs from direct host
 // Git, and returns the direct results.
-func shimDivergences(t *testing.T, shimBin string) ([]string, map[string]commandResult) {
+func shimDivergences(t *testing.T, shimBin string, aliased bool) ([]string, map[string]commandResult) {
 	t.Helper()
 	host, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal("host git unavailable")
 	}
-	want := shimResults(t, newEnvironment(t, ""), host)
+	direct := newEnvironment(t, "")
 	viaShim := newEnvironmentWith(t, "", shimLayout(runtime.GOOS), shimBin)
+	if aliased {
+		// Git prints the resolved path of a project reached through a symlink.
+		for _, r := range []*environment{&direct, &viaShim} {
+			alias := filepath.Join(filepath.Dir(r.project), "project-alias")
+			if err := os.Symlink(r.project, alias); err != nil {
+				t.Fatal("create project alias:", err)
+			}
+			r.project = alias
+		}
+	}
+	want := shimResults(t, direct, host)
 	got := shimResults(t, viaShim, viaShim.gitBin)
 	var names []string
 	for name, res := range want {
@@ -216,7 +264,7 @@ func buildShimVariant(t *testing.T, anchor, defect string) string {
 // stdout, stderr and exit status as direct host Git for every probe.
 func TestLifecycleGitShimFidelity(t *testing.T) {
 	shim := oracle.BuildCLI(t, shimPackage)
-	diverged, direct := shimDivergences(t, shim)
+	diverged, direct := shimDivergences(t, shim, false)
 	if len(diverged) != 0 {
 		t.Fatalf("shim differs from host git on probes %v", diverged)
 	}
@@ -250,11 +298,69 @@ func TestLifecycleGitShimDefectsDetected(t *testing.T) {
 		"dropped exit status": {"return exit.ExitCode()", "return 0", "missing"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			diverged, _ := shimDivergences(t, buildShimVariant(t, tc.anchor, tc.defect))
+			diverged, _ := shimDivergences(t, buildShimVariant(t, tc.anchor, tc.defect), false)
 			if !slices.Contains(diverged, tc.probe) {
 				t.Fatalf("defect went undetected by probe %s (diverged: %v)", tc.probe, diverged)
 			}
 		})
+	}
+}
+
+// R2 on a project reached through a symlink: Git prints the resolved path, so
+// fidelity must hold for every spelling of the fixture root. Creating a symlink
+// may be refused to an unprivileged Windows user; the spellings Windows Git
+// prints are covered by TestLifecyclePathSpellingsMask on every platform.
+func TestLifecycleGitShimFidelityAliasedRoot(t *testing.T) {
+	probe := filepath.Join(t.TempDir(), "probe")
+	if err := os.Symlink(t.TempDir(), probe); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Log("symlinks unavailable to this user; aliased root not exercised")
+			return
+		}
+		t.Fatal("create symlink:", err)
+	}
+	shim := oracle.BuildCLI(t, shimPackage)
+	if diverged, _ := shimDivergences(t, shim, true); len(diverged) != 0 {
+		t.Fatalf("shim differs from host git on probes %v for an aliased project", diverged)
+	}
+	for name, tc := range map[string]struct{ anchor, defect, probe string }{
+		"dropped argument":    {"os.Args[1:]", "os.Args[1:len(os.Args)-1]", "argv"},
+		"dropped exit status": {"return exit.ExitCode()", "return 0", "missing"},
+	} {
+		diverged, _ := shimDivergences(t, buildShimVariant(t, tc.anchor, tc.defect), true)
+		if !slices.Contains(diverged, tc.probe) {
+			t.Errorf("%s: defect went undetected for an aliased project (diverged: %v)", name, diverged)
+		}
+	}
+}
+
+func TestLifecyclePathSpellingsMask(t *testing.T) {
+	// A resolved root that contains the alias as a suffix, as on macOS where
+	// /var is a link to /private/var, and Git for Windows' slash spelling.
+	spellings := []string{"/private/var/T/p", "/var/T/p", `C:\Users\R\p`, "C:/Users/R/p"}
+	sort.SliceStable(spellings, func(i, j int) bool { return len(spellings[i]) > len(spellings[j]) })
+	for in, want := range map[string]string{
+		"Initialized in /private/var/T/p/.git/":   "Initialized in <PROJECT>/.git/",
+		"/var/T/p":                                "<PROJECT>",
+		"C:/Users/R/p\nfatal at C:/Users/R/p/sub": "<PROJECT>\nfatal at <PROJECT>/sub",
+		"/private/var/T/other":                    "/private/var/T/other",
+	} {
+		if runtime.GOOS == "windows" && strings.Contains(in, "/var/") {
+			continue // case folding applies only to Windows spellings
+		}
+		if got := maskPaths(in, spellings); got != want {
+			t.Errorf("masking %q: got %q; want %q", in, got, want)
+		}
+	}
+	dir := t.TempDir()
+	got := pathSpellings(dir)
+	if !slices.Contains(got, dir) || !slices.Contains(got, filepath.ToSlash(dir)) {
+		t.Error("spellings omit the native or slash form")
+	}
+	for i := 1; i < len(got); i++ {
+		if len(got[i]) > len(got[i-1]) {
+			t.Error("spellings must be ordered longest first")
+		}
 	}
 }
 

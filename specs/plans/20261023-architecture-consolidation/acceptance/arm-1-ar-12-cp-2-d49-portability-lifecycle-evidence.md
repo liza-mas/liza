@@ -35,6 +35,7 @@ After the correction all of them pass (`go test -count=1 ./internal/oracle/a3/li
 ## Negative controls
 
 - R2/R3 `TestLifecycleGitShimDefectsDetected`: a shim built from the shim source with `os.Args[1:]` replaced by `os.Args[1:len(os.Args)-1]` diverges from host Git on probe `argv`; one with `return exit.ExitCode()` replaced by `return 0` diverges on probe `missing`. Both detected; the real shim has no divergence (`TestLifecycleGitShimFidelity`).
+- R2 path spellings (review finding, iteration 1): Git prints a project reached through a symlink by its resolved path, and slash-separated paths on Windows. `maskPaths` now masks every spelling (native, slash, resolved) of the fixture root, longest first, ignoring case on Windows. `TestLifecycleGitShimFidelityAliasedRoot` runs the fidelity probes and both shim defects through a symlinked project root; with the previous native-only masking it failed with `shim differs from host git on probes [init toplevel] for an aliased project`, and it passes with the fix. `TestLifecyclePathSpellingsMask` covers the macOS `/private/var` and Windows slash/backslash spellings on every platform.
 - R4: removing the README assertion, masking the whole scalar, or removing the literal-block branch each turned the named R4 tests red; restored afterwards.
 
 ## Golden diff (`rebase-on-refusal-conflict.txt`, written with `ORACLE_WRITE=1` for this subtest only)
