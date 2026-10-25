@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "W7",
+      "file": "internal/toolresult/claude_test.go",
+      "assertion": "TestClaudeHookVocabularyKeepsWireNames decodes provider JSON into HookEvent/HookTool and pins each event constant (PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch) to its wire value; TestClaudeHookEventAndToolDispatch drives every event plus unknown and empty events and asserts hookEventName is a string equal to PostToolUse; TestCodexHookRefusesUnsupportedEvents (codex_test.go) asserts the exact unsupported-event refusal for non-PreToolUse/PostToolUse events. Recorded mutation (Bash rewrite guard widened to Read) turns TestCodexHookPreToolUsePassesThroughOtherTools red.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "W8",
+      "file": "internal/toolresult/claude_test.go",
+      "assertion": "TestClaudeHookEventAndToolDispatch rewrites Read, Grep, Glob and MCP results on PostToolUse and leaves Bash and unknown WebFetch untouched; TestClaudeBatchGuardHandledToolNames stops Read, Grep, Glob and MCP entries and ignores Bash and unknown entries; TestCodexHookPreToolUsePassesThroughOtherTools passes non-Bash tools through. Recorded mutation (Glob dropped from the batch native set) turns TestClaudeBatchGuardHandledToolNames red.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-unknown",
+      "file": "internal/toolresult/codex_test.go",
+      "assertion": "TestCodexHookRefusesUnsupportedEvents asserts the exact error text and nil output for unknown events; TestCodexHookRefusesNonManagedPermissionWithExactText asserts the exact deny JSON for non-managed permission modes; TestCodexHookPreToolUsePassesThroughOtherTools and TestClaudeHookEventAndToolDispatch assert unknown-tool pass-through. Existing TestCodexHookAcceptsOnlyManagedConfigurationMode and the native tables in claude_native_test.go are unchanged apart from HookTool conversions of loop variables.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a2/cli/tool_result_hooks_test.go",
+      "assertion": "TestOracleA2ToolResultHooks (C-12) passes live against unchanged claude-hook and codex-hook goldens; all other ./internal/oracle/... oracles pass in the same run.",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-guards",
+      "file": "internal/testguard/archguard/area_a2_test.go",
+      "assertion": "The architecture guard (size ratchet, import direction) runs under make lint and make test and passes with the area A2 declaration unchanged by this task.",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-types",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-callers",
+      "approved_reference_id": "scope5"
+    },
+    {
+      "obligation_id": "AC-policy",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    },
+    {
+      "obligation_id": "AC-order",
+      "approved_reference_id": "arch-files"
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a2-context"
+    }
+  ]
+}

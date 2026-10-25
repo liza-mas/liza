@@ -21,7 +21,7 @@ func TestClaudePostNativeOutputs(t *testing.T) {
 			case "Glob":
 				response = map[string]any{"filenames": strings.Split(big, "\n"), "numFiles": 4000, "durationMs": 2, "truncated": false}
 			}
-			hook := ClaudeHookInput{Event: "PostToolUse", Tool: tool, Response: response, Input: map[string]any{"path": "/repo"}, SessionID: "claude-session"}
+			hook := ClaudeHookInput{Event: "PostToolUse", Tool: HookTool(tool), Response: response, Input: map[string]any{"path": "/repo"}, SessionID: "claude-session"}
 			out, err := ClaudePostToolResult(s, hook, Result{TaskID: "task-778", AgentID: "coder-1"})
 			if err != nil {
 				t.Fatal(err)
@@ -163,7 +163,7 @@ func TestClaudeBatchPassesOversizedNativeSuccess(t *testing.T) {
 				t.Fatalf("fixture outside the D91 band: %d bytes", len(response))
 			}
 			// WHEN the batch boundary inspects it
-			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolBatch", SessionID: "claude-session", ToolCalls: []ClaudeHookInput{{Tool: tool, Response: response, Input: map[string]any{"path": "/repo"}}}}, Result{})
+			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolBatch", SessionID: "claude-session", ToolCalls: []ClaudeHookInput{{Tool: HookTool(tool), Response: response, Input: map[string]any{"path": "/repo"}}}}, Result{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -228,5 +228,96 @@ func TestClaudeBatchKeepsRedactedNativeReplacement(t *testing.T) {
 	out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolBatch", ToolCalls: []ClaudeHookInput{{Tool: "Read", Response: response, Input: map[string]any{"file_path": "/repo/.env"}}}}, Result{})
 	if err != nil || len(out) != 0 {
 		t.Fatalf("redacted native replacement stopped the session: out=%v err=%v", out, err)
+	}
+}
+
+func TestClaudeHookVocabularyKeepsWireNames(t *testing.T) {
+	var hook ClaudeHookInput
+	payload := `{"hook_event_name":"PostToolBatch","tool_name":"Read","tool_calls":[{"tool_name":"Bash"},{"tool_name":"WebFetch"}]}`
+	if err := json.Unmarshal([]byte(payload), &hook); err != nil {
+		t.Fatal(err)
+	}
+	if hook.Event != HookEventPostToolBatch || hook.Tool != HookToolRead || hook.ToolCalls[0].Tool != HookToolBash || hook.ToolCalls[1].Tool != "WebFetch" {
+		t.Fatalf("decoded hook: %+v", hook)
+	}
+	for want, got := range map[string]string{
+		"PreToolUse": string(HookEventPreToolUse), "PostToolUse": string(HookEventPostToolUse),
+		"PostToolUseFailure": string(HookEventPostToolUseFailure), "PostToolBatch": string(HookEventPostToolBatch),
+		"Read": string(HookToolRead), "Grep": string(HookToolGrep), "Glob": string(HookToolGlob), "Bash": string(HookToolBash),
+	} {
+		if got != want {
+			t.Errorf("constant %q has wire value %q", want, got)
+		}
+	}
+}
+
+// Each event reaches its own branch, and a handled tool is rewritten only on
+// PostToolUse. Bash, unknown tools and unknown events keep the native flow.
+func TestClaudeHookEventAndToolDispatch(t *testing.T) {
+	big := strings.Repeat("dispatch line\n", 4000)
+	responses := map[HookTool]any{
+		HookToolRead:         map[string]any{"type": "text", "file": map[string]any{"filePath": "/repo/a.go", "content": big}},
+		HookToolGrep:         map[string]any{"mode": "content", "content": big, "numFiles": 1, "filenames": []string{"a.go"}},
+		HookToolGlob:         map[string]any{"filenames": strings.Split(big, "\n"), "numFiles": 4000, "truncated": false},
+		HookToolBash:         map[string]any{"stdout": big},
+		"WebFetch":           map[string]any{"result": big},
+		"mcp__fixture__find": []any{map[string]any{"type": "text", "text": big}},
+	}
+	for _, tc := range []struct {
+		event    HookEvent
+		tool     HookTool
+		rewrites bool
+	}{
+		{HookEventPostToolUse, HookToolRead, true},
+		{HookEventPostToolUse, HookToolGrep, true},
+		{HookEventPostToolUse, HookToolGlob, true},
+		{HookEventPostToolUse, "mcp__fixture__find", true},
+		{HookEventPostToolUse, HookToolBash, false},
+		{HookEventPostToolUse, "WebFetch", false},
+		{HookEventPreToolUse, HookToolRead, false},
+		{HookEventPostToolUseFailure, HookToolRead, false},
+		{"SessionStart", HookToolRead, false},
+		{"", HookToolRead, false},
+	} {
+		t.Run(string(tc.event)+"/"+string(tc.tool), func(t *testing.T) {
+			out, err := ClaudePostToolResult(testStore(t), ClaudeHookInput{Event: tc.event, Tool: tc.tool, Response: responses[tc.tool]}, Result{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !tc.rewrites {
+				if len(out) != 0 {
+					t.Fatalf("expected the native flow, got %v", out)
+				}
+				return
+			}
+			specific, _ := out["hookSpecificOutput"].(map[string]any)
+			if name, ok := specific["hookEventName"].(string); !ok || name != "PostToolUse" || specific["updatedToolOutput"] == nil {
+				t.Fatalf("rewrite output: %#v", out)
+			}
+		})
+	}
+}
+
+// The batch boundary inspects only Read, Grep, Glob and MCP entries: a secret
+// in a Bash or unknown-tool entry is not its concern.
+func TestClaudeBatchGuardHandledToolNames(t *testing.T) {
+	secret := map[string]any{"stdout": "token fake-known-secret"}
+	for _, tc := range []struct {
+		tool HookTool
+		stop bool
+	}{
+		{HookToolRead, true}, {HookToolGrep, true}, {HookToolGlob, true}, {"mcp__fixture__find", true},
+		{HookToolBash, false}, {"WebFetch", false},
+	} {
+		t.Run(string(tc.tool), func(t *testing.T) {
+			hook := ClaudeHookInput{Event: HookEventPostToolBatch, ToolCalls: []ClaudeHookInput{{Tool: tc.tool, Response: secret}}}
+			out, err := ClaudePostToolResult(testStore(t), hook, Result{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stopped := out["continue"] == false; stopped != tc.stop {
+				t.Fatalf("stopped=%v want %v: %v", stopped, tc.stop, out)
+			}
+		})
 	}
 }
