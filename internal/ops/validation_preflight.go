@@ -330,7 +330,7 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 		var probe *sessionvalidation.Error
 		var local *validationFailure
 		if errors.As(checkErr, &probe) {
-			p.record.Code = probe.Code
+			p.record.Code = string(probe.Code)
 			p.record.CommandIndex = probe.CommandIndex
 			p.record.CheckIndex = probe.CheckIndex
 			p.record.Variable = probe.Variable

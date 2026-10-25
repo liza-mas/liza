@@ -87,7 +87,7 @@ func TestPreflightUsesSelectedPathAndWorktree(t *testing.T) {
 	contract := []models.ValidationPrerequisite{{Command: "validate", Executables: []string{"runtime"}, Probes: [][]string{{"runtime", "--import-module"}}}}
 	for _, tc := range []struct {
 		path string
-		code string
+		code ErrorCode
 	}{
 		{"absent", "executable_missing"},
 		{"broken", "probe_failed"},
@@ -298,7 +298,7 @@ func TestPreflightProcess(t *testing.T) {
 	}
 }
 
-func assertPreflightCode(t *testing.T, err error, code string) {
+func assertPreflightCode(t *testing.T, err error, code ErrorCode) {
 	t.Helper()
 	var failure *Error
 	if !errors.Is(err, ErrPreflight) || !errors.As(err, &failure) || failure.Code != code {
