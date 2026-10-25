@@ -28,6 +28,22 @@ const AcceptanceAllocationRefusalThreshold = 3
 // acceptanceBlockedReasonLimit bounds the refusal text a blocked reason carries.
 const acceptanceBlockedReasonLimit = 2000
 
+// Blocked-reason classes: a blocked reason starts with its class, which
+// operators and the support guide search for.
+const (
+	acceptanceReasonContentInvalid     = "acceptance_evidence_invalid"
+	acceptanceReasonAllocationRepeated = "acceptance_claim_refused_repeatedly"
+)
+
+// History Extra keys, and the claim_refusal value, of the blocked entry a
+// claim-stage refusal appends.
+const (
+	claimRefusalExtraKey        = "claim_refusal"
+	claimRefusalAcceptanceValue = "acceptance_evidence"
+	faultClassExtraKey          = "fault_class"
+	integrationCommitExtraKey   = "integration_commit"
+)
+
 type acceptanceClaimBlockTestHooks struct {
 	afterIntegrationEqualityCheck func()
 }
@@ -158,9 +174,9 @@ func BlockAcceptanceRefusedTask(projectRoot string, authority models.AgentAuthor
 			models.AdvanceLifecycle(task)
 			releaseAgentsForTask(state, taskID)
 			extra := map[string]any{
-				"claim_refusal":      "acceptance_evidence",
-				"fault_class":        string(refusal.Class),
-				"integration_commit": refusal.Claim.IntegrationCommit,
+				claimRefusalExtraKey:      claimRefusalAcceptanceValue,
+				faultClassExtraKey:        string(refusal.Class),
+				integrationCommitExtraKey: refusal.Claim.IntegrationCommit,
 			}
 			// Only the operator can provision a runtime input, so the question
 			// is the episode's human ask; other classes are agent repairs.
@@ -194,13 +210,13 @@ func acceptanceRefusalBlockText(refusal *AcceptanceEvidenceError) (string, strin
 	var reason, question string
 	switch refusal.Class {
 	case AcceptanceFaultContent:
-		reason = "acceptance_evidence_invalid: " + fault
+		reason = acceptanceReasonContentInvalid + ": " + fault
 		question = fmt.Sprintf("Correct the task's acceptance allocation (plan_ref/spec_ref, validation, parent tasks) to match the reviewed section — normally with %s, which supersedes this task — or repair its integration-side cause and, keeping this task, run %s to restore it for a new claim.", brand.Command("replace-task"), unblock)
 	case AcceptanceFaultRuntimeInput:
 		reason, question = runtimeInputBlockText(refusal)
 		return truncateForDiagnostics(reason, acceptanceBlockedReasonLimit), question, true
 	case AcceptanceFaultAllocation:
-		reason = fmt.Sprintf("acceptance_claim_refused_repeatedly: %d identical refusals at %s: %s — may be an invalid allocation or a persistent repository read failure", AcceptanceAllocationRefusalThreshold, refusal.Claim.IntegrationCommit, fault)
+		reason = fmt.Sprintf("%s: %d identical refusals at %s: %s — may be an invalid allocation or a persistent repository read failure", acceptanceReasonAllocationRepeated, AcceptanceAllocationRefusalThreshold, refusal.Claim.IntegrationCommit, fault)
 		question = fmt.Sprintf("Check the allocation (parent tasks and their approval and output, plan_ref, validation, proof reaffirmations) and repository health; replace this task with %s, or repair the cause and, keeping this task, run %s to restore it for a new claim.", brand.Command("replace-task"), unblock)
 	default:
 		return "", "", false
@@ -226,7 +242,7 @@ func acceptanceRefusalBlockableStatus(task *models.Task, resolver *pipeline.Reso
 // runtime-input refusal, at claim or at the submission gate. It names input
 // ids only, never artifact paths.
 func runtimeInputBlockText(refusal *AcceptanceEvidenceError) (string, string) {
-	return "runtime_input_unavailable: " + refusal.Reason, runtimeInputQuestion(refusal, refusal.Reason)
+	return string(runtimeInputCodeUnavailable) + ": " + refusal.Reason, runtimeInputQuestion(refusal, refusal.Reason)
 }
 
 func runtimeInputQuestion(refusal *AcceptanceEvidenceError, refused string) string {

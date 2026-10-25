@@ -6,14 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	gitpkg "github.com/liza-mas/liza/internal/git"
@@ -48,17 +45,17 @@ func ValidationConfigDigest(config models.Config) string {
 	return hex.EncodeToString(digest[:])
 }
 
-type validationFailure struct{ code string }
+type validationFailure struct{ code validationCode }
 
 func (e *validationFailure) Error() string {
-	if e.code == "artifact_unsupported" {
+	if e.code == validationCodeArtifactUnsupported {
 		return "validation preflight: artifact_unsupported: validation artifacts are not implemented in this version"
 	}
-	return "validation preflight: " + e.code
+	return "validation preflight: " + string(e.code)
 }
 func (e *validationFailure) Unwrap() error { return sessionvalidation.ErrPreflight }
 
-func validationError(code string) error { return &validationFailure{code: code} }
+func validationError(code validationCode) error { return &validationFailure{code: code} }
 
 // ValidationPreflight binds one observation to state and filesystem identities.
 // It never stores environment values or process output.
@@ -91,22 +88,22 @@ func (p *ValidationPreflight) CheckCurrent(state *models.State) error {
 	}
 	task := state.FindTask(p.record.TaskID)
 	if task == nil || models.ValidationPrerequisiteDigest(task.Validation, task.ValidationPrerequisites) != p.record.Digest || optionalValue(task.ReviewCommit) != p.reviewCommit || state.Config.IntegrationBranch != p.integrationBranch || state.Config.AgentTools[p.toolName].ValidationExecution != p.policy || ValidationConfigDigest(state.Config) != p.configDigest {
-		return validationError("context_changed")
+		return validationError(validationCodeContextChanged)
 	}
 	if task.Status != p.taskStatus || task.HandoffPending != p.handoffPending || optionalValue(task.AssignedTo) != p.assignedTo || optionalValue(task.ReviewingBy) != p.reviewingBy || optionalValue(task.BaseCommit) != p.baseCommit || optionalValue(task.Worktree) != p.taskWorktree {
-		return validationError("ownership_changed")
+		return validationError(validationCodeOwnershipChanged)
 	}
 	if task.Worktree != nil && filepath.Clean(filepath.Join(p.projectRoot, *task.Worktree)) != p.worktree {
-		return validationError("context_changed")
+		return validationError(validationCodeContextChanged)
 	}
 	git := gitpkg.New(p.projectRoot)
 	head, err := gitpkg.New(p.worktree).GetCommitSHA("HEAD")
 	if err != nil || head != p.record.Commit {
-		return validationError("commit_changed")
+		return validationError(validationCodeCommitChanged)
 	}
 	integration, err := git.GetCommitSHA(p.integrationBranch)
 	if err != nil || integration != p.record.IntegrationSHA {
-		return validationError("integration_changed")
+		return validationError(validationCodeIntegrationChanged)
 	}
 	return nil
 }
@@ -144,7 +141,7 @@ func (p *ValidationPreflight) CheckLaunchCurrent(state *models.State) error {
 			return nil
 		}
 	}
-	return validationError("executable_ownership_required")
+	return validationError(validationCodeExecutableOwnershipRequired)
 }
 
 var validationFailures = struct {
@@ -236,13 +233,46 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 		}
 		return nil, nil
 	}
+	p, agent, err := snapshotValidationPreflight(projectRoot, taskID, agentID, worktree, session, state, task)
+	if err != nil {
+		return nil, err
+	}
+	// Without a supervisor session the check runs inside a provider tool call.
+	inSession := session == nil
+	session, checkErr := p.observeSession(agent, session)
+	key := p.SessionScope() + "\x00" + session.Execution
+	if checkErr == nil && !session.ForceCheck && validationFailureCoolingDown(key, time.Now()) {
+		return nil, validationError(validationCodeRetryPending)
+	}
+	if checkErr == nil {
+		checkErr = p.probePrerequisites(state, task, session, inSession)
+	}
+	p.recordObservation(checkErr)
+	newFailure, err := p.recordReadiness(bb)
+	if err != nil {
+		return nil, err
+	}
+	if newFailure {
+		writeValidationPreflightAlert(projectRoot, agentID, p.record)
+	}
+	rememberValidationOutcome(key, checkErr)
+	if checkErr != nil {
+		return nil, checkErr
+	}
+	return p, nil
+}
+
+// snapshotValidationPreflight binds the task, registration, worktree and
+// integration identities the preflight observes, and returns the registered
+// agent. It runs Git reads but takes no lock.
+func snapshotValidationPreflight(projectRoot, taskID, agentID, worktree string, session *ValidationSession, state *models.State, task *models.Task) (*ValidationPreflight, models.Agent, error) {
 	agent, ok := state.Agents[agentID]
 	if !ok || agent.Generation == "" {
-		return nil, validationError("registration_required")
+		return nil, agent, validationError(validationCodeRegistrationRequired)
 	}
 	if worktree == "" {
 		if task.Worktree == nil || *task.Worktree == "" {
-			return nil, validationError("worktree_unavailable")
+			return nil, agent, validationError(validationCodeWorktreeUnavailable)
 		}
 		worktree = *task.Worktree
 	}
@@ -262,36 +292,44 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 		p.toolName = profile.CLI
 		p.policy = state.Config.AgentTools[p.toolName].ValidationExecution
 	}
+	var err error
 	p.resolver, err = LoadResolverForModels(projectRoot)
 	if err != nil {
-		return nil, validationError("pipeline_unavailable")
+		return nil, agent, validationError(validationCodePipelineUnavailable)
 	}
 	p.configDigest = ValidationConfigDigest(state.Config)
 	if session != nil && session.ToolName != "" {
 		p.toolName = session.ToolName
 		p.policy = state.Config.AgentTools[p.toolName].ValidationExecution
 	}
-	p.record = models.ValidationReadiness{Generation: agent.Generation, TaskID: taskID, Digest: models.ValidationPrerequisiteDigest(task.Validation, task.ValidationPrerequisites), Method: "direct", CheckedAt: time.Now().UTC()}
+	p.record = models.ValidationReadiness{Generation: agent.Generation, TaskID: taskID, Digest: models.ValidationPrerequisiteDigest(task.Validation, task.ValidationPrerequisites), Method: string(validationMethodDirect), CheckedAt: time.Now().UTC()}
 	p.record.Commit, err = gitpkg.New(worktree).GetCommitSHA("HEAD")
 	p.record.ReviewCommit = p.reviewCommit
 	if err != nil {
-		return nil, validationError("worktree_unavailable")
+		return nil, agent, validationError(validationCodeWorktreeUnavailable)
 	}
 	p.record.IntegrationSHA, err = gitpkg.New(projectRoot).GetCommitSHA(p.integrationBranch)
 	if err != nil {
-		return nil, validationError("integration_unavailable")
+		return nil, agent, validationError(validationCodeIntegrationUnavailable)
 	}
+	return p, agent, nil
+}
+
+// observeSession resolves the session whose environment is checked and records
+// its fingerprint. A nil session means the check runs inside a provider tool
+// call, so the caller must prove it is the registered agent's current session;
+// the environment it then checks is the process's own. The returned error is a
+// refusal to probe, which the readiness record still captures.
+func (p *ValidationPreflight) observeSession(agent models.Agent, session *ValidationSession) (*ValidationSession, error) {
 	var checkErr error
 	if session != nil && session.ConfigDigest != "" && session.ConfigDigest != p.configDigest {
-		checkErr = validationError("configuration_changed")
+		checkErr = validationError(validationCodeConfigurationChanged)
 	}
-	// Without a supervisor session the check runs inside a provider tool call.
-	inSession := session == nil
 	if session == nil {
 		id := brand.LookupEnv(os.Getenv, "AGENT_ID").Value
 		generation := brand.LookupEnv(os.Getenv, "AGENT_GENERATION").Value
-		if id != agentID || generation == "" || generation != agent.Generation {
-			checkErr = validationError("current_session_required")
+		if id != p.agentID || generation == "" || generation != agent.Generation {
+			checkErr = validationError(validationCodeCurrentSessionRequired)
 		}
 		session = &ValidationSession{Environment: os.Environ(), Execution: p.policy, ForceCheck: true}
 	}
@@ -299,111 +337,43 @@ func prepareValidationPreflight(projectRoot, taskID, agentID, worktree string, s
 	if session.PreparationError != nil {
 		checkErr = session.PreparationError
 	}
-	key := p.SessionScope() + "\x00" + session.Execution
-	if checkErr == nil && !session.ForceCheck && validationFailureCoolingDown(key, time.Now()) {
-		return nil, validationError("retry_pending")
-	}
-	if checkErr == nil && session.Execution != "local" {
-		if session.Execution == "artifact-only" {
-			checkErr = validationError("artifact_unsupported")
-		} else {
-			checkErr = validationError("execution_policy_required")
+	return session, checkErr
+}
+
+// probePrerequisites applies the execution policy and runs the task's declared
+// prerequisite probes against the session environment, outside any lock.
+func (p *ValidationPreflight) probePrerequisites(state *models.State, task *models.Task, session *ValidationSession, inSession bool) error {
+	if session.Execution != validationExecutionLocal {
+		if session.Execution == validationExecutionArtifactOnly {
+			return validationError(validationCodeArtifactUnsupported)
 		}
+		return validationError(validationCodeExecutionPolicyRequired)
 	}
-	if checkErr == nil && session.Execution != p.policy {
-		checkErr = validationError("execution_policy_required")
+	if session.Execution != p.policy {
+		return validationError(validationCodeExecutionPolicyRequired)
 	}
-	if checkErr == nil {
-		probeTimeout, totalTimeout := models.EffectiveValidationPreflightLimits(state.Config, inSession)
-		checkErr = sessionvalidation.Check(context.Background(), task.Validation, task.ValidationPrerequisites, worktree, append([]string(nil), session.Environment...), probeTimeout, totalTimeout)
-		var missing *sessionvalidation.Error
-		if errors.As(checkErr, &missing) && missing.Code == "environment_missing" && models.RuntimeInputDenyNames(state)[missing.Variable] {
-			// A legacy prerequisite demands a name reserved for runtime inputs,
-			// which every launch strips (ADR-0169): name the cause.
-			missing.Code = "runtime_input_scrubbed"
-		}
+	probeTimeout, totalTimeout := models.EffectiveValidationPreflightLimits(state.Config, inSession)
+	checkErr := sessionvalidation.Check(context.Background(), task.Validation, task.ValidationPrerequisites, p.worktree, append([]string(nil), session.Environment...), probeTimeout, totalTimeout)
+	var missing *sessionvalidation.Error
+	if errors.As(checkErr, &missing) && missing.Code == sessionvalidation.CodeEnvironmentMissing && models.RuntimeInputDenyNames(state)[missing.Variable] {
+		// A legacy prerequisite demands a name reserved for runtime inputs,
+		// which every launch strips (ADR-0169): name the cause.
+		missing.Code = sessionvalidation.CodeRuntimeInputScrubbed
 	}
-	p.record.Result = "passed"
-	if checkErr != nil {
-		p.record.Result = "failed"
-		p.record.Code = "prerequisite_failed"
-		var probe *sessionvalidation.Error
-		var local *validationFailure
-		if errors.As(checkErr, &probe) {
-			p.record.Code = string(probe.Code)
-			p.record.CommandIndex = probe.CommandIndex
-			p.record.CheckIndex = probe.CheckIndex
-			p.record.Variable = probe.Variable
-		}
-		if errors.As(checkErr, &local) {
-			p.record.Code = local.code
-		}
-	}
-	var newFailure bool
-	err = bb.Modify(func(current *models.State) error {
-		if err := p.CheckCurrent(current); err != nil {
-			return err
-		}
-		if current.ValidationReadiness == nil {
-			current.ValidationReadiness = make(map[string]map[string]models.ValidationReadiness)
-		}
-		if current.ValidationReadiness[agentID] == nil {
-			current.ValidationReadiness[agentID] = make(map[string]models.ValidationReadiness)
-		}
-		previous, recorded := current.ValidationReadiness[agentID][taskID]
-		newFailure = p.record.Result == "failed" && !(recorded && sameValidationObservation(previous, p.record))
-		current.ValidationReadiness[agentID][taskID] = p.record
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if newFailure {
-		writeValidationPreflightAlert(projectRoot, agentID, p.record)
-	}
-	if checkErr != nil {
-		validationFailures.Lock()
-		validationFailures.until[key] = time.Now().Add(models.ValidationRetryInterval)
-		validationFailures.Unlock()
-		return nil, checkErr
-	}
+	return checkErr
+}
+
+// rememberValidationOutcome starts the bounded retry delay of an unchanged
+// failure in this process, or clears it after a pass.
+func rememberValidationOutcome(key string, checkErr error) {
 	validationFailures.Lock()
+	defer validationFailures.Unlock()
+	if checkErr != nil {
+		validationFailures.until[key] = time.Now().Add(models.ValidationRetryInterval)
+		return
+	}
 	delete(validationFailures.until, key)
-	validationFailures.Unlock()
-	return p, nil
 }
-
-// sameValidationObservation compares the sanitized fields that tell an operator
-// what to repair. An unchanged failure retried every interval is one condition;
-// a different code, check or contract is a new one.
-func sameValidationObservation(a, b models.ValidationReadiness) bool {
-	return a.Result == b.Result && a.Code == b.Code && a.CommandIndex == b.CommandIndex &&
-		a.CheckIndex == b.CheckIndex && a.Variable == b.Variable && a.Digest == b.Digest
-}
-
-// writeValidationPreflightAlert surfaces a failed preflight: the claim is
-// released and retried silently otherwise. It carries only the sanitized
-// record fields, never command, probe or environment content.
-func writeValidationPreflightAlert(projectRoot, agentID string, record models.ValidationReadiness) {
-	detail := fmt.Sprintf("command=%d check=%d", record.CommandIndex, record.CheckIndex)
-	if record.Variable != "" {
-		detail += " variable=" + record.Variable
-	}
-	err := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: time.Now().UTC(),
-		Level:     alerts.AlertLevelWarning,
-		Category:  ValidationPreflightFailedCategory,
-		Message: fmt.Sprintf("%s — agent %s failed validation preflight: %s (%s); repair that prerequisite in the agent's launch environment, then let it retry (%s)",
-			record.TaskID, agentID, record.Code, detail, brand.Command("repair-agent-pool", "--dry-run")),
-	})
-	if err != nil {
-		log.Printf("WARNING: validation preflight alert for %s: %v", record.TaskID, err)
-	}
-}
-
-// ValidationPreflightFailedCategory is the alert category of a new failed
-// validation preflight observation.
-const ValidationPreflightFailedCategory = "VALIDATION PREFLIGHT FAILED"
 
 func validationSession(sessions []*ValidationSession) *ValidationSession {
 	if len(sessions) == 0 {
@@ -426,7 +396,7 @@ func prepareResumedValidation(projectRoot, taskID, agentID, worktree string, ses
 		return nil, nil
 	}
 	if task.Worktree == nil || *task.Worktree == "" || worktree == "" {
-		return nil, validationError("worktree_unavailable")
+		return nil, validationError(validationCodeWorktreeUnavailable)
 	}
 	if !filepath.IsAbs(worktree) {
 		worktree = filepath.Join(projectRoot, worktree)

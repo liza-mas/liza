@@ -12,6 +12,13 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// History Extra keys of the entry that records an acceptance evidence rewrite.
+const (
+	remapReplacedExtraKey       = "replaced"
+	remapIntegrationExtraKey    = "integration"
+	remapHistoryEntriesExtraKey = "history_entries"
+)
+
 // AcceptanceCommitRemap records one merged planning parent whose acceptance
 // evidence was rewritten, for operator review.
 type AcceptanceCommitRemap struct {
@@ -331,9 +338,9 @@ func applyAcceptanceRemap(parent *models.Task, mapping map[string]string, integr
 		Reason: &reason,
 		Note:   &note,
 		Extra: map[string]any{
-			"replaced":        replaced,
-			"integration":     integration,
-			"history_entries": hits,
+			remapReplacedExtraKey:       replaced,
+			remapIntegrationExtraKey:    integration,
+			remapHistoryEntriesExtraKey: hits,
 		},
 	})
 	return hits

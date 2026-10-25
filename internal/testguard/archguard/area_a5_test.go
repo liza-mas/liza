@@ -7,8 +7,6 @@ var areaA5 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/acceptance_evidence.go"}, Ceiling: 1105},
-		{Key: Key{File: "internal/ops/acceptance_evidence.go", Func: "loadDeclaredAcceptanceInput"}, Ceiling: 148},
 		{Key: Key{File: "internal/ops/await_resubmission.go"}, Ceiling: 834},
 		{Key: Key{File: "internal/ops/await_resubmission.go", Func: "awaitResubmissionWithOptions"}, Ceiling: 214},
 		{Key: Key{File: "internal/ops/await_resubmission.go", Func: "reclaimForReview"}, Ceiling: 124},
@@ -24,7 +22,6 @@ var areaA5 = Area{
 		{Key: Key{File: "internal/ops/submit_verdict.go", Func: "submitVerdict"}, Ceiling: 405},
 		{Key: Key{File: "internal/ops/submit_verdict.go", Func: "submitVerdictLifecycle"}, Ceiling: 101},
 		{Key: Key{File: "internal/ops/update_review_commit.go", Func: "updateReviewCommitLocked"}, Ceiling: 183},
-		{Key: Key{File: "internal/ops/validation_preflight.go", Func: "prepareValidationPreflight"}, Ceiling: 153},
 	},
 	S2: []S2Entry{},
 }

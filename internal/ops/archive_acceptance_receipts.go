@@ -15,8 +15,13 @@ type ArchiveLimit struct {
 	MaxBytes int
 }
 
+const (
+	defaultArchiveMaxTasks = 8
+	defaultArchiveMaxBytes = 4 << 20
+)
+
 // DefaultArchiveLimit bounds the work done under one state lock.
-var DefaultArchiveLimit = ArchiveLimit{MaxTasks: 8, MaxBytes: 4 << 20}
+var DefaultArchiveLimit = ArchiveLimit{MaxTasks: defaultArchiveMaxTasks, MaxBytes: defaultArchiveMaxBytes}
 
 // ArchiveResult reports one archival transaction.
 type ArchiveResult struct {
