@@ -1,0 +1,35 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "none",
+        "operation": "retarget-dependency",
+        "outcome": "ALREADY_TRANSITIONED",
+        "prerequisite": "consumer_not_executing",
+        "safe_action": "stop",
+        "status": "IMPLEMENTING_CODE",
+        "task_id": "consumer",
+        "task_status": "IMPLEMENTING_CODE",
+        "transition_id": "<DIGEST 1>",
+        "unmet_dependencies": [
+          "pending"
+        ]
+      },
+      "message": "retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): failed to retarget dependency: modification function failed: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task consumer is executing (IMPLEMENTING_CODE): a dependency update cannot add unmet dependencies pending; wait until it leaves execution or block it first"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "none",
+      "operation": "retarget-dependency",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "consumer",
+      "task_status": "IMPLEMENTING_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}
