@@ -1,7 +1,6 @@
 package toolresult
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -48,88 +47,27 @@ func ClaudePostToolResult(store *Store, hook ClaudeHookInput, metadata Result) (
 	if !ok {
 		return nil, fmt.Errorf("invalid native Claude response shape")
 	}
-	switch hook.Tool {
-	case "Read":
-		if response["type"] != "text" {
-			return empty, nil
-		}
-		file, ok := response["file"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid Claude Read output shape")
-		}
-		if _, ok := file["content"].(string); !ok {
-			return nil, fmt.Errorf("invalid Claude Read content shape")
-		}
-	case "Grep", "Glob":
-	default:
+	supported, err := claudeNativeSupported(hook.Tool, response)
+	if err != nil {
+		return nil, err
+	}
+	if !supported {
 		return empty, nil
 	}
-	if response == nil {
-		return nil, fmt.Errorf("missing Claude tool response")
-	}
-	content, err := json.Marshal(response)
+	metadata, err = claudeNativeMetadata(metadata, hook, response)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Claude response encoding")
-	}
-	command, err := json.Marshal(hook.Input)
-	if err != nil {
-		return nil, fmt.Errorf("invalid Claude input encoding")
-	}
-	metadata.Tool, metadata.Command, metadata.SessionID = hook.Tool, string(command), hook.SessionID
-	metadata.Content, metadata.ContentJSON = string(content), true
-	if value, ok := response["truncated"].(bool); ok {
-		metadata.Truncated = value
-	}
-	number := func(v any) float64 {
-		switch n := v.(type) {
-		case float64:
-			return n
-		case int:
-			return float64(n)
-		default:
-			return 0
-		}
-	}
-	if number(response["totalLines"]) > number(response["numLines"]) && number(response["numLines"]) > 0 {
-		metadata.Truncated = true
-	}
-	if file, ok := response["file"].(map[string]any); ok && number(file["totalLines"]) > number(file["numLines"]) && number(file["numLines"]) > 0 {
-		metadata.Truncated = true
+		return nil, err
 	}
 	processed, err := store.Process(metadata)
 	if err != nil {
 		return nil, err
 	}
-	if processed == string(content) {
+	if processed == metadata.Content {
 		return empty, nil
 	}
-	var replacement map[string]any
-	if err := json.Unmarshal([]byte(processed), &replacement); err != nil {
-		return nil, fmt.Errorf("invalid processed Claude result")
-	}
-	// Small secret-bearing objects retain their exact native shape after masking.
-	// Only externalized digests need embedding in the native textual display field.
-	if _, externalized := replacement["artifact_id"]; externalized {
-		replacement = nil
-		if err := json.Unmarshal([]byte(store.sanitizeContent(string(content), true)), &replacement); err != nil {
-			return nil, err
-		}
-		switch hook.Tool {
-		case "Read":
-			file := replacement["file"].(map[string]any)
-			file["content"] = processed
-			file["numLines"] = 1
-			file["startLine"] = 1
-		case "Grep":
-			replacement["mode"], replacement["content"] = "content", processed
-			replacement["filenames"], replacement["numFiles"] = []any{}, 0
-			replacement["numLines"] = 1
-		case "Glob":
-			// Glob serializes only filenames. A single explicitly marked JSON digest
-			// carries the artifact reference rather than inventing a real matching path.
-			replacement["filenames"], replacement["numFiles"] = []any{processed}, 1
-			replacement["truncated"] = true
-		}
+	replacement, err := claudeNativeReplacement(store, hook.Tool, metadata.Content, processed)
+	if err != nil {
+		return nil, err
 	}
 	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "updatedToolOutput": replacement}}, nil
 }
