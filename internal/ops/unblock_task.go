@@ -9,11 +9,9 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	gitpkg "github.com/liza-mas/liza/internal/git"
-	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/roles"
 )
 
 const integrationOperationUnblockTask = "unblock-task"
@@ -159,307 +157,39 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 }
 
 func unblockTaskLifecycle(projectRoot, taskID, reason, agentID string, opts UnblockTaskOptions, authority *models.AgentAuthority, effects *bool) (*UnblockTaskResult, error) {
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if reason == "" {
-		return nil, &PreconditionError{Reason: "reason is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "agent ID is required"}
-	}
-	if opts.ScopeException != nil {
-		if err := opts.ScopeException.Validate(); err != nil {
-			return nil, &PreconditionError{Reason: err.Error()}
-		}
-	}
-	if opts.BudgetException != nil {
-		if err := opts.BudgetException.Validate(); err != nil {
-			return nil, &PreconditionError{Reason: err.Error()}
-		}
-	}
-	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil && !opts.operator {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can unblock tasks: %v", err)}
-	}
-
-	var assignRole string
-	if opts.AssignTo != "" {
-		var err error
-		assignRole, err = identity.ExtractRole(opts.AssignTo)
-		if err != nil {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("invalid assign-to agent ID %s: %v", opts.AssignTo, err)}
-		}
-	}
-
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
-	}
-	pipelineTransitions := BuildPipelineTransitions(resolver)
-
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
-	now := time.Now().UTC()
-	preflight, err := bb.Read()
-	if err != nil {
+	call := &unblockCall{projectRoot: projectRoot, taskID: taskID, reason: reason, agentID: agentID, opts: opts, authority: authority, effects: effects, dryRun: true}
+	if err := call.validateInput(); err != nil {
 		return nil, err
 	}
-	if authority != nil {
-		if err := RequireAgentAuthority(preflight, *authority); err != nil {
-			return nil, err
-		}
-	}
-	observed := preflight.FindTask(taskID)
-	if observed == nil {
-		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
-	}
-	request, err := NewLifecycleRequest("unblock-task", observed, agentID, authority, opts.Request, struct {
-		Reason, AssignTo, RebaseOn string
-		AllowDirty                 bool
-		// omitempty keeps the identity of requests made without the flags.
-		NewIteration    bool             `json:",omitempty"`
-		ScopeException  *ScopeException  `json:",omitempty"`
-		BudgetException *BudgetException `json:",omitempty"`
-	}{reason, opts.AssignTo, opts.RebaseOn, opts.AllowDirty, opts.NewIteration, opts.ScopeException, opts.BudgetException})
-	if err != nil {
+	if err := call.loadPipeline(); err != nil {
 		return nil, err
 	}
-	var rebaseResult *UnblockTaskRebaseResult
-	prepared, dryRun := false, true
-
-	var result UnblockTaskResult
-	mutate := func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		if prepared {
-			if err := ValidateLifecyclePreparation(task, request); err != nil {
-				return err
-			}
-		} else {
-			receipt, err := checkOwnerEndingRequest(task, request)
-			if err != nil {
-				return err
-			}
-			if receipt != nil {
-				result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: opts.AssignTo, NewIteration: opts.NewIteration}
-				return errLifecycleReplay
-			}
-		}
-		// Exact replay has no new assignment; fresh protected work must be
-		// claimed by its own validated provider session.
-		if opts.AssignTo != "" && len(task.ValidationPrerequisites) > 0 {
-			return &PreconditionError{Reason: "validation preflight requires the target session; unblock without --assign-to and let its supervisor claim the task"}
-		}
-		if task.Status != models.TaskStatusBlocked {
-			return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-		if opts.stateLockHold != nil {
-			if opts.AssignTo != "" || opts.RebaseOn != "" || opts.NewIteration || authority == nil {
-				return &PreconditionError{Reason: "automatic state lock continuation cannot assign, rebase or consume an iteration"}
-			}
-			if reason := automaticStateLockHoldGate(state, task, projectRoot, resolver, opts.stateLockHold); reason != "" {
-				return &PreconditionError{Reason: "state lock hold recovery refused: " + reason}
-			}
-		}
-		if err := checkUnblockRejectionRCAGate(task, opts.NewIteration); err != nil {
-			return err
-		}
-		if task.RolePair == "" {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
-		}
-		expectedDoer, err := resolver.DoerRole(task.RolePair)
-		if err != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q: %v", task.RolePair, err)}
-		}
-		if opts.ScopeException != nil && expectedDoer != roles.Coder {
-			return &PreconditionError{Reason: fmt.Sprintf("scope exceptions apply to coding tasks only; task %s has doer role %q", taskID, expectedDoer)}
-		}
-		if opts.BudgetException != nil && expectedDoer != roles.Coder {
-			return &PreconditionError{Reason: fmt.Sprintf("budget exceptions apply to coding tasks only; task %s has doer role %q", taskID, expectedDoer)}
-		}
-		if opts.AssignTo != "" && assignRole != expectedDoer {
-			return &PreconditionError{Reason: fmt.Sprintf("assign-to agent role %q does not match task doer role %q", assignRole, expectedDoer)}
-		}
-		targetStatus, err := resolver.ExecutingStatus(task.RolePair)
-		if err != nil {
-			return &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q: %v", task.RolePair, err)}
-		}
-		if err := validateUnblockDirectDependencies(state, resolver, task); err != nil {
-			return err
-		}
-		if err := validateDependencyDirection(state, resolver, task.ID, task.RolePair, task.DependsOn); err != nil {
-			return err
-		}
-		var unmet []string
-		for _, dep := range models.UnmetClaimDependencies(task, state, resolver) {
-			if dep.Invalid() {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s has invalid dependency: %s", taskID, dep.Summary())}
-			}
-			if opts.AssignTo == "" && dep.Kind == models.DependencyUnsatisfiedPending {
-				continue
-			}
-			unmet = append(unmet, dep.Summary())
-		}
-		if len(unmet) > 0 {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s has unmet dependencies: %s", taskID, strings.Join(unmet, ", "))}
-		}
-
-		fromStatus := task.Status
-		historyExtra := map[string]any{
-			"target_status": string(targetStatus),
-		}
-		if rebaseResult != nil {
-			if err := revalidateUnblockRebase(projectRoot, task, rebaseResult); err != nil {
-				return err
-			}
-			historyExtra["rebase_old_head"] = rebaseResult.OldHead
-			historyExtra["rebase_new_head"] = rebaseResult.NewHead
-			historyExtra["rebase_target_ref"] = rebaseResult.TargetRef
-			historyExtra["rebase_target_sha"] = rebaseResult.TargetSHA
-			historyExtra["rebase_autostash"] = rebaseResult.Autostash
-			task.BaseCommit = &rebaseResult.TargetSHA
-		}
-		if task.RepairRequest != nil {
-			historyExtra["repair_operation"] = task.RepairRequest.Operation
-			historyExtra["repair_target"] = task.RepairRequest.Target
-			historyExtra["repair_command"] = task.RepairRequest.Command
-			historyExtra["repair_evidence"] = append([]string(nil), task.RepairRequest.Evidence...)
-			historyExtra["repair_validation"] = append([]string(nil), task.RepairRequest.Validation...)
-		}
-
-		var leaseExpires time.Time
-		if opts.AssignTo != "" {
-			if task.Worktree == nil {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s has no worktree to resume", taskID)}
-			}
-			agent, exists := state.Agents[opts.AssignTo]
-			if !exists {
-				return &PreconditionError{Reason: fmt.Sprintf("assign-to agent %s is not registered", opts.AssignTo)}
-			}
-			if agent.Role != expectedDoer {
-				return &PreconditionError{Reason: fmt.Sprintf("assign-to agent %s has role %q, want %q", opts.AssignTo, agent.Role, expectedDoer)}
-			}
-			if agent.CurrentTask != nil && *agent.CurrentTask != "" && *agent.CurrentTask != taskID {
-				return &PreconditionError{Reason: fmt.Sprintf("agent %s is already working on task %s", opts.AssignTo, *agent.CurrentTask)}
-			}
-			leaseDuration := state.Config.LeaseDuration
-			if leaseDuration == 0 {
-				leaseDuration = models.DefaultLeaseDurationSeconds
-			}
-			leaseExpires = now.Add(time.Duration(leaseDuration) * time.Second)
-			if err := task.TransitionWith(targetStatus, pipelineTransitions); err != nil {
-				return err
-			}
-			historyExtra["assigned_to"] = opts.AssignTo
-			task.AssignedTo = &opts.AssignTo
-			task.LeaseExpires = &leaseExpires
-			// Direct assignment skips the claim, so it does the claim's accounting.
-			task.Continuation = false
-			if opts.NewIteration {
-				task.Iteration++
-			}
-			agent.Status = models.AgentStatusWorking
-			agent.CurrentTask = &taskID
-			agent.LeaseExpires = &leaseExpires
-			agent.Heartbeat = now
-			state.Agents[opts.AssignTo] = agent
-		} else {
-			initialStatus, err := resolver.InitialStatus(task.RolePair)
-			if err != nil {
-				return &PreconditionError{Reason: fmt.Sprintf("unrecognized role-pair %q: %v", task.RolePair, err)}
-			}
-			if task.Worktree != nil && task.BaseCommit == nil {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s has preserved worktree but no base_commit", taskID)}
-			}
-			targetStatus = initialStatus
-			historyExtra["target_status"] = string(targetStatus)
-			if task.AssignedTo != nil {
-				previous := *task.AssignedTo
-				if agent, ok := state.Agents[previous]; ok && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-					state.ReleaseAgent(previous)
-				}
-			}
-			task.Status = targetStatus
-			task.AssignedTo = nil
-			task.LeaseExpires = nil
-			task.Continuation = !opts.NewIteration
-		}
-		historyExtra["new_iteration"] = opts.NewIteration
-		if opts.ScopeException != nil {
-			historyExtra[historyExtraScopeException] = opts.ScopeException.historyValue()
-		}
-		if opts.BudgetException != nil {
-			historyExtra[historyExtraBudgetException] = opts.BudgetException.historyValue()
-		}
-		task.BlockedReason = nil
-		task.BlockedQuestions = nil
-		task.RepairRequest = nil
-		task.StateLockHold = nil
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventUnblocked,
-			Agent:  &agentID,
-			Reason: &reason,
-			Extra:  historyExtra,
-		})
-
-		result = UnblockTaskResult{
-			TaskID:       taskID,
-			FromStatus:   fromStatus,
-			ToStatus:     targetStatus,
-			AssignedTo:   opts.AssignTo,
-			Claimable:    task.IsClaimable(expectedDoer, state.Tasks, resolver),
-			NewIteration: opts.NewIteration,
-			Rebase:       rebaseResult,
-		}
-		if opts.AssignTo != "" {
-			result.LeaseExpires = &leaseExpires
-		}
-		if dryRun {
-			return nil
-		}
-		models.AdvanceLifecycle(task)
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{SourceStatus: fromStatus}, state.Agents)
-		return err
+	preflight, err := call.openRequest()
+	if err != nil {
+		return nil, err
 	}
 	// Validate every state-dependent input on an isolated snapshot before Git.
-	if err := mutate(preflight); err != nil {
+	if err := call.mutate(preflight); err != nil {
 		if isLifecycleReplay(err) {
-			return &result, nil
+			return &call.result, nil
 		}
 		return nil, err
 	}
-	dryRun = false
+	call.dryRun = false
 	if strings.TrimSpace(opts.RebaseOn) != "" {
-		prepare := func() error {
-			err := lifecycleMutation(bb, authority)(func(state *models.State) error {
-				task := state.FindTask(taskID)
-				if task == nil {
-					return &errors.NotFoundError{Entity: "task", ID: taskID}
-				}
-				return prepareOwnerEndingRequest(task, request)
-			})
-			if err == nil {
-				prepared, *effects = true, true
-			}
-			return err
-		}
-		rebaseResult, err = maybeRebaseTaskBeforeUnblock(bb, lp.ProjectRoot(), taskID, agentID, opts, authority, request, prepare)
-		if err != nil {
+		if err := call.rebase(); err != nil {
 			return nil, err
 		}
 	}
-	err = lifecycleMutation(bb, authority)(mutate)
+	err = lifecycleMutation(call.bb, authority)(call.mutate)
 	if isLifecycleReplay(err) {
-		return &result, nil
+		return &call.result, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to unblock task: %w", err)
 	}
 
-	return &result, nil
+	return &call.result, nil
 }
 
 // checkUnblockRejectionRCAGate refuses a task whose rejection-RCA gate is still
