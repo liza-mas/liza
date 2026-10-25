@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -538,8 +539,17 @@ func TestStageSprintSummary(t *testing.T) {
 		if got, err := os.ReadFile(staged); err != nil || string(got) != "# report\n" {
 			t.Fatalf("staged content = %q, %v", got, err)
 		}
-		if info, err := os.Stat(staged); err != nil || info.Mode().Perm() != 0o644 || !strings.HasPrefix(info.Name(), ".sprint-summary-") {
-			t.Fatalf("staged file %v, %v: want mode 0644 and the staging prefix", info, err)
+		info, err := os.Stat(staged)
+		if err != nil || !strings.HasPrefix(info.Name(), ".sprint-summary-") {
+			t.Fatalf("staged file %v, %v: want the staging prefix", info, err)
+		}
+		// Windows reports a writable file as 0666: Chmod only clears its read-only attribute.
+		want := os.FileMode(0o644)
+		if runtime.GOOS == "windows" {
+			want = 0o666
+		}
+		if info.Mode().Perm() != want {
+			t.Fatalf("staged file mode = %v, want %v", info.Mode().Perm(), want)
 		}
 	})
 
