@@ -200,8 +200,19 @@ determinism records are required only after the first C record, `adr-0219` item 
 
 ### Regressions (AC-regress)
 
-Each fails for the pre-correction harness (shown in the manifest with before/after output) and
-asserts names/booleans only (`guard-tier1` G1.4).
+All assert names/booleans only (`guard-tier1` G1.4). Three evidence classes, each recorded in
+the manifest with its executed observation on Linux:
+
+- Defect regressions, red on the pre-correction harness: R1 (trigger: the pre-correction
+  Windows layout, extensionless `git`, fed to the R1 assertion) and R4 (trigger: a Git-only
+  transcript variant compared without the normaliser). The manifest records the red run
+  (test name, failing assertion) against the pre-correction code and the green run after.
+- Fidelity and composition controls for the new shim: R2 and R3. The pre-correction harness has
+  no shim, so no red run is claimed; their negative controls (a defective shim variant) must be
+  detected, and the manifest records that detection.
+- Preservation proof: R5. It passes before and after on Linux, where the environment is
+  unchanged; the manifest records both green runs. Its Windows names are exercised natively
+  only by the next G8 (`d59`); no Linux failure is manufactured.
 
 - R1 layout (all platforms, pure): for `goos == "windows"` the layout's PATH entry carries an
   extension of the default PATHEXT set and is an executable, not a `.cmd`/`.bat`; for linux and
@@ -241,7 +252,8 @@ Linux-only row names its two exceptions, and "Runs on all three platforms" lists
 Windows/macOS proof is the next G8 (`d59`), outside this task.
 
 **Done when:** on Linux with Git 2.43, commands 0-4 below pass; the two drivers carry no
-platform scoping; R1-R5 pass and their manifest-recorded pre-correction runs fail; the golden
+platform scoping; R1-R5 pass; R1 and R4 have manifest-recorded red runs on the pre-correction
+harness, R2/R3 negative controls are detected, and R5 is green before and after; the golden
 diff touches only the transcript remainders of lines 132 and 157; no production, other driver,
 fixture, golden, PROVENANCE or harness code file changes.
 
@@ -364,4 +376,5 @@ check 1200, headroom.
 
 One entry, output[0] = Task 1: `inherit_inputs` selects `arm-1-ar-12-cp-2-d49-correction`
 output 0; `plan_ref` the Task 1 heading; `spec_ref` `d53`; validation and prerequisites equal the
-Acceptance Contract. `desc`, `done_when` and `scope` are short projections of Task 1.
+Acceptance Contract. `desc`, `done_when` and `scope` are short projections of Task 1 (intent,
+completion observation, owned boundary); all mechanism and regression detail stays here.
