@@ -16,8 +16,6 @@ var areaA5 = Area{
 		{Key: Key{File: "internal/ops/claim_reviewer_task.go"}, Ceiling: 825},
 		{Key: Key{File: "internal/ops/claim_reviewer_task.go", Func: "claimReviewerTask"}, Ceiling: 383},
 		{Key: Key{File: "internal/ops/clear_stale_review_claims.go", Func: "ClearStaleReviewClaims"}, Ceiling: 110},
-		{Key: Key{File: "internal/ops/submit_review.go"}, Ceiling: 807},
-		{Key: Key{File: "internal/ops/submit_review.go", Func: "prepareSubmitForReview"}, Ceiling: 562},
 		{Key: Key{File: "internal/ops/submit_verdict.go"}, Ceiling: 1073},
 		{Key: Key{File: "internal/ops/submit_verdict.go", Func: "submitVerdict"}, Ceiling: 405},
 		{Key: Key{File: "internal/ops/submit_verdict.go", Func: "submitVerdictLifecycle"}, Ceiling: 101},

@@ -14,6 +14,16 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+const (
+	// submissionSHA1HexLength and submissionSHA256HexLength are the lengths of a
+	// full immutable commit SHA in each Git object format.
+	submissionSHA1HexLength   = 40
+	submissionSHA256HexLength = 64
+	// submitTimeoutRequestIDLength is how much of the settled transition names
+	// the request of the batch-timeout block.
+	submitTimeoutRequestIDLength = 16
+)
+
 // preparedSubmission keeps warning-only indexing outside task locking while
 // retaining the captured candidate and final transaction in one call frame.
 type preparedSubmission struct {
@@ -51,7 +61,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 			var invalid *PreconditionError
 			if !invocation.effects && errors.As(err, &invalid) {
-				outcome, action = models.LifecycleInvalidInput, "correct_input"
+				outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 			}
 			if invocation.effects {
 				effects = LifecycleEffectsUnknown
@@ -66,7 +76,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		observation.FinishResult(integrationOperationSubmitForReview, outcome, &err, warnings)
 	}()
 	if validateErr := ValidateLifecycleRequestOptions(opts); validateErr != nil {
-		return nil, &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, nil, models.LifecycleInvalidInput, "correct_input", "none"), Err: validateErr}
+		return nil, &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, nil, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone), Err: validateErr}
 	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -105,7 +115,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			prepared, inner = prepareSubmitForReview(projectRoot, taskID, commitRef, agentID, authority, opts, invocation)
 			return inner
 		}); prepareErr != nil {
-			return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, prepareErr, "unknown")
+			return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, prepareErr, LifecycleEffectsUnknown)
 		}
 		if prepared.replay != nil {
 			result = prepared.replay
@@ -127,7 +137,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		if result != nil {
 			result.Warnings = append(result.Warnings, warnings...)
 		}
-		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, "unknown")
+		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, LifecycleEffectsUnknown)
 	})
 	blockRuntimeInputRefusal(projectRoot, taskID, agentID, authority, err)
 	blockBatchTimeoutRefusal(projectRoot, taskID, agentID, authority, err)
@@ -159,7 +169,7 @@ func blockBatchTimeoutRefusal(projectRoot, taskID, agentID string, authority *mo
 	transition := retired.Outcome.TransitionID
 	reason := fmt.Sprintf("canonical admission timed out under admission_timeout_retry (ruling %s): %s", refusal.Ruling, refusal.Reason)
 	question := fmt.Sprintf("Raise the canonical admission budget for %s with a budget exception ruling, or correct timeout_seconds?", taskID)
-	opts := MarkBlockedOptions{Request: LifecycleRequestOptions{RequestID: "admission-timeout:" + transition[:16], ExpectedTransition: transition}}
+	opts := MarkBlockedOptions{Request: LifecycleRequestOptions{RequestID: "admission-timeout:" + transition[:submitTimeoutRequestIDLength], ExpectedTransition: transition}}
 	var blockErr error
 	if authority != nil {
 		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, opts)
@@ -202,7 +212,7 @@ func blockRuntimeInputRefusal(projectRoot, taskID, agentID string, authority *mo
 }
 
 func fullSubmissionSHA(value string) bool {
-	if len(value) != 40 && len(value) != 64 {
+	if len(value) != submissionSHA1HexLength && len(value) != submissionSHA256HexLength {
 		return false
 	}
 	_, err := hex.DecodeString(value)

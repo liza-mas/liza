@@ -103,7 +103,7 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 			}
 		}
 		return nil, &LifecycleError{
-			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, observed, models.LifecycleStateChanged, "requery", "none"),
+			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, observed, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone),
 			Err:     fmt.Errorf("submission ownership lost while waiting for an admission slot; nothing was prepared"),
 		}
 	}
@@ -111,9 +111,46 @@ func preAdmitSubmission(projectRoot, taskID, agentID string, authority *models.A
 	var evidence *AcceptanceEvidenceError
 	if errors.As(refusal, &evidence) {
 		return nil, &LifecycleError{
-			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, observed, models.LifecycleRetryable, "retry", "none"),
+			Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, observed, models.LifecycleRetryable, LifecycleSafeActionRetry, LifecycleEffectsNone),
 			Err:     refusal,
 		}
 	}
 	return nil, refusal
+}
+
+// planAdmission takes the limits, retry policy and slots pre-admission settled
+// for the batch, falling back to the snapshot's configuration; a class they lack
+// is taken at execution, within the same deadline (ADR-0209). An early marker
+// covers one batch and retry budget, so any other is refused before anything
+// changes (ADR-0216).
+func (s *submissionRun) planAdmission() error {
+	s.admissionConfig, s.held = s.state.Config, nil
+	if s.invocation.admission != nil {
+		s.admissionConfig, s.held = s.invocation.admission.config, s.invocation.admission.slots
+	}
+	if s.acceptance == nil {
+		return nil
+	}
+	commands, _ := s.acceptance.executedCommands()
+	s.limited = len(models.AdmissionLimitsFor(s.admissionConfig, commands)) > 0
+	doerRole, _ := s.resolver.DoerRole(s.task.RolePair)
+	s.retryPlan = planTimeoutRetry(s.admissionConfig, doerRole, s.task.RuntimeInputs, s.acceptance.batchTimeoutSeconds, s.limited)
+	if early := s.invocation.admission; early != nil && early.removeMarker != nil &&
+		(early.budgetSeconds != s.acceptance.batchTimeoutSeconds || early.retrySeconds != s.retryPlan.retrySeconds()) {
+		return &LifecycleError{
+			Outcome: NewLifecycleOutcome(s.request.Operation, s.task, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone),
+			Err:     fmt.Errorf("task %s: the canonical admission budget changed after the submit queued; no command ran: resubmit the same commit", s.taskID),
+		}
+	}
+	return nil
+}
+
+// acceptanceBatch is the time the final step may spend on the acceptance batch.
+// A marker written after preparation must also cover a slot wait still ahead:
+// wait, batch and retry together stay within the cap plus the floor.
+func (s *submissionRun) acceptanceBatch() time.Duration {
+	if s.acceptance == nil {
+		return 0
+	}
+	return submitAdmissionWindow(s.acceptance.batchTimeoutSeconds, s.limited, s.retryPlan)
 }

@@ -10,6 +10,9 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// submitHoldDigestBytes is how much of the caller digest names its hold file.
+const submitHoldDigestBytes = 8
+
 // submitHoldPath names one caller's submit hold for a task: its agent and
 // generation, so a restarted session is never held up by an abandoned one.
 func submitHoldPath(statePath, taskID, agentID string, authority *models.AgentAuthority) string {
@@ -18,7 +21,7 @@ func submitHoldPath(statePath, taskID, agentID string, authority *models.AgentAu
 		generation = authority.Generation
 	}
 	sum := sha256.Sum256([]byte(taskID + "\x00" + agentID + "\x00" + generation))
-	return statePath + ".submit-" + hex.EncodeToString(sum[:8])
+	return statePath + ".submit-" + hex.EncodeToString(sum[:submitHoldDigestBytes])
 }
 
 // holdSubmitTask takes the caller's submit hold on the task for the whole
@@ -32,7 +35,7 @@ func holdSubmitTask(projectRoot, taskID, agentID string, authority *models.Agent
 		return held, err
 	}
 	return nil, &LifecycleError{
-		Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, readLifecycleTask(projectRoot, taskID, authority, opts), models.LifecycleStateChanged, "requery", "unknown"),
+		Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, readLifecycleTask(projectRoot, taskID, authority, opts), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown),
 		Err:     fmt.Errorf("another submit-for-review of task %s by this agent is still running; wait for its result instead of submitting again", taskID),
 	}
 }

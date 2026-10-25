@@ -20,6 +20,9 @@ import (
 // around canonical execution.
 const submitGraceMargin = 10 * time.Minute
 
+// inflightSubmitNonceBytes is the random part of a marker's file name.
+const inflightSubmitNonceBytes = 8
+
 // MaxInflightSubmitGrace bounds the time any in-flight submit marker can keep
 // a session alive past its execution timeout: the largest acceptance batch,
 // the submit slot wait floor and the margin.
@@ -55,7 +58,7 @@ func writeInflightSubmitMarker(projectRoot string, authority models.AgentAuthori
 	if !ok {
 		return noop
 	}
-	nonce := make([]byte, 8)
+	nonce := make([]byte, inflightSubmitNonceBytes)
 	_, err := rand.Read(nonce)
 	path := filepath.Join(paths.New(projectRoot).InflightSubmitDir(), prefix+hex.EncodeToString(nonce)+".json")
 	var data []byte
