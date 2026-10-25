@@ -326,7 +326,7 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED", result.Verdict)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
@@ -335,8 +335,8 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 	if result.TaskStatus != models.TaskStatusApproved {
 		t.Errorf("TaskStatus = %q, want %s", result.TaskStatus, models.TaskStatusApproved)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -406,7 +406,7 @@ func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED; reason=%q", result.Verdict, result.Reason)
 	}
 	if result.Reason == "" {
@@ -517,7 +517,7 @@ func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED; reason=%q", result.Verdict, result.Reason)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
@@ -616,7 +616,7 @@ func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
 			if awaitErr != nil {
 				t.Fatalf("AwaitVerdict error: %v", awaitErr)
 			}
-			if result.Verdict != VerdictNewAttempt {
+			if result.Verdict != string(VerdictNewAttempt) {
 				t.Errorf("Verdict = %q, want NEW_ATTEMPT; reason=%q", result.Verdict, result.Reason)
 			}
 
@@ -719,7 +719,7 @@ func TestAwaitVerdict_Terminal(t *testing.T) {
 			if awaitErr != nil {
 				t.Fatalf("AwaitVerdict error: %v", awaitErr)
 			}
-			if result.Verdict != VerdictTerminal {
+			if result.Verdict != string(VerdictTerminal) {
 				t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 			}
 			if !strings.Contains(result.Reason, "non-awaitable status") {
@@ -728,8 +728,8 @@ func TestAwaitVerdict_Terminal(t *testing.T) {
 			if result.TaskStatus != models.TaskStatusBlocked {
 				t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
 			}
-			if result.SafeAction != SafeActionStop {
-				t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+			if result.SafeAction != string(SafeActionStop) {
+				t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 			}
 			if !strings.Contains(result.Guidance, "Stop this session") {
 				t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -773,7 +773,7 @@ func TestAwaitVerdict_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTimeout {
+	if result.Verdict != string(VerdictTimeout) {
 		t.Errorf("Verdict = %q, want TIMEOUT", result.Verdict)
 	}
 
@@ -909,7 +909,7 @@ func TestAwaitVerdict_Aborted(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictAborted {
+	if result.Verdict != string(VerdictAborted) {
 		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
 	}
 
@@ -948,14 +948,14 @@ func TestAwaitVerdict_AlreadyBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTerminal {
+	if result.Verdict != string(VerdictTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusBlocked {
 		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -997,14 +997,14 @@ func TestAwaitVerdict_AlreadyTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTerminal {
+	if result.Verdict != string(VerdictTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusSuperseded {
 		t.Errorf("TaskStatus = %q, want SUPERSEDED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -1041,14 +1041,14 @@ func TestAwaitVerdict_AlreadyApproved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED", result.Verdict)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
 		t.Errorf("ReviewerAgent = %q, want code-reviewer-1", result.ReviewerAgent)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -1091,14 +1091,14 @@ func TestAwaitVerdict_AlreadyMergedWithApprovalHistoryStopsWorktreeCommands(t *t
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.TaskStatus != models.TaskStatusMerged {
 		t.Errorf("TaskStatus = %q, want MERGED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "do not retry await-verdict or run more worktree commands") {
 		t.Errorf("Guidance = %q, want no-worktree-command guidance", result.Guidance)
@@ -1228,7 +1228,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED (after partial)", result.Verdict)
 	}
 }
@@ -1295,7 +1295,7 @@ func TestAwaitVerdict_RaceGuard(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED", result.Verdict)
 	}
 
@@ -1375,8 +1375,8 @@ func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1393,8 +1393,8 @@ func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
 	if result.ReviewCommit != reviewCommit {
 		t.Errorf("ReviewCommit = %q, want %q", result.ReviewCommit, reviewCommit)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 }
 
@@ -1456,8 +1456,8 @@ func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *test
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1468,8 +1468,8 @@ func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *test
 	if result.CurrentAssignee != "coder-2" {
 		t.Errorf("CurrentAssignee = %q, want coder-2", result.CurrentAssignee)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 }
 
@@ -1536,8 +1536,8 @@ func TestAwaitVerdict_RejectedAfterReviewCommitUpdate_ReturnsUpdatedVerdict(t *t
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1600,8 +1600,8 @@ func TestHandleVerdictResult_NonAwaitableStatusRecoversVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handleVerdictResult error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)

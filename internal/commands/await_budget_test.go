@@ -69,7 +69,7 @@ func TestAwaitResubmissionWithOptions_ForwardsOperationValidation(t *testing.T) 
 
 func TestAwaitVerdictWithBudget_DecreasesUntilExhausted(t *testing.T) {
 	remaining := 250 * time.Second
-	wantVerdicts := []string{ops.VerdictPoll, ops.VerdictPoll, ops.VerdictTimeout}
+	wantVerdicts := []string{string(ops.VerdictPoll), string(ops.VerdictPoll), string(ops.VerdictTimeout)}
 	wantRemaining := []int{150, 50, 0}
 	wantIntervals := []time.Duration{100 * time.Second, 100 * time.Second, 50 * time.Second}
 
@@ -77,7 +77,7 @@ func TestAwaitVerdictWithBudget_DecreasesUntilExhausted(t *testing.T) {
 		var gotInterval time.Duration
 		result, err := awaitVerdictWithBudget(remaining, 100*time.Second, func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
 			gotInterval = interval
-			return &ops.AwaitVerdictResult{Verdict: ops.VerdictTimeout}, nil
+			return &ops.AwaitVerdictResult{Verdict: string(ops.VerdictTimeout)}, nil
 		})
 		if err != nil {
 			t.Fatalf("call %d: awaitVerdictWithBudget error: %v", i+1, err)
@@ -125,13 +125,13 @@ func TestAwaitResubmissionWithBudget_DecreasesUntilExhausted(t *testing.T) {
 
 func TestAwaitWithBudget_PreservesNonTimeoutOutcome(t *testing.T) {
 	result, err := awaitVerdictWithBudget(250*time.Second, 100*time.Second, func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
-		return &ops.AwaitVerdictResult{Verdict: ops.VerdictApproved}, nil
+		return &ops.AwaitVerdictResult{Verdict: string(ops.VerdictApproved)}, nil
 	})
 	if err != nil {
 		t.Fatalf("awaitVerdictWithBudget error: %v", err)
 	}
-	if result.Verdict != ops.VerdictApproved {
-		t.Errorf("verdict = %q, want %q", result.Verdict, ops.VerdictApproved)
+	if result.Verdict != string(ops.VerdictApproved) {
+		t.Errorf("verdict = %q, want %q", result.Verdict, string(ops.VerdictApproved))
 	}
 	if result.TimeoutSeconds != 0 {
 		t.Errorf("timeout_seconds = %d, want 0 for non-POLL outcome", result.TimeoutSeconds)
@@ -203,9 +203,9 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 	if elapsed := time.Since(firstStarted); elapsed >= 3*time.Second {
 		t.Fatalf("first bounded await round took %s, want < 3s", elapsed)
 	}
-	if verdictResult.Verdict != ops.VerdictPoll || verdictResult.TimeoutSeconds != 1 {
+	if verdictResult.Verdict != string(ops.VerdictPoll) || verdictResult.TimeoutSeconds != 1 {
 		t.Fatalf("AwaitVerdict result = (%q, %d), want (%q, 1)",
-			verdictResult.Verdict, verdictResult.TimeoutSeconds, ops.VerdictPoll)
+			verdictResult.Verdict, verdictResult.TimeoutSeconds, string(ops.VerdictPoll))
 	}
 	if resubmissionResult.Verdict != ops.ResubmissionPoll || resubmissionResult.TimeoutSeconds != 1 {
 		t.Fatalf("AwaitResubmission result = (%q, %d), want (%q, 1)",
@@ -243,9 +243,9 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 
 	verdictResult = receiveAsyncAwait(t, verdictCall, 3*time.Second)
 	resubmissionResult = receiveAsyncAwait(t, resubmissionCall, 3*time.Second)
-	if verdictResult.Verdict != ops.VerdictTimeout || verdictResult.TimeoutSeconds != 0 {
+	if verdictResult.Verdict != string(ops.VerdictTimeout) || verdictResult.TimeoutSeconds != 0 {
 		t.Fatalf("final AwaitVerdict result = (%q, %d), want (%q, 0)",
-			verdictResult.Verdict, verdictResult.TimeoutSeconds, ops.VerdictTimeout)
+			verdictResult.Verdict, verdictResult.TimeoutSeconds, string(ops.VerdictTimeout))
 	}
 	if resubmissionResult.Verdict != ops.ResubmissionTimeout || resubmissionResult.TimeoutSeconds != 0 {
 		t.Fatalf("final AwaitResubmission result = (%q, %d), want (%q, 0)",
@@ -381,8 +381,8 @@ func TestAwaitVerdict_BudgetExhaustionReleasesDoerClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("awaitVerdictWithInterval: %v", err)
 	}
-	if result.Verdict != ops.VerdictTimeout {
-		t.Fatalf("verdict = %q, want %q", result.Verdict, ops.VerdictTimeout)
+	if result.Verdict != string(ops.VerdictTimeout) {
+		t.Fatalf("verdict = %q, want %q", result.Verdict, string(ops.VerdictTimeout))
 	}
 
 	state, err := fixture.bb.Read()
@@ -461,7 +461,7 @@ func TestAwaitVerdictWithAuthority_BudgetCleanupPropagatesGenerationFence(t *tes
 		time.Duration,
 		AwaitVerdictOptions,
 	) (*ops.AwaitVerdictResult, error) {
-		return &ops.AwaitVerdictResult{Verdict: ops.VerdictTimeout}, nil
+		return &ops.AwaitVerdictResult{Verdict: string(ops.VerdictTimeout)}, nil
 	}
 	t.Cleanup(func() { runAwaitVerdictWithAuthorityOptions = previousAwait })
 
@@ -490,7 +490,7 @@ func TestAwaitVerdictWithAuthority_BudgetCleanupPropagatesGenerationFence(t *tes
 			}
 		}
 	}
-	if result == nil || result.Verdict != ops.VerdictTimeout {
+	if result == nil || result.Verdict != string(ops.VerdictTimeout) {
 		t.Fatalf("result = %#v, want TIMEOUT with authority error", result)
 	}
 	after, err := os.ReadFile(statePath)
@@ -543,9 +543,9 @@ func TestAwaitVerdict_NonThreadingCallerStillConverges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict: %v", err)
 	}
-	if result.Verdict != ops.VerdictTimeout {
+	if result.Verdict != string(ops.VerdictTimeout) {
 		t.Fatalf("verdict = %q, want %q — a non-threading caller must still converge",
-			result.Verdict, ops.VerdictTimeout)
+			result.Verdict, string(ops.VerdictTimeout))
 	}
 	if result.TimeoutSeconds != 0 {
 		t.Errorf("timeout_seconds = %d, want 0 on final exhaustion", result.TimeoutSeconds)

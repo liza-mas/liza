@@ -546,7 +546,7 @@ func finishAwaitResubmission(
 		if stderrors.As(err, &halted) {
 			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation,
 				&AwaitResubmissionResult{Verdict: ResubmissionPaused, TaskStatus: result.TaskStatus,
-					Reason: pausedAwaitReason(halted.Mode), SafeAction: SafeActionStop}, nil)
+					Reason: pausedAwaitReason(halted.Mode), SafeAction: string(SafeActionStop)}, nil)
 		}
 		if err == nil && result.Verdict != ResubmissionPoll {
 			return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, result, nil)
@@ -564,7 +564,7 @@ func finishAwaitResubmission(
 func finishPausedAwaitResubmission(bb *db.Blackboard, task *models.Task, agentID string, authority *models.AgentAuthority, reservation *reviewReservation, mode models.SystemMode) (*AwaitResubmissionResult, error) {
 	return finishAwaitResubmission(bb, agentID, task.ID, authority, reservation,
 		&AwaitResubmissionResult{Verdict: ResubmissionPaused, TaskStatus: task.Status,
-			Reason: pausedAwaitReason(mode), SafeAction: SafeActionStop}, nil)
+			Reason: pausedAwaitReason(mode), SafeAction: string(SafeActionStop)}, nil)
 }
 
 func finishResubmissionInterval(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, reservation *reviewReservation, status models.TaskStatus, poll bool) (*AwaitResubmissionResult, error) {

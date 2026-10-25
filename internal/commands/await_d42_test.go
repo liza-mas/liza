@@ -27,11 +27,11 @@ func TestD42ClaudeAwaitUsesLongForegroundInterval(t *testing.T) {
 	runAwaitVerdictWithAuthorityOptions = func(_ context.Context, _, _ string, _ models.AgentAuthority,
 		interval time.Duration, _ AwaitVerdictOptions) (*ops.AwaitVerdictResult, error) {
 		observed = interval
-		return &ops.AwaitVerdictResult{Verdict: ops.VerdictApproved}, nil
+		return &ops.AwaitVerdictResult{Verdict: string(ops.VerdictApproved)}, nil
 	}
 	result, err := AwaitVerdictWithAuthority(fixture.projectRoot, boundedAwaitTaskID,
 		models.AgentAuthority{ID: boundedAwaitCoderID}, ops.DefaultAwaitBudget)
-	if err != nil || result.Verdict != ops.VerdictApproved {
+	if err != nil || result.Verdict != string(ops.VerdictApproved) {
 		t.Fatalf("await = %+v, %v; want APPROVED", result, err)
 	}
 	if observed != 540*time.Second {

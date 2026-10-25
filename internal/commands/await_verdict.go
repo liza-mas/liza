@@ -30,7 +30,7 @@ func AwaitVerdictWithAuthorityOptions(projectRoot, taskID string, authority mode
 	result, err := awaitVerdictWithBudget(remaining, agentAwaitInterval(projectRoot, authority.ID), func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
 		return runAwaitVerdictWithAuthorityOptions(context.Background(), projectRoot, taskID, authority, interval, opts)
 	})
-	if err == nil && result.Verdict == ops.VerdictTimeout {
+	if err == nil && result.Verdict == string(ops.VerdictTimeout) {
 		if releaseErr := ops.ReleaseDepartedDoerAssignmentWithAuthority(projectRoot, taskID, authority); releaseErr != nil {
 			return result, releaseErr
 		}
@@ -71,7 +71,7 @@ func awaitVerdictWithIntervalAndOptions(
 	result, err := awaitVerdictWithBudget(remaining, maxInterval, func(interval time.Duration) (*ops.AwaitVerdictResult, error) {
 		return ops.AwaitVerdictWithOptions(context.Background(), projectRoot, taskID, agentID, interval, opts)
 	})
-	if err == nil && result.Verdict == ops.VerdictTimeout {
+	if err == nil && result.Verdict == string(ops.VerdictTimeout) {
 		releaseExhaustedDoerClaim(projectRoot, taskID, agentID)
 	}
 	return result, err
@@ -99,13 +99,13 @@ func awaitVerdictWithBudget(
 		remaining,
 		maxInterval,
 		await,
-		func(result *ops.AwaitVerdictResult) bool { return result.Verdict == ops.VerdictTimeout },
-		func(result *ops.AwaitVerdictResult) { result.Verdict = ops.VerdictPoll },
+		func(result *ops.AwaitVerdictResult) bool { return result.Verdict == string(ops.VerdictTimeout) },
+		func(result *ops.AwaitVerdictResult) { result.Verdict = string(ops.VerdictPoll) },
 	)
 	if err != nil {
 		return nil, err
 	}
-	if result.Verdict != ops.VerdictPoll {
+	if result.Verdict != string(ops.VerdictPoll) {
 		timeoutSeconds = 0
 	}
 	return &AwaitVerdictResult{AwaitVerdictResult: result, TimeoutSeconds: timeoutSeconds}, nil

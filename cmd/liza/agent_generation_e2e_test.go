@@ -215,8 +215,8 @@ func testE2EAwaitGenerationFence(t *testing.T) {
 		"await-verdict", taskID, "--agent-id", agentID, "--timeout-seconds", "1",
 	)
 	result, ok := envelope["result"].(map[string]any)
-	if !ok || result["verdict"] != ops.VerdictTimeout {
-		t.Fatalf("current await result = %#v, want terminal %s", envelope["result"], ops.VerdictTimeout)
+	if !ok || result["verdict"] != string(ops.VerdictTimeout) {
+		t.Fatalf("current await result = %#v, want terminal %s", envelope["result"], string(ops.VerdictTimeout))
 	}
 	state := readState(t, statePath)
 	task := state.FindTask(taskID)

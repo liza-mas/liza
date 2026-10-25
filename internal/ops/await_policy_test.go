@@ -199,12 +199,12 @@ func TestAwaitPollingPolicyRoutes(t *testing.T) {
 					}
 					return
 				}
-				want := VerdictPaused
+				want := string(VerdictPaused)
 				if caller == "reviewer" {
 					want = ResubmissionPaused
 				}
 				if route == "deadline" {
-					want = VerdictTimeout
+					want = string(VerdictTimeout)
 					if caller == "reviewer" {
 						want = ResubmissionTimeout
 					}

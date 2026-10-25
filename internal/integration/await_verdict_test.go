@@ -123,8 +123,8 @@ func TestAwaitVerdict_RejectionFlow(t *testing.T) {
 
 	// --- Phase 4: Verify rejection result ---
 	awaitResult := receiveAwaitVerdict(t, awaitCall, 10*time.Second)
-	if awaitResult.Verdict != ops.VerdictRejected {
-		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, ops.VerdictRejected)
+	if awaitResult.Verdict != string(ops.VerdictRejected) {
+		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, string(ops.VerdictRejected))
 	}
 	if awaitResult.Reason == "" {
 		t.Error("Expected non-empty rejection reason")
@@ -166,8 +166,8 @@ func TestAwaitVerdict_RejectionFlow(t *testing.T) {
 		t.Fatalf("SubmitVerdict (approve) failed: %v", err)
 	}
 	awaitResult = receiveAwaitVerdict(t, awaitCall, 10*time.Second)
-	if awaitResult.Verdict != ops.VerdictApproved {
-		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, ops.VerdictApproved)
+	if awaitResult.Verdict != string(ops.VerdictApproved) {
+		t.Fatalf("Verdict = %q, want %q", awaitResult.Verdict, string(ops.VerdictApproved))
 	}
 
 	// --- Phase 7: Merge ---
@@ -188,11 +188,11 @@ func TestAwaitVerdict_RejectionFlow(t *testing.T) {
 	// A post-transition caller must stop instead of re-entering the lifecycle.
 	awaitCall = startAwaitVerdict(projectDir, "task-1", coderID, 30*time.Second)
 	awaitResult = receiveAwaitVerdict(t, awaitCall, 10*time.Second)
-	if awaitResult.Verdict != ops.VerdictAlreadyTransitioned {
-		t.Fatalf("Post-merge verdict = %q, want %q", awaitResult.Verdict, ops.VerdictAlreadyTransitioned)
+	if awaitResult.Verdict != string(ops.VerdictAlreadyTransitioned) {
+		t.Fatalf("Post-merge verdict = %q, want %q", awaitResult.Verdict, string(ops.VerdictAlreadyTransitioned))
 	}
-	if awaitResult.SafeAction != ops.SafeActionStop {
-		t.Fatalf("Post-merge safe action = %q, want %q", awaitResult.SafeAction, ops.SafeActionStop)
+	if awaitResult.SafeAction != string(ops.SafeActionStop) {
+		t.Fatalf("Post-merge safe action = %q, want %q", awaitResult.SafeAction, string(ops.SafeActionStop))
 	}
 }
 
@@ -274,7 +274,7 @@ func rejectAwaitFixture(t *testing.T, fixture awaitIntegrationFixture) {
 	if err := commands.SubmitVerdictCommand(
 		fixture.projectRoot,
 		awaitTaskID,
-		ops.VerdictRejected,
+		string(ops.VerdictRejected),
 		"Missing error handling",
 		awaitReviewerID,
 		"",
