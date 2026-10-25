@@ -1,0 +1,5 @@
+# exit_code
+1
+# stdout
+# stderr
+Error: await verdict: budget exhausted: iteration or review-cycle limit reached

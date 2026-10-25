@@ -1,0 +1,10 @@
+# exit_code
+0
+# stdout
+Verdict: TERMINAL
+Status: CODE_REJECTED
+Reason: A5 defect
+Reviewer: code-reviewer-1
+Safe action: stop
+Stop this session; do not run more worktree commands for this submission. Task status is CODE_REJECTED, and Liza may clean up the task worktree after terminal merge.
+# stderr

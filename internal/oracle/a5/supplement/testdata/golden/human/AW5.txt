@@ -1,0 +1,12 @@
+# exit_code
+0
+# stdout
+Verdict: ALREADY_TRANSITIONED
+Status: IMPLEMENTING_CODE
+Reason: A5 defect
+Reviewer: code-reviewer-1
+Review commit: <commit:candidate>
+Current assignee: coder-2
+Safe action: stop
+Review verdict was recovered after the task already moved to IMPLEMENTING_CODE and is assigned to coder-2. Stop this session; do not resubmit from stale context or run more worktree commands.
+# stderr

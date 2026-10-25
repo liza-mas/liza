@@ -83,6 +83,15 @@ type caseInput struct {
 // under state-lock contention, then drained by ReplayPendingVerdicts: PV1 applies
 // the approval, PV2 finds the registration replaced and quarantines the finding.
 //
+// AW*: an await-verdict outcome reachable from state without waiting. Outcome -> case:
+// TERMINAL AW1 (decided, no verdict recorded) and AW8 (last-attempt rejection blocks the
+// reclaim, no verdict recoverable); ALREADY_TRANSITIONED AW11 (same block, verdict recovered), AW2 (merged, approved: stop), AW3 (blocked, rejected,
+// caller still assigned: revise), AW4 (back with the doer: revise) and AW5 (another doer
+// holds it: stop); PAUSED AW6; NEW_ATTEMPT AW7; budget gate AW9; non-awaitable refusal AW10.
+// APPROVED, REJECTED and the non-doer refusal stay with the delivered AV1-AV3. POLL, TIMEOUT
+// and ABORTED depend on elapsed time or a mode change while waiting and stay mapped to the
+// white-box await tests.
+//
 // Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
 //
 //	registration_required VR1; worktree_unavailable VR13 (no path), VR14 (not a
@@ -106,6 +115,9 @@ var inventory = map[string]string{
 	"VR9": "state alerts", "VR10": "state alerts", "VR11": "state alerts", "VR12": "state alerts",
 	"VR13": "state alerts", "VR14": "state alerts", "VR15": "state alerts",
 	"PV1": "state outbox", "PV2": "state outbox",
+	"AW1": "json human state", "AW2": "json human state", "AW3": "json human state", "AW4": "json human state",
+	"AW5": "json human state", "AW6": "json human state", "AW7": "json human state", "AW8": "json human state",
+	"AW9": "json human state", "AW10": "json state", "AW11": "json human state",
 }
 
 func loadCases(t *testing.T) []caseInput {

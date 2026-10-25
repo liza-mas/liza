@@ -1,0 +1,65 @@
+{
+  "id": "AW6",
+  "base": "review",
+  "state_delta": {
+    "config": {
+      "mode": "PAUSED"
+    },
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "REVIEWING_CODE",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "submitted_for_review",
+            "agent": "coder-1",
+            "commit": "{{commit:candidate}}",
+            "submission_input_commit": "{{commit:candidate}}",
+            "submission_attempt": 1
+          }
+        ],
+        "review_commit": "{{commit:candidate}}",
+        "assigned_to": "coder-1",
+        "lease_expires": "2099-01-01T00:00:00Z",
+        "reviewing_by": "code-reviewer-1",
+        "review_lease_expires": "2099-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "step": {
+    "agent": "coder-1",
+    "args": [
+      "await-verdict",
+      "task-1"
+    ],
+    "exit": 0,
+    "contains": "PAUSED"
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

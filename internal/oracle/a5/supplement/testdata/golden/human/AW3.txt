@@ -1,0 +1,12 @@
+# exit_code
+0
+# stdout
+Verdict: ALREADY_TRANSITIONED
+Status: BLOCKED
+Reason: A5 defect
+Reviewer: code-reviewer-1
+Review commit: <commit:candidate>
+Current assignee: coder-1
+Safe action: revise
+Review verdict was recovered after the task already moved to BLOCKED. Address the rejection feedback before resubmitting.
+# stderr

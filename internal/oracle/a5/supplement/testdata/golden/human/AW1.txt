@@ -1,0 +1,9 @@
+# exit_code
+0
+# stdout
+Verdict: TERMINAL
+Status: BLOCKED
+Reason: task already BLOCKED — no verdict expected
+Safe action: stop
+Stop this session; do not run more worktree commands for this submission. Task status is BLOCKED, and Liza may clean up the task worktree after terminal merge.
+# stderr
