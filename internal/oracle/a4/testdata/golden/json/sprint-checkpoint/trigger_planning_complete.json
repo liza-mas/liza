@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "checkpoint_at": "<INSTANT +02:00>",
+      "report_path": "<FIXTURE>/.liza/sprint_summary.md",
+      "trigger": "PLANNING_COMPLETE"
+    }
+  }
+}
