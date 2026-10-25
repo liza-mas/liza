@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: plan-check failed: modification function failed: validation failed: task cp-1 is already held for "Confirm scope"; an operator must clear it before a different hold

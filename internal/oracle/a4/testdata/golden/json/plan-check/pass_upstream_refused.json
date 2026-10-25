@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task cp-1 cannot pass while upstream cp-c awaits plan review; replan or hold it instead"
+    },
+    "ok": false,
+    "result": null
+  }
+}
