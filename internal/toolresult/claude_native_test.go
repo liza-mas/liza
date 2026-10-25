@@ -154,7 +154,7 @@ func TestClaudeNativeMetadataAndTruncation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := testStore(t)
 			input := map[string]any{"path": "/repo", "pattern": "needle"}
-			hook := ClaudeHookInput{Event: "PostToolUse", Tool: tc.tool, Response: tc.response, Input: input, SessionID: "claude-session"}
+			hook := ClaudeHookInput{Event: "PostToolUse", Tool: HookTool(tc.tool), Response: tc.response, Input: input, SessionID: "claude-session"}
 			out, err := ClaudePostToolResult(s, hook, Result{TaskID: "task-778", AgentID: "coder-1", Role: "coder", Truncated: tc.seed})
 			if err != nil {
 				t.Fatal(err)
@@ -244,7 +244,7 @@ func TestClaudeNativeSmallResults(t *testing.T) {
 			"Glob": {"filenames": []string{"a.go"}, "numFiles": 1, "truncated": false},
 		} {
 			s := testStore(t)
-			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolUse", Tool: tool, Response: response}, Result{})
+			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolUse", Tool: HookTool(tool), Response: response}, Result{})
 			if err != nil || out == nil || len(out) != 0 {
 				t.Fatalf("%s: out=%v err=%v", tool, out, err)
 			}
@@ -260,7 +260,7 @@ func TestClaudeNativeSmallResults(t *testing.T) {
 			"Glob": {"filenames": []string{"fake-known-secret.txt"}, "numFiles": 1, "truncated": false},
 		} {
 			s := testStore(t)
-			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolUse", Tool: tool, Response: response}, Result{})
+			out, err := ClaudePostToolResult(s, ClaudeHookInput{Event: "PostToolUse", Tool: HookTool(tool), Response: response}, Result{})
 			if err != nil {
 				t.Fatalf("%s: %v", tool, err)
 			}

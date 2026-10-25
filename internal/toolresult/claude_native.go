@@ -8,9 +8,9 @@ import (
 // claudeNativeSupported validates a native PostToolUse response for the tool
 // and reports whether the transformer handles it. Unsupported tools and
 // non-text Read results are a no-op, malformed supported shapes are refused.
-func claudeNativeSupported(tool string, response map[string]any) (bool, error) {
+func claudeNativeSupported(tool HookTool, response map[string]any) (bool, error) {
 	switch tool {
-	case "Read":
+	case HookToolRead:
 		if response["type"] != "text" {
 			return false, nil
 		}
@@ -21,7 +21,7 @@ func claudeNativeSupported(tool string, response map[string]any) (bool, error) {
 		if _, ok := file["content"].(string); !ok {
 			return false, fmt.Errorf("invalid Claude Read content shape")
 		}
-	case "Grep", "Glob":
+	case HookToolGrep, HookToolGlob:
 	default:
 		return false, nil
 	}
@@ -43,7 +43,7 @@ func claudeNativeMetadata(metadata Result, hook ClaudeHookInput, response map[st
 	if err != nil {
 		return Result{}, fmt.Errorf("invalid Claude input encoding")
 	}
-	metadata.Tool, metadata.Command, metadata.SessionID = hook.Tool, string(command), hook.SessionID
+	metadata.Tool, metadata.Command, metadata.SessionID = string(hook.Tool), string(command), hook.SessionID
 	metadata.Content, metadata.ContentJSON = string(content), true
 	if value, ok := response["truncated"].(bool); ok {
 		metadata.Truncated = value
@@ -73,7 +73,7 @@ func claudeLinesTruncated(m map[string]any) bool {
 
 // claudeNativeReplacement shapes the updatedToolOutput for processed store
 // output that differs from the original content.
-func claudeNativeReplacement(store *Store, tool, content, processed string) (map[string]any, error) {
+func claudeNativeReplacement(store *Store, tool HookTool, content, processed string) (map[string]any, error) {
 	var replacement map[string]any
 	if err := json.Unmarshal([]byte(processed), &replacement); err != nil {
 		return nil, fmt.Errorf("invalid processed Claude result")
@@ -88,16 +88,16 @@ func claudeNativeReplacement(store *Store, tool, content, processed string) (map
 		return nil, err
 	}
 	switch tool {
-	case "Read":
+	case HookToolRead:
 		file := replacement["file"].(map[string]any)
 		file["content"] = processed
 		file["numLines"] = 1
 		file["startLine"] = 1
-	case "Grep":
+	case HookToolGrep:
 		replacement["mode"], replacement["content"] = "content", processed
 		replacement["filenames"], replacement["numFiles"] = []any{}, 0
 		replacement["numLines"] = 1
-	case "Glob":
+	case HookToolGlob:
 		// Glob serializes only filenames. A single explicitly marked JSON digest
 		// carries the artifact reference rather than inventing a real matching path.
 		replacement["filenames"], replacement["numFiles"] = []any{processed}, 1

@@ -41,12 +41,12 @@ func newToolResultCodexHookCmd(store func(*cobra.Command) (*toolresult.Store, er
 func codexHookFailure(input []byte) []byte {
 	const reason = "Tool-result processing failed; the original output is withheld. Check the managed artifact store and runner configuration."
 	var event struct {
-		Event string `json:"hook_event_name"`
+		Event toolresult.HookEvent `json:"hook_event_name"`
 	}
 	_ = json.Unmarshal(input, &event)
 	var output []byte
-	if event.Event == "PreToolUse" {
-		output, _ = json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}})
+	if event.Event == toolresult.HookEventPreToolUse {
+		output, _ = json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": string(toolresult.HookEventPreToolUse), "permissionDecision": "deny", "permissionDecisionReason": reason}})
 	} else {
 		output, _ = json.Marshal(map[string]any{"decision": "block", "reason": reason})
 	}
