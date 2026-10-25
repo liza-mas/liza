@@ -716,3 +716,36 @@ func TestWindowsRenamesWhenNothingRunnableExists(t *testing.T) {
 		t.Fatalf("expected the binary to be renamed so PATH can resolve it: %v", err)
 	}
 }
+
+func TestInstallToolSelector(t *testing.T) {
+	ids := func(t *testing.T, toolID string) []string {
+		t.Helper()
+		got, err := Install(InstallOptions{
+			Profile:    ProfileBalanced,
+			Exclude:    allToolIDsExcept("jq", "rg"),
+			ToolID:     toolID,
+			InstallDir: t.TempDir(),
+			DryRun:     true,
+			Runner:     &fakeRunner{paths: map[string]string{"brew": "/opt/homebrew/bin/brew"}},
+		})
+		if err != nil {
+			t.Fatalf("Install(%q) error = %v", toolID, err)
+		}
+		var out []string
+		for _, step := range got.Steps {
+			out = append(out, step.ToolID)
+		}
+		return out
+	}
+
+	every := ids(t, "")
+	if len(every) != 2 {
+		t.Fatalf("empty selector = %v, want the two kept tools", every)
+	}
+	if got := ids(t, "all"); !slices.Equal(got, every) {
+		t.Fatalf("selector all = %v, want %v", got, every)
+	}
+	if got := ids(t, "jq"); !slices.Equal(got, []string{"jq"}) {
+		t.Fatalf("selector jq = %v, want [jq]", got)
+	}
+}

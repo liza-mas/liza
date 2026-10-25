@@ -12,6 +12,9 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 )
 
+// allToolsSelector is the ToolID that selects every tool, like the empty ID.
+const allToolsSelector = "all"
+
 // toolEnvName names an environment variable the generated install commands set
 // and their scripts read. The pair is closed - nothing outside this package
 // writes or reads these, so no legacy alias is needed - but the names appear in
@@ -25,7 +28,7 @@ type InstallOptions struct {
 	Profile Profile
 	Include []string
 	Exclude []string
-	// ToolID, when set and not "all", selects exactly that tool, as in
+	// ToolID, when set and not allToolsSelector, selects exactly that tool, as in
 	// DoctorOptions.
 	ToolID     string
 	InstallDir string
@@ -64,7 +67,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 		return InstallResult{}, err
 	}
 	include, exclude := opts.Include, opts.Exclude
-	if opts.ToolID != "" && opts.ToolID != "all" {
+	if opts.ToolID != "" && opts.ToolID != allToolsSelector {
 		include, exclude = []string{opts.ToolID}, allCatalogIDsExcept(opts.ToolID)
 	}
 	selection, err := ResolveSelection(opts.Profile, include, exclude)

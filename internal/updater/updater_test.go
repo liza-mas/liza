@@ -2200,3 +2200,38 @@ func TestRenameOverBinaryRestoresAfterFailedReplace(t *testing.T) {
 		t.Fatalf("target content = %q, want restored %q", content, "old")
 	}
 }
+
+func TestInstallTimeoutDefaultsToNamedTenMinutes(t *testing.T) {
+	if defaultInstallTimeout != 10*time.Minute {
+		t.Fatalf("defaultInstallTimeout = %s, want 10m0s", defaultInstallTimeout)
+	}
+	var remaining time.Duration
+	reexecErr := errors.New("reexec sentinel")
+	err := MaybeUpdateAndReexec(context.Background(), Config{
+		CurrentVersion: "v1.0.0",
+		CheckUpdate:    true,
+		Args:           []string{"/tmp/old-liza", "version"},
+		Stdin:          strings.NewReader("y\n"),
+		Stdout:         io.Discard,
+		Stderr:         io.Discard,
+		IsInteractive:  func() bool { return true },
+		LookupLatest:   func(context.Context) (string, error) { return "v1.2.3", nil },
+		Install: func(ctx context.Context, _ candidate, _ string, _, _ io.Writer) error {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("install context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return nil
+		},
+		InstallTarget: func() (string, error) { return "/tmp/liza", nil },
+		VerifyInstall: func(context.Context, string, io.Writer) error { return nil },
+		Reexec:        func(string, []string, []string) error { return reexecErr },
+	})
+	if !errors.Is(err, reexecErr) {
+		t.Fatalf("MaybeUpdateAndReexec() error = %v, want reexec sentinel", err)
+	}
+	if remaining <= defaultInstallTimeout-time.Minute || remaining > defaultInstallTimeout {
+		t.Fatalf("install deadline remaining = %s, want within (9m, 10m]", remaining)
+	}
+}

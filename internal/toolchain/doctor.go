@@ -43,7 +43,7 @@ type DoctorResult struct {
 func Doctor(opts DoctorOptions) (DoctorResult, error) {
 	runner := runnerOrDefault(opts.Runner)
 	include := append([]string{}, opts.Include...)
-	if opts.ToolID != "" && opts.ToolID != "all" {
+	if opts.ToolID != "" && opts.ToolID != allToolsSelector {
 		include = []string{opts.ToolID}
 		opts.Exclude = allCatalogIDsExcept(opts.ToolID)
 	}

@@ -27,6 +27,15 @@ const (
 	AgentToolsModeForce AgentToolsMode = "force"
 )
 
+// Shell and PowerShell host names that select profile files.
+const (
+	shellBash       = "bash"
+	shellBashExe    = "bash.exe"
+	shellZsh        = "zsh"
+	shellPwsh       = "pwsh"
+	shellPowerShell = "powershell"
+)
+
 type ConfigureOptions struct {
 	Profile           Profile
 	Include           []string
@@ -338,9 +347,9 @@ func shellProfileNames(shell string) []string {
 		shell = os.Getenv("SHELL")
 	}
 	switch filepath.Base(shell) {
-	case "bash", "bash.exe":
+	case shellBash, shellBashExe:
 		return []string{".bashrc", ".profile"}
-	case "zsh":
+	case shellZsh:
 		return []string{".zshrc"}
 	default:
 		return []string{".profile"}
@@ -383,7 +392,7 @@ func powerShellProfilePaths(homeDir string, query func(string, ...string) ([]byt
 
 	var profilePaths []string
 	seen := make(map[string]struct{})
-	for _, host := range []string{"pwsh", "powershell"} {
+	for _, host := range []string{shellPwsh, shellPowerShell} {
 		out, err := query(host, "-NoProfile", "-NonInteractive", "-Command", "$PROFILE.CurrentUserAllHosts")
 		if err != nil {
 			continue

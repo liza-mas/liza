@@ -71,6 +71,9 @@ func TestCodexHookNeverElevatesConstrainedSession(t *testing.T) {
 // other mode: those sessions are either more constrained (an allow rewrite
 // would elevate them) or outside the managed baseline posture.
 func TestCodexHookAcceptsOnlyManagedConfigurationMode(t *testing.T) {
+	if codexManagedPermissionMode != "bypassPermissions" {
+		t.Fatalf("codexManagedPermissionMode = %q, want bypassPermissions", codexManagedPermissionMode)
+	}
 	runner := filepath.Join(t.TempDir(), "engine")
 	if err := os.WriteFile(runner, []byte("#!/bin/sh\n"), 0700); err != nil {
 		t.Fatal(err)
