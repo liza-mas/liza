@@ -1,0 +1,14 @@
+{
+  "source_task_id": "m1",
+  "reason": "Rescoped",
+  "replacement": {
+    "id": "m1b",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "coding-pair",
+    "priority": 1
+  },
+  "consumers": []
+}

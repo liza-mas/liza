@@ -1,0 +1,48 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "conflict",
+      "details": {
+        "diagnostics": [
+          {
+            "constraint": "must not reuse an identity for a different replacement intent",
+            "field": "request_id",
+            "safe_action": "requery",
+            "schema_version": 1,
+            "value_class": "conflict"
+          }
+        ],
+        "effects": "none",
+        "operation": "replace-task",
+        "outcome": "CONFLICT",
+        "request_id": "replace-1",
+        "safe_action": "stop",
+        "task_id": "t1",
+        "task_status": "SUPERSEDED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "replace-task: CONFLICT (safe_action=stop): modification function failed: replace-task: CONFLICT (safe_action=stop): replace-task: INVALID_INPUT (safe_action=correct_input): request identity was already used with a different payload: lifecycle request identity reused"
+    },
+    "ok": false,
+    "result": {
+      "diagnostics": [
+        {
+          "constraint": "must not reuse an identity for a different replacement intent",
+          "field": "request_id",
+          "safe_action": "requery",
+          "schema_version": 1,
+          "value_class": "conflict"
+        }
+      ],
+      "effects": "none",
+      "operation": "replace-task",
+      "outcome": "CONFLICT",
+      "request_id": "replace-1",
+      "safe_action": "stop",
+      "task_id": "t1",
+      "task_status": "SUPERSEDED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

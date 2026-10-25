@@ -1,0 +1,9 @@
+branches:
+<SHA base> integration
+<SHA state> main
+<SHA base> task/t1b
+worktrees:
+worktree <FIXTURE>
+branch refs/heads/main
+worktree <FIXTURE>/.worktrees/t1b
+branch refs/heads/task/t1b

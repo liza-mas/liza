@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "effects": "none",
+        "operation": "replace-task",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "t1",
+        "task_status": "DRAFT_CODE",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "replace-task: STATE_CHANGED (safe_action=requery): modification function failed: replace-task: STATE_CHANGED (safe_action=requery): validation failed: task t2 dependencies changed since the repair request was created: got [t1], expected [t3]"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "replace-task",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "t1",
+      "task_status": "DRAFT_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

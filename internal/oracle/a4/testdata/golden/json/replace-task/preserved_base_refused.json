@@ -1,0 +1,44 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "diagnostics": [
+          {
+            "constraint": "canonical replacement worktree is required",
+            "field": "preserved_base.worktree",
+            "safe_action": "correct_input",
+            "schema_version": 1,
+            "value_class": "malformed"
+          }
+        ],
+        "effects": "none",
+        "operation": "replace-task",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "replace-task: INVALID_INPUT (safe_action=correct_input): modification function failed: replace-task: INVALID_INPUT (safe_action=correct_input): invalid preserved base: canonical replacement worktree is required"
+    },
+    "ok": false,
+    "result": {
+      "diagnostics": [
+        {
+          "constraint": "canonical replacement worktree is required",
+          "field": "preserved_base.worktree",
+          "safe_action": "correct_input",
+          "schema_version": 1,
+          "value_class": "malformed"
+        }
+      ],
+      "effects": "none",
+      "operation": "replace-task",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}
