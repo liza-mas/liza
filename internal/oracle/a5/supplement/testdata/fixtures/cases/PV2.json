@@ -1,0 +1,25 @@
+{
+  "id": "PV2",
+  "base": "review",
+  "state_delta": {
+    "agents": {
+      "code-reviewer-1": {
+        "generation": "generation-2"
+      }
+    }
+  },
+  "step": {
+    "agent": "code-reviewer-1",
+    "adapter": "replay",
+    "params": {
+      "verdict": "APPROVED",
+      "generation": "generation-1",
+      "request_id": "reached-verdict"
+    },
+    "exit": 0
+  },
+  "modes": [
+    "state",
+    "outbox"
+  ]
+}

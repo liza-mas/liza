@@ -79,6 +79,9 @@ type caseInput struct {
 // SB6; task without a worktree SB7. Tool, HEAD-read and live-HEAD race failures
 // stay mapped to their white-box tests.
 // VR*: a validation preflight refused or recorded by prepareValidationPreflight.
+// PV*: a reached verdict left in the private outbox by SubmitVerdictWithAuthorityAndOptions
+// under state-lock contention, then drained by ReplayPendingVerdicts: PV1 applies
+// the approval, PV2 finds the registration replaced and quarantines the finding.
 //
 // Readiness refusal -> case (starting-tree classes of prepareValidationPreflight):
 //
@@ -102,6 +105,7 @@ var inventory = map[string]string{
 	"VR5": "state alerts", "VR6": "state alerts", "VR7": "state alerts", "VR8": "state alerts",
 	"VR9": "state alerts", "VR10": "state alerts", "VR11": "state alerts", "VR12": "state alerts",
 	"VR13": "state alerts", "VR14": "state alerts", "VR15": "state alerts",
+	"PV1": "state outbox", "PV2": "state outbox",
 }
 
 func loadCases(t *testing.T) []caseInput {
@@ -182,6 +186,9 @@ func expectedGoldens(c caseInput) []string {
 		out = append(out, "state/"+c.ID+".state.yaml")
 		if slices.Contains(c.Modes, "alerts") {
 			out = append(out, "human/"+c.ID+".alerts.txt")
+		}
+		if slices.Contains(c.Modes, "outbox") {
+			out = append(out, "human/"+c.ID+".outbox.txt")
 		}
 		return out
 	}

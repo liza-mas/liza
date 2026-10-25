@@ -25,6 +25,9 @@ type baseInput struct {
 type fixture struct {
 	root, project, home, tmp string
 	labels                   map[string]string
+	// outbox is the observation an adapter records about the private verdict
+	// outbox; only a case with the "outbox" capture mode compares it.
+	outbox []byte
 }
 
 // materialise builds a disposable project: a Git repository from the base
