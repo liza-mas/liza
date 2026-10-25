@@ -21,8 +21,8 @@
     },
     {
       "obligation_id": "AC-release",
-      "file": "internal/ops/release_claim_test.go",
-      "assertion": "TestReleaseClaim_BothClaims (reviewer then doer effects and projection), TestRejectedTaskHandoff and TestReleaseRejectedClaim (rejected-handoff candidate validation), TestReleaseClaim_NoClaims and the retained Pipeline* reviewer/doer release suites run unchanged against the extracted descriptor and transaction; the reviewer branch is also frozen by the oracle goldens release-claim/reviewer-release and recover-agent/reviewer-release.",
+      "file": "internal/ops/ownership_phase_test.go",
+      "assertion": "TestReleaseClaim_BothClaimsReviewerThenDoerEffectsAndProjection (a combined release commits both ownership effects, records the reviewer event before the doer event in history, and retains a receipt projecting both releases; negative proof: swapping the role order failed it and was restored); release_claim_test.go TestRejectedTaskHandoff and TestReleaseRejectedClaim (rejected-handoff candidate validation) and the Pipeline* release suites run unchanged; the reviewer branch is also frozen by the oracle goldens release-claim/reviewer-release and recover-agent/reviewer-release.",
       "command_index": 0
     },
     {
@@ -44,13 +44,13 @@
     {
       "obligation_id": "AC-frozen",
       "file": "internal/oracle/a3/lifecycle/recover_task_fresh_test.go",
-      "assertion": "TestOracleRecoverTaskFresh, TestOracleRecoverTaskAbsent, TestOracleAttemptRollover and TestOracleReleaseReviewer compare json, human and state.yaml/git effects against goldens written from the starting tree; every earlier A3 lifecycle golden (TestOracleRecoverTask, TestOracleRecoverAgent, TestOracleReleaseClaim, TestOracleHandoff, TestOracleClaimTaskVariants) is unchanged and passes after the refactor.",
+      "assertion": "TestOracleRecoverTaskFresh, TestOracleRecoverTaskAbsent (empty cleanup and cleanup of a real task-9 branch and worktree under --force, preserved by the unforced refusal), TestOracleAttemptRollover and TestOracleReleaseReviewer compare json, human and state.yaml/git effects against goldens written from the starting tree; every earlier A3 lifecycle golden (TestOracleRecoverTask, TestOracleRecoverAgent, TestOracleReleaseClaim, TestOracleHandoff, TestOracleClaimTaskVariants) is unchanged and passes after the refactor.",
       "command_index": 0
     },
     {
       "obligation_id": "AC-oracle",
       "file": "internal/oracle/a3/lifecycle/attempt_rollover_test.go",
-      "assertion": "The nine goldens of the four new drivers (fresh-success, fresh-refusal-live-assignee, fresh-blocked, absent-force, absent-refusal, rollover-attempt-one, rollover-refusal-attempt-two, release-claim and recover-agent reviewer-release) were written by regen -mode write-new from the starting tree in commit 'test(oracle): pin A3 fresh recovery, absent-task, rollover and reviewer release' before any production edit; regen -mode check reproduces them and every earlier golden after the refactor.",
+      "assertion": "The goldens of the four new drivers (fresh-success, fresh-refusal-live-assignee, fresh-blocked, absent-force, absent-refusal, absent-force-artifacts, absent-refusal-artifacts, rollover-attempt-one, rollover-refusal-attempt-two, release-claim and recover-agent reviewer-release) were written by regen -mode write-new from the starting tree in commit 'test(oracle): pin A3 fresh recovery, absent-task, rollover and reviewer release' before any production edit, and the two absent-artifacts goldens by regen -mode write-new in the rejection-fix commit that adds the absent-artifacts recipe (provenance from the starting tree); regen -mode check reproduces them and every earlier golden after the refactor.",
       "command_index": 4
     },
     {

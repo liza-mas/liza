@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
@@ -328,5 +329,56 @@ func TestTransitionToNewAttempt_SentinelReplacedSkipsCleanup(t *testing.T) {
 	task := state.FindTask("task-1")
 	if task.Worktree == nil || task.Attempt != 2 {
 		t.Fatalf("refused finalisation lost the recovery evidence: %+v", task)
+	}
+}
+
+// A combined release is reviewer-then-doer: both ownership effects commit
+// together, the history records the reviewer event first, and the retained
+// receipt projects both releases.
+func TestReleaseClaim_BothClaimsReviewerThenDoerEffectsAndProjection(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReviewing, time.Now().UTC())}
+	for id, role := range map[string]string{"coder-1": "coder", "code-reviewer-1": "code-reviewer"} {
+		state.Agents[id] = models.Agent{Role: role, Status: models.AgentStatusWorking, CurrentTask: testhelpers.StringPtr("task-1")}
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	result, err := ReleaseClaim(tmpDir, "task-1", "both", true, "full reset", "human")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.ReleasedReviewer || !result.ReleasedDoer {
+		t.Fatalf("result = %+v", result)
+	}
+	after, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := after.FindTask("task-1")
+	if task.AssignedTo != nil || task.LeaseExpires != nil || task.ReviewingBy != nil || task.ReviewLeaseExpires != nil {
+		t.Fatalf("ownership not fully released: %+v", task)
+	}
+	for _, id := range []string{"coder-1", "code-reviewer-1"} {
+		if agent := after.Agents[id]; agent.CurrentTask != nil {
+			t.Fatalf("agent %s still holds %s", id, *agent.CurrentTask)
+		}
+	}
+	reviewerAt, doerAt := -1, -1
+	for index, entry := range task.History {
+		switch entry.Event {
+		case models.TaskEventReviewClaimReleased:
+			reviewerAt = index
+		case models.TaskEventDoerClaimReleased:
+			doerAt = index
+		}
+	}
+	if reviewerAt < 0 || doerAt < 0 || reviewerAt > doerAt {
+		t.Fatalf("history order: reviewer release at %d, doer release at %d", reviewerAt, doerAt)
+	}
+	receipts := task.Lifecycle.Receipts
+	if len(receipts) != 1 || receipts[0].Operation != "release-claim" || !receipts[0].Projection.ReleasedDoer || !receipts[0].Projection.ReleasedReviewer {
+		t.Fatalf("receipt projection = %+v", receipts)
 	}
 }
