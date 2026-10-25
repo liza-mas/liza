@@ -26,27 +26,27 @@ func (p Provider) ACPToolConfig() models.AgentToolConfig {
 	if p.ACPRuntime == nil {
 		return models.AgentToolConfig{}
 	}
-	return runtimeToolConfig(p.ID+"-acp", "acpx", *p.ACPRuntime)
+	return runtimeToolConfig(p.ID+"-acp", BackendACPX, *p.ACPRuntime)
 }
 
-func runtimeToolConfig(id, backend string, rt Runtime) models.AgentToolConfig {
+func runtimeToolConfig(id string, backend Backend, rt Runtime) models.AgentToolConfig {
 	required := append([]string(nil), rt.RequiredExecutables...)
-	if len(required) == 0 && backend == "acpx" {
+	if len(required) == 0 && backend == BackendACPX {
 		required = []string{"acpx"}
 	}
 	transport := rt.PromptTransport
 	if transport == "" {
-		transport = "stdin"
+		transport = PromptTransportStdin
 	}
 	providerKey := rt.ProviderKey
 	if providerKey == "" {
 		providerKey = id
 	}
 	return models.AgentToolConfig{
-		Backend:             backend,
+		Backend:             string(backend),
 		ProviderKey:         providerKey,
 		Executable:          rt.Executable,
-		PromptTransport:     transport,
+		PromptTransport:     string(transport),
 		RunArgs:             append([]string(nil), rt.RunArgs...),
 		LoggedRunArgs:       append([]string(nil), rt.LoggedRunArgs...),
 		InteractiveArgs:     append([]string(nil), rt.InteractiveArgs...),

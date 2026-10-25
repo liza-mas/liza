@@ -21,11 +21,30 @@ type Catalog struct {
 	aliases map[string]string
 }
 
+// Backend names how a provider is launched (W2). Unknown catalog values load
+// as-is and are refused by validateProvider.
+type Backend string
+
+const (
+	BackendCLI  Backend = "cli"
+	BackendACPX Backend = "acpx"
+)
+
+// PromptTransport names how the prompt reaches the provider process (W3).
+// The empty value is accepted and projects to PromptTransportStdin.
+type PromptTransport string
+
+const (
+	PromptTransportStdin PromptTransport = "stdin"
+	PromptTransportArg   PromptTransport = "arg"
+	PromptTransportFile  PromptTransport = "file"
+)
+
 type Provider struct {
 	ID          string   `yaml:"id"`
 	DisplayName string   `yaml:"display_name"`
 	Aliases     []string `yaml:"aliases,omitempty"`
-	Backend     string   `yaml:"backend"`
+	Backend     Backend  `yaml:"backend"`
 	// Disabled is informational: it marks providers that are not yet
 	// fully supported (e.g. missing stable CLI or ACP integration).
 	// Disabled providers remain resolvable and detectable; the flag is
@@ -123,23 +142,23 @@ type ActivationAssets struct {
 }
 
 type Runtime struct {
-	ProviderKey         string   `yaml:"provider_key,omitempty"`
-	Executable          string   `yaml:"executable,omitempty"`
-	PromptTransport     string   `yaml:"prompt_transport,omitempty"`
-	RunArgs             []string `yaml:"run_args,omitempty"`
-	LoggedRunArgs       []string `yaml:"logged_run_args,omitempty"`
-	InteractiveArgs     []string `yaml:"interactive_args,omitempty"`
-	ModelArgs           []string `yaml:"model_args,omitempty"`
-	EnvFiles            []string `yaml:"env_files,omitempty"`
-	RequiredExecutables []string `yaml:"required_executables,omitempty"`
-	ContractKey         string   `yaml:"contract_key,omitempty"`
-	ACPXAgent           string   `yaml:"acpx_agent,omitempty"`
-	ACPXSessionName     string   `yaml:"acpx_session_name,omitempty"`
-	ACPXShowArgs        []string `yaml:"acpx_show_args,omitempty"`
-	ACPXEnsureArgs      []string `yaml:"acpx_ensure_args,omitempty"`
-	ACPXSetModeArgs     []string `yaml:"acpx_set_mode_args,omitempty"`
-	ACPXPromptArgs      []string `yaml:"acpx_prompt_args,omitempty"`
-	ACPXEventMode       string   `yaml:"acpx_event_mode,omitempty"`
+	ProviderKey         string          `yaml:"provider_key,omitempty"`
+	Executable          string          `yaml:"executable,omitempty"`
+	PromptTransport     PromptTransport `yaml:"prompt_transport,omitempty"`
+	RunArgs             []string        `yaml:"run_args,omitempty"`
+	LoggedRunArgs       []string        `yaml:"logged_run_args,omitempty"`
+	InteractiveArgs     []string        `yaml:"interactive_args,omitempty"`
+	ModelArgs           []string        `yaml:"model_args,omitempty"`
+	EnvFiles            []string        `yaml:"env_files,omitempty"`
+	RequiredExecutables []string        `yaml:"required_executables,omitempty"`
+	ContractKey         string          `yaml:"contract_key,omitempty"`
+	ACPXAgent           string          `yaml:"acpx_agent,omitempty"`
+	ACPXSessionName     string          `yaml:"acpx_session_name,omitempty"`
+	ACPXShowArgs        []string        `yaml:"acpx_show_args,omitempty"`
+	ACPXEnsureArgs      []string        `yaml:"acpx_ensure_args,omitempty"`
+	ACPXSetModeArgs     []string        `yaml:"acpx_set_mode_args,omitempty"`
+	ACPXPromptArgs      []string        `yaml:"acpx_prompt_args,omitempty"`
+	ACPXEventMode       string          `yaml:"acpx_event_mode,omitempty"`
 }
 
 func (c Catalog) ProvidersSorted() []Provider {

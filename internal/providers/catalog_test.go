@@ -497,6 +497,117 @@ providers:
 	})
 }
 
+func TestParseCatalogLaunchVocabulary(t *testing.T) {
+	const template = `version: 1
+providers:
+  - id: qwen
+    display_name: Qwen
+    backend: %BACKEND%
+    runtime:
+      executable: qwen
+%TRANSPORT%
+    acp_runtime:
+      executable: acpx
+%ACPTRANSPORT%
+`
+	render := func(backend, transport, acpTransport string) []byte {
+		line := func(v string) string {
+			if v == "" {
+				return ""
+			}
+			return "      prompt_transport: " + v
+		}
+		return []byte(strings.NewReplacer("%BACKEND%", backend, "%TRANSPORT%", line(transport), "%ACPTRANSPORT%", line(acpTransport)).Replace(template))
+	}
+
+	t.Run("accepted values", func(t *testing.T) {
+		for _, backend := range []Backend{BackendCLI, BackendACPX} {
+			for _, transport := range []PromptTransport{"", PromptTransportStdin, PromptTransportArg, PromptTransportFile} {
+				cat, err := ParseCatalog(render(string(backend), string(transport), string(transport)))
+				if err != nil {
+					t.Fatalf("ParseCatalog(backend %q, transport %q) error = %v", backend, transport, err)
+				}
+				p, ok := cat.Resolve("qwen")
+				if !ok || p.Backend != backend || p.Runtime.PromptTransport != transport || p.ACPRuntime.PromptTransport != transport {
+					t.Fatalf("qwen = %+v, %v; want backend %q and transport %q decoded verbatim", p, ok, backend, transport)
+				}
+			}
+		}
+	})
+
+	t.Run("unknown values are refused with their message", func(t *testing.T) {
+		tests := []struct {
+			name string
+			data []byte
+			want string
+		}{
+			{name: "backend", data: render("telepathy", "", ""), want: `provider qwen has unsupported backend "telepathy"`},
+			{name: "empty backend", data: render(`""`, "", ""), want: `provider qwen has unsupported backend ""`},
+			{name: "case sensitive backend", data: render("CLI", "", ""), want: `provider qwen has unsupported backend "CLI"`},
+			{name: "runtime transport", data: render("cli", "telepathy", ""), want: `provider qwen has unsupported runtime prompt transport "telepathy"`},
+			{name: "acp_runtime transport", data: render("cli", "", "telepathy"), want: `provider qwen has unsupported acp_runtime prompt transport "telepathy"`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := ParseCatalog(tt.data)
+				if err == nil || !strings.Contains(err.Error(), tt.want) {
+					t.Fatalf("ParseCatalog error = %v, want %q", err, tt.want)
+				}
+			})
+		}
+	})
+}
+
+func TestRuntimeToolConfigProjectsLaunchVocabulary(t *testing.T) {
+	tests := []struct {
+		name          string
+		id            string
+		backend       Backend
+		runtime       Runtime
+		wantBackend   string
+		wantTransport string
+		wantKey       string
+		wantRequired  []string
+	}{
+		{name: "cli defaults to stdin", id: "codex", backend: BackendCLI, runtime: Runtime{Executable: "codex"}, wantBackend: "cli", wantTransport: "stdin", wantKey: "codex"},
+		{name: "cli stdin", id: "codex", backend: BackendCLI, runtime: Runtime{Executable: "codex", PromptTransport: PromptTransportStdin}, wantBackend: "cli", wantTransport: "stdin", wantKey: "codex"},
+		{name: "cli arg", id: "codex", backend: BackendCLI, runtime: Runtime{Executable: "codex", PromptTransport: PromptTransportArg}, wantBackend: "cli", wantTransport: "arg", wantKey: "codex"},
+		{name: "cli file with explicit provider key", id: "codex", backend: BackendCLI, runtime: Runtime{Executable: "codex", PromptTransport: PromptTransportFile, ProviderKey: "openai"}, wantBackend: "cli", wantTransport: "file", wantKey: "openai"},
+		{name: "acpx requires acpx by default", id: "codex-acp", backend: BackendACPX, runtime: Runtime{Executable: "acpx"}, wantBackend: "acpx", wantTransport: "stdin", wantKey: "codex-acp", wantRequired: []string{"acpx"}},
+		{name: "acpx keeps declared required executables", id: "codex-acp", backend: BackendACPX, runtime: Runtime{Executable: "acpx", RequiredExecutables: []string{"acpx", "codex"}, ProviderKey: "openai"}, wantBackend: "acpx", wantTransport: "stdin", wantKey: "openai", wantRequired: []string{"acpx", "codex"}},
+		{name: "cli has no implicit required executables", id: "codex", backend: BackendCLI, runtime: Runtime{Executable: "codex"}, wantBackend: "cli", wantTransport: "stdin", wantKey: "codex"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := runtimeToolConfig(tt.id, tt.backend, tt.runtime)
+			if got.Backend != tt.wantBackend || got.PromptTransport != tt.wantTransport || got.ProviderKey != tt.wantKey || !slices.Equal(got.RequiredExecutables, tt.wantRequired) {
+				t.Fatalf("runtimeToolConfig = {Backend:%q PromptTransport:%q ProviderKey:%q Required:%v}, want {%q %q %q %v}",
+					got.Backend, got.PromptTransport, got.ProviderKey, got.RequiredExecutables,
+					tt.wantBackend, tt.wantTransport, tt.wantKey, tt.wantRequired)
+			}
+		})
+	}
+
+	t.Run("provider and ACP projections", func(t *testing.T) {
+		p := Provider{
+			ID:         "codex",
+			Backend:    BackendCLI,
+			Runtime:    Runtime{Executable: "codex", PromptTransport: PromptTransportArg},
+			ACPRuntime: &Runtime{Executable: "acpx", PromptTransport: PromptTransportFile},
+		}
+		if got := p.RuntimeToolConfig(); got.Backend != "cli" || got.PromptTransport != "arg" || got.ProviderKey != "codex" {
+			t.Fatalf("RuntimeToolConfig = %+v, want cli/arg keyed codex", got)
+		}
+		acp := p.ACPToolConfig()
+		if acp.Backend != "acpx" || acp.PromptTransport != "file" || acp.ProviderKey != "codex-acp" || !slices.Equal(acp.RequiredExecutables, []string{"acpx"}) {
+			t.Fatalf("ACPToolConfig = %+v, want acpx/file keyed codex-acp requiring acpx", acp)
+		}
+		if got := (Provider{ID: "codex"}).ACPToolConfig(); got.Backend != "" || got.PromptTransport != "" {
+			t.Fatalf("ACPToolConfig without acp_runtime = %+v, want empty", got)
+		}
+	})
+}
+
 func TestValidEnvNameAcceptsLowercase(t *testing.T) {
 	for _, name := range []string{"lowercase", "mixed_Case_2", "_private"} {
 		if !validEnvName(name) {

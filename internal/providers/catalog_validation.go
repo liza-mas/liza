@@ -85,7 +85,7 @@ func synthesizeACPProvider(base Provider) Provider {
 	return Provider{
 		ID:          base.ID + "-acp",
 		DisplayName: base.DisplayName + " ACP",
-		Backend:     "acpx",
+		Backend:     BackendACPX,
 		Detection:   base.Detection,
 		Setup:       base.Setup,
 		Runtime:     *base.ACPRuntime,
@@ -99,7 +99,7 @@ func validateProvider(p Provider) error {
 	if strings.TrimSpace(p.DisplayName) == "" {
 		return fmt.Errorf("provider %s missing display_name", p.ID)
 	}
-	if p.Backend != "cli" && p.Backend != "acpx" {
+	if p.Backend != BackendCLI && p.Backend != BackendACPX {
 		return fmt.Errorf("provider %s has unsupported backend %q", p.ID, p.Backend)
 	}
 	for _, value := range p.Detection.Binaries {
@@ -170,7 +170,7 @@ func validateRuntime(providerID, label string, rt Runtime) error {
 	if !validExecutable(rt.Executable) {
 		return fmt.Errorf("provider %s has invalid %s.executable %q", providerID, label, rt.Executable)
 	}
-	if rt.PromptTransport != "" && rt.PromptTransport != "stdin" && rt.PromptTransport != "arg" && rt.PromptTransport != "file" {
+	if rt.PromptTransport != "" && rt.PromptTransport != PromptTransportStdin && rt.PromptTransport != PromptTransportArg && rt.PromptTransport != PromptTransportFile {
 		return fmt.Errorf("provider %s has unsupported %s prompt transport %q", providerID, label, rt.PromptTransport)
 	}
 	for _, value := range rt.RequiredExecutables {
