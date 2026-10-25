@@ -7,8 +7,6 @@ var areaA4 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/add_tasks.go"}, Ceiling: 810},
-		{Key: Key{File: "internal/ops/add_tasks.go", Func: "planDeliveryUnits"}, Ceiling: 122},
 		{Key: Key{File: "internal/ops/amend_plan.go", Func: "AmendPlan"}, Ceiling: 145},
 		{Key: Key{File: "internal/ops/apply_dependency_repair.go", Func: "applyDependencyRepairWithOptionalAuthority"}, Ceiling: 161},
 		{Key: Key{File: "internal/ops/cancel_task.go", Func: "cancelTaskLifecycle"}, Ceiling: 118},
