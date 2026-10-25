@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "effects": "none",
+        "operation": "narrow-inherited-dependencies",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "cp-b",
+        "task_status": "MERGED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): failed to narrow inherited dependencies: modification function failed: narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): validation failed: selection index 3 is out of range: producer cp-b has 1 output(s)"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "narrow-inherited-dependencies",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "cp-b",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

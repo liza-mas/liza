@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: MERGED
+effects: none
+task_id: cp-b
+transition_id: <DIGEST 1>
+Error: narrow inherited dependencies: narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): failed to narrow inherited dependencies: modification function failed: narrow-inherited-dependencies: INVALID_INPUT (safe_action=correct_input): validation failed: output[0].inherit_inputs.selections[0]: upstream task "cp-zzz" supplies no inherited children for this transition; it is not a dependency of the producing task, or its output was replaced

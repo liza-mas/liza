@@ -1,0 +1,7 @@
+outputs:
+  - index: 3
+    inherit_inputs:
+      mode: selected
+      selections:
+        - upstream_task: cp-a
+          outputs: [0]
