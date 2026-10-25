@@ -10,6 +10,17 @@ import (
 	"github.com/liza-mas/liza/internal/runtimeinputs"
 )
 
+// Git tree entry modes of a regular file, the only kind the runtime-input
+// registry may be. internal/git exposes the mode as a string and names none.
+const (
+	gitModeRegularFile    = "100644"
+	gitModeExecutableFile = "100755"
+)
+
+// runtimeInputLedgerOwner is the owner recorded for a variable name held by a
+// ledger instance rather than a task; runtimeOwnerLabel tells it from a task ID.
+const runtimeInputLedgerOwner = "the runtime-input ledger"
+
 // runtimeInputsStrictReason refuses runtime inputs on anything but a strict
 // acceptance task: only its submit gate runs the canonical commands that
 // consume them (ADR-0169).
@@ -82,7 +93,7 @@ func checkRuntimeInputRecipes(root string, state *models.State, carriers []runti
 		switch {
 		case !present:
 			registryProblem = "the runtime-input registry is missing from integration"
-		case entry.Mode != "100644" && entry.Mode != "100755":
+		case entry.Mode != gitModeRegularFile && entry.Mode != gitModeExecutableFile:
 			registryProblem = "the runtime-input registry must be a regular committed file"
 		default:
 			data, err := g.ReadBlob(commit, registryPath)
@@ -152,7 +163,7 @@ func runtimeInputNameCollisions(state *models.State, owners []string, carriers [
 	for _, instance := range state.RuntimeInputs {
 		for _, name := range instance.Names {
 			if _, known := runtimeOwners[name]; !known {
-				runtimeOwners[name] = "the runtime-input ledger"
+				runtimeOwners[name] = runtimeInputLedgerOwner
 			}
 		}
 	}
@@ -194,7 +205,7 @@ func runtimeInputNameCollisions(state *models.State, owners []string, carriers [
 }
 
 func runtimeOwnerLabel(owner string) string {
-	if owner == "the runtime-input ledger" {
+	if owner == runtimeInputLedgerOwner {
 		return owner
 	}
 	return "task " + owner

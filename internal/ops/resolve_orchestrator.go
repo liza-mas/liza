@@ -6,6 +6,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ResolveOrchestratorFromState reads workspace state and returns the registered
@@ -42,7 +43,7 @@ func findOrchestratorByType(state *models.State, resolver *pipeline.Resolver) (s
 		if err != nil {
 			continue // unknown role, skip
 		}
-		if roleType == "orchestrator" {
+		if roleType == roles.RoleTypeOrchestrator {
 			if found != "" {
 				return "", fmt.Errorf("multiple orchestrators registered (%s, %s); pass --agent-id explicitly", found, id)
 			}

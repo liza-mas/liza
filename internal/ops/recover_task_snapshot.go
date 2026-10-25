@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // recoverTaskSnapshot is the claim and worktree evidence captured before any
@@ -138,10 +139,10 @@ func recoverTaskCheckLiveClaims(taskID string, task *models.Task, state *models.
 	}
 	if coderAgentID != "" {
 		result.AgentID = coderAgentID
-		result.AgentRole = "coder"
+		result.AgentRole = roles.Coder
 	} else if reviewerAgentID != "" {
 		result.AgentID = reviewerAgentID
-		result.AgentRole = "code-reviewer"
+		result.AgentRole = roles.CodeReviewer
 	}
 	return nil
 }

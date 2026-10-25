@@ -11,11 +11,17 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// AgentDegradedReason is a reason ClassifyInfraClaimError assigns to a claim
+// failure that degrades an agent. The recorded reason, MarkAgentDegradedInput.Reason
+// and models.AgentHealth.Reason, is open text (an operator names its own), so it
+// stays a string and takes the converted value.
+type AgentDegradedReason string
+
 const (
-	AgentDegradedWorktreeCreateFailed     = "claim_worktree_create_failed"
-	AgentDegradedWorktreeReadonly         = "claim_worktree_readonly"
-	AgentDegradedWorktreePermissionDenied = "claim_worktree_permission_denied"
-	AgentDegradedWorktreeSetupFailed      = "claim_worktree_setup_failed"
+	AgentDegradedWorktreeCreateFailed     AgentDegradedReason = "claim_worktree_create_failed"
+	AgentDegradedWorktreeReadonly         AgentDegradedReason = "claim_worktree_readonly"
+	AgentDegradedWorktreePermissionDenied AgentDegradedReason = "claim_worktree_permission_denied"
+	AgentDegradedWorktreeSetupFailed      AgentDegradedReason = "claim_worktree_setup_failed"
 )
 
 // MarkAgentDegradedInput contains the evidence used to mark an agent epoch as
@@ -43,7 +49,7 @@ var ErrSetupFailureSuperseded = stderrors.New("setup failure superseded by a lat
 // InfraClaimErrorClassification describes a claim failure that indicates the
 // agent process cannot provision worktrees/refs for its role.
 type InfraClaimErrorClassification struct {
-	Reason      string
+	Reason      AgentDegradedReason
 	RecoverHint string
 	IsInfra     bool
 }
@@ -113,7 +119,7 @@ func MarkAgentDegraded(input MarkAgentDegradedInput) error {
 			Timestamp: now,
 			Task:      input.LastTask,
 			Reporter:  input.AgentID,
-			Type:      "agent_degraded",
+			Type:      models.AnomalyTypeAgentDegraded,
 			Details: map[string]any{
 				"agent_id":        input.AgentID,
 				"role":            input.Role,
@@ -218,7 +224,7 @@ func hasSetupDegradationFor(health map[string]models.AgentHealth, taskID string)
 
 func isSetupDegradationFor(health models.AgentHealth, taskID string) bool {
 	return health.State == models.AgentHealthDegraded &&
-		health.Reason == AgentDegradedWorktreeSetupFailed &&
+		health.Reason == string(AgentDegradedWorktreeSetupFailed) &&
 		health.LastTask == taskID
 }
 
@@ -259,17 +265,17 @@ func ClassifyInfraClaimError(err error) InfraClaimErrorClassification {
 	case strings.Contains(lower, "read-only file system"):
 		return infraClaimClassification(AgentDegradedWorktreeReadonly)
 	case strings.Contains(lower, "permission denied") &&
-		(strings.Contains(lower, ".git/refs") || strings.Contains(lower, ".git/worktrees") || strings.Contains(lower, ".worktrees")):
+		(strings.Contains(lower, ".git/refs") || strings.Contains(lower, ".git/worktrees") || strings.Contains(lower, paths.WorktreesDirName)):
 		return infraClaimClassification(AgentDegradedWorktreePermissionDenied)
 	case strings.Contains(lower, "operation not permitted") &&
-		(strings.Contains(lower, ".git/refs") || strings.Contains(lower, ".git/worktrees") || strings.Contains(lower, ".worktrees")):
+		(strings.Contains(lower, ".git/refs") || strings.Contains(lower, ".git/worktrees") || strings.Contains(lower, paths.WorktreesDirName)):
 		return infraClaimClassification(AgentDegradedWorktreePermissionDenied)
 	}
 
 	return InfraClaimErrorClassification{}
 }
 
-func infraClaimClassification(reason string) InfraClaimErrorClassification {
+func infraClaimClassification(reason AgentDegradedReason) InfraClaimErrorClassification {
 	return InfraClaimErrorClassification{
 		Reason:      reason,
 		RecoverHint: fmt.Sprintf("restart the agent from a process context that can write project git refs and %s", paths.WorktreesDirName),

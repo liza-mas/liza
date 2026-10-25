@@ -199,7 +199,7 @@ func TestAssessmentDependencyOutcomeCoversDeclaredStatuses(t *testing.T) {
 			if !ok {
 				t.Fatalf("declare assessment outcome for new task status %s", status)
 			}
-			if got := assessmentDependencyOutcome(&models.Task{Status: status}); got != outcome {
+			if got := assessmentDependencyOutcome(&models.Task{Status: status}); string(got) != outcome {
 				t.Errorf("%s outcome = %s, want %s", status, got, outcome)
 			}
 			declared++

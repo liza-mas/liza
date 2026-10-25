@@ -30,7 +30,7 @@ const (
 type claimBreakerKey struct {
 	Role            string
 	TaskID          string
-	Class           string
+	Class           ops.ReviewClaimClass
 	BoundaryVersion string
 }
 
@@ -73,7 +73,7 @@ type claimFailureObserver interface {
 type claimBreakerScope struct {
 	role   string
 	taskID string
-	class  string
+	class  ops.ReviewClaimClass
 }
 
 type claimBreakerEntry struct {
@@ -86,7 +86,7 @@ type claimBreakerEntry struct {
 // retrying: the delay doubles while the class repeats and restarts when the
 // class changes or a claim succeeds.
 type claimBackoffState struct {
-	class string
+	class ops.ReviewClaimClass
 	delay time.Duration
 }
 
@@ -108,7 +108,7 @@ func newClaimBreaker() *claimBreaker {
 
 // quarantineClass reports whether a candidate class is deterministic and
 // repair-required — never worth retrying against unchanged state (plan D3).
-func quarantineClass(class string) bool {
+func quarantineClass(class ops.ReviewClaimClass) bool {
 	switch class {
 	case ops.ReviewClaimClassAcceptanceEvidence,
 		ops.ReviewClaimClassReviewBoundaryRepair,
@@ -120,7 +120,7 @@ func quarantineClass(class string) bool {
 
 // stopClass reports whether a candidate-free class ends the supervisor loop
 // instead of scheduling another attempt.
-func stopClass(class string) bool {
+func stopClass(class ops.ReviewClaimClass) bool {
 	return class == ops.ReviewClaimClassAuthority || class == ops.ReviewClaimClassDegraded
 }
 
@@ -172,7 +172,7 @@ func (b *claimBreaker) observeCandidateFree(failure *ops.ReviewClaimFailure) cla
 
 // advanceBackoff returns the next delay for the role's schedule: the base on a
 // fresh schedule or a class change, otherwise double the last, capped.
-func (b *claimBreaker) advanceBackoff(role, class string) time.Duration {
+func (b *claimBreaker) advanceBackoff(role string, class ops.ReviewClaimClass) time.Duration {
 	state := b.backoff[role]
 	if state == nil {
 		state = &claimBackoffState{}

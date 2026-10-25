@@ -17,6 +17,16 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// Operation and lock labels of the claim concern.
+const (
+	claimTaskOperation             = "claim-task"
+	claimTaskProjectLockOperation  = "task-claim-worktree"
+	claimTaskWorktreeLockOperation = "claim-task-worktree"
+	claimTaskTakeoverLockOperation = "claim-task-takeover"
+	// degradedByClaimTask records a claim as the cause of an agent's degradation.
+	degradedByClaimTask = "claim_task"
+)
+
 // ClaimResult contains the outcome of a successful task claim.
 type ClaimResult struct {
 	models.LifecycleOutcome
@@ -63,7 +73,7 @@ func claimTaskWithOptionalAuthority(projectRoot, taskID, agentID string, authori
 // ClaimTaskWithRequest preserves the caller's original claim identity across
 // retries, including after the task has moved beyond its claimed state.
 func ClaimTaskWithRequest(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, sessions ...*ValidationSession) (result *ClaimResult, err error) {
-	invocation := &ownershipInvocation{operation: "claim-task", opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
+	invocation := &ownershipInvocation{operation: claimTaskOperation, opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
 	defer func() { err = invocation.finish(projectRoot, err) }()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -74,7 +84,7 @@ func ClaimTaskWithRequest(projectRoot, taskID, agentID string, authority *models
 	if err := ValidateLifecycleRequestOptions(opts); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
-	err = WithProjectLifecycleSharedLock(projectRoot, "task-claim-worktree", func() error {
+	err = WithProjectLifecycleSharedLock(projectRoot, claimTaskProjectLockOperation, func() error {
 		drainDeferredLifecycleRetirements(projectRoot)
 		var claimErr error
 		result, claimErr = claimTask(projectRoot, taskID, agentID, authority, invocation, sessions...)
@@ -115,12 +125,12 @@ func degradeOnPostWorktreeSetupFailure(projectRoot, taskID, agentID string, auth
 		ProjectRoot:    projectRoot,
 		AgentID:        agentID,
 		Role:           role,
-		Reason:         classification.Reason,
+		Reason:         string(classification.Reason),
 		LastTask:       taskID,
 		CandidateTasks: []string{taskID},
 		LastError:      err.Error(),
 		RecoverHint:    classification.RecoverHint,
-		DegradedBy:     "claim_task",
+		DegradedBy:     degradedByClaimTask,
 		Authority:      authority,
 		SetupOutcome:   setupErr,
 	}); markErr != nil {
@@ -146,7 +156,7 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 		return replay, nil
 	}
 	var claimResult *ClaimResult
-	err = filelock.New(claimTaskWorktreeLockPath(op.statePath, taskID)).WithLockOperation("claim-task-worktree", func() error {
+	err = filelock.New(claimTaskWorktreeLockPath(op.statePath, taskID)).WithLockOperation(claimTaskWorktreeLockOperation, func() error {
 		var lockedErr error
 		claimResult, lockedErr = completeClaimTaskAfterValidation(op)
 		return lockedErr
@@ -157,9 +167,16 @@ func claimTask(projectRoot, taskID, agentID string, authority *models.AgentAutho
 	return claimResult, nil
 }
 
+// claimTaskLockKeyBytes is how much of the task ID's digest names its worktree
+// lock; claimTaskLockInfix joins it to the state path.
+const (
+	claimTaskLockKeyBytes = 8
+	claimTaskLockInfix    = ".claim-"
+)
+
 func claimTaskWorktreeLockPath(statePath, taskID string) string {
 	sum := sha256.Sum256([]byte(taskID))
-	return statePath + ".claim-" + hex.EncodeToString(sum[:8])
+	return statePath + claimTaskLockInfix + hex.EncodeToString(sum[:claimTaskLockKeyBytes])
 }
 
 // completeClaimTaskAfterValidation runs phases two and three under the task

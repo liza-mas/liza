@@ -59,7 +59,7 @@ func newHoldGateFixture(t *testing.T) holdGateFixture {
 // gate evaluates automaticStateLockHoldGate on a fresh read of the persisted
 // state after memory mutates it. The expected hold is the persisted one unless
 // mismatch is set.
-func (f holdGateFixture) gate(t *testing.T, mismatch bool, memory func(*models.State, *models.Task)) string {
+func (f holdGateFixture) gate(t *testing.T, mismatch bool, memory func(*models.State, *models.Task)) stateLockHoldReason {
 	t.Helper()
 	state := readStateForTest(t, f.path)
 	task := state.FindTask("target")
@@ -175,7 +175,7 @@ func TestPhaseAutomaticStateLockHoldGatePrecedence(t *testing.T) {
 		for _, fault := range faults[i:] {
 			mismatch = mismatch || fault.mismatch
 		}
-		if got := f.gate(t, mismatch, memory); got != faults[i].reason {
+		if got := f.gate(t, mismatch, memory); string(got) != faults[i].reason {
 			t.Fatalf("with faults %s..end installed the gate named %q, want %q", faults[i].reason, got, faults[i].reason)
 		}
 		if undos[i] != nil {
@@ -198,7 +198,7 @@ func TestPhaseAutomaticStateLockHoldGateEachFaultAlone(t *testing.T) {
 			if fault.fs != nil {
 				fault.fs(t, f)
 			}
-			if got := f.gate(t, fault.mismatch, fault.memory); got != fault.reason {
+			if got := f.gate(t, fault.mismatch, fault.memory); string(got) != fault.reason {
 				t.Fatalf("gate = %q, want %q", got, fault.reason)
 			}
 		})
@@ -239,7 +239,7 @@ func TestPhaseRecordStateLockHoldRefusal(t *testing.T) {
 		hold := *observed.StateLockHold
 		return f, observed, &hold
 	}
-	record := func(f holdGateFixture, observed *models.Task, hold *models.StateLockHold, reason string) error {
+	record := func(f holdGateFixture, observed *models.Task, hold *models.StateLockHold, reason stateLockHoldReason) error {
 		return recordStateLockHoldRefusal(f.bb, f.root, f.authority, f.pr, observed, hold, reason)
 	}
 	state := func(t *testing.T, f holdGateFixture) *models.State { return readStateForTest(t, f.path) }

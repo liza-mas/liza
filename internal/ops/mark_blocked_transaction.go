@@ -12,7 +12,7 @@ import (
 func (c *markBlockedCall) mutate(state *models.State) error {
 	task := state.FindTask(c.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: c.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
 	request, err := c.newRequest(task)
 	if err != nil {
@@ -37,7 +37,7 @@ func (c *markBlockedCall) mutate(state *models.State) error {
 }
 
 func (c *markBlockedCall) newRequest(task *models.Task) (LifecycleRequest, error) {
-	return NewLifecycleRequest("mark-blocked", task, c.agentID, c.authority, c.opts.Request, struct {
+	return NewLifecycleRequest(markBlockedOperation, task, c.agentID, c.authority, c.opts.Request, struct {
 		Reason       string
 		Questions    []string
 		Repair       *models.RepairRequest
@@ -52,11 +52,11 @@ func (c *markBlockedCall) newRequest(task *models.Task) (LifecycleRequest, error
 // caller, or whose added dependencies or state-lock wait are not acceptable.
 func (c *markBlockedCall) checkBlockable(state *models.State, task *models.Task) error {
 	if !isExecutingStatus(task.Status, c.pipelineExecuting) {
-		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+		return WrapLifecycleError(markBlockedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if task.AssignedTo == nil || *task.AssignedTo != c.agentID {
-		return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
+		return WrapLifecycleError(markBlockedOperation, task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	if err := validateDependsOnForBlockedTask(state, task, c.dependsOn); err != nil {
 		return err
@@ -70,7 +70,7 @@ func (c *markBlockedCall) checkBlockable(state *models.State, task *models.Task)
 		candidate.DependsOn = append(append([]string(nil), task.DependsOn...), c.dependsOn...)
 		candidate.RepairRequest = c.repairRequest
 		if reason := stateLockHoldGate(state, &candidate, c.resolver); reason != "" {
-			return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
+			return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + string(reason)}
 		}
 	}
 	return nil

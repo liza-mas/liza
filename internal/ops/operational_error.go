@@ -2,6 +2,10 @@ package ops
 
 import "fmt"
 
+// operationalCodeGitOperation is the OperationalError.Code of a failed Git
+// invocation; callers and the review-claim classes match on it.
+const operationalCodeGitOperation = "git_operation"
+
 // OperationalError indicates an infrastructure or environment failure during
 // operation execution. Unlike PreconditionError (caller mistake) this represents
 // "execution failed" scenarios (git failures, config loading issues, etc.).

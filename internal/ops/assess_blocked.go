@@ -222,6 +222,14 @@ func AssessBlockedWithAuthority(projectRoot, taskID, note string, authority mode
 
 const assessBlockedOperation = "assess-blocked"
 
+// alertCategoryUnresolvedBlocked is the alert category of a blocked task whose
+// assessment leaves it unresolved.
+const alertCategoryUnresolvedBlocked = "UNRESOLVED BLOCKED"
+
+// maxBlockedQuestions is the most questions one blocker may carry (the
+// blocking protocol).
+const maxBlockedQuestions = 3
+
 // assessBlockedCall carries one assessment across its phases: caller and payload
 // validation, input normalization, the locked mutation and the post-commit alert.
 type assessBlockedCall struct {
@@ -333,7 +341,7 @@ func (c *assessBlockedCall) normalizeBlocker() error {
 		if len(c.opts.Questions) == 0 {
 			return &PreconditionError{Reason: "at least 1 question is required"}
 		}
-		if len(c.opts.Questions) > 3 {
+		if len(c.opts.Questions) > maxBlockedQuestions {
 			return &PreconditionError{Reason: "maximum 3 questions allowed per blocking protocol"}
 		}
 		var err error
@@ -357,7 +365,7 @@ func (c *assessBlockedCall) alertUnresolved(lp paths.LizaPaths) []string {
 	if err := alerts.Write(lp.AlertsLogPath(), alerts.Alert{
 		Timestamp: c.now,
 		Level:     alerts.AlertLevelCritical,
-		Category:  "UNRESOLVED BLOCKED",
+		Category:  alertCategoryUnresolvedBlocked,
 		Message:   message,
 	}); err != nil {
 		warnings = append(warnings, fmt.Sprintf("alert write failed: %v", err))

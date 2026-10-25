@@ -32,7 +32,7 @@ func (c *assessBlockedCall) mutate(state *models.State) (callbackErr error) {
 	}()
 	task := state.FindTask(c.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: c.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
 	copy := *task
 	c.observed = &copy
@@ -101,7 +101,7 @@ func (c *assessBlockedCall) assess(state *models.State, task *models.Task) (*ass
 			return nil, err
 		}
 		if reason := stateLockHoldGate(state, &preview, resolver); reason != "" {
-			return nil, &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
+			return nil, &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + string(reason)}
 		}
 	}
 	return &assessedEpisode{effective: effective, humanAction: humanAction, fingerprint: fingerprint, entry: entry, adoptHold: adoptHold}, nil

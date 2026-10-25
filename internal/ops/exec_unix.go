@@ -30,6 +30,10 @@ func signalProcessGroup(pid int, sig os.Signal) error {
 	return syscall.Kill(-pid, number)
 }
 
+// processGroupPollInterval spaces the probes for a killed process group's
+// members to be gone.
+const processGroupPollInterval = 20 * time.Millisecond
+
 // reapProcessGroup kills what remains of the process group pid led (a
 // configProcessGroupKill command that already exited) and waits up to wait
 // for every member to be gone. It reports whether none survives.
@@ -43,6 +47,6 @@ func reapProcessGroup(pid int, wait time.Duration) bool {
 		if time.Now().After(deadline) {
 			return false
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(processGroupPollInterval)
 	}
 }

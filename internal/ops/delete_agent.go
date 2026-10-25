@@ -116,7 +116,7 @@ func readAgentForDeletion(projectRoot, agentID string) (models.Agent, error) {
 
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return models.Agent{}, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return models.Agent{}, &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 	}
 	return agent, nil
 }
@@ -163,6 +163,10 @@ func terminateProcess(pid int, grace time.Duration) (ProcessTerminationResult, e
 	return result, fmt.Errorf("%s agent process %d still running after termination", brand.BinaryName, pid)
 }
 
+// agentExitPollInterval spaces the liveness probes while waiting for a
+// terminated agent process to exit.
+const agentExitPollInterval = 50 * time.Millisecond
+
 func waitForAgentProcessExit(pid int, grace time.Duration) bool {
 	if !IsProcessAlive(pid) {
 		return true
@@ -174,7 +178,7 @@ func waitForAgentProcessExit(pid int, grace time.Duration) bool {
 	deadline := time.Now().Add(grace)
 	for time.Now().Before(deadline) {
 		remaining := time.Until(deadline)
-		delay := 50 * time.Millisecond
+		delay := agentExitPollInterval
 		if remaining < delay {
 			delay = remaining
 		}
@@ -233,7 +237,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return nil, &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 	}
 
 	if !force {
@@ -248,7 +252,7 @@ func DeleteAgent(projectRoot, agentID string, force, allowRunningPID bool, reaso
 	err = bb.Modify(func(state *models.State) error {
 		agent, exists := state.Agents[agentID]
 		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
+			return &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 		}
 
 		if !force {
@@ -294,7 +298,7 @@ func IsAgentProcessRunning(projectRoot, agentID string) (bool, int, error) {
 
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return false, 0, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return false, 0, &errors.NotFoundError{Entity: notFoundEntityAgent, ID: agentID}
 	}
 
 	if agent.PID != 0 && IsProcessAlive(agent.PID) {

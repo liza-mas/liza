@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RepairInvalidDoerOwnership clears active doer claims whose owner process is
@@ -43,7 +44,7 @@ func RepairInvalidDoerOwnership(statePath, projectRoot, logPath, reason string) 
 			if revertStatus == "" {
 				continue
 			}
-			if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, "$") {
+			if task.AssignedTo != nil && strings.HasPrefix(*task.AssignedTo, transitionSentinelPrefix) {
 				continue
 			}
 
@@ -63,8 +64,8 @@ func RepairInvalidDoerOwnership(statePath, projectRoot, logPath, reason string) 
 						task.ID,
 						doerID,
 						agent.PID,
-						brand.Command("recover-agent", doerID, "--force"),
-						brand.Command("release-claim", task.ID, "--role", "doer", "--force"),
+						brand.Command(recoverAgentOperation, doerID, "--force"),
+						brand.Command(releaseClaimOperation, task.ID, "--role", string(roles.ClaimDoer), "--force"),
 					))
 					continue
 				}
@@ -86,7 +87,7 @@ func RepairInvalidDoerOwnership(statePath, projectRoot, logPath, reason string) 
 			detail := fmt.Sprintf("Invalid active doer ownership repaired (%s; reason: %s). Worktree left on disk for inspection; a later reclaim may remove stale worktree resources.", reason, repairReason)
 			if err := logger.Append(log.Entry{
 				Timestamp: now,
-				Agent:     "system",
+				Agent:     actorSystem,
 				Action:    "invalid_doer_ownership_repaired",
 				Task:      &task.ID,
 				Detail:    detail,

@@ -9,6 +9,10 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// lifecycleTaskStatusUnobserved is the task status of an outcome built without
+// an observed task.
+const lifecycleTaskStatusUnobserved models.TaskStatus = "UNKNOWN"
+
 // LifecycleSafeAction is the single recovery action the server selects for a
 // lifecycle outcome. Model and wire fields stay strings; convert explicitly.
 type LifecycleSafeAction string
@@ -147,7 +151,7 @@ func WrapLifecycleError(operation string, task *models.Task, err error, outcome 
 // NewLifecycleOutcome requires an already-authorized task observation. Pass
 // nil when state cannot be read or authorization forbids exposing ownership.
 func NewLifecycleOutcome(operation string, task *models.Task, outcome string, safeAction LifecycleSafeAction, effects LifecycleEffects) models.LifecycleOutcome {
-	o := models.LifecycleOutcome{Operation: operation, Outcome: outcome, SafeAction: string(safeAction), Effects: string(effects), TaskStatus: "UNKNOWN"}
+	o := models.LifecycleOutcome{Operation: operation, Outcome: outcome, SafeAction: string(safeAction), Effects: string(effects), TaskStatus: lifecycleTaskStatusUnobserved}
 	o.Changed = models.LifecycleChanged(outcome)
 	if task == nil {
 		return o

@@ -109,9 +109,9 @@ func (c *unblockCall) openRequest() (*models.State, error) {
 	}
 	observed := preflight.FindTask(c.taskID)
 	if observed == nil {
-		return nil, &errors.NotFoundError{Entity: "task", ID: c.taskID}
+		return nil, &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
-	c.request, err = NewLifecycleRequest("unblock-task", observed, c.agentID, c.authority, c.opts.Request, struct {
+	c.request, err = NewLifecycleRequest(integrationOperationUnblockTask, observed, c.agentID, c.authority, c.opts.Request, struct {
 		Reason, AssignTo, RebaseOn string
 		AllowDirty                 bool
 		// omitempty keeps the identity of requests made without the flags.
@@ -134,7 +134,7 @@ func (c *unblockCall) prepare() error {
 	err := lifecycleMutation(c.bb, c.authority)(func(state *models.State) error {
 		task := state.FindTask(c.taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: c.taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 		}
 		return prepareOwnerEndingRequest(task, c.request)
 	})
@@ -150,7 +150,7 @@ func (c *unblockCall) prepare() error {
 func (c *unblockCall) mutate(state *models.State) error {
 	task := state.FindTask(c.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: c.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
 	if err := c.admit(task); err != nil {
 		return err
@@ -203,14 +203,14 @@ func (c *unblockCall) checkUnblockable(state *models.State, task *models.Task) e
 		return &PreconditionError{Reason: "validation preflight requires the target session; unblock without --assign-to and let its supervisor claim the task"}
 	}
 	if task.Status != models.TaskStatusBlocked {
-		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError(integrationOperationUnblockTask, task, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	if c.opts.stateLockHold != nil {
 		if c.opts.AssignTo != "" || c.opts.RebaseOn != "" || c.opts.NewIteration || c.authority == nil {
 			return &PreconditionError{Reason: "automatic state lock continuation cannot assign, rebase or consume an iteration"}
 		}
 		if reason := automaticStateLockHoldGate(state, task, c.projectRoot, c.resolver, c.opts.stateLockHold); reason != "" {
-			return &PreconditionError{Reason: "state lock hold recovery refused: " + reason}
+			return &PreconditionError{Reason: "state lock hold recovery refused: " + string(reason)}
 		}
 	}
 	return checkUnblockRejectionRCAGate(task, c.opts.NewIteration)

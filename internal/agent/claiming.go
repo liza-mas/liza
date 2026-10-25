@@ -224,7 +224,7 @@ func markAgentDegradedForInfraClaim(projectRoot, agentID, role, taskID string, c
 		ProjectRoot:    projectRoot,
 		AgentID:        agentID,
 		Role:           role,
-		Reason:         classification.Reason,
+		Reason:         string(classification.Reason),
 		LastTask:       taskID,
 		CandidateTasks: candidateTaskIDs,
 		LastError:      err.Error(),

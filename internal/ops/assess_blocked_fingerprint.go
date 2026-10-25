@@ -35,6 +35,23 @@ type AssessmentFingerprintCandidate struct {
 	HumanAction string
 }
 
+// humanNoteForAll is the human-note target addressed to every task.
+const humanNoteForAll = "all"
+
+// assessmentOutcome classifies a dependency record for the assessment
+// fingerprint. assessmentDependency.Outcome stays a string, so the hashed
+// bytes are unchanged; the type is converted where a record is built.
+type assessmentOutcome string
+
+const (
+	assessmentOutcomeMissing         assessmentOutcome = "missing"
+	assessmentOutcomeSatisfied       assessmentOutcome = "satisfied"
+	assessmentOutcomeFailedOrBlocked assessmentOutcome = "failed_or_blocked"
+	assessmentOutcomeReplaced        assessmentOutcome = "replaced"
+	assessmentOutcomeUnknown         assessmentOutcome = "unknown"
+	assessmentOutcomePending         assessmentOutcome = "pending"
+)
+
 type assessmentDependency struct {
 	TaskID                    string    `json:"task_id"`
 	Created                   time.Time `json:"created"`
@@ -54,7 +71,7 @@ type assessmentDependency struct {
 func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidate AssessmentFingerprintCandidate) string {
 	humanCount := 0
 	for _, note := range state.HumanNotes {
-		if note.For == task.ID || note.For == "all" {
+		if note.For == task.ID || note.For == humanNoteForAll {
 			humanCount++
 		}
 	}
@@ -102,7 +119,7 @@ func BuildAssessmentFingerprint(state *models.State, task *models.Task, candidat
 // hexadecimal representation. Foreign YAML values fail open at the caller.
 func IsAssessmentFingerprint(value any) (string, bool) {
 	digest, ok := value.(string)
-	if !ok || len(digest) != sha256.Size*2 {
+	if !ok || len(digest) != hex.EncodedLen(sha256.Size) {
 		return "", false
 	}
 	for _, ch := range digest {
@@ -133,14 +150,15 @@ func assessmentDependencies(state *models.State, ids []string) []assessmentDepen
 				continue
 			}
 			seen[pathID] = true
-			entry := assessmentDependency{TaskID: pathID, Outcome: "missing"}
+			entry := assessmentDependency{TaskID: pathID, Outcome: string(assessmentOutcomeMissing)}
 			if dependency := state.FindTask(pathID); dependency != nil {
+				outcome := assessmentDependencyOutcome(dependency)
 				entry.Created = dependency.Created
-				entry.Outcome = assessmentDependencyOutcome(dependency)
+				entry.Outcome = string(outcome)
 				entry.ParentTasks = uniqueSortedStrings(dependency.EffectiveParentTasks())
 				entry.DependsOn = uniqueSortedStrings(dependency.DependsOn)
 				entry.SupersededBy = uniqueSortedStrings(dependency.SupersededBy)
-				if entry.Outcome == "unknown" {
+				if outcome == assessmentOutcomeUnknown {
 					// An absent status has no pending-work interpretation.
 					entry.NonAssessmentHistoryCount = assessmentHistoryCount(dependency)
 				}
@@ -171,7 +189,7 @@ func assessmentAwaited(state *models.State, awaited []string) (map[string]any, m
 			setState = awaitedPending
 		}
 	}
-	projection := map[string]any{"tasks": awaited, "state": setState}
+	projection := map[string]any{"tasks": awaited, "state": string(setState)}
 	if setState == awaitedFailed {
 		projection["records"] = assessmentDependencies(state, awaited)
 	}
@@ -204,23 +222,23 @@ func assessmentDescendants(state *models.State, task *models.Task) []assessmentD
 
 // Intermediate lifecycle steps do not change a blocked consumer's options.
 // Topology is recorded separately, including every reachable replacement.
-func assessmentDependencyOutcome(task *models.Task) string {
+func assessmentDependencyOutcome(task *models.Task) assessmentOutcome {
 	switch task.Status {
 	case models.TaskStatusMerged:
-		return "satisfied"
+		return assessmentOutcomeSatisfied
 	case models.TaskStatusBlocked, models.TaskStatusAbandoned, models.TaskStatusIntegrationFailed:
-		return "failed_or_blocked"
+		return assessmentOutcomeFailedOrBlocked
 	case models.TaskStatusSuperseded:
 		if len(task.SupersededBy) == 0 {
-			return "failed_or_blocked"
+			return assessmentOutcomeFailedOrBlocked
 		}
-		return "replaced"
+		return assessmentOutcomeReplaced
 	case "":
-		return "unknown"
+		return assessmentOutcomeUnknown
 	default:
 		// Intermediate statuses belong to the configured pipeline, not a
 		// closed Go enum. Only engine-owned outcomes end pending work.
-		return "pending"
+		return assessmentOutcomePending
 	}
 }
 

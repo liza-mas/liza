@@ -31,7 +31,7 @@ func (e *AgentAuthorityError) Error() string {
 func (e *AgentAuthorityError) SafeDetails() map[string]any {
 	return map[string]any{
 		"agent_id":    e.AgentID,
-		"outcome":     "STALE_CALLER",
+		"outcome":     models.LifecycleStaleCaller,
 		"safe_action": string(LifecycleSafeActionStop),
 		"effects":     string(LifecycleEffectsNone),
 	}

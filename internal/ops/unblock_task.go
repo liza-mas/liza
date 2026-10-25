@@ -16,6 +16,9 @@ import (
 
 const integrationOperationUnblockTask = "unblock-task"
 
+// unblockRebaseExcerptLimit bounds the Git output kept in a rebase-conflict diagnostic.
+const unblockRebaseExcerptLimit = 2000
+
 // UnblockTaskResult contains the outcome of restoring a repaired BLOCKED task.
 type UnblockTaskResult struct {
 	models.LifecycleOutcome
@@ -137,18 +140,18 @@ func unblockTaskWithOptionalAuthority(projectRoot, taskID, reason, agentID strin
 		if effects {
 			outcome, action, effect = models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown
 		}
-		retErr = WrapLifecycleError("unblock-task", nil, retErr, outcome, action, effect)
+		retErr = WrapLifecycleError(integrationOperationUnblockTask, nil, retErr, outcome, action, effect)
 		var value models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {
 			value, warnings = result.LifecycleOutcome, &result.Warnings
 		}
-		invocation.FinishResult("unblock-task", value, &retErr, warnings)
+		invocation.FinishResult(integrationOperationUnblockTask, value, &retErr, warnings)
 	}()
 	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
 		return nil, err
 	}
-	retErr = withOwnershipTaskLock(projectRoot, taskID, "unblock-task", func() error {
+	retErr = withOwnershipTaskLock(projectRoot, taskID, integrationOperationUnblockTask, func() error {
 		var err error
 		result, err = unblockTaskLifecycle(projectRoot, taskID, reason, agentID, opts, authority, &effects)
 		return err
@@ -213,7 +216,7 @@ func checkUnblockRejectionRCAGate(task *models.Task, newIteration bool) error {
 		}
 		// Closing the gate is a state change the caller must make through two
 		// other operations, so requery — no payload correction can clear it.
-		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
+		return WrapLifecycleError(integrationOperationUnblockTask, task, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s has an open rejection-RCA gate: run %s next, then unblock-task (record-rejection-rca records the classified RCA, resume-rejection-rca records the authorized disposition)",
 			task.ID, missing)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
@@ -238,7 +241,7 @@ func checkUnblockRejectionRCAGate(task *models.Task, newIteration bool) error {
 	default:
 		// rescope routes to supersession; no form of unblock-task will ever
 		// restore this task, so stop rather than invite a retry.
-		return WrapLifecycleError("unblock-task", task, &PreconditionError{Reason: fmt.Sprintf(
+		return WrapLifecycleError(integrationOperationUnblockTask, task, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s recovery path %s authorizes restore mode %q: it is not restored by unblock-task",
 			task.ID, record.Disposition.RecoveryPath, mode)}, models.LifecycleStateChanged, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
@@ -302,7 +305,7 @@ func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentI
 	if err := gitWrapper.RebaseOntoWithOptions(snapshot.WorktreePath, snapshot.TargetSHA, gitpkg.RebaseOptions{Autostash: autostash}); err != nil {
 		if abortErr := gitWrapper.AbortRebase(snapshot.WorktreePath); abortErr != nil {
 			return nil, &OperationalError{
-				Code:    "git_operation",
+				Code:    operationalCodeGitOperation,
 				Phase:   "abort-unblock-rebase",
 				Message: "failed to abort unblock-task rebase after failure",
 				Details: rebaseFailureDetails(err, snapshot.TargetRef, snapshot.TargetSHA, snapshot.OldHead),
@@ -312,7 +315,7 @@ func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentI
 		var conflict *gitpkg.RebaseConflictError
 		if !stderrors.As(err, &conflict) {
 			return nil, &OperationalError{
-				Code:    "git_operation",
+				Code:    operationalCodeGitOperation,
 				Phase:   "unblock-rebase",
 				Message: "unblock-task rebase failed (not a merge conflict)",
 				Details: rebaseFailureDetails(err, snapshot.TargetRef, snapshot.TargetSHA, snapshot.OldHead),
@@ -333,7 +336,7 @@ func maybeRebaseTaskBeforeUnblock(bb *db.Blackboard, projectRoot, taskID, agentI
 	newHead, err := gitWrapper.GetWorktreeHEAD(taskID)
 	if err != nil {
 		return nil, &OperationalError{
-			Code:    "git_operation",
+			Code:    operationalCodeGitOperation,
 			Phase:   "post-unblock-rebase-head",
 			Message: "failed to read worktree HEAD after unblock-task rebase",
 			Err:     err,
@@ -357,7 +360,7 @@ func snapshotUnblockRebase(bb *db.Blackboard, gitWrapper *gitpkg.Git, taskID, ta
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
-		return snapshot, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return snapshot, &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 	if task.Status != models.TaskStatusBlocked {
 		return snapshot, &PreconditionError{Reason: fmt.Sprintf("task must be BLOCKED to unblock, current status: %s", task.Status)}
@@ -437,7 +440,7 @@ func markUnblockRebaseConflict(bb *db.Blackboard, taskID, agentID string, snapsh
 		"Resolve the rebase conflict in the preserved task worktree, then retry unblock-task with --rebase-on.",
 	}
 	command := fmt.Sprintf("git -C %s rebase %s", snapshot.WorktreeRel, snapshot.TargetSHA)
-	excerpt := truncateForDiagnostics(cause.Error(), 2000)
+	excerpt := truncateForDiagnostics(cause.Error(), unblockRebaseExcerptLimit)
 	diagnostic := map[string]any{
 		"operation":             integrationOperationUnblockTask,
 		"reason":                "unblock_rebase_conflict",
@@ -451,7 +454,7 @@ func markUnblockRebaseConflict(bb *db.Blackboard, taskID, agentID string, snapsh
 	return lifecycleMutation(bb, authority)(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if task.Status != models.TaskStatusBlocked {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s status changed during unblock rebase conflict handling: %s", taskID, task.Status)}

@@ -15,6 +15,13 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
+// alertCategoryBlocked is the alert category of a newly blocked task; the watch
+// display and the TUI match on its spelling.
+const alertCategoryBlocked = "BLOCKED"
+
+// markBlockedOperation names the mark-blocked operation.
+const markBlockedOperation = "mark-blocked"
+
 // MarkBlockedResult contains the outcome of marking a task as blocked.
 type MarkBlockedResult struct {
 	models.LifecycleOutcome
@@ -97,7 +104,7 @@ func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questi
 		if result != nil {
 			outcome, warnings = result.LifecycleOutcome, &result.Warnings
 		}
-		invocation.FinishResult("mark-blocked", outcome, &retErr, warnings)
+		invocation.FinishResult(markBlockedOperation, outcome, &retErr, warnings)
 	}()
 	if err := call.normalizeInput(); err != nil {
 		return nil, err
@@ -137,14 +144,14 @@ func (c *markBlockedCall) classifyFailure(err error) error {
 		effects = LifecycleEffectsNone
 	}
 	observed := readLifecycleTask(c.projectRoot, c.taskID, c.authority, c.opts.Request)
-	return WrapLifecycleError("mark-blocked", observed, err, outcome, action, effects)
+	return WrapLifecycleError(markBlockedOperation, observed, err, outcome, action, effects)
 }
 
 // normalizeInput validates and normalizes the caller's input before any state
 // path is opened.
 func (c *markBlockedCall) normalizeInput() error {
 	if err := ValidateLifecycleRequestOptions(c.opts.Request); err != nil {
-		return WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+		return WrapLifecycleError(markBlockedOperation, nil, err, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	if c.agentID == "" {
 		return &PreconditionError{Reason: "agent ID is required"}
@@ -185,7 +192,7 @@ func (c *markBlockedCall) completed(lp paths.LizaPaths) *MarkBlockedResult {
 	if err := alerts.Write(lp.AlertsLogPath(), alerts.Alert{
 		Timestamp: c.now,
 		Level:     alerts.AlertLevelWarning,
-		Category:  "BLOCKED",
+		Category:  alertCategoryBlocked,
 		Message:   message,
 		// now is the blocked history entry's time, so watchers derive the same
 		// key from state and this episode is logged once between us.
@@ -230,7 +237,7 @@ func markBlockedStructuralError(payload payloadschema.MarkBlockedPayload) error 
 	if len(diagnostics) == 0 {
 		return nil
 	}
-	return NewLifecycleInvalidInputError("mark-blocked", nil, diagnostics, preconditionFromDiagnostics(diagnostics))
+	return NewLifecycleInvalidInputError(markBlockedOperation, nil, diagnostics, preconditionFromDiagnostics(diagnostics))
 }
 
 // preconditionFromDiagnostics restates the schema's first rejection as the

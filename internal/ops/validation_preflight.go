@@ -500,7 +500,7 @@ func ReleaseValidationOwnership(projectRoot, taskID, agentID string, authority *
 type runtimeInputPreflightError struct{ refusal *AcceptanceEvidenceError }
 
 func (e *runtimeInputPreflightError) Error() string {
-	return "validation preflight: " + runtimeInputCodeUnavailable + ": " + e.refusal.Error()
+	return "validation preflight: " + string(runtimeInputCodeUnavailable) + ": " + e.refusal.Error()
 }
 
 func (e *runtimeInputPreflightError) Unwrap() error { return sessionvalidation.ErrPreflight }

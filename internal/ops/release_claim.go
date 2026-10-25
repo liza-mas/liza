@@ -15,6 +15,9 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// releaseClaimOperation names the release-claim operation.
+const releaseClaimOperation = "release-claim"
+
 // ReleaseClaimResult contains the outcome of releasing a claim.
 type ReleaseClaimResult struct {
 	models.LifecycleOutcome
@@ -44,7 +47,7 @@ func releaseClaim(projectRoot, taskID, role string, force bool, reason, agentID 
 // ReleaseClaimWithRequest binds release retries to the inspected ownership
 // boundary. Legacy human/admin callers may omit authority and request options.
 func ReleaseClaimWithRequest(projectRoot, taskID, role string, force bool, reason, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions) (result *ReleaseClaimResult, err error) {
-	invocation := &ownershipInvocation{operation: "release-claim", opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
+	invocation := &ownershipInvocation{operation: releaseClaimOperation, opts: opts, authority: authority, metrics: NewLifecycleInvocation(projectRoot)}
 	defer func() { err = invocation.finish(projectRoot, err) }()
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -55,7 +58,7 @@ func ReleaseClaimWithRequest(projectRoot, taskID, role string, force bool, reaso
 	if err := ValidateLifecycleRequestOptions(opts); err != nil {
 		return nil, &PreconditionError{Reason: err.Error()}
 	}
-	err = withOwnershipTaskLock(projectRoot, taskID, "release-claim", func() error {
+	err = withOwnershipTaskLock(projectRoot, taskID, releaseClaimOperation, func() error {
 		var inner error
 		result, inner = releaseClaimLocked(projectRoot, taskID, role, force, reason, agentID, authority, invocation)
 		return inner
@@ -89,7 +92,7 @@ func releaseClaimLocked(projectRoot, taskID, role string, force bool, reason, ag
 	}
 
 	if agentID == "" {
-		agentID = "human"
+		agentID = actorHuman
 	}
 
 	if reason == "" {
@@ -142,10 +145,10 @@ func releaseClaimTransaction(state *models.State, bb *db.Blackboard, run release
 	taskID, agentID, invocation := run.taskID, run.agentID, run.invocation
 	task := state.FindTask(taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 	}
 	invocation.observe(task)
-	request, err := NewLifecycleRequest("release-claim", task, agentID, run.authority, invocation.opts, struct {
+	request, err := NewLifecycleRequest(releaseClaimOperation, task, agentID, run.authority, invocation.opts, struct {
 		Role   string
 		Force  bool
 		Reason string
@@ -169,7 +172,7 @@ func releaseClaimTransaction(state *models.State, bb *db.Blackboard, run release
 		return err
 	}
 	if !released.ReleasedReviewer && !released.ReleasedDoer {
-		return &LifecycleError{Outcome: NewLifecycleOutcome("release-claim", task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
+		return &LifecycleError{Outcome: NewLifecycleOutcome(releaseClaimOperation, task, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone), Err: &PreconditionError{Reason: fmt.Sprintf("no claims to release for task %s", taskID)}}
 	}
 	if validateRejectedHandoff {
 		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, run.projectRoot, true, os.Stderr); err != nil {

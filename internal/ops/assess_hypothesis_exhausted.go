@@ -133,7 +133,7 @@ func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr
 	}()
 	task := state.FindTask(c.taskID)
 	if task == nil {
-		return &errors.NotFoundError{Entity: "task", ID: c.taskID}
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
 	copy := *task
 	c.observed = &copy
@@ -150,7 +150,7 @@ func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr
 		return errLifecycleReplay
 	}
 
-	if len(task.FailedBy) < 2 {
+	if len(task.FailedBy) < hypothesisExhaustionFailures {
 		return &PreconditionError{Reason: fmt.Sprintf("task must have 2+ entries in failed_by to assess as hypothesis-exhausted, has %d", len(task.FailedBy))}
 	}
 	if task.Status.IsTerminal() {

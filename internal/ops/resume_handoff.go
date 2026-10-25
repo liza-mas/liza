@@ -8,6 +8,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ResumeHandoffInput contains the parameters for resuming a handoff task.
@@ -96,10 +97,10 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 			}
 			t := s.FindTask(id)
 			if t == nil {
-				return &lizaerrors.NotFoundError{Entity: "task", ID: id}
+				return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: id}
 			}
 			if len(t.ValidationPrerequisites) > 0 && preflight == nil {
-				return validationError("context_changed")
+				return validationError(validationContextChanged)
 			}
 			if !isExecutingStatus(t.Status, executingStatuses) {
 				return &PreconditionError{Reason: fmt.Sprintf("task %s is no longer in an executing state (current: %s)", id, t.Status)}
@@ -119,7 +120,7 @@ func resumeHandoffWithState(bb *db.Blackboard, state *models.State, agentID stri
 
 			agent, ok := s.Agents[agentID]
 			if !ok {
-				agent = models.Agent{Role: "coder"}
+				agent = models.Agent{Role: roles.Coder}
 			}
 			agent.Status = models.AgentStatusWorking
 			agent.CurrentTask = &id

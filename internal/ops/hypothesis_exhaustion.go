@@ -9,6 +9,10 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// hypothesisExhaustionFailures is how many distinct agents must have failed a
+// task before it counts as hypothesis-exhausted.
+const hypothesisExhaustionFailures = 2
+
 const hypothesisExhaustionBlockedReason = "hypothesis_exhaustion: two distinct agents failed this task; rescope, split, or abandon before reassignment"
 
 var hypothesisExhaustionBlockedQuestions = []string{
@@ -17,7 +21,7 @@ var hypothesisExhaustionBlockedQuestions = []string{
 }
 
 func blockTaskForHypothesisExhaustion(state *models.State, task *models.Task, agentID string, transitions map[models.TaskStatus][]models.TaskStatus, now time.Time) (bool, error) {
-	if len(task.FailedBy) < 2 || task.Status == models.TaskStatusBlocked || task.Status.IsTerminal() {
+	if len(task.FailedBy) < hypothesisExhaustionFailures || task.Status == models.TaskStatusBlocked || task.Status.IsTerminal() {
 		return false, nil
 	}
 	if err := task.TransitionWith(models.TaskStatusBlocked, transitions); err != nil {
