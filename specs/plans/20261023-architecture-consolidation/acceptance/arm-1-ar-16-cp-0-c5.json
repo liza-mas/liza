@@ -10,7 +10,7 @@
     {
       "obligation_id": "C5-utc-persisted",
       "file": "internal/ops/merge_c5_utc_test.go",
-      "assertion": "TestC5MergeTimestampsPersistWithZUnderNonUTCZone re-runs the test binary as a child process with an explicitly built environment (TZ=Etc/GMT-2), requires child exit 0 and the child's PASS line, asserts the child's local offset is non-zero, runs a real MergeWorktree and asserts the merged task's raw completion handoff timestamp and merged history time end in Z, the seeded +02:00 task's two raw scalars are byte-identical, and a fresh read returns the seeded instants; it failed on the pre-C5 code (+02:00 persisted) and passes after. On Windows, where Go ignores TZ, the test skips and the in-memory test carries the zone proof.",
+      "assertion": "TestC5MergeTimestampsPersistWithZUnderNonUTCZone re-runs the test binary as a child process with an explicitly built environment (TZ=Etc/GMT-2), requires child exit 0 and the child's PASS line, asserts the child's local offset is non-zero, runs a real MergeWorktree and asserts the merged task's raw completion handoff timestamp and merged history time end in Z, the seeded +02:00 task's two raw scalars are byte-identical, and a fresh read returns the seeded instants; it failed on the pre-C5 code (+02:00 persisted) and passes after. On Windows, where Go ignores TZ, a test-package init assigns the child's time.Local to a fixed +02:00 zone before any test or goroutine runs (race-free), so the same proof runs on every platform; the init mechanism was exercised on Linux with TZ removed from the child environment.",
       "command_index": 0
     },
     {

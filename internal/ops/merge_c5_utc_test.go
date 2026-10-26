@@ -190,16 +190,23 @@ func c5ChildEnvironment() []string {
 	return env
 }
 
+// init gives the child process its +02:00 local zone on Windows, where Go takes
+// time.Local from the system and ignores TZ. It runs before TestMain and before
+// any test or goroutine of this package, so the assignment cannot race.
+func init() {
+	if runtime.GOOS == "windows" && os.Getenv(c5ChildMarker) == "1" {
+		time.Local = time.FixedZone(c5ChildZone, 2*60*60)
+	}
+}
+
 // TestC5MergeTimestampsPersistWithZUnderNonUTCZone runs a real merge in a child
-// test process whose local zone is +02:00. Go fixes time.Local at first use, so
-// the zone cannot change inside this process without a data race.
+// test process whose local zone is +02:00 (TZ, or init on Windows). Go fixes
+// time.Local at first use, so the zone cannot change inside this process
+// without a data race.
 func TestC5MergeTimestampsPersistWithZUnderNonUTCZone(t *testing.T) {
 	if os.Getenv(c5ChildMarker) == "1" {
 		c5PersistWithZChild(t)
 		return
-	}
-	if runtime.GOOS == "windows" {
-		t.Skip("Go on Windows takes the local zone from the system and ignores TZ; TestC5MergeTimestampsAreUTCInMemory covers the zone there")
 	}
 	t.Parallel()
 
