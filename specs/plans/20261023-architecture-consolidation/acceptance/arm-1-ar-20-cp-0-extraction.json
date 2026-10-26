@@ -4,13 +4,13 @@
     {
       "obligation_id": "AC-oracle-add",
       "file": "internal/oracle/a9/interactive_test.go",
-      "assertion": "TestOracleA9InteractiveLaunch (16 catalog tools, stdin not a terminal) and TestOracleA9ResumeSignalCleanup (expired quota, unexpired quota, provider-unavailable signal) assert invocation sequence, human output, exit code, state and runtime files against goldens written by regen -mode write-new from the starting tree in oracle-only commit b084f98c3; index 3 reproduces them with regen check",
+      "assertion": "TestOracleA9InteractiveLaunch (all 16 catalog tools reach the interactive stub with stdin not a terminal; the codex-acp, opencode-acp and qwen-acp fixtures provide codex, opencode and qwen beside acpx) and TestOracleA9ResumeSignalCleanup (expired quota, unexpired quota, provider-unavailable signal) assert invocation sequence, human output, exit code, state and runtime files against goldens written by regen -mode write-new from the starting tree in oracle-only commit b084f98c3 and, for the three ACP tools, in the oracle-only fix commit that supplies their stubs; index 3 reproduces them with regen check",
       "command_index": 2
     },
     {
       "obligation_id": "AC-launch",
       "file": "internal/agentlaunch/a9_launch_pb_test.go",
-      "assertion": "PB-1 TestA9EffectiveRegistryKeys, PB-2 TestA9LaunchPlanDoesNotAliasInputs, PB-3 TestA9LaunchPlanErrorOrder, written in internal/agent and green on the unchanged tree (commit 44c6e93ef) before moving with the code; PB-4 maps to the moved TestDefaultRoleCLIs, TestAllValidationLocal, TestLoadRoleModelsRejectsInvalidEntries, TestResolveLaunchSelectionRules and TestResolveDefaultCLIForRole in internal/agentlaunch",
+      "assertion": "PB-1 TestA9EffectiveRegistryKeys, PB-2 TestA9LaunchPlanDoesNotAliasInputs, PB-3 TestA9LaunchPlanErrorOrder, PB-10 TestA9CatalogCachesLoadOnce (the runtime and embedded catalog memos load once; mutation of either memo fails it), written in internal/agent (PB-10 in the fix commit, green at 44c6e93ef plus that file) and green on the unchanged tree (commit 44c6e93ef) before moving with the code; PB-4 maps to the moved TestDefaultRoleCLIs, TestAllValidationLocal, TestLoadRoleModelsRejectsInvalidEntries, TestResolveLaunchSelectionRules and TestResolveDefaultCLIForRole in internal/agentlaunch",
       "command_index": 0
     },
     {
