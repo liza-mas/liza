@@ -1,0 +1,158 @@
+goal:
+  base_commit: '@BASE@'
+  integration:
+    contributing_set:
+      scopes:
+        - plan_task_id: plan-multi
+          root_task_ids: [coding-a, coding-b]
+        - plan_task_id: plan-single
+          root_task_ids: [coding-single]
+    coverage:
+      - plan_task_id: plan-single
+        kind: approval_attestation
+        approval_attestations:
+          - reviewed_task_id: coding-single
+            acceptance_criteria: Single coding accepted
+            reviewed_commit: '@HEAD@'
+            approver: code-reviewer-1
+            validation: ['true']
+            merge_commit: '@HEAD@'
+tasks:
+  - id: plan-single
+    type: planning
+    role_pair: code-planning-pair
+    description: Plan single scope
+    status: MERGED
+    priority: 1
+    spec_ref: README.md
+    plan_ref: README.md
+    arch_ref: README.md
+    done_when: Single plan implemented
+    scope: fixture
+    created: 2001-02-03T04:05:06Z
+    approved_by: code-reviewer-1
+    review_commit: '@BASE@'
+    merge_commit: '@BASE@'
+    transitions_executed: {code-plan-to-coding: true}
+    output:
+      - desc: Single coding scope
+        done_when: Coded
+        scope: fixture
+        spec_ref: README.md
+    history: []
+    handoff_events:
+      - {timestamp: '2001-02-03T04:05:06Z', agent: coder-1, trigger: submission}
+      - {timestamp: '2001-02-03T04:05:06Z', agent: code-reviewer-1, trigger: completion}
+  - id: coding-single
+    type: coding
+    role_pair: coding-pair
+    description: Implement single scope
+    status: MERGED
+    priority: 1
+    parent_task: plan-single
+    spec_ref: README.md
+    done_when: Single coding accepted
+    scope: fixture
+    validation: ['true']
+    created: 2001-02-03T04:05:06Z
+    approved_by: code-reviewer-1
+    base_commit: '@B@'
+    review_commit: '@HEAD@'
+    merge_commit: '@HEAD@'
+    history: []
+    handoff_events:
+      - {timestamp: '2001-02-03T04:05:06Z', agent: coder-1, trigger: submission}
+      - {timestamp: '2001-02-03T04:05:06Z', agent: code-reviewer-1, trigger: completion}
+  - id: plan-multi
+    type: planning
+    role_pair: code-planning-pair
+    description: Plan multiple scopes
+    status: MERGED
+    priority: 1
+    spec_ref: README.md
+    plan_ref: README.md
+    arch_ref: README.md
+    done_when: Multiple plan implemented
+    scope: fixture
+    created: 2001-02-03T04:05:06Z
+    approved_by: code-reviewer-1
+    review_commit: '@BASE@'
+    merge_commit: '@BASE@'
+    transitions_executed: {code-plan-to-coding: true}
+    output:
+      - desc: Multiple coding scopes
+        done_when: Coded
+        scope: fixture
+        spec_ref: README.md
+    history: []
+    handoff_events:
+      - {timestamp: '2001-02-03T04:05:06Z', agent: coder-1, trigger: submission}
+      - {timestamp: '2001-02-03T04:05:06Z', agent: code-reviewer-1, trigger: completion}
+  - id: coding-b
+    type: coding
+    role_pair: coding-pair
+    description: Implement scope B
+    status: MERGED
+    priority: 1
+    parent_task: plan-multi
+    spec_ref: README.md
+    done_when: Coding B accepted
+    scope: fixture
+    validation: ['true']
+    created: 2001-02-03T04:05:06Z
+    approved_by: code-reviewer-1
+    base_commit: '@A@'
+    review_commit: '@B@'
+    merge_commit: '@B@'
+    history: []
+    handoff_events:
+      - {timestamp: '2001-02-03T04:05:06Z', agent: coder-1, trigger: submission}
+      - {timestamp: '2001-02-03T04:05:06Z', agent: code-reviewer-1, trigger: completion}
+  - id: coding-a
+    type: coding
+    role_pair: coding-pair
+    description: Implement scope A
+    status: MERGED
+    priority: 1
+    parent_task: plan-multi
+    spec_ref: README.md
+    done_when: Coding A accepted
+    scope: fixture
+    validation: ['true']
+    created: 2001-02-03T04:05:06Z
+    approved_by: code-reviewer-1
+    base_commit: '@BASE@'
+    review_commit: '@A@'
+    merge_commit: '@A@'
+    history: []
+    handoff_events:
+      - {timestamp: '2001-02-03T04:05:06Z', agent: coder-1, trigger: submission}
+      - {timestamp: '2001-02-03T04:05:06Z', agent: code-reviewer-1, trigger: completion}
+  - id: integration-slice-plan-multi
+    type: integration
+    role_pair: slice-integration-pair
+    description: Analyze integration composition for plan plan-multi.
+    status: DRAFT_SLICE_INTEGRATION_ANALYSIS
+    priority: 1
+    parent_tasks: [coding-a, coding-b]
+    spec_ref: README.md
+    plan_ref: README.md
+    arch_ref: README.md
+    done_when: The slice analysis is reviewed and its immutable verdict is recorded.
+    scope: Frozen integration slice for plan plan-multi.
+    created: 2001-02-03T04:05:06Z
+    integration_analysis:
+      key: 'slice:plan-multi'
+      phase: slice
+      originating_plan_task_id: plan-multi
+      root_task_ids: [coding-a, coding-b]
+      descendant_changes:
+        - {task_id: coding-a, commit: '@A@'}
+        - {task_id: coding-b, commit: '@B@'}
+      source_commit: '@HEAD@'
+      affected_paths: [a.txt, b.txt]
+      source_snapshot_paths: [a.txt, b.txt]
+    history: []
+sprint:
+  scope:
+    planned: [plan-single, coding-single, plan-multi, coding-b, coding-a, integration-slice-plan-multi]
