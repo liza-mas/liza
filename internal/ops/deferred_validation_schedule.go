@@ -363,7 +363,7 @@ func startDeferredValidationIfDueWith(projectRoot string, spawn func(string) err
 	if err := os.MkdirAll(deferredValidationDir(projectRoot), 0o755); err != nil {
 		return false, err
 	}
-	held, acquired, err := filelock.New(filepath.Join(deferredValidationDir(projectRoot), "runner")).TryHold("deferred-validation-probe")
+	held, acquired, err := filelock.New(filepath.Join(deferredValidationDir(projectRoot), deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationProbe)
 	if err != nil || !acquired {
 		return false, err
 	}

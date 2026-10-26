@@ -19,6 +19,7 @@ import (
 // RunLive timing: the default and maximum command timeout in seconds, and how
 // long the child's pipes may stay open after its process ended.
 const (
+	runLiveMinTimeoutSeconds     = 1
 	runLiveDefaultTimeoutSeconds = 600
 	runLiveMaxTimeoutSeconds     = 3600
 	runLiveWaitDelay             = 5 * time.Second
@@ -54,8 +55,8 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	if timeout == 0 {
 		timeout = runLiveDefaultTimeoutSeconds
 	}
-	if timeout < 1 || timeout > runLiveMaxTimeoutSeconds {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("timeout must be between 1 and %d seconds", runLiveMaxTimeoutSeconds)}
+	if timeout < runLiveMinTimeoutSeconds || timeout > runLiveMaxTimeoutSeconds {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("timeout must be between %d and %d seconds", runLiveMinTimeoutSeconds, runLiveMaxTimeoutSeconds)}
 	}
 	bb := db.For(paths.New(projectRoot).StatePath())
 	state, task, err := readTaskState(bb, input.TaskID)

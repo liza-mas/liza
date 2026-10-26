@@ -175,7 +175,7 @@ func SettleDeferredValidation(projectRoot, ruling string) (*DeferredValidationRu
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	held, acquired, err := filelock.New(filepath.Join(dir, "runner")).TryHold("deferred-validation-settle")
+	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationSettle)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	held, acquired, err := filelock.New(filepath.Join(dir, "runner")).TryHold("deferred-validation-abort")
+	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationAbort)
 	if err != nil {
 		return nil, err
 	}

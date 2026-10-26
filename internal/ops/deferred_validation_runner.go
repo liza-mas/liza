@@ -62,7 +62,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	held, acquired, err := filelock.New(filepath.Join(dir, "runner")).TryHold("deferred-validation-run")
+	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationRun)
 	if err != nil {
 		return nil, err
 	}

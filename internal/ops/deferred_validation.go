@@ -44,6 +44,13 @@ const (
 	integrationProgressBlockedDeferredUnsettled = "deferred_validation_unsettled"
 	integrationProgressBlockedDeferredAborted   = "deferred_validation_aborted"
 
+	// deferredValidationRunnerLockName is the runner's OS lock file in the
+	// deferred-validation directory, and the labels its holders record.
+	deferredValidationRunnerLockName  = "runner"
+	lockLabelDeferredValidationRun    = "deferred-validation-run"
+	lockLabelDeferredValidationProbe  = "deferred-validation-probe"
+	lockLabelDeferredValidationSettle = "deferred-validation-settle"
+	lockLabelDeferredValidationAbort  = "deferred-validation-abort"
 	// deferredValidationRunnerLogName is the runner's diagnostics file in the
 	// deferred-validation directory.
 	deferredValidationRunnerLogName = "runner.log"
