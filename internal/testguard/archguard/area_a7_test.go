@@ -13,7 +13,6 @@ var areaA7 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "cmd/liza/cmd_launch.go"}, Ceiling: 1159},
 		{Key: Key{File: "internal/commands/init.go"}, Ceiling: 1684},
 		{Key: Key{File: "internal/commands/init.go", Func: "InitCommandWithConfig"}, Ceiling: 471},
 		{Key: Key{File: "internal/commands/init.go", Func: "InitPairingCommand"}, Ceiling: 182},
