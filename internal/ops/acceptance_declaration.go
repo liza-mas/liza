@@ -12,6 +12,11 @@ import (
 	"github.com/liza-mas/liza/internal/referencecontract"
 )
 
+// referenceAnchorSeparator splits an allocation or source reference into its
+// file path and heading anchor. referencecontract and models split the same
+// grammar with a literal and name none.
+const referenceAnchorSeparator = "#"
+
 // declaredCarrier is the source an acceptance allocation names, read at
 // integration.
 type declaredCarrier struct {
@@ -69,7 +74,7 @@ func readDeclaredCarrier(root string, task *models.Task, integrationCommit strin
 		}
 		return nil, nil
 	}
-	path, heading, _ := strings.Cut(ref, "#")
+	path, heading, _ := strings.Cut(ref, referenceAnchorSeparator)
 	if err := referencecontract.ValidateAcceptancePath(path); err != nil {
 		// Existing legacy artifact references are validated by their own path.
 		if task.AcceptanceSource == nil {

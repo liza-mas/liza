@@ -85,7 +85,7 @@ func checkCreatedTaskAcceptance(root string, state *models.State, task *models.T
 // untouched never depend on state or integration being readable at creation.
 func acceptanceCreationApplies(task *models.Task) bool {
 	ref := acceptanceAllocationRef(task)
-	path, _, _ := strings.Cut(ref, "#")
+	path, _, _ := strings.Cut(ref, referenceAnchorSeparator)
 	return task.EffectiveType() == models.TaskTypeCoding && ref != "" && referencecontract.ValidateAcceptancePath(path) == nil
 }
 

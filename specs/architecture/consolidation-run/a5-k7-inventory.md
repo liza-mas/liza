@@ -14,11 +14,11 @@ section "K7 Families" and the A3/A4 inventory precedent (`a3-k7`, `a4-k7-invento
 ## Method
 
 1. File list: the 32 `A5` files of the area partition plus the 16 private concern files Tasks 2–7 created (names and creating task in table 1). `init_project.go` (A7) and the A3, A4 and A6 files are out of the list.
-2. Every string and numeric literal of those 48 production files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite field, map key or index, call argument, declaration…): **1342 literals**, of which 144 sit in `const` declarations (already named) and 1198 elsewhere.
+2. Every string and numeric literal of those 48 production files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite field, map key or index, call argument, declaration…): **1340 literals**, of which 146 sit in `const` declarations (already named) and 1194 elsewhere.
 3. Each literal's value was matched against every string and integer constant of `ops` and the constants of the A1 owner packages (`models`, `pipeline`, `roles`, `taskkind`, `paths`, `alerts`, `errors`, `payloadschema`, `referencecontract`, `statehygiene`, `statevalidate`, `analysis`, `git`, `gitenv`, `db`, `log`). A same-value, same-meaning owner constant is adopted (R1); a false friend (same spelling, other meaning) is recorded in table 4.
 4. A literal that is control-flow vocabulary or a repeated magic value without an owner is named (R4) or, when the owner is a closed package outside `ops` that names nothing, named in `ops` without editing the owner (R3, table 5). A finite set deciding control flow is typed; the A5 sets were typed by Tasks 2–7 (table 3c).
 5. Every remaining literal is classified (R5/F12) with a reason in table 3; the classifier fails on a literal it cannot place, so no literal is left unclassified or deferred.
-6. Completeness check: the scan was run on the committed tree and every row of its output is either a row of table 3 (retained literal) or part of a constant declaration listed in table 2 or 3b; table 3 groups the 1198 rows by file, class and reason, so the line numbers listed there can be checked against the source one by one. Cross-checks: a quoted-literal probe for the lifecycle safe actions and effects, the review impact levels, the claim and role types and the submitted verdicts finds only constant declarations in the 48 files; every `models.TaskEvent*` and `models.AnomalyType*` use in them is the constant, and the one raw `"submit_verdict_failed"` is an activity-log action label (table 4).
+6. Completeness check: the scan was run on the committed tree and every row of its output is either a row of table 3 (retained literal) or part of a constant declaration listed in table 2 or 3b; table 3 groups the 1198 rows by file, class and reason, so the line numbers listed there can be checked against the source one by one. A second pass over every literal used as an argument of a predicate or splitter (`strings.Contains`, `HasPrefix`, `HasSuffix`, `Cut`, `Split`, `Trim*`), as a comparison operand, a `case`, or an index or key read found two control-flow uses among the retained literals — the `transitioned to attempt` substring of the reclaim-failure branch and the `#` reference-anchor separator — and named them (table 2); the rest are the test-file naming table (J22), delimiters, Git revision names and `errors.New` sentinel texts. Cross-checks: a quoted-literal probe for the lifecycle safe actions and effects, the review impact levels, the claim and role types and the submitted verdicts finds only constant declarations in the 48 files; every `models.TaskEvent*` and `models.AnomalyType*` use in them is the constant, and the one raw `"submit_verdict_failed"` is an activity-log action label (table 4).
 
 Outcome vocabulary: **adopted** (existing owner constant used), **named** (new constant, value unchanged), **typed** (defined type, one constant per value), **classified** (retained literal data or dynamic identity, with reason).
 
@@ -26,11 +26,11 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 
 | Outcome | Count |
 |---|---|
-| Substitution sites in this task (table 2: adopted, named or typed use sites) | 58 |
-| Constant declarations added by this task (table 2) | 22 |
+| Substitution sites in this task (table 2: adopted, named or typed use sites) | 62 |
+| Constant declarations added by this task (table 2) | 24 |
 | Pre-existing named constants in A5 files (table 3b) | 120 |
-| Retained literals classified R5/F12 (table 3, grouped by file and reason) | 1198 |
-| Literals scanned at this tree | 1342 = 1198 retained (table 3) + 144 inside declarations of the 142 named constants (22 declared by this task in table 2, 120 pre-existing in table 3b) |
+| Retained literals classified R5/F12 (table 3, grouped by file and reason) | 1194 |
+| Literals scanned at this tree | 1340 = 1194 retained (table 3) + 146 inside declarations of the 144 named constants (24 declared by this task in table 2, 120 pre-existing in table 3b) |
 | Unclassified / deferred | 0 |
 | New defined types | 0 (every finite control-flow set was typed by Tasks 2–7; table 3c) |
 | BLOCKED findings against A1 or A3 closure (prospective symbol not delivered) | 0 |
@@ -62,9 +62,9 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 | `claim_reviewer_task.go` | area partition | 371 | 22 | 0 | 0 | 1 |
 | `rejection_rca.go` | area partition | 363 | 27 | 1 | 0 | 0 |
 | `reaffirm_proof.go` | area partition | 207 | 35 | 2 | 1 | 1 |
-| `acceptance_evidence.go` | area partition | 477 | 91 | 0 | 0 | 6 |
+| `acceptance_evidence.go` | area partition | 477 | 90 | 1 | 0 | 6 |
 | `acceptance_execution.go` | area partition | 267 | 41 | 2 | 2 | 9 |
-| `acceptance_creation.go` | area partition | 153 | 18 | 0 | 0 | 3 |
+| `acceptance_creation.go` | area partition | 153 | 17 | 1 | 0 | 3 |
 | `acceptance_claim_block.go` | area partition | 272 | 34 | 0 | 0 | 9 |
 | `acceptance_ownership_fence.go` | area partition | 63 | 2 | 0 | 0 | 1 |
 | `archive_acceptance_receipts.go` | area partition | 139 | 7 | 1 | 1 | 3 |
@@ -72,7 +72,7 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 | `validation_preflight.go` | area partition | 513 | 42 | 3 | 0 | 0 |
 | `test_detection.go` | area partition | 163 | 62 | 0 | 0 | 0 |
 | `acceptance_allocation_review.go` | concern file (Task 2) | 341 | 26 | 0 | 0 | 0 |
-| `acceptance_declaration.go` | concern file (Task 2) | 202 | 23 | 1 | 0 | 0 |
+| `acceptance_declaration.go` | concern file (Task 2) | 207 | 23 | 2 | 1 | 1 |
 | `acceptance_reference_reads.go` | concern file (Task 2) | 191 | 46 | 0 | 0 | 0 |
 | `validation_readiness.go` | concern file (Task 2) | 144 | 29 | 0 | 1 | 22 |
 | `submission_finalize.go` | concern file (Task 3) | 230 | 13 | 1 | 0 | 0 |
@@ -82,7 +82,7 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 | `verdict_integration_evidence.go` | concern file (Task 4) | 169 | 11 | 0 | 0 | 0 |
 | `verdict_transition.go` | concern file (Task 4) | 518 | 36 | 1 | 0 | 4 |
 | `await_verdict_finish.go` | concern file (Task 5) | 227 | 16 | 2 | 1 | 4 |
-| `await_verdict_outcome.go` | concern file (Task 5) | 405 | 50 | 2 | 0 | 11 |
+| `await_verdict_outcome.go` | concern file (Task 5) | 410 | 50 | 3 | 1 | 12 |
 | `review_reclaim.go` | concern file (Task 6) | 217 | 7 | 2 | 0 | 1 |
 | `review_reservation.go` | concern file (Task 6) | 298 | 4 | 3 | 0 | 1 |
 | `reviewer_claim_candidate.go` | concern file (Task 7) | 122 | 4 | 0 | 0 | 0 |
@@ -94,7 +94,11 @@ One row per changed line. A row marked "declaration of named" is the constant's 
 
 | file:line | F | Rule | Outcome | Constant | Replaces | Owner |
 |---|---|---|---|---|---|---|
-| `acceptance_declaration.go:174` | F2 | R4 | named | `reaffirmProofOperation` | "reaffirm-proof" (rendered command) | A5 reaffirm_proof.go |
+| `acceptance_creation.go:88` | F9 | R3 | named | `referenceAnchorSeparator` | "#" | A5 acceptance_declaration.go; `referencecontract`/`models` owner gap |
+| `acceptance_declaration.go:18` | F9 | R3 | declaration of named | `referenceAnchorSeparator` | "#" | A5 acceptance_declaration.go; `referencecontract`/`models` owner gap |
+| `acceptance_declaration.go:77` | F9 | R3 | named | `referenceAnchorSeparator` | "#" | A5 acceptance_declaration.go; `referencecontract`/`models` owner gap |
+| `acceptance_declaration.go:179` | F2 | R4 | named | `reaffirmProofOperation` | "reaffirm-proof" (rendered command) | A5 reaffirm_proof.go |
+| `acceptance_evidence.go:253` | F9 | R3 | named | `referenceAnchorSeparator` | "#" | A5 acceptance_declaration.go; `referencecontract`/`models` owner gap |
 | `acceptance_execution.go:42` | F9 | R4 | declaration of named | `acceptanceEnvSuffixURL` | "URL" | A5 acceptance_execution.go |
 | `acceptance_execution.go:43` | F9 | R4 | declaration of named | `acceptanceEnvSuffixDSN` | "DSN" | A5 acceptance_execution.go |
 | `acceptance_execution.go:230` | F9 | R4 | named | `acceptanceEnvSuffixURL, acceptanceEnvSuffixDSN` | "URL", "DSN" | A5 acceptance_execution.go |
@@ -107,8 +111,10 @@ One row per changed line. A row marked "declaration of named" is the constant's 
 | `await_verdict_finish.go:18` | F3 | R4 | declaration of named | `awaitVerdictOperation` | "await-verdict" | A5 await_verdict_finish.go |
 | `await_verdict_finish.go:188` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
 | `await_verdict_finish.go:203` | F3 | R4 | named | `awaitVerdictOperation` | "await-verdict" | A5 await_verdict_finish.go |
-| `await_verdict_outcome.go:336` | F11 | R1 | adopted | `oldReviewCommitExtraKey` | "old_review_commit" | update_review_commit.go (K-OWN) |
-| `await_verdict_outcome.go:337` | F11 | R1 | adopted | `newReviewCommitExtraKey` | "new_review_commit" | update_review_commit.go (K-OWN) |
+| `await_verdict_outcome.go:43` | F3 | R4 | declaration of named | `attemptTransitionReasonMarker` | "transitioned to attempt" | A5 await_verdict_outcome.go; producer: A3 claim_task_admission.go |
+| `await_verdict_outcome.go:155` | F3 | R4 | named | `attemptTransitionReasonMarker` | "transitioned to attempt" (strings.Contains discriminator of the reclaim-failure branch) | A5 await_verdict_outcome.go; producer: A3 claim_task_admission.go |
+| `await_verdict_outcome.go:341` | F11 | R1 | adopted | `oldReviewCommitExtraKey` | "old_review_commit" | update_review_commit.go (K-OWN) |
+| `await_verdict_outcome.go:342` | F11 | R1 | adopted | `newReviewCommitExtraKey` | "new_review_commit" | update_review_commit.go (K-OWN) |
 | `inflight_submit.go:28` | F9 | R4 | declaration of named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
 | `inflight_submit.go:67` | F9 | R4 | named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
 | `inflight_submit.go:132` | F9 | R4 | named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
@@ -193,18 +199,17 @@ Each row lists every line of one file carrying literals of one class and reason.
 | `acceptance_creation.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 123 |
 | `acceptance_creation.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 98,116,117,118 |
 | `acceptance_creation.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 119 |
-| `acceptance_creation.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 88 |
 | `acceptance_creation.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 55,89,101,149 |
-| `acceptance_declaration.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 38,124 |
-| `acceptance_declaration.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 68,78,83,89,92,117,133,168,174,176,198 |
-| `acceptance_declaration.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 72,131,131 |
-| `acceptance_declaration.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 48,66,83,135,137,162,173 |
+| `acceptance_declaration.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 43,129 |
+| `acceptance_declaration.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 73,83,88,94,97,122,138,173,179,181,203 |
+| `acceptance_declaration.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 136,136 |
+| `acceptance_declaration.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 53,71,88,140,142,167,178 |
 | `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field or source label named in a refusal (A3 I27: diagnostic fields stay dynamic) | 215 |
 | `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 174,256,262,266,273,281,291,295,338,365,378,385,400,411,419,429,448,454,458,469 |
 | `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field path suffix named in an acceptance refusal (A3 I27) | 281 |
 | `acceptance_evidence.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 78,80,84,86,91,94,96,98,103,107,227,256,262,281,291,295,331,338,341,344,349,351,354,363,363,378,385,400,411,419,429,448,454,458,469 |
 | `acceptance_evidence.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 78,81,84,86,94,94,94,94,94,96,107 |
-| `acceptance_evidence.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 185,253,467 |
+| `acceptance_evidence.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 185,467 |
 | `acceptance_evidence.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 97,170,226,276,294,348,406,406 |
 | `acceptance_evidence.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 214,340,447,447,460,468 |
 | `acceptance_execution.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 89 |
@@ -232,10 +237,10 @@ Each row lists every line of one file carrying literals of one class and reason.
 | `await_verdict_finish.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 79 |
 | `await_verdict_finish.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 163,169,177,190 |
 | `await_verdict_finish.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 109,110,143,147 |
-| `await_verdict_outcome.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 42,76,150,175,182,195,205,206,210,212,370,373,381,390,396,402 |
-| `await_verdict_outcome.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 208 |
-| `await_verdict_outcome.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 209,226,229,254,273,305,308,312,318,322,338,338,338,341,369,382,394 |
-| `await_verdict_outcome.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 219,219,246,246,293 |
+| `await_verdict_outcome.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 47,81,180,187,200,210,211,215,217,375,378,386,395,401,407 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 213 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 214,231,234,259,278,310,313,317,323,327,343,343,343,346,374,387,399 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 224,224,251,251,298 |
 | `claim_reviewer_task.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 55,61,104,160,165,279,362,368 |
 | `claim_reviewer_task.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 54,60,60,103,135,145,278,291,362,368 |
 | `claim_reviewer_task.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 111,259,290 |
@@ -410,7 +415,7 @@ Named by earlier scopes, by the A5 concern tasks or by A3 inside the A5 files; r
 
 Adopted, not redefined: `ReviewClaimClass` (A3 I24, `claim_failure_anomaly.go`), `LifecycleSafeAction` and `LifecycleEffects` (A3), the A1 types `models.TaskEventName`, `models.AnomalyType`, `models.AllocationRoute`, `pipeline.ReviewImpact`, `roles.RoleType`. No A5 type has a constant of the same set as an A1 or A3 type. `AwaitSafeAction` (`revise`, `stop`) is the await protocol's own pair and is not the A3 lifecycle set (`continue`, `stop`, `requery`, `retry`, `correct_input`): see table 4.
 
-The values this task named are pinned by `TestA5NamedValuesKeepTheirSpelling`, `TestA5ReconcileDispositionsAreOwnerAccepted` and `TestA5ComposedTextKeepsItsBytes` in `internal/ops/k7_a5_vocabulary_test.go`.
+The values this task named are pinned by `TestA5NamedValuesKeepTheirSpelling`, `TestA5ReconcileDispositionsAreOwnerAccepted`, `TestA5ComposedTextKeepsItsBytes` and `TestA5AttemptTransitionMarkerIsInTheClaimRefusal` in `internal/ops/k7_a5_vocabulary_test.go`.
 
 ## 4. False friends: same spelling, different meaning
 
@@ -436,6 +441,8 @@ The values this task named are pinned by `TestA5NamedValuesKeepTheirSpelling`, `
 |---|---|---|---|
 | reconciliation dispositions `accepted`, `refuted`, `superseded`, `escalated` | `models.IsVerdictDisposition` | the owner switches on four literals and names none | `reconcileDispositionRefuted`, `reconcileDispositionSuperseded` in `quarantined_verdict.go` for the two that release a hold; no `models` edit (X1); `TestA5ReconcileDispositionsAreOwnerAccepted` ties both to the owner's validation |
 | environment suffixes `AGENT_ID`, `AGENT_GENERATION` | `brand.EnvName` / `brand.LookupEnv` take a free suffix and name no identity variable | owner gap | `agentIDEnvSuffix`, `agentGenerationEnvSuffix` in `submission_lifecycle.go`; other-area sites in table 7 |
+| reference anchor separator `#` (path`#`heading) | `referencecontract` and `models` split the grammar with a literal and name none | owner gap | `referenceAnchorSeparator` in `acceptance_declaration.go` at the three A5 split sites; other-area sites in table 7 |
+| reclaim-failure marker `transitioned to attempt` | produced by A3 `claim_task_admission.go`, matched by A5 `await_verdict_outcome.go` | cross-concern coupling by message text, no shared constant | `attemptTransitionReasonMarker` at the consuming concern; the A3 producer is not edited (A3 closed; protocol unchanged); coupling pinned by `TestA5AttemptTransitionMarkerIsInTheClaimRefusal` (table 7) |
 | `refs/heads/` branch namespace | `git` names none | owner gap, repeated in A6 and A2 | classified in `orphaned_review_base.go` (table 3); the A6 and A2 sites are listed in table 7 so their owners name it once |
 | `reaffirm-proof`, `reconcile-verdict`, `await-verdict` operation names | `models.IsLifecycleOperation` and the pipeline capability list spell them; no constant | owner gap | named in the A5 concern that raises them (table 2) |
 | actor `system` in an activity-log entry | `actorSystem` (A3 `helpers.go`) | delivered | adopted (table 2) |
@@ -465,6 +472,8 @@ None. No exported A5 name, signature, value or type changed, so no X2 caller in 
 | A7 | `cmd/liza/cmd_review.go:654`, `internal/commands/submit_verdict.go:42` | `APPROVED`, `REJECTED` | `submittedVerdict` is unexported; the exported `AwaitVerdictOutcome` constants `VerdictApproved`/`VerdictRejected` are the same wire values for a completion list |
 | A3 | `internal/ops/lifecycle_metrics.go:41` | `claim-reviewer-task` | `claimReviewerTaskOperation` (diagnostic-counter key list, A3 I-row classification; listed, not edited) |
 | A1 | `internal/models/lifecycle.go:199`, `internal/statevalidate/validate_lifecycle.go:141` | `claim-reviewer-task` | `claimReviewerTaskOperation` (owner list and validator) |
+| A3 | `internal/ops/claim_task_admission.go:297` | `transitioned to attempt` (producer text of the exhausted-limits refusal; the A5 await matches it by substring) | `attemptTransitionReasonMarker` — owner finding: the coupling is by message text; the A3 text must keep containing the marker. `TestA5AttemptTransitionMarkerIsInTheClaimRefusal` drives the real producer and asserts the refusal reason contains the constant (A3's own `TestClaimTask_IterationCapAttempt1_TriggersNewAttempt` asserts the literal); a drifted marker fails it, whereas the await's branch alone would silently fall through to the history recovery |
+| A1 | `internal/referencecontract/contract.go:167`, `internal/models/coding_allocation.go:29,65` | `#` | `referenceAnchorSeparator` (owner gap) |
 | A9 | `internal/agent/acceptance_refusal.go:85` | `fault_class` | log attribute key (log lines are free); `faultClassExtraKey` names the persisted detail key and is read by no A9 code |
 
 ## 8. Plan K7 families F1–F12

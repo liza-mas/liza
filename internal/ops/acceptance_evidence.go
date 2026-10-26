@@ -250,7 +250,7 @@ func prepareAcceptanceReceipt(root string, task *models.Task, input *acceptanceI
 	if input == nil {
 		return nil, nil
 	}
-	path, heading, _ := strings.Cut(input.source.Ref, "#")
+	path, heading, _ := strings.Cut(input.source.Ref, referenceAnchorSeparator)
 	candidateContent, _, err := readAcceptanceBlob(root, commit, path)
 	if err != nil {
 		return nil, acceptanceError(task.ID, "acceptance.source", "candidate changes the independently reviewed source")

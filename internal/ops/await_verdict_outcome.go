@@ -37,6 +37,11 @@ const (
 	SafeActionStop   AwaitSafeAction = "stop"
 )
 
+// attemptTransitionReasonMarker is the text of the claim refusal that reports an
+// exhausted-limits transition to a new attempt (claim_task_admission.go). The
+// await matches it in the reason, so that producer must keep containing it.
+const attemptTransitionReasonMarker = "transitioned to attempt"
+
 // ErrBudgetExhausted is returned when the iteration/review-cycle budget
 // would be exceeded on rejection — the agent should exit normally.
 var ErrBudgetExhausted = stderrors.New("budget exhausted: iteration or review-cycle limit reached")
@@ -147,7 +152,7 @@ func (r awaitVerdictRun) reclaimFailureResult(task *models.Task, claimErr error,
 	}
 	var pe *PreconditionError
 	if stderrors.As(claimErr, &pe) {
-		if strings.Contains(pe.Reason, "transitioned to attempt") {
+		if strings.Contains(pe.Reason, attemptTransitionReasonMarker) {
 			return r.finish(&AwaitVerdictResult{
 				Verdict:       string(VerdictNewAttempt),
 				Reason:        verdict.reason,

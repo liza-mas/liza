@@ -3,12 +3,15 @@ package ops
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	stderrors "errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // TestA5AcceptanceFaultKeepsWireSpelling pins the one A5-owned typed set no
@@ -62,6 +65,8 @@ func TestA5NamedValuesKeepTheirSpelling(t *testing.T) {
 		"A3 system actor":              {actorSystem, "system"},
 		"credential mask replacement":  {acceptanceMaskedValue, "***"},
 		"claim operation (A5 adopted)": {claimReviewerTaskOperation, "claim-reviewer-task"},
+		"attempt transition marker":    {attemptTransitionReasonMarker, "transitioned to attempt"},
+		"reference anchor separator":   {referenceAnchorSeparator, "#"},
 	} {
 		if pair[0] != pair[1] {
 			t.Errorf("%s = %q, want %q", name, pair[0], pair[1])
@@ -112,5 +117,43 @@ func TestA5ComposedTextKeepsItsBytes(t *testing.T) {
 	}
 	if got, want := brand.EnvName(agentIDEnvSuffix), brand.EnvName("AGENT_ID"); got != want {
 		t.Errorf("agent ID variable = %q, want %q", got, want)
+	}
+}
+
+// TestA5AttemptTransitionMarkerIsInTheClaimRefusal pins the coupling the await
+// depends on: reclaimFailureResult recognises a new-attempt refusal of the
+// doer's auto-reclaim by this marker in the claim's PreconditionError reason,
+// so the real producer (an exhausted-limits claim) must keep containing it. If
+// the text drifted, the branch would silently fall through to the history
+// recovery instead of failing, so the producer is exercised here.
+func TestA5AttemptTransitionMarkerIsInTheClaimRefusal(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	registerClaimTaskTestAgents(state)
+	state.Config.MaxCoderIterations = 3
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	task.Iteration = 3
+	task.Attempt = 1
+	state.Tasks = []models.Task{task}
+	taskRef := "task-1"
+	agent := testhelpers.RegisteredTestAgent("coder")
+	agent.Status = models.AgentStatusWorking
+	agent.CurrentTask = &taskRef
+	agent.Heartbeat = now
+	state.Agents["coder-1"] = agent
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	_, err := ClaimTask(tmpDir, "task-1", "coder-1")
+	var refusal *PreconditionError
+	if !stderrors.As(err, &refusal) {
+		t.Fatalf("ClaimTask error = %T %v, want a PreconditionError", err, err)
+	}
+	if !strings.Contains(refusal.Reason, attemptTransitionReasonMarker) {
+		t.Errorf("refusal reason does not contain the await marker %q", attemptTransitionReasonMarker)
 	}
 }
