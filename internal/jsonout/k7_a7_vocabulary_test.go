@@ -1,6 +1,9 @@
 package jsonout
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // The --json codes agents branch on. The literals are written out so that
 // renaming a constant cannot rename a code.
@@ -14,6 +17,19 @@ func TestA7ErrorCodesKeepTheirSpellings(t *testing.T) {
 	} {
 		if string(code) != want {
 			t.Errorf("code constant spells %q, want %q", code, want)
+		}
+	}
+}
+
+// An untyped message names a lock timeout only when it carries "lock" and
+// either timeout phrase.
+func TestA7LockTimeoutFragmentsKeepTheirSpellings(t *testing.T) {
+	for msg, want := range map[string]string{
+		"could not take the lock: timeout": "lock_timeout", "lock wait timed out": "lock_timeout",
+		"timeout": "internal", "lock held": "internal",
+	} {
+		if got, _ := ClassifyError(errors.New(msg)); got != want {
+			t.Errorf("ClassifyError(%q) code = %q, want %q", msg, got, want)
 		}
 	}
 }

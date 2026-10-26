@@ -15,8 +15,8 @@ import (
 func buildRespawnArgs(role, agentID, cli string) []string {
 	return []string{
 		brand.BinaryName, "agent", role,
-		"--agent-id", agentID,
-		"--cli", cli,
+		agentFlagAgentID, agentID,
+		agentFlagCLI, cli,
 	}
 }
 

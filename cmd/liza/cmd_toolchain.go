@@ -200,7 +200,7 @@ func init() {
 	addToolchainSelectionFlags(toolchainDoctorCmd)
 	addToolchainSelectionFlags(toolchainInstallCmd)
 	addToolchainSelectionFlags(toolchainConfigureCmd)
-	toolchainDoctorCmd.Flags().String("tool", "all", "tool id to check, or all")
+	toolchainDoctorCmd.Flags().String("tool", toolSelectorAll, "tool id to check, or all")
 	toolchainInstallCmd.Flags().String("tool", "", "install only this tool id (needs --yes or --dry-run)")
 	toolchainInstallCmd.Flags().String("install-dir", "", "directory for managed binaries (default: ~/.local/bin)")
 	toolchainInstallCmd.Flags().Bool("dry-run", false, "print planned install commands without executing them")

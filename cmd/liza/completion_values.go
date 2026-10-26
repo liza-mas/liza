@@ -38,8 +38,11 @@ func completeToolIDs(_ *cobra.Command, _ []string, toComplete string) ([]string,
 	return filterCompletionValues(toolIDs(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
+// toolSelectorAll selects every tool where a tool id is expected.
+const toolSelectorAll = "all"
+
 func completeToolIDsOrAll(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	ids := append(toolIDs(), "all")
+	ids := append(toolIDs(), toolSelectorAll)
 	return filterCompletionValues(ids, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 

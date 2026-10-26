@@ -110,19 +110,32 @@ func CategoryColor(category pipeline.StateCategory) lipgloss.Color {
 	}
 }
 
+// Status-name affixes that color a status the exact-status table does not list.
+const (
+	statusSuffixPartiallyApproved = "_PARTIALLY_APPROVED"
+	statusSuffixApproved          = "_APPROVED"
+	statusSuffixRejected          = "_REJECTED"
+	statusSuffixPlanning          = "_PLANNING"
+	statusSuffixToReview          = "_TO_REVIEW"
+	statusSuffixReadyForReview    = "_READY_FOR_REVIEW"
+	statusPrefixImplementing      = "IMPLEMENTING_"
+	statusPrefixReviewing         = "REVIEWING_"
+	statusPrefixDraft             = "DRAFT_"
+)
+
 func matchSuffix(status string) (lipgloss.Color, bool) {
 	switch {
-	case strings.HasSuffix(status, "_PARTIALLY_APPROVED"):
+	case strings.HasSuffix(status, statusSuffixPartiallyApproved):
 		return ColorPartialApproved, true
-	case strings.HasSuffix(status, "_APPROVED"):
+	case strings.HasSuffix(status, statusSuffixApproved):
 		return ColorApproved, true
-	case strings.HasSuffix(status, "_REJECTED"):
+	case strings.HasSuffix(status, statusSuffixRejected):
 		return ColorRejected, true
-	case strings.HasSuffix(status, "_PLANNING"):
+	case strings.HasSuffix(status, statusSuffixPlanning):
 		return ColorActive, true
-	case strings.HasSuffix(status, "_TO_REVIEW"):
+	case strings.HasSuffix(status, statusSuffixToReview):
 		return ColorToReview, true
-	case strings.HasSuffix(status, "_READY_FOR_REVIEW"):
+	case strings.HasSuffix(status, statusSuffixReadyForReview):
 		return ColorToReview, true
 	default:
 		return "", false
@@ -131,11 +144,11 @@ func matchSuffix(status string) (lipgloss.Color, bool) {
 
 func matchPrefix(status string) (lipgloss.Color, bool) {
 	switch {
-	case strings.HasPrefix(status, "IMPLEMENTING_"):
+	case strings.HasPrefix(status, statusPrefixImplementing):
 		return ColorActive, true
-	case strings.HasPrefix(status, "REVIEWING_"):
+	case strings.HasPrefix(status, statusPrefixReviewing):
 		return ColorReview, true
-	case strings.HasPrefix(status, "DRAFT_"):
+	case strings.HasPrefix(status, statusPrefixDraft):
 		return ColorBareDraft, true
 	default:
 		return "", false

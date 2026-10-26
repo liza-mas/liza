@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/commands"
 )
 
@@ -70,5 +71,31 @@ func TestA7LayoutAndAnswerConstantsKeepTheirValues(t *testing.T) {
 		if got := isYes(answer); got != want {
 			t.Errorf("isYes(%q) = %v, want %v", answer, got, want)
 		}
+	}
+}
+
+// The status-name affixes color a status the exact table does not list. Order
+// matters: _PARTIALLY_APPROVED also ends in _APPROVED.
+func TestA7StatusAffixesKeepSpellingsAndBranchOrder(t *testing.T) {
+	for status, want := range map[string]lipgloss.Color{
+		"CODE_PARTIALLY_APPROVED": ColorPartialApproved, "CODE_APPROVED": ColorApproved, "CODE_REJECTED": ColorRejected,
+		"CODING_PLANNING": ColorActive, "CODE_TO_REVIEW": ColorToReview, "CODE_READY_FOR_REVIEW": ColorToReview,
+	} {
+		if got, ok := matchSuffix(status); !ok || got != want {
+			t.Errorf("matchSuffix(%q) = %q, %v; want %q, true", status, got, ok, want)
+		}
+	}
+	for status, want := range map[string]lipgloss.Color{
+		"IMPLEMENTING_CODE": ColorActive, "REVIEWING_CODE": ColorReview, "DRAFT_CODE": ColorBareDraft,
+	} {
+		if got, ok := matchPrefix(status); !ok || got != want {
+			t.Errorf("matchPrefix(%q) = %q, %v; want %q, true", status, got, ok, want)
+		}
+	}
+	if _, ok := matchSuffix("CODE_UNKNOWN"); ok {
+		t.Error("matchSuffix matched a status with no listed suffix")
+	}
+	if _, ok := matchPrefix("UNKNOWN_CODE"); ok {
+		t.Error("matchPrefix matched a status with no listed prefix")
 	}
 }

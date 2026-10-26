@@ -90,14 +90,21 @@ func ErrorDetails(err error) map[string]any {
 	return nil
 }
 
+// Fragments of an untyped error message that together mark a lock timeout.
+const (
+	lockMessageFragment     = "lock"
+	timeoutMessageFragment  = "timeout"
+	timedOutMessageFragment = "timed out"
+)
+
 // classifyUntyped maps untyped errors to codes via string matching.
 // Returns (codeInternal, messageInternal) when no pattern matches.
 func classifyUntyped(err error) (code errorCode, message string) {
 	msg := err.Error()
 
 	// Lock timeout: compound match (requires "lock" AND a timeout indicator).
-	if strings.Contains(msg, "lock") &&
-		(strings.Contains(msg, "timeout") || strings.Contains(msg, "timed out")) {
+	if strings.Contains(msg, lockMessageFragment) &&
+		(strings.Contains(msg, timeoutMessageFragment) || strings.Contains(msg, timedOutMessageFragment)) {
 		return codeLockTimeout, "lock acquisition timed out"
 	}
 

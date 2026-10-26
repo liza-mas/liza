@@ -125,7 +125,7 @@ func buildCmuxLaunchCommands(opts cmuxLaunchOptions, commands [][]string) ([][]s
 		}
 		cmds = append(cmds, paneArgs)
 		cmds = append(cmds, []string{cmuxExecutable, "send", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), shellJoin(paneCommand)})
-		cmds = append(cmds, []string{cmuxExecutable, "send-key", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), "enter"})
+		cmds = append(cmds, []string{cmuxExecutable, "send-key", "--workspace", workspaceRef, "--surface", fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1), cmuxKeyEnter})
 	}
 
 	return cmds, nil
@@ -165,7 +165,7 @@ func buildCmuxInteractiveLaunchCommands(opts cmuxLaunchOptions, panes []interact
 		cmds = append(cmds, paneArgs)
 		surfaceRef := fmt.Sprintf("<surface-ref-%d-from-new-pane-output>", i+1)
 		cmds = append(cmds, []string{cmuxExecutable, "send", "--workspace", workspaceRef, "--surface", surfaceRef, shellJoin(pane.Command)})
-		cmds = append(cmds, []string{cmuxExecutable, "send-key", "--workspace", workspaceRef, "--surface", surfaceRef, "enter"})
+		cmds = append(cmds, []string{cmuxExecutable, "send-key", "--workspace", workspaceRef, "--surface", surfaceRef, cmuxKeyEnter})
 	}
 
 	// Send prompts to all panes
@@ -188,7 +188,7 @@ func buildCmuxInteractiveLaunchCommands(opts cmuxLaunchOptions, panes []interact
 			cmuxExecutable, "send-key",
 			"--workspace", workspaceRef,
 			"--surface", surfaceRef,
-			"enter",
+			cmuxKeyEnter,
 		}
 		cmds = append(cmds, enterArgs)
 	}

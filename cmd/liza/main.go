@@ -192,7 +192,7 @@ func validateCLIInputs(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		return nil
 	}
-	if isJSON(cmd) || matchedFlag == "--json" {
+	if isJSON(cmd) || matchedFlag == jsonFlagToken {
 		return jsonout.WriteResult(os.Stdout, nil, nil, err)
 	}
 	return err
@@ -223,17 +223,25 @@ func validateReasonFlag(cmd *cobra.Command) (string, error) {
 	))
 }
 
+// Flag syntax registeredFlagToken recognizes in a value that swallowed a flag.
+const (
+	jsonFlagToken      = "--json"
+	longFlagPrefix     = "--"
+	shortFlagPrefix    = "-"
+	flagValueDelimiter = "="
+)
+
 func registeredFlagToken(cmd *cobra.Command, value string) string {
-	token, _, _ := strings.Cut(value, "=")
-	if strings.HasPrefix(token, "--") && len(token) > 2 {
-		if cmd.Flag(strings.TrimPrefix(token, "--")) != nil {
+	token, _, _ := strings.Cut(value, flagValueDelimiter)
+	if strings.HasPrefix(token, longFlagPrefix) && len(token) > 2 {
+		if cmd.Flag(strings.TrimPrefix(token, longFlagPrefix)) != nil {
 			return token
 		}
 		return ""
 	}
 
-	if strings.HasPrefix(token, "-") && !strings.HasPrefix(token, "--") {
-		shorthand := strings.TrimPrefix(token, "-")
+	if strings.HasPrefix(token, shortFlagPrefix) && !strings.HasPrefix(token, longFlagPrefix) {
+		shorthand := strings.TrimPrefix(token, shortFlagPrefix)
 		if len(shorthand) == 1 {
 			if cmd.Flags().ShorthandLookup(shorthand) != nil ||
 				cmd.InheritedFlags().ShorthandLookup(shorthand) != nil {

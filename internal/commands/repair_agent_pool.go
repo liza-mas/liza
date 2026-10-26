@@ -190,6 +190,10 @@ func AutoRepairAgentPoolEnabledFromEnv() (bool, string) {
 	return parseAutoRepairAgentPoolEnv(value, ok)
 }
 
+// envBooleanNo is the spelling of false that strconv.ParseBool does not accept
+// but the auto-repair switch does.
+const envBooleanNo = "no"
+
 func parseAutoRepairAgentPoolEnv(value string, ok bool) (bool, string) {
 	if !ok {
 		return true, ""
@@ -198,7 +202,7 @@ func parseAutoRepairAgentPoolEnv(value string, ok bool) (bool, string) {
 	if trimmed == "" {
 		return true, ""
 	}
-	if strings.EqualFold(trimmed, "no") {
+	if strings.EqualFold(trimmed, envBooleanNo) {
 		return false, ""
 	}
 	enabled, err := strconv.ParseBool(trimmed)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/procscan"
@@ -236,5 +237,47 @@ func TestA7ScipPlanSyntaxKeepsLanguageSpellings(t *testing.T) {
 		if got := pairingScipPlanSyntax(string(language)); got != want {
 			t.Errorf("pairingScipPlanSyntax(%q) = %q, want %q", language, got, want)
 		}
+	}
+}
+
+func TestA7AutoRepairEnvAcceptsNoAsFalse(t *testing.T) {
+	for value, want := range map[string]bool{"no": false, " No ": false, "NO": false, "false": false, "1": true, "yes": true} {
+		if got, _ := parseAutoRepairAgentPoolEnv(value, true); got != want {
+			t.Errorf("parseAutoRepairAgentPoolEnv(%q) = %v, want %v", value, got, want)
+		}
+	}
+	if _, warning := parseAutoRepairAgentPoolEnv("yes", true); warning == "" {
+		t.Error("an unrecognized boolean must still warn")
+	}
+}
+
+func TestA7StopGuardAwaitSyntaxKeepsItsTokens(t *testing.T) {
+	for command, want := range map[string]bool{
+		"liza await-verdict task-1":                         true,
+		"/usr/bin/liza.exe await-resubmission":              true,
+		"liza -C /repo await-verdict":                       true,
+		"liza --project-root /repo -v await-verdict":        true,
+		"liza --project-root=/repo --verbose await-verdict": true,
+		"liza -C=/repo await-verdict":                       true,
+		"liza await-verdict; ls":                            false,
+		"liza await-verdict | tee out":                      false,
+		"liza -x await-verdict":                             false,
+	} {
+		if got := isAwaitCommand(command, "liza"); got != want {
+			t.Errorf("isAwaitCommand(%q) = %v, want %v", command, got, want)
+		}
+	}
+	if reason, block := stopGuardReason([]byte(`{"background_tasks":null}`), "liza"); block || reason != "" {
+		t.Errorf("a null job list must not block, got %q %v", reason, block)
+	}
+}
+
+func TestA7SpawnAndSembleSyntaxKeepSpellings(t *testing.T) {
+	pinSpellings(t, "command syntax", [][2]string{
+		{agentFlagCLI, "--cli"}, {agentFlagAgentID, "--agent-id"}, {sembleMessagePrefix, "semble:"}, {sembleMessageLead, "semble: "}, {envBooleanNo, "no"},
+	})
+	want := []string{brand.BinaryName, "agent", "doer", "--agent-id", "doer-1", "--cli", "claude"}
+	if got := buildRespawnArgs("doer", "doer-1", "claude"); !reflect.DeepEqual(got, want) {
+		t.Errorf("buildRespawnArgs = %v, want %v", got, want)
 	}
 }

@@ -18,6 +18,35 @@ const (
 	cmuxExecutable    = string(launchBackendCmux)
 )
 
+// goosWindows is the runtime.GOOS value that selects the Git for Windows shell.
+const goosWindows = "windows"
+
+// posixShellPath is the shell launched when SHELL names none.
+const posixShellPath = "/bin/sh"
+
+// codexExecutable is the executable name of the Codex CLI, whose panes need the
+// interactive-readiness handling below.
+const codexExecutable = "codex"
+
+// Reference kinds cmux prints and the key name it is sent to submit a prompt.
+const (
+	cmuxRefWorkspace = "workspace"
+	cmuxRefSurface   = "surface"
+	cmuxKeyEnter     = "enter"
+)
+
+// Text the cmux readiness probes look for on a pane's screen.
+const (
+	cmuxHostPickerTitle      = "Pick host for agent"
+	cmuxHostPickerSubmitHint = "enter submit"
+	cmuxPromptMarker         = "›"
+	cmuxPromptEchoPrefix     = "› "
+	cmuxWorkingMarker        = "Working"
+	cmuxCodexBanner          = "OpenAI Codex"
+	cmuxStartingMCPMarker    = "Starting MCP servers"
+	cmuxInterruptHint        = "esc to interrupt"
+)
+
 // Waits and bounds of the interactive cmux launch.
 const (
 	// cmuxInteractiveReadyTimeout bounds the wait for every Codex pane to look interactive.
@@ -135,7 +164,7 @@ func runCmuxLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, commands [][]stri
 	if err != nil {
 		return cliValidationWrap("create cmux workspace", err)
 	}
-	workspaceRef, err := parseCmuxRef(output, "workspace")
+	workspaceRef, err := parseCmuxRef(output, cmuxRefWorkspace)
 	if err != nil {
 		return err
 	}
@@ -156,14 +185,14 @@ func runCmuxLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, commands [][]stri
 		if err != nil {
 			return err
 		}
-		surfaceRef, err := parseCmuxRef(paneOutput, "surface")
+		surfaceRef, err := parseCmuxRef(paneOutput, cmuxRefSurface)
 		if err != nil {
 			return err
 		}
 		if err := cmuxSendText(workspaceRef, surfaceRef, shellJoin(paneCommand)); err != nil {
 			return cliValidationWrap("send command to cmux pane", err)
 		}
-		if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
+		if err := cmuxSendKey(workspaceRef, surfaceRef, cmuxKeyEnter); err != nil {
 			return cliValidationWrap("send enter key to cmux pane", err)
 		}
 	}
@@ -199,7 +228,7 @@ func runCmuxInteractiveLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, panes 
 	if err != nil {
 		return cliValidationWrap("create cmux workspace", err)
 	}
-	workspaceRef, err := parseCmuxRef(output, "workspace")
+	workspaceRef, err := parseCmuxRef(output, cmuxRefWorkspace)
 	if err != nil {
 		return err
 	}
@@ -225,7 +254,7 @@ func runCmuxInteractiveLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, panes 
 		if err != nil {
 			return cliValidationWrap("create cmux pane", err)
 		}
-		surfaceRef, err := parseCmuxRef(paneOutput, "surface")
+		surfaceRef, err := parseCmuxRef(paneOutput, cmuxRefSurface)
 		if err != nil {
 			return err
 		}
@@ -233,7 +262,7 @@ func runCmuxInteractiveLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, panes 
 		if err := cmuxSendText(workspaceRef, surfaceRef, shellJoin(pane.Command)); err != nil {
 			return cliValidationWrap("send command to cmux pane", err)
 		}
-		if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
+		if err := cmuxSendKey(workspaceRef, surfaceRef, cmuxKeyEnter); err != nil {
 			return cliValidationWrap("send enter key to cmux pane", err)
 		}
 	}
@@ -266,7 +295,7 @@ func cmuxSendPrompt(workspaceRef, surfaceRef string, pane interactivePane) error
 		return cliValidationWrap("send prompt to cmux pane", err)
 	}
 	for attempt := 0; attempt < cmuxPromptSubmitAttempts; attempt++ {
-		if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
+		if err := cmuxSendKey(workspaceRef, surfaceRef, cmuxKeyEnter); err != nil {
 			return cliValidationWrap("send enter key to cmux pane", err)
 		}
 		if !cmuxPaneUsesCodex(pane) {
@@ -289,7 +318,7 @@ func cmuxWorkspaceSelectedSurfaceRef(workspaceRef string) (string, error) {
 	if err != nil {
 		return "", cliValidationWrap("list cmux workspace surfaces", err)
 	}
-	return parseCmuxRef(output, "surface")
+	return parseCmuxRef(output, cmuxRefSurface)
 }
 
 func waitForCmuxInteractiveSurfaces(workspaceRef string, panes []interactivePane, surfaceRefs []string, timeout time.Duration) error {
@@ -310,7 +339,7 @@ func waitForCmuxInteractiveSurfaces(workspaceRef string, panes []interactivePane
 				break
 			}
 			if cmuxScreenNeedsHostSelection(screen) && !hostSelectionSent[surfaceRef] {
-				if err := cmuxSendKey(workspaceRef, surfaceRef, "enter"); err != nil {
+				if err := cmuxSendKey(workspaceRef, surfaceRef, cmuxKeyEnter); err != nil {
 					return cliValidationWrap("select cmux codex host", err)
 				}
 				hostSelectionSent[surfaceRef] = true
@@ -341,34 +370,34 @@ func cmuxReadScreen(workspaceRef, surfaceRef string) (string, error) {
 }
 
 func cmuxScreenNeedsHostSelection(screen string) bool {
-	return strings.Contains(screen, "Pick host for agent") && strings.Contains(screen, "enter submit")
+	return strings.Contains(screen, cmuxHostPickerTitle) && strings.Contains(screen, cmuxHostPickerSubmitHint)
 }
 
 func cmuxPromptStillPending(screen, prompt string) bool {
-	return strings.Contains(screen, "› "+prompt) && !strings.Contains(screen, "Working")
+	return strings.Contains(screen, cmuxPromptEchoPrefix+prompt) && !strings.Contains(screen, cmuxWorkingMarker)
 }
 
 func cmuxScreenLooksInteractive(screen string) bool {
-	if !strings.Contains(screen, "OpenAI Codex") {
+	if !strings.Contains(screen, cmuxCodexBanner) {
 		return false
 	}
 	for _, marker := range []string{
-		"Starting MCP servers",
-		"esc to interrupt",
-		"Working",
+		cmuxStartingMCPMarker,
+		cmuxInterruptHint,
+		cmuxWorkingMarker,
 	} {
 		if strings.Contains(screen, marker) {
 			return false
 		}
 	}
-	return strings.Contains(screen, "›")
+	return strings.Contains(screen, cmuxPromptMarker)
 }
 
 func cmuxPaneUsesCodex(pane interactivePane) bool {
 	if pane.CLIName != "" {
-		return agent.CLIExecutableName(pane.CLIName) == "codex"
+		return agent.CLIExecutableName(pane.CLIName) == codexExecutable
 	}
-	return len(pane.Command) > 0 && pane.Command[0] == "codex"
+	return len(pane.Command) > 0 && pane.Command[0] == codexExecutable
 }
 
 func parseCmuxRef(output []byte, refType string) (string, error) {
@@ -386,11 +415,11 @@ func parseCmuxRef(output []byte, refType string) (string, error) {
 // ships: SHELL may name the WSL launcher, and /bin/sh names nothing the OS can
 // execute.
 func launchShell() (string, error) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goosWindows {
 		return gitbash.Resolve()
 	}
 	if shell := os.Getenv("SHELL"); shell != "" {
 		return shell, nil
 	}
-	return "/bin/sh", nil
+	return posixShellPath, nil
 }

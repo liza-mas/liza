@@ -122,13 +122,20 @@ func runSembleInitPrewarm(projectRoot string) {
 	}
 }
 
+// A semble diagnostic on stderr starts with sembleMessagePrefix; sembleMessageLead
+// is that prefix and the space before the message.
+const (
+	sembleMessagePrefix = "semble:"
+	sembleMessageLead   = "semble: "
+)
+
 func writeSembleDiagnostic(diagnostic semble.Diagnostic) {
 	message := strings.TrimSpace(diagnostic.Message)
 	if message == "" {
 		return
 	}
-	if !strings.HasPrefix(message, "semble:") {
-		message = "semble: " + message
+	if !strings.HasPrefix(message, sembleMessagePrefix) {
+		message = sembleMessageLead + message
 	}
 	fmt.Fprintln(os.Stderr, message)
 }

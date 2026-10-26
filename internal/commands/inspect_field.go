@@ -21,7 +21,7 @@ func getField(state *models.State, fieldPath string) (any, error) {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
 
-	parts := strings.Split(fieldPath, ".")
+	parts := strings.Split(fieldPath, queryPathSeparator)
 	if slices.Contains(parts, "") {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
@@ -44,7 +44,7 @@ func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath st
 	current = derefReflectValue(current)
 	if !current.IsValid() {
 		if entityPath == "" {
-			return nil, &errors.NotFoundError{Entity: "field", Field: strings.Join(parts, ".")}
+			return nil, &errors.NotFoundError{Entity: "field", Field: strings.Join(parts, queryPathSeparator)}
 		}
 		return nil, &errors.NotFoundError{Entity: entityPath, Field: ""}
 	}
@@ -70,7 +70,7 @@ func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath st
 
 	nextEntityPath := part
 	if entityPath != "" {
-		nextEntityPath = entityPath + "." + part
+		nextEntityPath = entityPath + queryPathSeparator + part
 	}
 
 	if len(parts) == 1 {
@@ -184,14 +184,14 @@ func handleTaskQuery(state *models.State, query string, opts InspectOptions) (st
 	var selected *models.Task
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if strings.HasPrefix(query, task.ID+".") && (selected == nil || len(task.ID) > len(selected.ID)) {
+		if strings.HasPrefix(query, task.ID+queryPathSeparator) && (selected == nil || len(task.ID) > len(selected.ID)) {
 			selected = task
 		}
 	}
 	if selected == nil {
 		return "", &errors.NotFoundError{Entity: string(inspectRootTask), ID: query}
 	}
-	return handleTaskFieldQuery(selected, strings.TrimPrefix(query, selected.ID+"."), opts)
+	return handleTaskFieldQuery(selected, strings.TrimPrefix(query, selected.ID+queryPathSeparator), opts)
 }
 
 func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) (string, error) {
@@ -208,7 +208,7 @@ func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) 
 // taskInspectionField is shared by dotted queries and projections. Sanitize
 // before traversal so intermediate lifecycle objects cannot bypass redaction.
 func taskInspectionField(projectRoot string, task *models.Task, field string) (any, error) {
-	parts := strings.Split(field, ".")
+	parts := strings.Split(field, queryPathSeparator)
 	if slices.Contains(parts, "") || slices.Contains(parts, taskFieldGenerationDigest) {
 		return nil, &errors.NotFoundError{Entity: string(inspectRootTask), ID: task.ID, Field: field}
 	}
@@ -241,7 +241,7 @@ func taskInspectionField(projectRoot string, task *models.Task, field string) (a
 // getComputedField calculates derived data from state
 // Supports computed fields like agents.active_count, sprint.elapsed, etc.
 func getComputedField(state *models.State, fieldPath string) (any, error) {
-	parts := strings.Split(fieldPath, ".")
+	parts := strings.Split(fieldPath, queryPathSeparator)
 	if len(parts) < 2 {
 		return nil, &errors.NotFoundError{Entity: "computed", Field: fieldPath}
 	}

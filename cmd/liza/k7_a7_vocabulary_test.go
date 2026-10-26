@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -121,5 +122,54 @@ func TestA7NamedMagicValuesKeepTheirValues(t *testing.T) {
 	}
 	if got, want := shortObjectID("short"), "short"; got != want {
 		t.Errorf("shortObjectID keeps %q, want %q", got, want)
+	}
+}
+
+func TestA7LaunchProbesKeepProviderScreenText(t *testing.T) {
+	for _, pair := range [][2]string{
+		{goosWindows, "windows"}, {posixShellPath, "/bin/sh"}, {codexExecutable, "codex"}, {cliFlag, "--cli"},
+		{cmuxPromptEchoPrefix, "› "}, {cmuxRefWorkspace, "workspace"}, {cmuxRefSurface, "surface"}, {cmuxKeyEnter, "enter"},
+		{toolSelectorAll, "all"}, {jsonFlagToken, "--json"}, {longFlagPrefix, "--"}, {shortFlagPrefix, "-"}, {flagValueDelimiter, "="},
+	} {
+		if pair[0] != pair[1] {
+			t.Errorf("constant spells %q, want %q", pair[0], pair[1])
+		}
+	}
+	if !cmuxScreenNeedsHostSelection("Pick host for agent\nenter submit") || cmuxScreenNeedsHostSelection("Pick host for agent") {
+		t.Error("host selection needs both the title and the submit hint")
+	}
+	if !cmuxPromptStillPending("› go", "go") || cmuxPromptStillPending("› go\nWorking", "go") || cmuxPromptStillPending("go", "go") {
+		t.Error("a prompt is pending only while echoed after the marker and no Working text shows")
+	}
+	if !cmuxScreenLooksInteractive("OpenAI Codex\n›") {
+		t.Error("the Codex banner and prompt marker mean interactive")
+	}
+	for _, busy := range []string{"Starting MCP servers", "esc to interrupt", "Working"} {
+		if cmuxScreenLooksInteractive("OpenAI Codex\n› " + busy) {
+			t.Errorf("%q must keep the pane not interactive", busy)
+		}
+	}
+	if cmuxScreenLooksInteractive("›") {
+		t.Error("a screen without the Codex banner is not interactive")
+	}
+	if !cmuxPaneUsesCodex(interactivePane{Command: []string{"codex"}}) || cmuxPaneUsesCodex(interactivePane{Command: []string{"claude"}}) {
+		t.Error("an unnamed pane is a Codex pane only when its command is codex")
+	}
+	if ref, err := parseCmuxRef([]byte("OK workspace:3 surface:7"), cmuxRefSurface); err != nil || ref != "surface:7" {
+		t.Errorf("parseCmuxRef surface = %q, %v", ref, err)
+	}
+	shell, err := launchShell()
+	if runtime.GOOS != "windows" && (err != nil || shell == "") {
+		t.Errorf("launchShell = %q, %v", shell, err)
+	}
+}
+
+func TestA7ToolCompletionOffersAll(t *testing.T) {
+	values, _ := completeToolIDsOrAll(nil, nil, "")
+	if !slices.Contains(values, "all") {
+		t.Errorf("tool completion = %v, want it to offer all", values)
+	}
+	if got := toolchainDoctorCmd.Flags().Lookup("tool").DefValue; got != "all" {
+		t.Errorf("toolchain doctor --tool defaults to %q, want all", got)
 	}
 }

@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// cliFlag is the agent command's flag that selects the coding CLI.
+const cliFlag = "--cli"
+
 var launchCmd = &cobra.Command{
 	Use:   "launch",
 	Short: fmt.Sprintf("Launch grouped %s workflows", brand.NameTitle),
@@ -67,7 +70,7 @@ Preset role sets:
 				if !containsString(availableCLIs, cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
 				}
-				agentCmd = append(agentCmd, "--cli", cliName)
+				agentCmd = append(agentCmd, cliFlag, cliName)
 			}
 			commands = append(commands, agentCmd)
 		}
@@ -174,7 +177,7 @@ Preset role sets:
 				if !containsString(availableCLIs, cliName) {
 					return cliValidationError(fmt.Sprintf("invalid --cli %q", cliName))
 				}
-				agentCmd = append(agentCmd, "--cli", cliName)
+				agentCmd = append(agentCmd, cliFlag, cliName)
 			}
 			commands = append(commands, agentCmd)
 		}
