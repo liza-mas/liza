@@ -10,19 +10,19 @@ import (
 // provenance, deferred-validation gate and the next global request.
 
 func (e *integrationProgressEvaluator) evaluateGlobal(
-	decision IntegrationProgressDecision,
+	decision models.IntegrationProgressDecision,
 	lifecycle *models.IntegrationLifecycle,
 	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
+) (models.IntegrationProgressDecision, error) {
 	if err := e.validateGlobalGenerations(lifecycle.GlobalGenerations, lifecycle.FirstGlobalGeneration()); err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	if len(lifecycle.GlobalGenerations) > 0 {
 		latest := lifecycle.GlobalGenerations[len(lifecycle.GlobalGenerations)-1]
 		if latest.Verdict == models.IntegrationAnalysisVerdictFindings {
 			resolution, err := e.resolveAnalysisRepairs(latest.AnalysisTaskID)
 			if err != nil {
-				return IntegrationProgressDecision{}, err
+				return models.IntegrationProgressDecision{}, err
 			}
 			if resolution.blocked {
 				decision.Blocked = progressReasonWithTasks(integrationProgressBlockedRepair, resolution.taskIDs...)
@@ -72,14 +72,14 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 	nextGeneration := len(lifecycle.GlobalGenerations) + lifecycle.FirstGlobalGeneration()
 	if len(lifecycle.GlobalGenerations)+1 > limit {
 		decision.Exhausted = true
-		decision.Blocked = &IntegrationProgressReason{
+		decision.Blocked = &models.IntegrationProgressReason{
 			Code:     string(integrationProgressBlockedExhausted),
 			Guidance: fmt.Sprintf("global integration generation limit %d reached", limit),
 		}
 		return decision, nil
 	}
 	if integrationHEAD == "" {
-		return IntegrationProgressDecision{}, fmt.Errorf("integration progress: live integration HEAD is empty for global generation %d", nextGeneration)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("integration progress: live integration HEAD is empty for global generation %d", nextGeneration)
 	}
 	key := globalAnalysisKey(nextGeneration)
 	if analysis := e.analysisKeys[key]; analysis != nil {
@@ -90,7 +90,7 @@ func (e *integrationProgressEvaluator) evaluateGlobal(
 		}
 		return decision, nil
 	}
-	decision.GlobalRequest = &IntegrationAnalysisRequest{
+	decision.GlobalRequest = &models.IntegrationAnalysisRequest{
 		Key: key, Phase: models.IntegrationAnalysisPhaseGlobal,
 		Generation: nextGeneration, SourceCommit: integrationHEAD,
 	}

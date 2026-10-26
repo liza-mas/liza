@@ -39,14 +39,6 @@ const (
 
 var errIntegrationReconcileChanged = errors.New("integration reconciliation input changed")
 
-// ReconcileIntegrationAnalysesResult reports the durable projection made by
-// ReconcileIntegrationAnalyses.
-type ReconcileIntegrationAnalysesResult struct {
-	Changed        bool                       `json:"changed"`
-	CreatedTaskIDs []string                   `json:"created_task_ids,omitempty"`
-	Reason         *IntegrationProgressReason `json:"reason,omitempty"`
-}
-
 type reconcileIntegrationAnalysesTestHooks struct {
 	capability        *pipeline.SlicedIntegrationCapability
 	beforeGitEvidence func()
@@ -58,7 +50,7 @@ var testReconcileIntegrationAnalysesHooks *reconcileIntegrationAnalysesTestHooks
 // ReconcileIntegrationAnalyses atomically projects the immutable cohort,
 // coverage, analysis work, and non-clean closure requested by the authoritative
 // integration progress decision.
-func ReconcileIntegrationAnalyses(projectRoot string) (*ReconcileIntegrationAnalysesResult, error) {
+func ReconcileIntegrationAnalyses(projectRoot string) (*models.ReconcileIntegrationAnalysesResult, error) {
 	result, err := reconcileIntegrationAnalyses(projectRoot, false)
 	if err == nil {
 		// Reconsider a due or gate-required deferred-validation batch. It runs
@@ -73,11 +65,11 @@ func ReconcileIntegrationAnalyses(projectRoot string) (*ReconcileIntegrationAnal
 
 // reconcileIntegrationAnalysesWithCompletionLockHeld is used by progression,
 // whose caller already holds the non-reentrant integration completion lock.
-func reconcileIntegrationAnalysesWithCompletionLockHeld(projectRoot string) (*ReconcileIntegrationAnalysesResult, error) {
+func reconcileIntegrationAnalysesWithCompletionLockHeld(projectRoot string) (*models.ReconcileIntegrationAnalysesResult, error) {
 	return reconcileIntegrationAnalyses(projectRoot, true)
 }
 
-func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (*ReconcileIntegrationAnalysesResult, error) {
+func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (*models.ReconcileIntegrationAnalysesResult, error) {
 	resolver, _, err := loadResolver(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("load integration reconciliation pipeline: %w", err)
@@ -117,7 +109,7 @@ func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (
 			return nil, prepareErr
 		}
 
-		result := &ReconcileIntegrationAnalysesResult{}
+		result := &models.ReconcileIntegrationAnalysesResult{}
 		apply := func() error {
 			currentHEAD, currentHeadErr := ResolveIntegrationHEAD(projectRoot, snapshot.Config.IntegrationBranch)
 			if currentHeadErr != nil {
@@ -187,10 +179,10 @@ func sameIntegrationReconciliationInput(snapshot, current *models.State) bool {
 
 func projectIntegrationProgressDecision(
 	state *models.State,
-	decision IntegrationProgressDecision,
+	decision models.IntegrationProgressDecision,
 	resolver *pipeline.Resolver,
 	prepared map[string]preparedIntegrationAnalysisProjection,
-	result *ReconcileIntegrationAnalysesResult,
+	result *models.ReconcileIntegrationAnalysesResult,
 ) (bool, error) {
 	changed := false
 	if decision.GlobalRequest != nil && state.Goal.BaseCommit == nil &&
@@ -249,7 +241,7 @@ func projectIntegrationProgressDecision(
 	return changed, nil
 }
 
-func requestedIntegrationAnalyses(decision IntegrationProgressDecision) []IntegrationAnalysisRequest {
+func requestedIntegrationAnalyses(decision models.IntegrationProgressDecision) []models.IntegrationAnalysisRequest {
 	if decision.Blocked != nil {
 		return nil
 	}
@@ -263,7 +255,7 @@ func requestedIntegrationAnalyses(decision IntegrationProgressDecision) []Integr
 
 func appendApprovalCoverage(
 	lifecycle *models.IntegrationLifecycle,
-	coverage []IntegrationScopeCoverage,
+	coverage []models.IntegrationScopeCoverage,
 ) (bool, error) {
 	existing := make(map[string]models.IntegrationCoverageRecord, len(lifecycle.Coverage))
 	for _, record := range lifecycle.Coverage {
@@ -297,7 +289,7 @@ func appendApprovalCoverage(
 
 func materializeIntegrationAnalysis(
 	state *models.State,
-	request IntegrationAnalysisRequest,
+	request models.IntegrationAnalysisRequest,
 	resolver *pipeline.Resolver,
 	prepared map[string]preparedIntegrationAnalysisProjection,
 	now time.Time,
@@ -368,7 +360,7 @@ type preparedIntegrationAnalysisProjection struct {
 
 func prepareIntegrationAnalysisProjections(
 	state *models.State,
-	decision IntegrationProgressDecision,
+	decision models.IntegrationProgressDecision,
 	integrationHEAD string,
 	projectRoot string,
 	gitWrapper *gitpkg.Git,
@@ -410,8 +402,8 @@ func prepareIntegrationAnalysisProjections(
 
 func buildIntegrationAnalysisProjection(
 	state *models.State,
-	decision IntegrationProgressDecision,
-	request IntegrationAnalysisRequest,
+	decision models.IntegrationProgressDecision,
+	request models.IntegrationAnalysisRequest,
 	integrationHEAD string,
 	projectRoot string,
 	gitWrapper *gitpkg.Git,
@@ -510,7 +502,7 @@ func sliceAnalysisSurface(
 
 func globalAnalysisParents(
 	state *models.State,
-	decision IntegrationProgressDecision,
+	decision models.IntegrationProgressDecision,
 	generation int,
 ) ([]string, error) {
 	cohort := decision.ContributingSet
@@ -523,7 +515,7 @@ func globalAnalysisParents(
 			parents = append(parents, scope.RootTaskIDs...)
 		}
 	} else {
-		coverageByPlan := make(map[string]IntegrationScopeCoverage, len(decision.Coverage))
+		coverageByPlan := make(map[string]models.IntegrationScopeCoverage, len(decision.Coverage))
 		for _, coverage := range decision.Coverage {
 			coverageByPlan[coverage.PlanTaskID] = coverage
 		}
@@ -577,8 +569,8 @@ func integrationCoverageByPlan(lifecycle *models.IntegrationLifecycle, planID st
 
 func projectNonCleanIntegrationClosure(
 	lifecycle *models.IntegrationLifecycle,
-	decision IntegrationProgressDecision,
-	result *ReconcileIntegrationAnalysesResult,
+	decision models.IntegrationProgressDecision,
+	result *models.ReconcileIntegrationAnalysesResult,
 ) bool {
 	if decision.Blocked == nil {
 		if lifecycle.Closure != nil && lifecycle.Closure.Status != models.IntegrationClosureStatusClean {
@@ -617,21 +609,21 @@ func analysisRolePair(phase models.IntegrationAnalysisPhase) (string, error) {
 	}
 }
 
-func analysisDescription(request IntegrationAnalysisRequest) string {
+func analysisDescription(request models.IntegrationAnalysisRequest) string {
 	if request.Phase == models.IntegrationAnalysisPhaseSlice {
 		return fmt.Sprintf("Analyze integration composition for plan %s.", request.OriginatingPlanTaskID)
 	}
 	return fmt.Sprintf("Analyze global integration generation %d.", request.Generation)
 }
 
-func analysisDoneWhen(request IntegrationAnalysisRequest) string {
+func analysisDoneWhen(request models.IntegrationAnalysisRequest) string {
 	if request.Phase == models.IntegrationAnalysisPhaseSlice {
 		return "The slice analysis is reviewed and its immutable verdict is recorded."
 	}
 	return "The global integration analysis is reviewed and its immutable verdict is recorded."
 }
 
-func analysisScope(request IntegrationAnalysisRequest) string {
+func analysisScope(request models.IntegrationAnalysisRequest) string {
 	if request.Phase == models.IntegrationAnalysisPhaseSlice {
 		return fmt.Sprintf("Frozen integration slice for plan %s.", request.OriginatingPlanTaskID)
 	}

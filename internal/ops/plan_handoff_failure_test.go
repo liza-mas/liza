@@ -608,7 +608,7 @@ func TestPlanCheckClearReleasesHoldOnPlanNoLongerAwaitingHandoff(t *testing.T) {
 				t.Fatal("fixture plan is not held")
 			}
 			result, err := RecordPlanCheck(root, PlanCheckInput{TaskID: original.ID, Action: PlanCheckActionClear, ChangedBy: "operator"})
-			if err != nil || !result.Changed || result.Verdict != "" || result.Class != PlanHandoffNotSource {
+			if err != nil || !result.Changed || result.Verdict != "" || result.Class != models.PlanHandoffNotSource {
 				t.Fatalf("clear = %+v, %v", result, err)
 			}
 			state, _ := db.For(stateFile).Read()

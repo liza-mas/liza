@@ -15,7 +15,7 @@ import (
 // cohort holds two or more scopes: an approval attestation for a single-root
 // scope, an analyst slice report for a multi-root one.
 func (e *integrationProgressEvaluator) evaluateCoverage(
-	decision *IntegrationProgressDecision,
+	decision *models.IntegrationProgressDecision,
 	lifecycle *models.IntegrationLifecycle,
 	capability pipeline.SlicedIntegrationCapability,
 ) (bool, error) {
@@ -30,7 +30,7 @@ func (e *integrationProgressEvaluator) evaluateCoverage(
 	allReady := true
 	for _, scope := range decision.ContributingSet.Scopes {
 		cohortPlans[scope.PlanTaskID] = true
-		coverage := IntegrationScopeCoverage{
+		coverage := models.IntegrationScopeCoverage{
 			PlanTaskID: scope.PlanTaskID, RootTaskIDs: append([]string(nil), scope.RootTaskIDs...),
 		}
 		record := records[scope.PlanTaskID]
@@ -69,7 +69,7 @@ func coverageRecordsByPlan(lifecycle *models.IntegrationLifecycle) (map[string]*
 // attestedScopeCoverage covers a single-root scope with the approval facts of
 // its merged lineage; it needs no analyst and is always ready.
 func (e *integrationProgressEvaluator) attestedScopeCoverage(
-	coverage *IntegrationScopeCoverage,
+	coverage *models.IntegrationScopeCoverage,
 	scope models.IntegrationScopeSnapshot,
 	record *models.IntegrationCoverageRecord,
 ) (bool, error) {
@@ -87,8 +87,8 @@ func (e *integrationProgressEvaluator) attestedScopeCoverage(
 // sliceScopeCoverage covers a multi-root scope with the slice analysis of its
 // plan: requested while absent, validated and judged by verdict once recorded.
 func (e *integrationProgressEvaluator) sliceScopeCoverage(
-	decision *IntegrationProgressDecision,
-	coverage *IntegrationScopeCoverage,
+	decision *models.IntegrationProgressDecision,
+	coverage *models.IntegrationScopeCoverage,
 	scope models.IntegrationScopeSnapshot,
 	record *models.IntegrationCoverageRecord,
 ) (bool, error) {
@@ -112,13 +112,13 @@ func (e *integrationProgressEvaluator) sliceScopeCoverage(
 // requestSliceAnalysis asks for the missing slice analysis, or blocks when the
 // existing one can no longer finish.
 func (e *integrationProgressEvaluator) requestSliceAnalysis(
-	decision *IntegrationProgressDecision,
+	decision *models.IntegrationProgressDecision,
 	scope models.IntegrationScopeSnapshot,
 	key string,
 ) {
 	analysis := e.analysisKeys[key]
 	if analysis == nil {
-		decision.SliceRequests = append(decision.SliceRequests, IntegrationAnalysisRequest{
+		decision.SliceRequests = append(decision.SliceRequests, models.IntegrationAnalysisRequest{
 			Key: key, Phase: models.IntegrationAnalysisPhaseSlice,
 			OriginatingPlanTaskID: scope.PlanTaskID,
 			RootTaskIDs:           append([]string(nil), scope.RootTaskIDs...),
@@ -133,8 +133,8 @@ func (e *integrationProgressEvaluator) requestSliceAnalysis(
 // sliceReportResolved judges a recorded slice report: a clean verdict
 // resolves the scope, findings resolve it once their repairs settle.
 func (e *integrationProgressEvaluator) sliceReportResolved(
-	decision *IntegrationProgressDecision,
-	coverage *IntegrationScopeCoverage,
+	decision *models.IntegrationProgressDecision,
+	coverage *models.IntegrationScopeCoverage,
 	report *models.IntegrationSliceReport,
 	key string,
 ) (bool, error) {
@@ -181,13 +181,13 @@ func rejectNonContributingCoverage(records map[string]*models.IntegrationCoverag
 // coverageVerdict decides whether coverage is complete: slice requests need a
 // pipeline that supports sliced integration, and an incomplete scope without a
 // more specific reason waits on slice coverage.
-func coverageVerdict(decision *IntegrationProgressDecision, capability pipeline.SlicedIntegrationCapability, allReady bool) bool {
+func coverageVerdict(decision *models.IntegrationProgressDecision, capability pipeline.SlicedIntegrationCapability, allReady bool) bool {
 	if len(decision.SliceRequests) > 0 && !capability.Available {
 		code := capability.Code
 		if code == "" {
 			code = string(integrationProgressBlockedCapability)
 		}
-		decision.Blocked = &IntegrationProgressReason{Code: code, Guidance: capability.Guidance}
+		decision.Blocked = &models.IntegrationProgressReason{Code: code, Guidance: capability.Guidance}
 		return false
 	}
 	if !allReady && decision.Blocked == nil && decision.Waiting == nil {

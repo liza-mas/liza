@@ -384,7 +384,7 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read reconciled state: %v", err)
 		}
-		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err != nil {
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &models.ReconcileIntegrationAnalysesResult{}); err != nil {
 			t.Fatalf("restart membership verification: %v", err)
 		}
 	})
@@ -401,12 +401,12 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 			WakeTrigger: "CODING_COMPLETE", Status: "reconciliation_needed", RequestKeys: []string{"global:2"},
 		}
 
-		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err != nil {
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &models.ReconcileIntegrationAnalysesResult{}); err != nil {
 			t.Fatalf("existing deterministic membership rejected after restart: %v", err)
 		}
 		state.Tasks = append(state.Tasks, analysis)
 		state.Sprint.Scope.Planned = append(state.Sprint.Scope.Planned, analysis.ID)
-		if err := verifyEffectiveIntegrationOutcome(state, projection, &ops.ReconcileIntegrationAnalysesResult{}); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		if err := verifyEffectiveIntegrationOutcome(state, projection, &models.ReconcileIntegrationAnalysesResult{}); err == nil || !strings.Contains(err.Error(), "duplicate") {
 			t.Fatalf("duplicate membership error = %v, want duplicate rejection", err)
 		}
 

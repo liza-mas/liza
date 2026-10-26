@@ -796,7 +796,7 @@ func verifyOrchestratorWakeChanges(bb *db.Blackboard, stateBefore *models.State,
 	return nil
 }
 
-type integrationReconcileFunc func(projectRoot string) (*ops.ReconcileIntegrationAnalysesResult, error)
+type integrationReconcileFunc func(projectRoot string) (*models.ReconcileIntegrationAnalysesResult, error)
 
 func reconcileEffectiveIntegrationOutcome(projectRoot string, bb *db.Blackboard, projection prompts.EffectiveIntegrationCompletion, reconcile integrationReconcileFunc) error {
 	reconciliation, err := reconcile(projectRoot)
@@ -810,7 +810,7 @@ func reconcileEffectiveIntegrationOutcome(projectRoot string, bb *db.Blackboard,
 	return verifyEffectiveIntegrationOutcome(state, projection, reconciliation)
 }
 
-func verifyEffectiveIntegrationOutcome(state *models.State, projection prompts.EffectiveIntegrationCompletion, reconciliation *ops.ReconcileIntegrationAnalysesResult) error {
+func verifyEffectiveIntegrationOutcome(state *models.State, projection prompts.EffectiveIntegrationCompletion, reconciliation *models.ReconcileIntegrationAnalysesResult) error {
 	switch projection.Status {
 	case "blocked", "exhausted":
 		return nil

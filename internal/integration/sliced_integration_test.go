@@ -839,7 +839,7 @@ func (fixture *slicedLifecycleFixture) integrationHead(t *testing.T) string {
 	return head
 }
 
-func reconcileSlicedLifecycle(t *testing.T, root string) *ops.ReconcileIntegrationAnalysesResult {
+func reconcileSlicedLifecycle(t *testing.T, root string) *models.ReconcileIntegrationAnalysesResult {
 	t.Helper()
 	result, err := ops.ReconcileIntegrationAnalyses(root)
 	if err != nil {
@@ -848,11 +848,11 @@ func reconcileSlicedLifecycle(t *testing.T, root string) *ops.ReconcileIntegrati
 	return result
 }
 
-func reconcileConcurrently(t *testing.T, root string, callers int) []*ops.ReconcileIntegrationAnalysesResult {
+func reconcileConcurrently(t *testing.T, root string, callers int) []*models.ReconcileIntegrationAnalysesResult {
 	t.Helper()
 	start := make(chan struct{})
 	type call struct {
-		result *ops.ReconcileIntegrationAnalysesResult
+		result *models.ReconcileIntegrationAnalysesResult
 		err    error
 	}
 	calls := make(chan call, callers)
@@ -868,7 +868,7 @@ func reconcileConcurrently(t *testing.T, root string, callers int) []*ops.Reconc
 	}
 	ready.Wait()
 	close(start)
-	results := make([]*ops.ReconcileIntegrationAnalysesResult, 0, callers)
+	results := make([]*models.ReconcileIntegrationAnalysesResult, 0, callers)
 	for range callers {
 		select {
 		case call := <-calls:
@@ -1106,7 +1106,7 @@ func assertGlobalIntegrationPrompt(t *testing.T, fixture *slicedLifecycleFixture
 	}
 }
 
-func assertExactlyOneCreatedTask(t *testing.T, results []*ops.ReconcileIntegrationAnalysesResult, taskID string) {
+func assertExactlyOneCreatedTask(t *testing.T, results []*models.ReconcileIntegrationAnalysesResult, taskID string) {
 	t.Helper()
 	created := 0
 	for _, result := range results {

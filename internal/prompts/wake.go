@@ -16,7 +16,7 @@ import (
 type planningTaskData struct {
 	TaskID           string
 	Output           []models.OutputEntry
-	Class            ops.PlanHandoffClass
+	Class            models.PlanHandoffClass
 	Blocker          string
 	PlanRefs         []string // distinct plan files named by output[].plan_ref
 	CorrectionID     string
@@ -82,8 +82,8 @@ type EffectiveIntegrationCompletion struct {
 // ProjectEffectiveIntegrationCompletion maps authoritative integration
 // progress and reconciliation outcomes into deterministic wake vocabulary.
 func ProjectEffectiveIntegrationCompletion(
-	decision ops.IntegrationProgressDecision,
-	reconciliation *ops.ReconcileIntegrationAnalysesResult,
+	decision models.IntegrationProgressDecision,
+	reconciliation *models.ReconcileIntegrationAnalysesResult,
 	evaluationErr error,
 ) EffectiveIntegrationCompletion {
 	if evaluationErr != nil {
@@ -152,7 +152,7 @@ func ProjectEffectiveIntegrationCompletion(
 	}
 }
 
-func integrationRequestKeys(decision ops.IntegrationProgressDecision) []string {
+func integrationRequestKeys(decision models.IntegrationProgressDecision) []string {
 	keys := make([]string, 0, len(decision.SliceRequests)+1)
 	for _, request := range decision.SliceRequests {
 		keys = append(keys, request.Key)
@@ -226,14 +226,14 @@ func buildWakePlanningCompleteData(agentID string, planningTasks []planningTaskD
 	data := wakePlanningCompleteData{AgentID: agentID}
 	for _, task := range planningTasks {
 		switch task.Class {
-		case ops.PlanHandoffAmendmentReady:
+		case models.PlanHandoffAmendmentReady:
 			data.Amendments = append(data.Amendments, task)
 			data.ToReview = append(data.ToReview, task)
-		case ops.PlanHandoffNeedsReview:
+		case models.PlanHandoffNeedsReview:
 			data.ToReview = append(data.ToReview, task)
-		case ops.PlanHandoffNeedsReconciliation:
+		case models.PlanHandoffNeedsReconciliation:
 			data.Reconcile = append(data.Reconcile, task)
-		case ops.PlanHandoffPassed, ops.PlanHandoffOutOfDomain:
+		case models.PlanHandoffPassed, models.PlanHandoffOutOfDomain:
 			data.Ready = append(data.Ready, task)
 		}
 	}

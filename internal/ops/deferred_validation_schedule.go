@@ -115,14 +115,14 @@ func latestDeferredBatchAt(ledger *models.DeferredValidationLedger, commit strin
 // not complete until a batch at HEAD passed, or carried forward, every
 // effective deferred command. It does not hold a generation request (D-230).
 // It reads no Git: the runner decided carry-forward when it ran the batch.
-func deferredValidationGate(state *models.State, integrationHEAD string) (waiting, blocked *IntegrationProgressReason) {
+func deferredValidationGate(state *models.State, integrationHEAD string) (waiting, blocked *models.IntegrationProgressReason) {
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
 	if len(commands) == 0 {
 		return nil, nil
 	}
 	if runner := ledger.Runner; runner != nil && runner.Unsettled != "" {
-		return nil, &IntegrationProgressReason{
+		return nil, &models.IntegrationProgressReason{
 			Code:     string(integrationProgressBlockedDeferredUnsettled),
 			Guidance: fmt.Sprintf("a deferred-validation runner ended with %s; confirm none of its processes still runs, then run %s", runner.Unsettled, brand.Command(deferredValidationOperation, string(rulingActionSettle))),
 		}
@@ -136,21 +136,21 @@ func deferredValidationGate(state *models.State, integrationHEAD string) (waitin
 			if owners := deferredKnownRedOwners(latest); len(owners) > 0 {
 				guidance += fmt.Sprintf("; known red, fix in flight: %s", strings.Join(owners, ", "))
 			}
-			return nil, &IntegrationProgressReason{
+			return nil, &models.IntegrationProgressReason{
 				Code:     string(integrationProgressBlockedDeferredFailed),
 				TaskIDs:  deferredCulpritTasks(latest),
 				Guidance: guidance,
 			}
 		}
 		if deferredAbortedByOperator(latest) {
-			return nil, &IntegrationProgressReason{
+			return nil, &models.IntegrationProgressReason{
 				Code:     string(integrationProgressBlockedDeferredAborted),
 				Guidance: fmt.Sprintf("deferred-validation batch %d was aborted by the operator at integration HEAD; merge, or run %s", latest.ID, brand.Command(deferredValidationOperation, deferredValidationSubcommandRun, deferredValidationFlagForce)),
 			}
 		}
 	}
 	if deferredValidationAttemptsAt(ledger, integrationHEAD) >= models.DeferredValidationMaxAttemptsPerCommit {
-		return nil, &IntegrationProgressReason{
+		return nil, &models.IntegrationProgressReason{
 			Code:     string(integrationProgressBlockedDeferredInfra),
 			Guidance: fmt.Sprintf("deferred-validation batches at integration HEAD ended %d times without a verdict; fix the environment, then run %s", models.DeferredValidationMaxAttemptsPerCommit, brand.Command(deferredValidationOperation, deferredValidationSubcommandRun, deferredValidationFlagForce)),
 		}

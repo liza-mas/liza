@@ -14,7 +14,7 @@ func TestGlobalAnalysisParentsAfterPrematureRecovery(t *testing.T) {
 	state.Goal.Integration = &models.IntegrationLifecycle{
 		PrematureRecovery: &models.IntegrationPrematureRecovery{AnalysisTaskID: "integration-global-1"},
 	}
-	decision := IntegrationProgressDecision{ContributingSet: &models.IntegrationContributingSet{}}
+	decision := models.IntegrationProgressDecision{ContributingSet: &models.IntegrationContributingSet{}}
 
 	parents, err := globalAnalysisParents(state, decision, 2)
 	if err != nil || len(parents) != 0 {

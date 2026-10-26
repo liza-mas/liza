@@ -112,7 +112,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 
 		concurrent := newReconcileFixture(t, false)
 		const callers = 8
-		results := make(chan *ReconcileIntegrationAnalysesResult, callers)
+		results := make(chan *models.ReconcileIntegrationAnalysesResult, callers)
 		errs := make(chan error, callers)
 		var wg sync.WaitGroup
 		for range callers {
@@ -162,7 +162,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		t.Cleanup(func() { testReconcileIntegrationAnalysesHooks = previousHooks })
 
 		type outcome struct {
-			result *ReconcileIntegrationAnalysesResult
+			result *models.ReconcileIntegrationAnalysesResult
 			err    error
 		}
 		done := make(chan outcome, 1)
@@ -230,7 +230,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		t.Cleanup(func() { testReconcileIntegrationAnalysesHooks = previousHooks })
 
 		type outcome struct {
-			result *ReconcileIntegrationAnalysesResult
+			result *models.ReconcileIntegrationAnalysesResult
 			err    error
 		}
 		done := make(chan outcome, 1)

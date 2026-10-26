@@ -373,8 +373,8 @@ func TestStaleDraftOutputAcrossIntegrationRecovery(t *testing.T) {
 	if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
 		t.Fatalf("reconciled stale output left the state invalid: %v", err)
 	}
-	if class, blocker := classifyForTest(t, root, statePath, "consumer"); class != PlanHandoffNeedsReview || !strings.Contains(blocker, staleProviderBlocker) {
-		t.Fatalf("Classify = (%q, %q), want (%q, containing %q)", class, blocker, PlanHandoffNeedsReview, staleProviderBlocker)
+	if class, blocker := classifyForTest(t, root, statePath, "consumer"); class != models.PlanHandoffNeedsReview || !strings.Contains(blocker, staleProviderBlocker) {
+		t.Fatalf("Classify = (%q, %q), want (%q, containing %q)", class, blocker, models.PlanHandoffNeedsReview, staleProviderBlocker)
 	}
 	if _, err := ExecuteTransitionsReportWith(root, "manual", AdmitOperator); err != nil {
 		t.Fatal(err)

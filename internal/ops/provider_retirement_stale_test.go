@@ -97,7 +97,7 @@ func staleRetirements() []staleRetirement {
 	}
 }
 
-func classifyForTest(t *testing.T, root, statePath, taskID string) (PlanHandoffClass, string) {
+func classifyForTest(t *testing.T, root, statePath, taskID string) (models.PlanHandoffClass, string) {
 	t.Helper()
 	domain, err := LoadPlanHandoffDomain(root)
 	if err != nil {
@@ -135,9 +135,9 @@ func TestStaleProviderDeclarationOnUnexpandedPlanDoesNotBlockRetirement(t *testi
 				}
 
 				// AND the consumer is a visible reconcile blocker
-				wantClass := PlanHandoffNeedsReview
+				wantClass := models.PlanHandoffNeedsReview
 				if passed {
-					wantClass = PlanHandoffNeedsReconciliation
+					wantClass = models.PlanHandoffNeedsReconciliation
 				}
 				class, blocker := classifyForTest(t, root, statePath, consumer.ID)
 				if class != wantClass || !strings.Contains(blocker, staleProviderBlocker) {
@@ -255,12 +255,12 @@ func TestStaleProviderConsumerBlocksDependentPlans(t *testing.T) {
 
 	// THEN every dependent reports the stale upstream through the chain
 	for id, want := range map[string]struct {
-		class   PlanHandoffClass
+		class   models.PlanHandoffClass
 		blocker string
 	}{
-		"downstream": {PlanHandoffNeedsReconciliation, "upstream consumer: " + staleProviderBlocker},
-		"further":    {PlanHandoffNeedsReconciliation, "upstream downstream: upstream consumer: " + staleProviderBlocker},
-		"sibling":    {PlanHandoffNeedsReview, "upstream consumer: " + staleProviderBlocker},
+		"downstream": {models.PlanHandoffNeedsReconciliation, "upstream consumer: " + staleProviderBlocker},
+		"further":    {models.PlanHandoffNeedsReconciliation, "upstream downstream: upstream consumer: " + staleProviderBlocker},
+		"sibling":    {models.PlanHandoffNeedsReview, "upstream consumer: " + staleProviderBlocker},
 	} {
 		if class, blocker := classifyForTest(t, root, statePath, id); class != want.class || blocker != want.blocker {
 			t.Errorf("Classify(%s) = (%q, %q), want (%q, %q)", id, class, blocker, want.class, want.blocker)
@@ -313,7 +313,7 @@ func TestHeldStaleConsumerKeepsItsHold(t *testing.T) {
 	}
 
 	// THEN the hold still wins and only an operator clear releases the consumer
-	if class, blocker := classifyForTest(t, root, statePath, consumer.ID); class != PlanHandoffHeld || blocker != "confirm contract" {
+	if class, blocker := classifyForTest(t, root, statePath, consumer.ID); class != models.PlanHandoffHeld || blocker != "confirm contract" {
 		t.Fatalf("Classify = (%q, %q), want held hold", class, blocker)
 	}
 	before := replacementBytes(t, statePath)
@@ -593,9 +593,9 @@ func TestStaleSelectedChildOnUnexpandedPlanDoesNotBlockPermanentRetirement(t *te
 
 				// AND the consumer is a visible reconcile blocker naming the child
 				wantBlocker := fmt.Sprintf("output[0] declares provider %s whose selected child %s was retired", scenario.provider, scenario.child)
-				wantClass := PlanHandoffNeedsReview
+				wantClass := models.PlanHandoffNeedsReview
 				if passed {
-					wantClass = PlanHandoffNeedsReconciliation
+					wantClass = models.PlanHandoffNeedsReconciliation
 				}
 				class, blocker := classifyForTest(t, root, statePath, "consumer")
 				if class != wantClass || !strings.Contains(blocker, wantBlocker) {
@@ -1015,9 +1015,9 @@ func transitionFailedEvents(task *models.Task) int {
 func TestStaleProviderRefusalStaysRoutedToOrchestrator(t *testing.T) {
 	for _, scenario := range staleRefusalScenarios() {
 		for _, passed := range []bool{false, true} {
-			name, wantClass := scenario.name+"/unreviewed consumer", PlanHandoffNeedsReview
+			name, wantClass := scenario.name+"/unreviewed consumer", models.PlanHandoffNeedsReview
 			if passed {
-				name, wantClass = scenario.name+"/passed consumer", PlanHandoffNeedsReconciliation
+				name, wantClass = scenario.name+"/passed consumer", models.PlanHandoffNeedsReconciliation
 			}
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()

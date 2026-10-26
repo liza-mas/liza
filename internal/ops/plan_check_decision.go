@@ -24,7 +24,7 @@ type planCheckChange struct {
 // domain classification of the admitted task and returns the change to
 // persist. Only retirement routes stale provider consumers, so it is the one
 // branch that writes state; every other branch leaves state untouched.
-func decidePlanCheck(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
+func decidePlanCheck(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, task *models.Task, class models.PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
 	retiring := input.Action == PlanCheckActionReplace || input.Action == PlanCheckActionRetire
 	switch {
 	case input.Action == PlanCheckActionRetire && task.PlanCheckVerdictOf() == models.PlanCheckRetired &&
@@ -33,7 +33,7 @@ func decidePlanCheck(state *models.State, resolver *pipeline.Resolver, domain Pl
 	case retiring:
 		return decideRetirement(state, resolver, domain, task, input, actor)
 	case input.Action == PlanCheckActionClear && task.PlanCheckVerdictOf() == models.PlanCheckHeld &&
-		(class == PlanHandoffNotSource || class == PlanHandoffOutOfDomain):
+		(class == models.PlanHandoffNotSource || class == models.PlanHandoffOutOfDomain):
 		// A hold placed while the plan still awaited hand-off outlives it
 		// once the plan expands or its fence lifts. Clearing only drops the
 		// disposition: a plan that awaits no hand-off generates nothing.
@@ -70,12 +70,12 @@ func decideRetirement(state *models.State, resolver *pipeline.Resolver, domain P
 // a plan outside the reviewed hand-off carries no disposition, otherwise the
 // transition of the current verdict decides, and a pass additionally meets
 // the replacement barrier.
-func decideDisposition(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
+func decideDisposition(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, task *models.Task, class models.PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
 	switch class {
-	case PlanHandoffNotSource:
+	case models.PlanHandoffNotSource:
 		return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s has no plan awaiting hand-off: it must be a MERGED planning task with output whose children do not exist yet and that was not replanned", task.ID)}
-	case PlanHandoffOutOfDomain:
+	case models.PlanHandoffOutOfDomain:
 		return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
 			"task %s has no reviewed hand-off (its transitions are automatic, many-to-one, or it has no output); it transitions without a plan-check", task.ID)}
 	}
@@ -219,7 +219,7 @@ func hasUnexecutedManyToOne(resolver *pipeline.Resolver, task *models.Task) bool
 	return false
 }
 
-func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
+func planCheckTransition(task *models.Task, class models.PlanHandoffClass, blocker string, input PlanCheckInput, actor string) (planCheckChange, error) {
 	current := task.PlanCheckVerdictOf()
 	now := time.Now().UTC()
 	switch input.Action {
@@ -233,7 +233,7 @@ func planCheckTransition(task *models.Task, class PlanHandoffClass, blocker stri
 				return planCheckChange{}, &PreconditionError{Reason: "passed plan has different validation notes; an operator must clear and recheck it before generation"}
 			}
 			return planCheckChange{}, nil
-		case class == PlanHandoffNeedsReview && blocker != "":
+		case class == models.PlanHandoffNeedsReview && blocker != "":
 			return planCheckChange{}, &PreconditionError{Reason: fmt.Sprintf(
 				"task %s cannot pass while %s; replan or hold it instead", task.ID, blocker)}
 		}

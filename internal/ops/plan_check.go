@@ -48,7 +48,7 @@ type PlanCheckResult struct {
 	Verdict    models.PlanCheckVerdict `json:"verdict,omitempty"`
 	ReplacedBy string                  `json:"replaced_by,omitempty"`
 	Ruling     string                  `json:"ruling,omitempty"`
-	Class      PlanHandoffClass        `json:"class"`
+	Class      models.PlanHandoffClass `json:"class"`
 	Blocker    string                  `json:"blocker,omitempty"`
 	Changed    bool                    `json:"changed"`
 	Warnings   []string                `json:"warnings,omitempty"`
@@ -111,7 +111,7 @@ func RecordPlanCheck(projectRoot string, input PlanCheckInput) (*PlanCheckResult
 // the provider graph a pass relies on, the task, the amendment fence, the note
 // selection and a retired hand-off, which only a retiring action may revisit.
 // It returns the task with its domain classification for the decision step.
-func admitPlanCheck(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, input PlanCheckInput) (*models.Task, PlanHandoffClass, string, error) {
+func admitPlanCheck(state *models.State, resolver *pipeline.Resolver, domain PlanHandoffDomain, input PlanCheckInput) (*models.Task, models.PlanHandoffClass, string, error) {
 	if input.Action == PlanCheckActionPass {
 		if err := statevalidate.ValidateProviderDependencies(state, resolver); err != nil {
 			return nil, "", "", &PreconditionError{Reason: fmt.Sprintf("plan-check provider dependencies: %v", err)}

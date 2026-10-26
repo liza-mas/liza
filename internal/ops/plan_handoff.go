@@ -7,35 +7,6 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
-// PlanHandoffClass classifies a merged planning task for the orchestrator's
-// plan-to-children hand-off. One classification feeds wake rendering, the
-// PLANNING_COMPLETE verifier, plan-check admission, and transition admission,
-// so none of them can disagree about what a plan still needs.
-type PlanHandoffClass string
-
-const (
-	// PlanHandoffNotSource: no hand-off left to run (see Pending).
-	PlanHandoffNotSource PlanHandoffClass = ""
-	// PlanHandoffOutOfDomain: a source with no reviewed hand-off (auto-only,
-	// many-to-one or empty output). Behaves as before D73.
-	PlanHandoffOutOfDomain PlanHandoffClass = "out_of_domain"
-	// PlanHandoffNeedsReview: in domain, no disposition yet.
-	PlanHandoffNeedsReview PlanHandoffClass = "needs_review"
-	// PlanHandoffPassed: passed and every in-domain upstream is admissible.
-	PlanHandoffPassed PlanHandoffClass = "passed"
-	// PlanHandoffWaitingUpstream: passed, but an in-domain upstream still
-	// awaits its own review.
-	PlanHandoffWaitingUpstream PlanHandoffClass = "waiting_upstream"
-	// PlanHandoffNeedsReconciliation: passed, but an in-domain upstream was
-	// replanned or held afterwards; the plan must be replanned or held.
-	PlanHandoffNeedsReconciliation PlanHandoffClass = "needs_reconciliation"
-	// PlanHandoffHeld: held for a human action.
-	PlanHandoffHeld PlanHandoffClass = "held"
-	// A terminal pending correction needs adoption or replacement, while the
-	// original remains fenced against generation.
-	PlanHandoffAmendmentReady PlanHandoffClass = "amendment_ready"
-)
-
 // PlanHandoffDomain identifies the reviewed hand-off: manual per-subtask or
 // one-to-one transitions out of a planning pair whose task has output[]. Only
 // these transitions need an orchestrator disposition before they run
@@ -197,25 +168,25 @@ func (d PlanHandoffDomain) GatesTransition(task *models.Task, transitionName str
 // blocker (the hold's ask, or the upstream chain that prevents admission).
 // A needs_review task also reports the upstream blocker that would refuse a
 // pass.
-func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (PlanHandoffClass, string) {
+func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (models.PlanHandoffClass, string) {
 	if task != nil && task.AmendsPlan == "" && task.PlanAmendment != nil && task.PlanAmendment.Pending != "" {
 		if correction := d.ReadyPlanCorrection(state, task); correction != nil {
-			return PlanHandoffAmendmentReady, "pending correction ready for adoption/replacement: " + correction.ID
+			return models.PlanHandoffAmendmentReady, "pending correction ready for adoption/replacement: " + correction.ID
 		}
 		if task.PlanCheckVerdictOf() == models.PlanCheckHeld {
-			return PlanHandoffHeld, task.PlanCheck.Ask
+			return models.PlanHandoffHeld, task.PlanCheck.Ask
 		}
-		return PlanHandoffWaitingUpstream, "reviewed correction pending: " + task.PlanAmendment.Pending
+		return models.PlanHandoffWaitingUpstream, "reviewed correction pending: " + task.PlanAmendment.Pending
 	}
 	if !d.Pending(task) {
-		return PlanHandoffNotSource, ""
+		return models.PlanHandoffNotSource, ""
 	}
 	if !d.InDomain(task) {
-		return PlanHandoffOutOfDomain, ""
+		return models.PlanHandoffOutOfDomain, ""
 	}
 	switch task.PlanCheckVerdictOf() {
 	case models.PlanCheckHeld:
-		return PlanHandoffHeld, task.PlanCheck.Ask
+		return models.PlanHandoffHeld, task.PlanCheck.Ask
 	case models.PlanCheckPassed:
 		kind, blocker := d.upstreamBlocker(state, task, map[string]bool{task.ID: true})
 		if replaced, replacedBlocker := d.replacementBlocker(state, task); replaced > kind {
@@ -226,11 +197,11 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		}
 		switch kind {
 		case upstreamReconcile:
-			return PlanHandoffNeedsReconciliation, blocker
+			return models.PlanHandoffNeedsReconciliation, blocker
 		case upstreamWaiting:
-			return PlanHandoffWaitingUpstream, blocker
+			return models.PlanHandoffWaitingUpstream, blocker
 		default:
-			return PlanHandoffPassed, ""
+			return models.PlanHandoffPassed, ""
 		}
 	default:
 		_, blocker := d.upstreamBlocker(state, task, map[string]bool{task.ID: true})
@@ -242,7 +213,7 @@ func (d PlanHandoffDomain) Classify(state *models.State, task *models.Task) (Pla
 		if blocker == "" {
 			_, blocker = d.providerBlocker(state, task)
 		}
-		return PlanHandoffNeedsReview, blocker
+		return models.PlanHandoffNeedsReview, blocker
 	}
 }
 

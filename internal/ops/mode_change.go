@@ -148,7 +148,7 @@ func StopForGoalCompletion(projectRoot, reason string) (*ModeChangeResult, error
 	if verificationErr != nil {
 		return nil, errors.Join(fmt.Errorf("verify goal-complete stop: %w", verificationErr), restoreErr)
 	}
-	return nil, errors.Join(integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode}), restoreErr)
+	return nil, errors.Join(integrationCompletionPreconditionError(&models.IntegrationProgressReason{Code: integrationStateChangedCode}), restoreErr)
 }
 
 func goalCompleteStopAuthorizationMatches(
@@ -588,7 +588,7 @@ func (d *resumeDecision) apply(s *models.State, projectRoot, changedBy string, o
 		}
 		if currentRequiresCompletion {
 			if completionAuthorization == nil {
-				return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
+				return integrationCompletionPreconditionError(&models.IntegrationProgressReason{Code: integrationStateChangedCode})
 			}
 			if err := completionAuthorization.validateState(s, false); err != nil {
 				return err

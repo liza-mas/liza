@@ -436,9 +436,9 @@ type TransitionReport struct {
 func admitsHandoff(domain PlanHandoffDomain, s *models.State, task *models.Task, admission TransitionAdmission) bool {
 	class, _ := domain.Classify(s, task)
 	if admission == AdmitReviewed {
-		return class == PlanHandoffPassed
+		return class == models.PlanHandoffPassed
 	}
-	return class != PlanHandoffHeld
+	return class != models.PlanHandoffHeld
 }
 
 // TransitionAdmission selects who authorizes the reviewed plan hand-off

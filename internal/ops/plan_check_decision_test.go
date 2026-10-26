@@ -97,8 +97,8 @@ func TestDecidePlanCheck_ClearOfHoldOnExpandedPlanDropsOnlyTheDisposition(t *tes
 	state, resolver, domain := planCheckStepFixture(t, plan)
 	task := state.FindTask("p")
 	class, blocker := domain.Classify(state, task)
-	if class != PlanHandoffNotSource {
-		t.Fatalf("class = %q, want %q", class, PlanHandoffNotSource)
+	if class != models.PlanHandoffNotSource {
+		t.Fatalf("class = %q, want %q", class, models.PlanHandoffNotSource)
 	}
 
 	next, err := decidePlanCheck(state, resolver, domain, task, class, blocker, PlanCheckInput{TaskID: "p", Action: PlanCheckActionClear}, "operator")

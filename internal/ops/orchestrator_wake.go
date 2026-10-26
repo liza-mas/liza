@@ -217,7 +217,7 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 func PassedPlansAwaitingCheckpoint(state *models.State, handoff PlanHandoffDomain) []string {
 	var ids []string
 	for _, id := range state.Sprint.Scope.Planned {
-		if class, _ := handoff.Classify(state, state.FindTask(id)); class == PlanHandoffPassed && awaitsPlanningTransition(state, id, handoff) {
+		if class, _ := handoff.Classify(state, state.FindTask(id)); class == models.PlanHandoffPassed && awaitsPlanningTransition(state, id, handoff) {
 			ids = append(ids, id)
 		}
 	}

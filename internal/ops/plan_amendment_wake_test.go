@@ -38,7 +38,7 @@ func TestPlanAmendmentTerminalReviewWakesWithoutReleasingFence(t *testing.T) {
 			if !domain.PlanningCompleteEligible(state, originalTask) {
 				t.Fatal("hold incorrectly hides independent correction disposition")
 			}
-			if class, _ := domain.Classify(state, originalTask); class != PlanHandoffAmendmentReady {
+			if class, _ := domain.Classify(state, originalTask); class != models.PlanHandoffAmendmentReady {
 				t.Fatal(class)
 			}
 			if observed := domain.RecordUndecided(state, state, original.ID, time.Now().UTC()); observed == nil {

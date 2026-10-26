@@ -246,7 +246,7 @@ func projectIntegrationWakeResult(projection prompts.EffectiveIntegrationComplet
 		WakeTriggerIntegrationUnavailable:
 	default:
 		projection = prompts.ProjectEffectiveIntegrationCompletion(
-			ops.IntegrationProgressDecision{},
+			models.IntegrationProgressDecision{},
 			nil,
 			fmt.Errorf("unknown integration wake projection %q", projection.WakeTrigger),
 		)

@@ -277,7 +277,7 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 		if got := scopePlanIDs(decision.ContributingSet); !reflect.DeepEqual(got, []string{"plan-a", "plan-b"}) {
 			t.Fatalf("contributing plans = %v, want escalation excluded", got)
 		}
-		if slices.ContainsFunc(decision.SliceRequests, func(request IntegrationAnalysisRequest) bool {
+		if slices.ContainsFunc(decision.SliceRequests, func(request models.IntegrationAnalysisRequest) bool {
 			return request.OriginatingPlanTaskID == "escalated-plan"
 		}) {
 			t.Fatalf("escalation created a slice request: %#v", decision.SliceRequests)
@@ -688,7 +688,7 @@ func addGlobalClean(state *models.State, generation int, source string) {
 	})
 }
 
-func evaluateProgress(t *testing.T, state *models.State, capability pipeline.SlicedIntegrationCapability, head string) IntegrationProgressDecision {
+func evaluateProgress(t *testing.T, state *models.State, capability pipeline.SlicedIntegrationCapability, head string) models.IntegrationProgressDecision {
 	t.Helper()
 	decision, err := EvaluateIntegrationProgress(state, capability, head)
 	if err != nil {
@@ -757,7 +757,7 @@ func cloneProgressBoolMap(values map[string]bool) map[string]bool {
 	return clone
 }
 
-func progressCoverageByPlan(t *testing.T, coverage []IntegrationScopeCoverage, planID string) IntegrationScopeCoverage {
+func progressCoverageByPlan(t *testing.T, coverage []models.IntegrationScopeCoverage, planID string) models.IntegrationScopeCoverage {
 	t.Helper()
 	for _, record := range coverage {
 		if record.PlanTaskID == planID {
@@ -765,7 +765,7 @@ func progressCoverageByPlan(t *testing.T, coverage []IntegrationScopeCoverage, p
 		}
 	}
 	t.Fatalf("coverage for plan %q not found in %#v", planID, coverage)
-	return IntegrationScopeCoverage{}
+	return models.IntegrationScopeCoverage{}
 }
 
 func progressReviewedTaskIDs(attestations []models.IntegrationApprovalAttestation) []string {

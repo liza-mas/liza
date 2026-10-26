@@ -35,20 +35,20 @@ func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State)
 		class, _ := domain.Classify(before, task)
 		current := after.FindTask(id)
 		if current != nil && current.PlanAmendment != nil && current.PlanAmendment.Pending != "" {
-			if class == ops.PlanHandoffAmendmentReady && current.PlanAmendment.Pending == task.PlanAmendment.Pending {
+			if class == models.PlanHandoffAmendmentReady && current.PlanAmendment.Pending == task.PlanAmendment.Pending {
 				undecided = append(undecided, id+" (terminal reviewed amendment needs apply or pending replacement)")
 				undecidedIDs = append(undecidedIDs, id)
 			}
 			continue
 		}
-		if class == ops.PlanHandoffAmendmentReady {
-			class = ops.PlanHandoffNeedsReview
+		if class == models.PlanHandoffAmendmentReady {
+			class = models.PlanHandoffNeedsReview
 		}
 		replanned := current != nil && current.TransitionsExecuted["replanned"]
 		transitioned := current != nil && !replanned && !domain.Pending(current)
 		verdict := current.PlanCheckVerdictOf()
 		switch class {
-		case ops.PlanHandoffNeedsReview:
+		case models.PlanHandoffNeedsReview:
 			switch {
 			case replanned || transitioned || verdict == models.PlanCheckHeld:
 			case verdict == models.PlanCheckPassed:
@@ -57,12 +57,12 @@ func verifyPlanningCompleteTurn(projectRoot string, before, after *models.State)
 				undecided = append(undecided, id+" (no disposition)")
 				undecidedIDs = append(undecidedIDs, id)
 			}
-		case ops.PlanHandoffNeedsReconciliation:
+		case models.PlanHandoffNeedsReconciliation:
 			if !replanned && verdict != models.PlanCheckHeld {
 				undecided = append(undecided, id+" (upstream changed; replan or hold it)")
 				undecidedIDs = append(undecidedIDs, id)
 			}
-		case ops.PlanHandoffPassed, ops.PlanHandoffOutOfDomain:
+		case models.PlanHandoffPassed, models.PlanHandoffOutOfDomain:
 			if !replanned && !transitioned {
 				needsCheckpoint = true
 			}

@@ -12,8 +12,8 @@ import (
 )
 
 // integrationProgressCode is the finite set of wait and block reasons the
-// evaluator emits. IntegrationProgressReason.Code stays a string, which
-// prompts reads until Scope 19; constants convert where assigned.
+// evaluator emits. models.IntegrationProgressReason.Code stays a string;
+// constants convert where assigned.
 type integrationProgressCode string
 
 const (
@@ -35,64 +35,16 @@ const (
 // its global analysis takes the scopes' root tasks as parents.
 const slicedCohortMinScopes = 2
 
-// IntegrationProgressDecision is the pure projection consumed by integration
-// reconciliation and completion gates.
-type IntegrationProgressDecision struct {
-	PlanningSettled       bool
-	FreezeContributingSet bool
-	ContributingSet       *models.IntegrationContributingSet
-	Coverage              []IntegrationScopeCoverage
-	SliceRequests         []IntegrationAnalysisRequest
-	GlobalReady           bool
-	GlobalRequest         *IntegrationAnalysisRequest
-	IntegrationComplete   bool
-	Exhausted             bool
-	Waiting               *IntegrationProgressReason
-	Blocked               *IntegrationProgressReason
-	// DeferredValidationRequest is the integration HEAD at which integration
-	// needs a deferred-validation batch verdict (ADR-0204); empty otherwise.
-	DeferredValidationRequest string
-}
-
-// IntegrationScopeCoverage projects the bounded evidence required for one
-// frozen contributing scope.
-type IntegrationScopeCoverage struct {
-	PlanTaskID           string
-	RootTaskIDs          []string
-	Kind                 models.IntegrationCoverageKind
-	AnalysisKey          string
-	ApprovalAttestations []models.IntegrationApprovalAttestation
-	Effective            bool
-	Resolved             bool
-}
-
-// IntegrationAnalysisRequest identifies one missing immutable analysis.
-type IntegrationAnalysisRequest struct {
-	Key                   string
-	Phase                 models.IntegrationAnalysisPhase
-	Generation            int
-	OriginatingPlanTaskID string
-	RootTaskIDs           []string
-	SourceCommit          string
-}
-
-// IntegrationProgressReason is a stable machine-readable wait or stop reason.
-type IntegrationProgressReason struct {
-	Code     string
-	TaskIDs  []string
-	Guidance string
-}
-
 // EvaluateIntegrationProgress derives integration lifecycle progress without
 // mutating state, creating tasks, reading prompts, or inspecting Git.
 func EvaluateIntegrationProgress(
 	state *models.State,
 	capability pipeline.SlicedIntegrationCapability,
 	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
+) (models.IntegrationProgressDecision, error) {
 	evaluator, err := newIntegrationProgressEvaluator(state)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	return evaluator.evaluate(capability, integrationHEAD)
 }
@@ -111,18 +63,18 @@ func UnsettledPreIntegrationPlanningTasks(state *models.State, capability pipeli
 
 // EvaluateLiveIntegrationProgress loads the frozen pipeline capability and
 // current integration branch HEAD before evaluating integration progress.
-func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (IntegrationProgressDecision, error) {
+func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (models.IntegrationProgressDecision, error) {
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("load frozen pipeline: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("load frozen pipeline: %w", err)
 	}
 	capability, err := pipeline.NewResolver(cfg).SlicedIntegrationCapability()
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("resolve sliced integration capability: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("resolve sliced integration capability: %w", err)
 	}
 	integrationHEAD, err := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("read integration HEAD: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("read integration HEAD: %w", err)
 	}
 	return EvaluateIntegrationProgress(state, capability, integrationHEAD)
 }
@@ -246,8 +198,8 @@ func (e *integrationProgressEvaluator) sortedTaskIDs() []string {
 func (e *integrationProgressEvaluator) evaluate(
 	capability pipeline.SlicedIntegrationCapability,
 	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
-	decision := IntegrationProgressDecision{}
+) (models.IntegrationProgressDecision, error) {
+	decision := models.IntegrationProgressDecision{}
 	lifecycle := e.state.Goal.Integration
 	if lifecycle == nil {
 		lifecycle = &models.IntegrationLifecycle{}
@@ -271,7 +223,7 @@ func (e *integrationProgressEvaluator) evaluate(
 
 	coverageReady, err := e.evaluateCoverage(&decision, lifecycle, capability)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	if decision.Blocked != nil || !coverageReady {
 		return decision, nil
@@ -279,7 +231,7 @@ func (e *integrationProgressEvaluator) evaluate(
 
 	codingReady, err := e.evaluateCodingBarrier(&decision)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	if decision.Blocked != nil || !codingReady {
 		return decision, nil
@@ -525,7 +477,7 @@ func (e *integrationProgressEvaluator) validateCohort(cohort *models.Integration
 	return nil
 }
 
-func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *IntegrationProgressDecision) (bool, error) {
+func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *models.IntegrationProgressDecision) (bool, error) {
 	pending := make([]string, 0)
 	repairPending := make([]string, 0)
 	blocked := make([]string, 0)
@@ -594,12 +546,12 @@ func globalAnalysisKey(generation int) string {
 	return globalAnalysisKeyPrefix + strconv.Itoa(generation)
 }
 
-func progressReason(code integrationProgressCode) *IntegrationProgressReason {
-	return &IntegrationProgressReason{Code: string(code)}
+func progressReason(code integrationProgressCode) *models.IntegrationProgressReason {
+	return &models.IntegrationProgressReason{Code: string(code)}
 }
 
-func progressReasonWithTasks(code integrationProgressCode, taskIDs ...string) *IntegrationProgressReason {
-	return &IntegrationProgressReason{Code: string(code), TaskIDs: uniqueSortedStrings(taskIDs)}
+func progressReasonWithTasks(code integrationProgressCode, taskIDs ...string) *models.IntegrationProgressReason {
+	return &models.IntegrationProgressReason{Code: string(code), TaskIDs: uniqueSortedStrings(taskIDs)}
 }
 
 func uniqueSortedStrings(values []string) []string {

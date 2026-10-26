@@ -39,7 +39,7 @@ type effectiveIntegrationCompletionAuthorization struct {
 }
 
 type effectiveIntegrationCompletionSnapshot struct {
-	decision             IntegrationProgressDecision
+	decision             models.IntegrationProgressDecision
 	cohortFrozen         bool
 	closure              *models.IntegrationClosure
 	mutationReceiptCount int
@@ -129,7 +129,7 @@ func authorizeEffectiveIntegrationCompletion(projectRoot string, requireSettled 
 			reason = progressReason(integrationProgressWaitingGlobalAnalysis)
 		}
 		if reason == nil {
-			reason = &IntegrationProgressReason{Code: integrationIncompleteCode}
+			reason = &models.IntegrationProgressReason{Code: integrationIncompleteCode}
 		}
 		return nil, integrationCompletionPreconditionError(reason)
 	}
@@ -184,7 +184,7 @@ func readEffectiveIntegrationCompletionSnapshot(projectRoot string) (effectiveIn
 	return snapshot, err
 }
 
-func integrationCompletionPreconditionError(reason *IntegrationProgressReason) error {
+func integrationCompletionPreconditionError(reason *models.IntegrationProgressReason) error {
 	details := map[string]any{"code": reason.Code}
 	if len(reason.TaskIDs) > 0 {
 		details["task_ids"] = append([]string(nil), reason.TaskIDs...)
@@ -207,7 +207,7 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		return nil
 	}
 	if !authorization.cohortFrozen || !authorization.integrationComplete {
-		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
+		return integrationCompletionPreconditionError(&models.IntegrationProgressReason{Code: integrationStateChangedCode})
 	}
 	closure := state.Goal.Integration.Closure
 	// The outer completion lock excludes cooperating ref mutations here. Recheck
@@ -217,7 +217,7 @@ func (authorization *effectiveIntegrationCompletionAuthorization) validateState(
 		closure.Generation != authorization.generation || closure.AnalysisKey != authorization.analysisKey ||
 		closure.SourceCommit != authorization.sourceCommit ||
 		len(state.Goal.Integration.MutationReceipts) != authorization.mutationReceiptCount {
-		return integrationCompletionPreconditionError(&IntegrationProgressReason{Code: integrationStateChangedCode})
+		return integrationCompletionPreconditionError(&models.IntegrationProgressReason{Code: integrationStateChangedCode})
 	}
 	return nil
 }

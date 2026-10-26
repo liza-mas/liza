@@ -4433,20 +4433,20 @@ func TestWakeTemplate_CodingComplete(t *testing.T) {
 
 func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 	t.Run("requested work renders deterministic reconciliation context without mutation", func(t *testing.T) {
-		decision := ops.IntegrationProgressDecision{
+		decision := models.IntegrationProgressDecision{
 			FreezeContributingSet: true,
-			SliceRequests: []ops.IntegrationAnalysisRequest{
+			SliceRequests: []models.IntegrationAnalysisRequest{
 				{Key: "slice:plan-z"},
 				{Key: "slice:plan-a"},
 			},
-			GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"},
+			GlobalRequest: &models.IntegrationAnalysisRequest{Key: "global:2"},
 		}
-		before := ops.IntegrationProgressDecision{
+		before := models.IntegrationProgressDecision{
 			FreezeContributingSet: decision.FreezeContributingSet,
-			SliceRequests:         append([]ops.IntegrationAnalysisRequest(nil), decision.SliceRequests...),
-			GlobalRequest:         &ops.IntegrationAnalysisRequest{Key: decision.GlobalRequest.Key},
+			SliceRequests:         append([]models.IntegrationAnalysisRequest(nil), decision.SliceRequests...),
+			GlobalRequest:         &models.IntegrationAnalysisRequest{Key: decision.GlobalRequest.Key},
 		}
-		reconciliation := &ops.ReconcileIntegrationAnalysesResult{
+		reconciliation := &models.ReconcileIntegrationAnalysesResult{
 			CreatedTaskIDs: []string{"integration-slice-plan-z", "integration-slice-plan-a"},
 		}
 		beforeReconciliation := append([]string(nil), reconciliation.CreatedTaskIDs...)
@@ -4489,29 +4489,29 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 	t.Run("waiting blocked exhausted and unavailable outcomes fail closed", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			decision ops.IntegrationProgressDecision
+			decision models.IntegrationProgressDecision
 			err      error
 			trigger  string
 			code     string
 		}{
 			{
 				name: "waiting",
-				decision: ops.IntegrationProgressDecision{
-					Coverage: []ops.IntegrationScopeCoverage{{PlanTaskID: "plan-a"}},
-					Waiting:  &ops.IntegrationProgressReason{Code: "integration_repairs_pending", TaskIDs: []string{"repair-z", "repair-a"}},
+				decision: models.IntegrationProgressDecision{
+					Coverage: []models.IntegrationScopeCoverage{{PlanTaskID: "plan-a"}},
+					Waiting:  &models.IntegrationProgressReason{Code: "integration_repairs_pending", TaskIDs: []string{"repair-z", "repair-a"}},
 				},
 				trigger: "INTEGRATION_WAITING",
 				code:    "integration_repairs_pending",
 			},
 			{
 				name:     "blocked",
-				decision: ops.IntegrationProgressDecision{Blocked: &ops.IntegrationProgressReason{Code: "integration_analysis_blocked", TaskIDs: []string{"analysis-1"}}},
+				decision: models.IntegrationProgressDecision{Blocked: &models.IntegrationProgressReason{Code: "integration_analysis_blocked", TaskIDs: []string{"analysis-1"}}},
 				trigger:  "INTEGRATION_BLOCKED",
 				code:     "integration_analysis_blocked",
 			},
 			{
 				name:     "exhausted",
-				decision: ops.IntegrationProgressDecision{Exhausted: true, Blocked: &ops.IntegrationProgressReason{Code: "global_generations_exhausted", Guidance: "generation limit reached"}},
+				decision: models.IntegrationProgressDecision{Exhausted: true, Blocked: &models.IntegrationProgressReason{Code: "global_generations_exhausted", Guidance: "generation limit reached"}},
 				trigger:  "INTEGRATION_EXHAUSTED",
 				code:     "global_generations_exhausted",
 			},
@@ -4553,12 +4553,12 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 	})
 
 	t.Run("a wait carries the deferred-validation request whatever its reason", func(t *testing.T) {
-		wait := &ops.IntegrationProgressReason{Code: "global_analysis_pending", TaskIDs: []string{"global-1"}}
-		requested := ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{Waiting: wait, DeferredValidationRequest: "head-1"}, nil, nil)
+		wait := &models.IntegrationProgressReason{Code: "global_analysis_pending", TaskIDs: []string{"global-1"}}
+		requested := ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{Waiting: wait, DeferredValidationRequest: "head-1"}, nil, nil)
 		if requested.WakeTrigger != "INTEGRATION_WAITING" || requested.ReasonCode != "global_analysis_pending" || !requested.DeferredValidationRequested {
 			t.Fatalf("projection = %#v, want a global analysis wait carrying the batch request", requested)
 		}
-		if plain := ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{Waiting: wait}, nil, nil); plain.DeferredValidationRequested {
+		if plain := ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{Waiting: wait}, nil, nil); plain.DeferredValidationRequested {
 			t.Fatalf("projection = %#v, want no batch request", plain)
 		}
 	})

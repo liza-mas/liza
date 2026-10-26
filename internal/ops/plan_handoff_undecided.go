@@ -41,7 +41,7 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 		return ""
 	}
 	class, blocker := d.Classify(state, task)
-	if class != PlanHandoffNeedsReview && class != PlanHandoffNeedsReconciliation && class != PlanHandoffAmendmentReady {
+	if class != models.PlanHandoffNeedsReview && class != models.PlanHandoffNeedsReconciliation && class != models.PlanHandoffAmendmentReady {
 		return ""
 	}
 	deps, _, err := canonicalizeConcreteDependencyList(state, d.resolver, task.ID, task.RolePair, task.DependsOn)

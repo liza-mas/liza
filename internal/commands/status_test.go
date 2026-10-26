@@ -114,16 +114,16 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 	}{
 		{
 			name: "reconciliation needed",
-			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
-				GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"},
+			projection: prompts.ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{
+				GlobalRequest: &models.IntegrationAnalysisRequest{Key: "global:2"},
 			}, nil, nil),
 			wantStatus: "reconciliation_needed",
 			wantDetail: "global:2",
 		},
 		{
 			name: "waiting",
-			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
-				Waiting: &ops.IntegrationProgressReason{
+			projection: prompts.ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{
+				Waiting: &models.IntegrationProgressReason{
 					Code: "integration_repairs_pending", TaskIDs: []string{"repair-z", "repair-a"}, Guidance: "wait for merged repairs",
 				},
 			}, nil, nil),
@@ -133,8 +133,8 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		},
 		{
 			name: "blocked",
-			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
-				Blocked: &ops.IntegrationProgressReason{
+			projection: prompts.ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{
+				Blocked: &models.IntegrationProgressReason{
 					Code: "integration_analysis_blocked", TaskIDs: []string{"slice-z", "slice-a"}, Guidance: "resolve the blocked analysis",
 				},
 			}, nil, nil),
@@ -144,9 +144,9 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		},
 		{
 			name: "exhausted",
-			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{
+			projection: prompts.ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{
 				Exhausted: true,
-				Blocked: &ops.IntegrationProgressReason{
+				Blocked: &models.IntegrationProgressReason{
 					Code: "global_generations_exhausted", Guidance: "generation limit reached",
 				},
 			}, nil, nil),
@@ -156,7 +156,7 @@ func TestEffectiveIntegrationCompletionConsumers(t *testing.T) {
 		},
 		{
 			name:       "unavailable",
-			projection: prompts.ProjectEffectiveIntegrationCompletion(ops.IntegrationProgressDecision{}, nil, os.ErrNotExist),
+			projection: prompts.ProjectEffectiveIntegrationCompletion(models.IntegrationProgressDecision{}, nil, os.ErrNotExist),
 			wantStatus: "unavailable",
 			wantCode:   "integration_progress_unavailable",
 			wantDetail: os.ErrNotExist.Error(),
