@@ -130,18 +130,18 @@ func (m *mergeInvocation) historyExtra() map[string]any {
 	return extra
 }
 
-// recordMergeCompletion appends the merge's two persisted local-time records:
-// the completion handoff event (audit trail for sprint analysis) and the MERGED
+// recordMergeCompletion appends the merge's two persisted UTC records: the
+// completion handoff event (audit trail for sprint analysis) and the MERGED
 // history entry. These are the C5 timestamp sites (Scope 16); both stay here, in
 // one function.
 func recordMergeCompletion(t *models.Task, agentID, mergeCommit string, extra map[string]any) {
 	t.HandoffEvents = append(t.HandoffEvents, models.HandoffEvent{
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Agent:     agentID,
 		Trigger:   models.HandoffTriggerCompletion,
 	})
 	t.History = append(t.History, models.TaskHistoryEntry{
-		Time:   time.Now(),
+		Time:   time.Now().UTC(),
 		Event:  models.TaskEventMerged,
 		Agent:  &agentID,
 		Commit: &mergeCommit,
