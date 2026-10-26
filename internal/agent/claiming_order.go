@@ -10,9 +10,13 @@ import (
 // rejection, other rework, and active dependency demand. Shuffling before the
 // stable sort preserves random contention spreading among equivalent ranks.
 // Every top-tier candidate remains available for the claim loop's fallback.
+// minOrderableCandidates is the smallest tier that has anything to order: a
+// tier of fewer candidates is already in its only order.
+const minOrderableCandidates = 2
+
 func orderDoerCandidates(candidates []*models.Task, state *models.State, agentID string, pr models.PipelineResolver) []*models.Task {
 	tier := shuffledByPriorityTier(candidates)
-	if len(tier) < 2 {
+	if len(tier) < minOrderableCandidates {
 		return tier
 	}
 	impact := doerDependencyImpact(state, pr, tier)

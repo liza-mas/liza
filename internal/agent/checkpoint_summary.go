@@ -17,6 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 const checkpointSummaryFileName = "checkpoint-summary.md"
@@ -137,7 +138,7 @@ func waitForCheckpointSummary() {
 // (#171). One runs at a time; while it does, a newer obligation is left
 // unclaimed for a later poll.
 func maybeEmitCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectRoot, roleType string, state *models.State) {
-	if roleType != "orchestrator" || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
+	if roleType != string(roles.RoleTypeOrchestrator) || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
 		return
 	}
 	finish, ok := beginCheckpointSummary()
@@ -317,7 +318,7 @@ questions.
 func runCheckpointSummaryCLI(parent context.Context, projectRoot, cliName, prompt string, cfg models.Config) error {
 	reportRelPath := checkpointSummaryRelPath()
 	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
-	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(reportPath), runtimeDirMode); err != nil {
 		return fmt.Errorf("failed to prepare checkpoint-summary directory: %w", err)
 	}
 

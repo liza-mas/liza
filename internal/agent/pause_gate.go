@@ -113,11 +113,15 @@ func awaitRoleGate(ctx context.Context, projectRoot, roleType string, checkHeart
 	return true, err
 }
 
+// pausePollInterval is how often a paused supervisor re-reads the state to see
+// whether the pause was lifted.
+const pausePollInterval = 5 * time.Second
+
 func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) error {
 	logger := GetLogger()
 	statePath := paths.New(projectRoot).StatePath()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(pausePollInterval)
 	defer ticker.Stop()
 
 	for {

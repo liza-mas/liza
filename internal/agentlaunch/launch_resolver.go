@@ -42,6 +42,12 @@ const (
 	claudeOutputFormatFlag    = "--output-format"
 )
 
+// Delimiters of a template expression; templateExprRE matches the same pair.
+const (
+	templateExprOpen  = "{{"
+	templateExprClose = "}}"
+)
+
 var templateExprRE = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
 var (
@@ -302,7 +308,7 @@ func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.Age
 	}
 	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
 	if sessionTemplate == "" && backend == providers.BackendACPX {
-		sessionTemplate = ACPXSessionName("{{" + templateVarAgentID + "}}")
+		sessionTemplate = ACPXSessionName(templateExprOpen + templateVarAgentID + templateExprClose)
 	}
 
 	vars[templateVarACPXAgent] = acpxAgent
@@ -320,7 +326,7 @@ func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.Age
 	// full control.
 	templateIncludesTaskID := false
 	for _, match := range templateExprRE.FindAllString(sessionTemplate, -1) {
-		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, templateExprOpen), templateExprClose))
 		if name == templateVarTaskID {
 			templateIncludesTaskID = true
 			break
@@ -545,7 +551,7 @@ func renderArgs(args []string, vars map[string]string) ([]string, error) {
 func renderArg(arg string, vars map[string]string) (string, error) {
 	var missing []string
 	rendered := templateExprRE.ReplaceAllStringFunc(arg, func(match string) string {
-		key := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
+		key := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, templateExprOpen), templateExprClose))
 		value, ok := vars[key]
 		if !ok {
 			missing = append(missing, key)

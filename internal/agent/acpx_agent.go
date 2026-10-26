@@ -385,7 +385,7 @@ func (e maskedError) Unwrap() error {
 }
 
 func acpxAgentMessageChunk(update map[string]any) string {
-	if update["sessionUpdate"] != "agent_message_chunk" {
+	if update[acpSessionUpdateKey] != acpSessionUpdateMessageChunk {
 		return ""
 	}
 	content, ok := update["content"].(map[string]any)

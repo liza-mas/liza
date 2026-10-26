@@ -19,7 +19,7 @@ func DiagnosticLines(output string) []string {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "{") && !strings.HasPrefix(line, "[") {
+		if !strings.HasPrefix(line, jsonObjectLinePrefix) && !strings.HasPrefix(line, jsonArrayLinePrefix) {
 			diagnostics = append(diagnostics, typographicQuotes.Replace(line))
 			continue
 		}

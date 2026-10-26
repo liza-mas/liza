@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // validateIdentity validates agent ID format: {role}-{number}
@@ -104,7 +105,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 				occupiedDetails := occupiedRolePeers(state, resolver, role, string(roleType), agentID, now, livenessWindow)
 				occupiedCount := len(occupiedDetails)
 				if occupiedCount >= maxInst {
-					if roleType == "orchestrator" {
+					if roleType == roles.RoleTypeOrchestrator {
 						return fmt.Errorf("type orchestrator already has %d live agent(s); only %d instance(s) allowed; %s",
 							occupiedCount, maxInst, strings.Join(occupiedDetails, "; "))
 					}
@@ -151,7 +152,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 	// If reviewer role: clear stale review claims
 	if resolver != nil {
 		roleType, rtErr := resolver.RoleType(role)
-		if rtErr == nil && roleType == "reviewer" {
+		if rtErr == nil && roleType == roles.RoleTypeReviewer {
 			if _, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
 				logger.Warn("Failed to clear stale review claims", "error", err, "role", role)
 			}
@@ -180,9 +181,9 @@ func occupiedRolePeers(state *models.State, resolver *pipeline.Resolver, role, r
 		}
 		agent := state.Agents[id]
 		matchesRole := agent.Role == role
-		if roleType == "orchestrator" {
+		if roleType == string(roles.RoleTypeOrchestrator) {
 			resolvedType, resolveErr := resolver.RoleType(agent.Role)
-			matchesRole = resolveErr == nil && resolvedType == "orchestrator"
+			matchesRole = resolveErr == nil && resolvedType == roles.RoleTypeOrchestrator
 		}
 		if !matchesRole {
 			continue
@@ -214,7 +215,7 @@ func poolSurplus(state *models.State, resolver *pipeline.Resolver, agentID strin
 		return false
 	}
 	roleType, err := resolver.RoleType(agent.Role)
-	if err != nil || roleType == "orchestrator" {
+	if err != nil || roleType == roles.RoleTypeOrchestrator {
 		return false
 	}
 	roleMax, err := resolver.MaxInstances(agent.Role)
@@ -396,7 +397,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 	}
 
 	switch roleType {
-	case "doer":
+	case string(roles.RoleTypeDoer):
 		if task.Status == activeExecuting {
 			if err := transitionTask(releasedInitial); err != nil {
 				return err
@@ -409,7 +410,7 @@ func releaseTaskClaim(state *models.State, task *models.Task, role, agentID stri
 		task.LeaseExpires = nil
 		models.AdvanceLifecycle(task)
 
-	case "reviewer":
+	case string(roles.RoleTypeReviewer):
 		if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
 			activeReviewing, releasedSubmitted, err := resolveReviewerRelease()
 			if err != nil {

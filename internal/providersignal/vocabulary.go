@@ -44,6 +44,13 @@ const (
 	rateLimitedAPIStatus = 429
 )
 
+// Leading characters that mark a provider output line as a JSON object or array
+// event rather than plain text.
+const (
+	jsonObjectLinePrefix = "{"
+	jsonArrayLinePrefix  = "["
+)
+
 // recordLine is one "key: value" line of a signal record.
 func recordLine(key, value string) string {
 	return key + recordSeparator + value + "\n"

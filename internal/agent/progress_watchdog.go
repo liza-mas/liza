@@ -220,13 +220,21 @@ func findExecutingTaskForAgent(state *models.State, taskID string, agentID strin
 	return task, true
 }
 
+// The watchdog polls a quarter of the progress timeout, kept between a floor
+// that bounds its read rate and a ceiling that bounds its reaction time.
+const (
+	progressPollDivisor     = 4
+	minProgressPollInterval = 100 * time.Millisecond
+	maxProgressPollInterval = 15 * time.Second
+)
+
 func progressPollInterval(timeout time.Duration) time.Duration {
-	interval := timeout / 4
-	if interval < 100*time.Millisecond {
-		return 100 * time.Millisecond
+	interval := timeout / progressPollDivisor
+	if interval < minProgressPollInterval {
+		return minProgressPollInterval
 	}
-	if interval > 15*time.Second {
-		return 15 * time.Second
+	if interval > maxProgressPollInterval {
+		return maxProgressPollInterval
 	}
 	return interval
 }

@@ -8,16 +8,23 @@ import (
 	"time"
 )
 
+// Permissions of the files and directories the runtime writes under the project:
+// agent output, streamed output and checkpoint summaries.
+const (
+	runtimeDirMode  os.FileMode = 0o755
+	runtimeFileMode os.FileMode = 0o644
+)
+
 // saveTimestampedFile writes content to dir/<agentID>-<timestamp>.<ext> and returns the path.
 func saveTimestampedFile(dir, agentID, ext, content string) (string, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, runtimeDirMode); err != nil {
 		return "", fmt.Errorf("create directory %s: %w", dir, err)
 	}
 
 	timestamp := time.Now().UTC().Format("20060102-150405")
 	filePath := filepath.Join(dir, fmt.Sprintf("%s-%s.%s", agentID, timestamp, ext))
 
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), runtimeFileMode); err != nil {
 		return "", fmt.Errorf("write file %s: %w", filePath, err)
 	}
 
@@ -99,12 +106,12 @@ func (w *streamingOutputFile) ensureOpen() error {
 	if w.writer != nil {
 		return nil
 	}
-	if err := os.MkdirAll(w.dir, 0755); err != nil {
+	if err := os.MkdirAll(w.dir, runtimeDirMode); err != nil {
 		return fmt.Errorf("create directory %s: %w", w.dir, err)
 	}
 
 	filePath := filepath.Join(w.dir, fmt.Sprintf("%s-%s.%s", w.agentID, w.timestamp, w.ext))
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, runtimeFileMode)
 	if err != nil {
 		return fmt.Errorf("open output file %s: %w", filePath, err)
 	}

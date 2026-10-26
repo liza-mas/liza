@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -47,7 +46,7 @@ func prepareCodexToolResultLaunch(projectRoot, engineExecutable, codexExecutable
 	if !filepath.IsAbs(projectRoot) || !filepath.IsAbs(engineExecutable) || !filepath.IsAbs(codexExecutable) {
 		return result, fmt.Errorf("codex tool-result launch paths must be absolute")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), toolResultVersionProbeTimeout)
 	defer cancel()
 	version, err := exec.CommandContext(ctx, codexExecutable, append(append([]string{}, prefix...), "--version")...).Output()
 	if err != nil || !codexSupportsToolResultHooks(string(version)) {
@@ -89,7 +88,7 @@ func persistToolResultScript(projectRoot, prefix, script string) (string, error)
 		return "", fmt.Errorf("invalid tool-result runtime script path")
 	}
 	dir := filepath.Join(projectRoot, paths.ProjectDirName(), "tool-result-runtime")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, toolResultScriptMode); err != nil {
 		return "", err
 	}
 	if info, e := os.Lstat(dir); e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
@@ -102,7 +101,7 @@ func persistToolResultScript(projectRoot, prefix, script string) (string, error)
 		return "", err
 	}
 	defer os.Remove(file.Name())
-	if err = file.Chmod(0700); err != nil {
+	if err = file.Chmod(toolResultScriptMode); err != nil {
 		_ = file.Close()
 		return "", err
 	}
@@ -115,7 +114,7 @@ func persistToolResultScript(projectRoot, prefix, script string) (string, error)
 		return "", err
 	}
 	info, statErr := os.Lstat(path)
-	if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0700 {
+	if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm() != toolResultScriptMode {
 		return "", fmt.Errorf("unsafe existing tool-result runtime script")
 	}
 	existing, readErr := os.ReadFile(path)
@@ -125,19 +124,30 @@ func persistToolResultScript(projectRoot, prefix, script string) (string, error)
 	return path, nil
 }
 
+// Codex announces "codex-cli X.Y.Z[-prerelease]". The managed tool-result
+// boundary needs release 0.154.0 or newer (codexToolResultMinMinor; the error
+// message names it). The runtime script and its directory are private to the owner.
+const (
+	codexVersionProgram                 = "codex-cli"
+	codexVersionFields                  = 2
+	codexVersionComponents              = 3
+	codexToolResultMinMinor             = 154
+	toolResultScriptMode    os.FileMode = 0o700
+)
+
 func codexSupportsToolResultHooks(version string) bool {
 	fields := strings.Fields(version)
-	if len(fields) != 2 || fields[0] != "codex-cli" {
+	if len(fields) != codexVersionFields || fields[0] != codexVersionProgram {
 		return false
 	}
 	// A prerelease precedes its release, so it qualifies only when its release
 	// is newer than 0.154.0: `0.160.0-alpha.1` passes, `0.154.0-alpha` does not.
 	release, _, prerelease := strings.Cut(fields[1], "-")
 	components := strings.Split(release, ".")
-	if len(components) != 3 {
+	if len(components) != codexVersionComponents {
 		return false
 	}
-	numbers := [3]int{}
+	numbers := [codexVersionComponents]int{}
 	for i, part := range components {
 		n, err := strconv.Atoi(part)
 		if err != nil || n < 0 {
@@ -146,9 +156,9 @@ func codexSupportsToolResultHooks(version string) bool {
 		numbers[i] = n
 	}
 	if prerelease {
-		return numbers[0] > 0 || numbers[1] > 154 || (numbers[1] == 154 && numbers[2] > 0)
+		return numbers[0] > 0 || numbers[1] > codexToolResultMinMinor || (numbers[1] == codexToolResultMinMinor && numbers[2] > 0)
 	}
-	return numbers[0] > 0 || numbers[1] >= 154
+	return numbers[0] > 0 || numbers[1] >= codexToolResultMinMinor
 }
 
 func codexToolResultShellQuote(value string) string {

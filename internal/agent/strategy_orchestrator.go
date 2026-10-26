@@ -76,7 +76,7 @@ func orchestratorProgressSignature(state *models.State) string {
 	// Unconverted immediate discovery count — changes when orchestrator triages.
 	immediateDisc := 0
 	for _, d := range state.Discovered {
-		if d.Urgency == "immediate" && d.ConvertedToTask == nil {
+		if d.Urgency == models.DiscoveryUrgencyImmediate && d.ConvertedToTask == nil {
 			immediateDisc++
 		}
 	}

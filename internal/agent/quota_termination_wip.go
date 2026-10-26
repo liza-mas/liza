@@ -14,7 +14,7 @@ import (
 // preserved worktree blocks the task on its next claim. A skipped or failed
 // commit only logs, leaving that block for a human to repair, as before.
 func commitQuotaTerminationWIP(ctx context.Context, config SupervisorConfig, exitCode int, taskID, output string) {
-	if exitCode == 0 || exitCode == 42 || taskID == "" {
+	if exitCode == 0 || exitCode == exitCodeGracefulAbort || taskID == "" {
 		return
 	}
 	qe := providersignal.DetectQuotaExhaustion(output, config.CLIName)

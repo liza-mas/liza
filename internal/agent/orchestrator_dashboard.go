@@ -183,9 +183,13 @@ func resolveWakeRoutes(goalEntryPoint, projectRoot string) (prompts.WakeRoutes, 
 // the simple role pair it targets.
 const entryPointValueSeparator = "."
 
+// entryPointValueParts is the number of parts of an entry-point value: its kind
+// and the role pair it targets.
+const entryPointValueParts = 2
+
 func wakeEntryPointRolePair(entryPointValue string) (string, bool) {
-	parts := strings.SplitN(entryPointValue, entryPointValueSeparator, 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(entryPointValue, entryPointValueSeparator, entryPointValueParts)
+	if len(parts) != entryPointValueParts {
 		return "", false
 	}
 	return parts[1], true

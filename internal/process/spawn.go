@@ -30,6 +30,8 @@ var agentSpawnGuard = struct {
 const (
 	supervisorBootstrapTimeout      = 5 * time.Second
 	supervisorBootstrapPollInterval = 10 * time.Millisecond
+	// supervisorOutputDirMode is the permission of the supervisor output directory.
+	supervisorOutputDirMode os.FileMode = 0o755
 )
 
 // buildSpawnCommand builds the agent start command. An empty cli omits
@@ -45,7 +47,7 @@ func buildSpawnCommand(projectRoot, role, cli string, extraArgs ...string) (*exe
 	args = append(args, extraArgs...)
 
 	outputsDir := paths.New(projectRoot).AgentOutputsDir()
-	if err := os.MkdirAll(outputsDir, 0755); err != nil {
+	if err := os.MkdirAll(outputsDir, supervisorOutputDirMode); err != nil {
 		return nil, nil, "", fmt.Errorf("create supervisor output directory: %w", err)
 	}
 	timestamp := time.Now().UTC().Format("20060102-150405.000000000")

@@ -47,7 +47,7 @@ func evaluateMergeGate(input mergeGateInput) *mergeGateResult {
 	}
 
 	// No diversity evaluation when not configured
-	if input.providerDiversity != "preferred" {
+	if input.providerDiversity != string(pipeline.ProviderDiversityPreferred) {
 		return result
 	}
 

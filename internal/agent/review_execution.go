@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // Claim loss is an expected coordination outcome, not a provider crash.
@@ -43,7 +44,7 @@ func newReviewExecution(state *models.State, config SupervisorConfig, taskID str
 	if err != nil {
 		return nil, err
 	}
-	if roleType != "reviewer" {
+	if roleType != roles.RoleTypeReviewer {
 		return nil, nil
 	}
 	guard := &reviewExecution{
@@ -120,7 +121,7 @@ func (g *reviewExecution) current(state *models.State, now time.Time) bool {
 		}
 		if event.Event == models.TaskEventClaimed {
 			roleType, _ := g.resolver.RoleType(state.Agents[*event.Agent].Role)
-			if *event.Agent == g.authority.ID || roleType == "reviewer" {
+			if *event.Agent == g.authority.ID || roleType == roles.RoleTypeReviewer {
 				ownVerdict = false
 			}
 		}

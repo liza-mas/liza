@@ -12,13 +12,16 @@ import (
 	"github.com/liza-mas/liza/internal/usage"
 )
 
+// supervisorRunIDBytes is the size of a supervisor run identity: 128 bits.
+const supervisorRunIDBytes = 16
+
 // newSupervisorRunID mints one opaque 128-bit identity. Each supervisor process
 // mints exactly one, so a restart or a handoff is observable in usage records on
 // every provider path — including the default CLI one, where session_id is a
 // copy of the task id. It is not a registration generation and confers no
 // authority (specs/protocols/lifecycle-results.md, Result contract).
 func newSupervisorRunID() string {
-	var buf [16]byte
+	var buf [supervisorRunIDBytes]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		// A record must never carry an empty identity. Process id plus start
 		// time still separates two supervisors on one host.

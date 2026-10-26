@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // supervisorBlockBeforeModifyTestHook runs just before a supervisor block's
@@ -16,12 +17,12 @@ var supervisorBlockBeforeModifyTestHook func()
 
 // supervisorTaskSlot names the ownership agentID holds on task: "doer"
 // (assigned_to), "reviewer" (reviewing_by), or "" for none.
-func supervisorTaskSlot(task *models.Task, agentID string) string {
+func supervisorTaskSlot(task *models.Task, agentID string) roles.ClaimType {
 	switch {
 	case task.AssignedTo != nil && *task.AssignedTo == agentID:
-		return "doer"
+		return roles.ClaimDoer
 	case task.ReviewingBy != nil && *task.ReviewingBy == agentID:
-		return "reviewer"
+		return roles.ClaimReviewer
 	}
 	return ""
 }
@@ -56,7 +57,7 @@ func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, auth
 		return nil
 	}
 	expected := models.TaskTransitionID(task)
-	if slot == "doer" {
+	if slot == roles.ClaimDoer {
 		commitBlockedDoerWIP(projectRoot, authority, taskID, reason)
 	}
 	return transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
@@ -95,7 +96,7 @@ func blockExecutingTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID str
 	commitBlockedDoerWIP(projectRoot, authority, taskID, reason)
 	matched := false
 	err = transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
-		matched = supervisorTaskSlot(t, authority.ID) == "doer" && models.TaskTransitionID(t) == expected
+		matched = supervisorTaskSlot(t, authority.ID) == roles.ClaimDoer && models.TaskTransitionID(t) == expected
 		return matched
 	})
 	return matched && err == nil, err

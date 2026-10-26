@@ -240,10 +240,15 @@ func verifyEffectiveIntegrationOutcome(state *models.State, projection prompts.E
 	}
 }
 
+// hypothesisExhaustionMinFailures is the number of failed attempts at which a
+// task counts as hypothesis-exhausted. It mirrors the operations' own threshold,
+// which is unexported there.
+const hypothesisExhaustionMinFailures = 2
+
 func countUnresolvedHypothesisExhausted(state *models.State) int {
 	count := 0
 	for _, task := range state.Tasks {
-		if len(task.FailedBy) >= 2 && task.Status != models.TaskStatusBlocked && !task.Status.IsTerminal() {
+		if len(task.FailedBy) >= hypothesisExhaustionMinFailures && task.Status != models.TaskStatusBlocked && !task.Status.IsTerminal() {
 			count++
 		}
 	}

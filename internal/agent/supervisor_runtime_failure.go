@@ -51,13 +51,13 @@ func (t *runtimeFailureTracker) reset(taskID string) {
 }
 
 func detectObservedRuntimeFailure(output string) *observedRuntimeFailure {
-	if strings.Contains(output, "submit_verdict_failed") {
-		return &observedRuntimeFailure{Command: "submit-verdict", Code: "submit_verdict_failed"}
+	if strings.Contains(output, submitVerdictFailedCode) {
+		return &observedRuntimeFailure{Command: submitVerdictCommand, Code: submitVerdictFailedCode}
 	}
 
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) {
 			continue
 		}
 		if failure := detectFailedCommandEvent(line); failure != nil {
@@ -109,12 +109,12 @@ func detectFailedCommandEvent(line string) *observedRuntimeFailure {
 
 	command := detectLizaCommandContext(event.Item.Command)
 	output := event.Item.AggregatedOutput
-	if strings.Contains(output, "submit_verdict_failed") {
-		return &observedRuntimeFailure{Command: "submit-verdict", Code: "submit_verdict_failed"}
+	if strings.Contains(output, submitVerdictFailedCode) {
+		return &observedRuntimeFailure{Command: submitVerdictCommand, Code: submitVerdictFailedCode}
 	}
 	for _, outputLine := range strings.Split(output, "\n") {
 		outputLine = strings.TrimSpace(outputLine)
-		if !strings.HasPrefix(outputLine, "{") {
+		if !strings.HasPrefix(outputLine, streamJSONObjectPrefix) {
 			continue
 		}
 		env, ok := parseFailedJSONEnvelope(outputLine)

@@ -74,7 +74,7 @@ func claudeRejectedResetAt(output string) time.Time {
 	var resetsAt time.Time
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
+		if !strings.HasPrefix(line, jsonObjectLinePrefix) {
 			continue
 		}
 		var event struct {
@@ -114,7 +114,7 @@ func claudeRateLimitedResult(output string) (string, bool) {
 	found := false
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
+		if !strings.HasPrefix(line, jsonObjectLinePrefix) {
 			continue
 		}
 		var event struct {
