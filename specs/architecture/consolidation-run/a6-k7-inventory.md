@@ -8,17 +8,17 @@ sites and the reconciliation of the plan's K7 families F1–F9. Source of the ru
 ## Coding HEAD
 
 - Integration HEAD at claim (A1, A3, A4, A5 delivered; A6 Tasks 2–6 merged, the last being `e7cbe3206`): `e7cbe32069b986eac8db07c8ff4d6f3356e1c24a`.
-- The tables describe the production tree of the code commit `97d17dab166e3370fe8d0a247b40e6cef1e33cc2`, committed on top of that HEAD; line numbers are that tree's (the inventory and its manifest are added by the commit after it, which edits no Go file). Table 2 is derived from `git diff e7cbe3206 97d17dab1 -- internal/ops/`.
+- The tables describe the production tree of the code commit `97d17dab166e3370fe8d0a247b40e6cef1e33cc2`, committed on top of that HEAD; line numbers are that tree's (the inventory and its manifest are added by the commits after it, which edit no Go file). Table 2 is derived from `git diff e7cbe3206 97d17dab1 -- internal/ops/`.
 - No oracle file, fixture or golden is added or edited by this task: every substitution keeps its value, so no oracle-first checkpoint is needed.
 
 ## Method
 
-1. File list: the 19 `A6` files of the area partition plus the 17 private files Tasks 2–6 created (names and creating task in table 1): 36 production files. `*_test.go` files, the A3–A5 files and `init_project.go` are out of the list.
-2. Every string and integer literal of those files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite field, map key or index, call argument, declaration…): **895** literals at this tree.
+1. File list: the 19 `A6` files of the area partition plus the 18 private files Tasks 2–6 created (names and creating task in table 1): 37 production files. The private set is not a glob of file names: it is the set of non-test files `git show --diff-filter=A` reports for the five task commits (`f1c5afd0c` Task 2, `bce406207` Task 3, `bafe7b0d6` Task 4, `18246b22d` Task 5, `e7cbe3206` Task 6), and the generator asserts equality with table 1. `*_test.go` files, the A3–A5 files and `init_project.go` are out of the list.
+2. Every string and integer literal of those files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite field, map key or index, call argument, declaration…): **898** literals at this tree.
 3. Each non-message literal was matched by value against every string and integer constant of `ops` and of the A1 owner packages (`models`, `pipeline`, `roles`, `taskkind`, `paths`, `alerts`, `errors`, `payloadschema`, `referencecontract`, `statehygiene`, `brand`); a same-value, same-meaning constant is adopted (R1). Same-value constants of a different meaning are false friends (table 4).
 4. A literal that is control-flow vocabulary or a repeated magic value without an owner is named in its concern (R4) or, when the owner is a closed package outside `ops` that names nothing, named in `ops` without editing the owner (R3, table 5). A finite set deciding control flow or persisted as a closed vocabulary is typed (R2).
 5. Every remaining literal is classified (R5/F8/F9) with a reason in table 3; the classifier raises on a literal it cannot place, so none is unclassified or deferred.
-6. Completeness check: the scan of the committed tree yields 895 rows; each is a row of table 3 (723 retained, grouped by file and reason) or part of a constant or variable declaration (172 rows, table 2 for the ones this task added, table 3b for the pre-existing ones).
+6. Completeness check: the scan of the committed tree yields 898 rows; each is a row of table 3 (726 retained, grouped by file and reason) or part of a constant or variable declaration (172 rows, table 2 for the ones this task added, table 3b for the pre-existing ones).
 
 Rules: **R1** adopt an existing owner constant; **R2** type a finite set; **R3** name in `ops` a value whose closed owner package names nothing; **R4** name an unowned value in its concern; **R5** classify retained literal data or a dynamic identity with a reason.
 Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **typed** (defined type, one constant per value), **classified** (retained literal data or dynamic identity, with reason).
@@ -30,8 +30,8 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | Substitution sites in this task (table 2: adopted, named or typed use sites) | 100 |
 | Constant or variable declarations added by this task (table 2) | 63 |
 | Pre-existing named constants in A6 files (table 3b) | 102 |
-| Retained literals classified R5/F8/F9 (table 3, grouped by file and reason) | 723 |
-| Literals scanned at this tree | 895 = 723 retained (table 3) + 172 inside declarations of named constants and variables (tables 2 and 3b) |
+| Retained literals classified R5/F8/F9 (table 3, grouped by file and reason) | 726 |
+| Literals scanned at this tree | 898 = 726 retained (table 3) + 172 inside declarations of named constants and variables (tables 2 and 3b) |
 | Unclassified / deferred | 0 |
 | New defined types | 2 (`deferredValidationUnattributedReason`, `worktreeSetupOutcomeStatus`); 3 members added to `deferredValidationSkipReason` and 5 deferred-validation members to `integrationProgressCode` |
 | BLOCKED findings against A1 or A3 closure (prospective symbol not delivered) | 0 |
@@ -64,6 +64,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `merge_publication.go` | private, Task 4 | 138 | 18 | 0 | 0 | 2 |
 | `merge_ref_mutation.go` | private, Task 4 | 169 | 12 | 0 | 0 | 0 |
 | `merge_validation.go` | private, Task 5 | 134 | 9 | 0 | 0 | 1 |
+| `merged_task_retirement.go` | private, Task 5 | 33 | 3 | 0 | 0 | 0 |
 | `post_worktree_setup.go` | area partition | 495 | 57 | 10 | 12 | 15 |
 | `post_worktree_setup_error.go` | area partition | 69 | 6 | 0 | 0 | 1 |
 | `reconcile_merged.go` | area partition | 149 | 19 | 1 | 0 | 0 |
@@ -265,7 +266,7 @@ Rows are grouped by file and reason; the line numbers are the tree's. Messages k
 | `deferred_validation_lanes.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 4 | 82, 116, 290, 297 |
 | `deferred_validation_lanes.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 12 | 105, 154, 250, 296, 318, 411, 416, 453, 490, 495, 509, 517 |
 | `deferred_validation_lanes.go` | Git argv | executable name run with the project's Git environment | 1 | 133 |
-| `deferred_validation_lanes.go` | Git argv | Git subcommand, option or revision argument (external CLI vocabulary) | 23 | 143, 143, 157, 157, 175, 175, 190, 190, 190, 202, 202, 202, 213, 213, 240, 240, 240, … |
+| `deferred_validation_lanes.go` | Git argv | Git subcommand, option or revision argument (external CLI vocabulary) | 23 | 143, 143, 157, 157, 175, 175, 190, 190, 190, 202, 202, 202, 213, 213, 240, 240, 240, 243, 243, 285, 292, 292, 292 |
 | `deferred_validation_lanes.go` | Git argv | Git first-parent revision suffix | 1 | 157 |
 | `deferred_validation_lanes.go` | number | zero: emptiness, count or sign test | 3 | 164, 381, 467 |
 | `deferred_validation_lanes.go` | number | zero: the first lane, which keeps the single-lane worktree path | 1 | 182 |
@@ -352,7 +353,7 @@ Rows are grouped by file and reason; the line numbers are the tree's. Messages k
 | `integration_progress_lineage.go` | number | zero: first element or first argument | 1 | 205 |
 | `integration_progress_lineage.go` | number | one: drop-first slice | 1 | 206 |
 | `integration_reconcile.go` | message | log line (free surface, goal-frozen) | 1 | 68 |
-| `integration_reconcile.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 27 | 83, 87, 98, 102, 124, 174, 178, 212, 284, 312, 317, 324, 327, 400, 423, 427, 455, 484, … |
+| `integration_reconcile.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 27 | 83, 87, 98, 102, 124, 174, 178, 212, 284, 312, 317, 324, 327, 400, 423, 427, 455, 484, 488, 493, 518, 533, 540, 546, 550, 559, 616 |
 | `integration_reconcile.go` | number | one: first attempt or generation of a counting loop | 1 | 95 |
 | `integration_reconcile.go` | number | zero: emptiness, count or sign test | 6 | 197, 202, 203, 290, 323, 539 |
 | `integration_reconcile.go` | number | zero: initial length of a made slice or map | 6 | 272, 470, 479, 480, 498, 520 |
@@ -411,6 +412,7 @@ Rows are grouped by file and reason; the line numbers are the tree's. Messages k
 | `merge_validation.go` | message | fragment of a composed message, warning or truncation marker (frozen wording) | 1 | 51 |
 | `merge_validation.go` | message | log line (free surface, goal-frozen) | 2 | 98, 103 |
 | `merge_validation.go` | message | composed message, warning, guidance or identifier text | 1 | 131 |
+| `merged_task_retirement.go` | message | composed message, warning, guidance or identifier text | 3 | 20, 24, 27 |
 | `post_worktree_setup.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 7 | 137, 157, 242, 275, 278, 320, 452 |
 | `post_worktree_setup.go` | number | zero: emptiness, count or sign test | 6 | 144, 175, 293, 369, 425, 469 |
 | `post_worktree_setup.go` | number | one: first attempt or generation of a counting loop | 1 | 155 |
@@ -441,7 +443,7 @@ Rows are grouped by file and reason; the line numbers are the tree's. Messages k
 | `reconcile_merged.go` | persisted key | persisted MERGED history `Extra` key of an external-merge reconciliation | 1 | 135 |
 | `reconcile_merged.go` | persisted key | persisted history `Extra` key read by `internal/commands/integration_failure_diagnostics.go` through its own literal (later-area adoption, table 7) | 1 | 138 |
 | `recover_integration.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 3 | 48, 48, 256 |
-| `recover_integration.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 24 | 49, 74, 100, 120, 144, 163, 167, 171, 175, 179, 182, 186, 191, 201, 205, 209, 216, 228, … |
+| `recover_integration.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 24 | 49, 74, 100, 120, 144, 163, 167, 171, 175, 179, 182, 186, 191, 201, 205, 209, 216, 228, 235, 239, 242, 246, 250, 257 |
 | `recover_integration.go` | persisted key | persisted map key (integration-failure diagnostic or recovery history `Extra`); different maps, see table 4 | 1 | 134 |
 | `recover_integration.go` | persisted key | persisted recovery history `Extra` key (mirrors `models.IntegrationRecovery.ReportCommit`) | 1 | 134 |
 | `recover_integration.go` | persisted key | persisted recovery history `Extra` key (mirrors `models.IntegrationRecovery.PreservationRef`) | 1 | 134 |
@@ -479,7 +481,7 @@ Rows are grouped by file and reason; the line numbers are the tree's. Messages k
 | `wt_create.go` | message | precondition or refusal reason text (classified messages are frozen) | 1 | 82 |
 | `wt_create.go` | message | error text (classified messages are frozen: `--json` classifies by substring) | 3 | 108, 124, 178 |
 | `wt_create.go` | message | composed message, warning, guidance or identifier text | 1 | 151 |
-| `wt_create.go` | message | fragment of a composed message, warning or truncation marker (frozen wording) | 19 | 203, 222, 241, 245, 258, 262, 267, 273, 277, 286, 292, 294, 385, 391, 398, 404, 409, … |
+| `wt_create.go` | message | fragment of a composed message, warning or truncation marker (frozen wording) | 19 | 203, 222, 241, 245, 258, 262, 267, 273, 277, 286, 292, 294, 385, 391, 398, 404, 409, 419, 424 |
 | `wt_create.go` | number | zero: emptiness, count or sign test | 2 | 293, 331 |
 | `wt_create.go` | other literal | list separator in a composed message | 1 | 294 |
 | `wt_create.go` | Git argv | Git subcommand, option or revision argument (external CLI vocabulary) | 3 | 355, 355, 355 |
