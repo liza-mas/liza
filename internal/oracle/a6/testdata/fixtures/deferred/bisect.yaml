@@ -1,0 +1,34 @@
+goal:
+  integration:
+    mutation_receipts:
+      - task_id: oracle-first
+        before_commit: "@BASE@"
+        after_commit: "@C1@"
+      - task_id: oracle-second
+        before_commit: "@C1@"
+        after_commit: "@C2@"
+    deferred_validation:
+      deferrals:
+        - task_id: historical-coding
+          merge_commit: "@BASE@"
+          before_commit: "@BASE@"
+          recorded_at: 2001-02-03T04:05:06Z
+          commands:
+            - command: "test ! -e bad.txt"
+              command_sha256: ab4c539c3041c47f2244868459f75d760279d1b55b1f4e92d24235c0e0d79aba
+              timeout_seconds: 30
+              authority: contract
+      last_batch_id: 1
+      batches:
+        - id: 1
+          commit: "@BASE@"
+          started_at: 2001-02-03T04:05:06Z
+          finished_at: 2001-02-03T04:05:07Z
+          status: passed
+          results:
+            - command: "test ! -e bad.txt"
+              command_sha256: ab4c539c3041c47f2244868459f75d760279d1b55b1f4e92d24235c0e0d79aba
+              status: passed
+              exit_code: 0
+              started_at: 2001-02-03T04:05:06Z
+              finished_at: 2001-02-03T04:05:07Z

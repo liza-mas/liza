@@ -1,0 +1,71 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "effective": [
+        {
+          "command": "test ! -e bad.txt",
+          "command_sha256": "<ID>"
+        }
+      ],
+      "integration_head": "<SHA:C2>",
+      "latest_batches": [
+        {
+          "commit": "<SHA:BASE>",
+          "finished_at": "<TIME:Z>",
+          "id": 1,
+          "results": [
+            {
+              "command": "test ! -e bad.txt",
+              "command_sha256": "<ID>",
+              "exit_code": 0,
+              "finished_at": "<TIME:Z>",
+              "started_at": "<TIME:Z>",
+              "status": "passed"
+            }
+          ],
+          "started_at": "<TIME:Z>",
+          "status": "passed"
+        },
+        {
+          "commit": "<SHA:C2>",
+          "culprits": [
+            {
+              "command_sha256": "<ID>",
+              "merge_commit": "<SHA:C2>",
+              "steps": [
+                {
+                  "commit": "<SHA:BASE>",
+                  "exit_code": 0,
+                  "status": "passed"
+                },
+                {
+                  "commit": "<SHA:C1>",
+                  "exit_code": 0,
+                  "status": "passed"
+                }
+              ],
+              "task_id": "oracle-second"
+            }
+          ],
+          "finished_at": "<TIME:Z>",
+          "id": 2,
+          "results": [
+            {
+              "command": "test ! -e bad.txt",
+              "command_sha256": "<ID>",
+              "excerpt": "exit status 1\n",
+              "exit_code": 1,
+              "finished_at": "<TIME:Z>",
+              "started_at": "<TIME:Z>",
+              "status": "failed"
+            }
+          ],
+          "started_at": "<TIME:Z>",
+          "status": "failed"
+        }
+      ]
+    }
+  }
+}
