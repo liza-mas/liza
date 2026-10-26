@@ -13,9 +13,6 @@ var areaA7 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/commands/repair_agent_pool.go"}, Ceiling: 1252},
-		{Key: Key{File: "internal/commands/repair_agent_pool.go", Func: "FindRoleCapacity"}, Ceiling: 234},
-		{Key: Key{File: "internal/commands/repair_agent_pool.go", Func: "RepairAgentPool"}, Ceiling: 139},
 		{Key: Key{File: "internal/commands/watch.go"}, Ceiling: 2084},
 		{Key: Key{File: "internal/commands/watch.go", Func: "RunAutoRepairAgentPool"}, Ceiling: 133},
 		{Key: Key{File: "internal/ops/init_project.go", Func: "InitProject"}, Ceiling: 229},
