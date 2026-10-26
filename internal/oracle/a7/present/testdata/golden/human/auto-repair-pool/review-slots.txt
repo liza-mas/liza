@@ -1,4 +1,4 @@
-=== tick 1: reviewer work and models.yaml slots
+=== tick 1: reviewer starts bound to models.yaml slots
 --- start requests
 1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=true models_item=1
 2: role=code-reviewer cli=codex agent_id=code-reviewer-2 from_config=true models_item=2

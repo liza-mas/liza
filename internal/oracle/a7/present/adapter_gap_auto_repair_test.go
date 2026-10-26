@@ -88,6 +88,36 @@ func (r *autoRepairRun) writeModels(content string) {
 	}
 }
 
+// preferProviderDiversity makes the coding pair's reviews prefer a provider other
+// than the doer's, which a new reviewer sharing the doer's provider may not
+// claim while a different-provider reviewer is registered.
+func (r *autoRepairRun) preferProviderDiversity() {
+	r.t.Helper()
+	path := r.liza("pipeline.yaml")
+	pipeline, err := os.ReadFile(path)
+	if err != nil || bytes.Count(pipeline, poolPipelineQuorum) != 1 {
+		r.t.Fatal("fixture pipeline must hold exactly one coding-pair quorum of 2")
+	}
+	diverse := append(append([]byte(nil), poolPipelineQuorum...), []byte("        provider-diversity: preferred\n")...)
+	if err := os.WriteFile(path, bytes.Replace(pipeline, poolPipelineQuorum, diverse, 1), 0o644); err != nil {
+		r.t.Fatal("write fixture pipeline")
+	}
+}
+
+// livePID registers the fixture agent holding placeholder under this process's
+// PID, which makes it a live agent with reviewer capacity.
+func (r *autoRepairRun) livePID(placeholder string) {
+	r.t.Helper()
+	path := r.liza("state.yaml")
+	state, err := os.ReadFile(path)
+	if err != nil || bytes.Count(state, []byte(placeholder)) != 1 {
+		r.t.Fatal("fixture state must carry the placeholder PID once")
+	}
+	if err := os.WriteFile(path, bytes.Replace(state, []byte(placeholder), []byte(strconv.Itoa(os.Getpid())), 1), 0o644); err != nil {
+		r.t.Fatal("write fixture state")
+	}
+}
+
 func autoRepairCases() []autoRepairCase {
 	orchestratorOverdue := func(r *autoRepairRun) {
 		r.cache[autoRepairOrchestratorSince] = time.Now().UTC().Add(-10 * time.Minute)
@@ -145,9 +175,16 @@ func autoRepairCases() []autoRepairCase {
 			}},
 			{label: "settled entries are gone", before: elapseBackoff},
 		}},
-		{name: "unservable", project: "slots", ticks: []autoRepairTick{
-			{label: "reviewer work and models.yaml slots"},
+		{name: "review-slots", project: "slots", ticks: []autoRepairTick{
+			{label: "reviewer starts bound to models.yaml slots"},
 			{label: "same condition: no repeat alerts", before: elapseBackoff},
+		}},
+		{name: "unservable-reviewer", project: "unservable", ticks: []autoRepairTick{
+			{label: "reviewer work no new reviewer may claim: warned, nothing started", before: func(r *autoRepairRun) {
+				r.preferProviderDiversity()
+				r.livePID("5000005")
+			}},
+			{label: "same condition: the warning is not repeated"},
 		}},
 		{name: "provider-blocked", project: "provider-blocked", ticks: []autoRepairTick{
 			{label: "start CLI quota-blocked", before: orchestratorOverdue},
@@ -186,8 +223,10 @@ func autoRepairCases() []autoRepairCase {
 // the warnings written, and the watcher cache after the tick (keys, and failed
 // start counts). The case tail holds the spawn log the watcher wrote. Cases cover
 // spawn success and failure, the orchestrator grace, backoff, suppression and
-// its cooldown, pending starts that registered or exited, unservable reviewer
-// work, a quota-blocked provider, an invalid models file, the environment
+// its cooldown, pending starts that registered or exited, starts bound to
+// models.yaml review slots, reviewer work no new reviewer may claim (doer
+// provider diversity: the warning, no start, one warning per episode), a
+// quota-blocked provider, an invalid models file, the environment
 // toggle and a cancelled context. A start still alive on a later tick needs a
 // process matching an agent supervisor, which the proof environment excludes
 // (E2); the white-box tests script that observation.
@@ -325,5 +364,16 @@ func (r *autoRepairRun) runTick(step autoRepairTick) {
 	}
 	if len(keys) == 0 {
 		w.WriteString("none\n")
+	}
+}
+
+// TestAutoRepairUnservableFixtureValidates keeps the state this file adds to the
+// pool fixtures a valid one.
+func TestAutoRepairUnservableFixtureValidates(t *testing.T) {
+	skipUnlessLinux(t)
+	e := newEnvironment(t)
+	result := runCLI(t, e, materialisePool(t, e, "unservable"), nil, "validate")
+	if result.exit != 0 {
+		t.Fatalf("unservable fixture validate exited %d:\n%s\n%s", result.exit, e.norm.Text(string(result.stdout)), e.norm.Text(string(result.stderr)))
 	}
 }

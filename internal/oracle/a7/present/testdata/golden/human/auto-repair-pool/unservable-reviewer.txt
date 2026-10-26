@@ -1,0 +1,28 @@
+=== tick 1: reviewer work no new reviewer may claim: warned, nothing started
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+[<TIME>] ⚠️ AUTO REPAIR UNSERVABLE: 1 code-reviewer task(s) (task-fresh) cannot be claimed by a new reviewer started with --cli claude; auto repair does not start one. They wait for an eligible reviewer, or start one with `liza agent code-reviewer --cli <other-cli>`
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-unservable:code-reviewer
+=== tick 2: same condition: the warning is not repeated
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-unservable:code-reviewer
+=== spawn log
+none
