@@ -1,4 +1,4 @@
-package agent
+package providersignal
 
 import (
 	"encoding/json"
@@ -9,10 +9,10 @@ import (
 // the ASCII ones diagnostic patterns are written with.
 var typographicQuotes = strings.NewReplacer("\u2018", "'", "\u2019", "'", "\u02BC", "'", "\u201C", `"`, "\u201D", `"`)
 
-// providerDiagnosticLines separates provider failures from quoted tool output and
+// DiagnosticLines separates provider failures from quoted tool output and
 // assistant text. Never recursively search a structured transcript for errors.
 // Returned lines have typographic quotes normalised to ASCII.
-func providerDiagnosticLines(output string) []string {
+func DiagnosticLines(output string) []string {
 	var diagnostics []string
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)

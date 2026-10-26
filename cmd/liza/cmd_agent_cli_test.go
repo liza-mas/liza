@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
@@ -153,7 +153,7 @@ func TestAgentCmd_ExplainLaunchUsesConfiguredToolProfile(t *testing.T) {
 	state.Config.AgentTools = map[string]models.AgentToolConfig{
 		"cursor": {
 			Executable:      "cursor-agent",
-			PromptTransport: agent.PromptTransportFile,
+			PromptTransport: agentlaunch.PromptTransportFile,
 			RunArgs:         []string{"--cwd", "{{projectRoot}}", "--prompt-file", "{{promptFile}}", "--model", "{{profile.model}}"},
 			ContractKey:     "none",
 		},

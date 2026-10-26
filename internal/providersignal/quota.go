@@ -1,17 +1,19 @@
-package agent
+// Package providersignal detects provider stop conditions (quota exhaustion,
+// provider unavailability) in agent output and owns their signal files, reset
+// interpretation, quota sweep and alert-line writes. It takes a project root,
+// a tool identity and output text, and holds no blackboard handle: task
+// ownership and runtime artifacts stay with the callers.
+package providersignal
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -49,7 +51,7 @@ func DetectQuotaExhaustion(output, cliName string) *QuotaExhaustion {
 
 func detectQuotaExhaustionAt(output, cliName string, now time.Time) *QuotaExhaustion {
 	provider := canonicalQuotaProvider(cliName)
-	for _, line := range providerDiagnosticLines(output) {
+	for _, line := range DiagnosticLines(output) {
 		for _, p := range quotaPatterns {
 			if p.Provider != provider {
 				continue
@@ -219,33 +221,6 @@ func RaiseQuotaExhaustion(projectRoot string, qe *QuotaExhaustion) error {
 	)
 }
 
-// commitQuotaTerminationWIP commits the work of a session that a quota cutoff
-// ended mid-edit. The supervisor calls it after every exit, before
-// resetAgentAfterExit releases the claim: a claim released with a dirty
-// preserved worktree blocks the task on its next claim. A skipped or failed
-// commit only logs, leaving that block for a human to repair, as before.
-func commitQuotaTerminationWIP(ctx context.Context, config SupervisorConfig, exitCode int, taskID, output string) {
-	if exitCode == 0 || exitCode == 42 || taskID == "" {
-		return
-	}
-	qe := DetectQuotaExhaustion(output, config.CLIName)
-	if qe == nil {
-		return
-	}
-	message := fmt.Sprintf("WIP: provider quota exhausted (%s), auto-committed by supervisor, hooks skipped\n\nTask: %s\nAgent: %s\n",
-		qe.Provider, taskID, config.AgentID)
-	result, err := ops.CommitTerminatedDoerWIP(ctx, config.ProjectRoot, config.Authority, taskID, message)
-	if err != nil {
-		GetLogger().Warn("Failed to commit quota-terminated work in progress", "error", err, "task_id", taskID, "agent_id", config.AgentID)
-		return
-	}
-	if !result.Committed {
-		GetLogger().Info("Quota-terminated work in progress not committed", "reason", result.SkipReason, "task_id", taskID, "agent_id", config.AgentID)
-		return
-	}
-	GetLogger().Info("Committed quota-terminated work in progress", "commit", result.SHA, "task_id", taskID, "agent_id", config.AgentID)
-}
-
 // LogQuotaSpawnBlockedAlert appends an alert when an unexpired quota signal blocks spawn.
 func LogQuotaSpawnBlockedAlert(projectRoot, provider, role string) error {
 	now := time.Now()
@@ -268,80 +243,5 @@ func ClearQuotaSignal(projectRoot, provider string) error {
 }
 
 func canonicalQuotaProvider(cliName string) string {
-	return acpxAgentNameFromTool(cliName)
-}
-
-// tailReadSize is the maximum bytes to read from the end of an output file.
-// Quota messages appear near the end; reading the full file is wasteful.
-const tailReadSize = 8 * 1024
-
-// latestAgentOutputContent reads tails from stdout/stderr files belonging to
-// the same most-recent agent output timestamp. Provider startup failures may be
-// emitted on stderr before a structured stdout stream exists.
-func latestAgentOutputContent(outputsDir, agentID string) string {
-	base := latestOutputBase(outputsDir, agentID)
-	if base == "" {
-		return ""
-	}
-
-	parts := []string{
-		outputContent(base + ".txt"),
-		outputContent(base + ".err"),
-	}
-	return strings.Join(parts, "\n")
-}
-
-func latestOutputBase(outputsDir, agentID string) string {
-	matches := make([]string, 0, 2)
-	for _, ext := range []string{".txt", ".err"} {
-		pattern := filepath.Join(outputsDir, agentID+"-*"+ext)
-		extMatches, err := filepath.Glob(pattern)
-		if err != nil {
-			continue
-		}
-		matches = append(matches, extMatches...)
-	}
-	if len(matches) == 0 {
-		return ""
-	}
-	sort.Strings(matches)
-	latest := matches[len(matches)-1]
-	return strings.TrimSuffix(latest, filepath.Ext(latest))
-}
-
-// latestOutputContent reads the tail of the most recent agent output file with
-// the requested extension. Returns empty string if no file is found or read fails.
-func latestOutputContent(outputsDir, agentID, ext string) string {
-	pattern := filepath.Join(outputsDir, agentID+"-*"+ext)
-	matches, err := filepath.Glob(pattern)
-	if err != nil || len(matches) == 0 {
-		return ""
-	}
-	// Glob returns sorted by name; timestamp format ensures lexicographic = chronological.
-	latest := matches[len(matches)-1]
-	return outputContent(latest)
-}
-
-func outputContent(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return ""
-	}
-
-	size := info.Size()
-	readSize := int64(tailReadSize)
-	if size < readSize {
-		readSize = size
-	}
-	buf := make([]byte, readSize)
-	if _, err := f.ReadAt(buf, size-readSize); err != nil {
-		return ""
-	}
-	return string(buf)
+	return agentlaunch.ACPXAgentName(cliName)
 }

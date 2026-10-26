@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
@@ -400,17 +400,17 @@ func confirmMissingPostWorktreeCmd(params InitParams, projectRoot string, stdin 
 // operator's (ADR-0136), so auto-confirm and non-interactive runs never make it.
 // Without it, declared validation prerequisites stay off.
 func resolveValidationExecutionTools(params InitParams, projectRoot string, pipelineCfg *pipeline.PipelineConfig, stdin *bufio.Reader, rawStdin io.Reader) (map[string]models.AgentToolConfig, error) {
-	asserted := params.ValidationExecution == agent.ValidationExecutionLocal
+	asserted := params.ValidationExecution == agentlaunch.ValidationExecutionLocal
 	ask := !asserted && !params.AutoConfirm && (params.ForceInteractive || isInteractive(rawStdin))
 	if !asserted && !ask {
-		fmt.Fprintf(os.Stderr, "Validation prerequisites are off; pass --validation-execution %s if the agent CLIs run validation commands locally.\n", agent.ValidationExecutionLocal)
+		fmt.Fprintf(os.Stderr, "Validation prerequisites are off; pass --validation-execution %s if the agent CLIs run validation commands locally.\n", agentlaunch.ValidationExecutionLocal)
 		return nil, nil
 	}
 	resolver := pipeline.NewResolver(pipelineCfg)
 	roleModels, err := rolemodels.Load(projectRoot)
-	var roleCLIs []agent.RoleCLI
+	var roleCLIs []agentlaunch.RoleCLI
 	if err == nil {
-		roleCLIs, err = agent.DefaultRoleCLIs(resolver.AllRoleNames(), resolver, models.Config{DefaultCLI: params.DefaultCLI}, roleModels)
+		roleCLIs, err = agentlaunch.DefaultRoleCLIs(resolver.AllRoleNames(), resolver, models.Config{DefaultCLI: params.DefaultCLI}, roleModels)
 	}
 	if err != nil {
 		if asserted {
@@ -435,11 +435,11 @@ func resolveValidationExecutionTools(params InitParams, projectRoot string, pipe
 			return nil, nil
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "Validation execution: %s for %s\n", agent.ValidationExecutionLocal, strings.Join(clis, ", "))
+		fmt.Fprintf(os.Stderr, "Validation execution: %s for %s\n", agentlaunch.ValidationExecutionLocal, strings.Join(clis, ", "))
 	}
 	tools := make(map[string]models.AgentToolConfig, len(clis))
 	for _, cli := range clis {
-		tools[cli] = models.AgentToolConfig{ValidationExecution: agent.ValidationExecutionLocal}
+		tools[cli] = models.AgentToolConfig{ValidationExecution: agentlaunch.ValidationExecutionLocal}
 	}
 	return tools, nil
 }

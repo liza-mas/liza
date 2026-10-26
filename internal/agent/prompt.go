@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -252,8 +253,8 @@ func consumersValidateLocally(rolePair string, config models.Config, projectRoot
 	if err != nil {
 		return false
 	}
-	roleCLIs, err := DefaultRoleCLIs(roles, resolver, config, roleModels)
-	return err == nil && AllValidationLocal(roleCLIs, config)
+	roleCLIs, err := agentlaunch.DefaultRoleCLIs(roles, resolver, config, roleModels)
+	return err == nil && agentlaunch.AllValidationLocal(roleCLIs, config)
 }
 
 // TaskContextSections extends a role's configured context sections with the

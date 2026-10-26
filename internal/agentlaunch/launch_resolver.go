@@ -1,4 +1,10 @@
-package agent
+// Package agentlaunch resolves how a provider CLI is launched: the effective
+// tool registry (catalog merged with agent_tools), CLI, profile and model
+// selection, role-model validation, launch-plan rendering, executable
+// prerequisites and the default-role validation policy. It starts no process,
+// registers nothing and touches no worktree, so the agent runtime, process
+// spawning and presentation share it without importing one another.
+package agentlaunch
 
 import (
 	"context"
@@ -83,6 +89,17 @@ type LaunchPlanRequest struct {
 	RuntimeConfig    models.Config
 	DisableSubagents bool
 	Interactive      bool
+}
+
+// UseRuntimeCatalog replaces the memoised runtime catalog and returns the
+// function that restores it. Tests of callers use it to pin the catalog they
+// assert against, so the result does not depend on the on-disk cache or the
+// network; production code never calls it.
+func UseRuntimeCatalog(catalog providers.Catalog) (restore func()) {
+	runtimeCatalogOnce.Do(func() {})
+	previous := runtimeCatalog
+	runtimeCatalog = catalog
+	return func() { runtimeCatalog = previous }
 }
 
 func BuiltInAgentTools() map[string]models.AgentToolConfig {
@@ -267,11 +284,11 @@ func resolveLaunchBase(toolName string, tool models.AgentToolConfig, requestedMo
 func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.AgentToolConfig, backend string, vars map[string]string) (acpxAgent, sessionName string, err error) {
 	acpxAgent = strings.TrimSpace(tool.ACPXAgent)
 	if acpxAgent == "" && backend == ToolBackendACPX {
-		acpxAgent = acpxAgentNameFromTool(toolName)
+		acpxAgent = ACPXAgentName(toolName)
 	}
 	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
 	if sessionTemplate == "" && backend == ToolBackendACPX {
-		sessionTemplate = acpxSessionName("{{agentID}}")
+		sessionTemplate = ACPXSessionName("{{agentID}}")
 	}
 
 	vars["acpxAgent"] = acpxAgent
@@ -550,7 +567,10 @@ func appendDisallowedTaskArg(args []string) []string {
 	return out
 }
 
-func acpxAgentNameFromTool(toolName string) string {
+// ACPXAgentName is the canonical provider name behind a tool name: the ACPX
+// agent of an ACP tool, otherwise the tool name itself. Provider signals use it
+// to treat a tool and its ACP counterpart as one provider.
+func ACPXAgentName(toolName string) string {
 	switch toolName {
 	case "codex-acp", "acpx-codex":
 		return "codex"

@@ -1,4 +1,4 @@
-package agent
+package agentlaunch
 
 import (
 	"fmt"
@@ -89,7 +89,7 @@ func ResolveLaunchSelection(req LaunchSelectionRequest) (LaunchSelection, error)
 			if covered {
 				cli = entry.CLI
 			} else {
-				cli = ResolveDefaultCLIForRole(req.RoleType, cliResolutionConfig(req.Config))
+				cli = ResolveDefaultCLIForRole(req.RoleType, CLIResolutionConfigOf(req.Config))
 			}
 		}
 		sel = LaunchSelection{CLI: cli, Model: model, Source: SelectionSourceFlag}
@@ -118,7 +118,9 @@ func ResolveLaunchSelection(req LaunchSelectionRequest) (LaunchSelection, error)
 	return sel, nil
 }
 
-func cliResolutionConfig(config models.Config) CLIResolutionConfig {
+// CLIResolutionConfigOf extracts the configured default-CLI fields from a state
+// config.
+func CLIResolutionConfigOf(config models.Config) CLIResolutionConfig {
 	return CLIResolutionConfig{
 		DefaultCLI:         config.DefaultCLI,
 		DefaultDoerCLI:     config.DefaultDoerCLI,

@@ -1,4 +1,4 @@
-package agent
+package providersignal
 
 import (
 	"encoding/json"

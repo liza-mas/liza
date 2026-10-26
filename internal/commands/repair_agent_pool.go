@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 type RepairAgentPoolOptions struct {
@@ -91,7 +92,7 @@ type ProviderBlock func(cli string) (until time.Time, blocked bool)
 // QuotaProviderBlock blocks the CLIs whose quota signal is set in projectRoot.
 func QuotaProviderBlock(projectRoot string) ProviderBlock {
 	return func(cli string) (time.Time, bool) {
-		return agent.QuotaBlockedUntil(projectRoot, cli)
+		return providersignal.QuotaBlockedUntil(projectRoot, cli)
 	}
 }
 
@@ -128,7 +129,7 @@ func (w ProviderBlockedRoleWork) describe() (summary, hint string) {
 		remedy = fmt.Sprintf("change item %d in %s", w.Item, paths.ModelsFileName)
 	}
 	hint = fmt.Sprintf("auto repair starts agents after that; to staff earlier, %s, or delete %s once %s has capacity again",
-		remedy, agent.QuotaSignalFile(w.CLI), w.CLI)
+		remedy, providersignal.QuotaSignalFile(w.CLI), w.CLI)
 	return summary, hint
 }
 
@@ -241,12 +242,12 @@ func loadRepairInputs(opts RepairAgentPoolOptions) (repairInputs, error) {
 		return repairInputs{}, fmt.Errorf("failed to load pipeline resolver: %w", err)
 	}
 
-	availableCLIs := agent.AvailableCLIs(state.Config)
+	availableCLIs := agentlaunch.AvailableCLIs(state.Config)
 	if opts.CLI != "" && !slices.Contains(availableCLIs, opts.CLI) {
 		return repairInputs{}, fmt.Errorf("invalid CLI: %s (must be %s)", opts.CLI, strings.Join(availableCLIs, ", "))
 	}
 
-	roleModels, err := agent.LoadValidatedRoleModels(opts.ProjectRoot, agent.RoleTypesOf(pr), state.Config)
+	roleModels, err := agentlaunch.LoadValidatedRoleModels(opts.ProjectRoot, agentlaunch.RoleTypesOf(pr), state.Config)
 	if err != nil {
 		return repairInputs{}, err
 	}

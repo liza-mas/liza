@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"github.com/spf13/cobra"
 )
@@ -49,8 +49,8 @@ func TestBuildWeztermInteractivePaneScriptStartsCLIsWithInitialPrompts(t *testin
 		PromptDelay: 2 * time.Second,
 	}
 	script := buildWeztermInteractivePaneScript(opts, []interactivePane{
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 
 	for _, want := range []string{
@@ -123,7 +123,7 @@ func TestAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 }
 
 func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
-	cmd := agent.InteractiveCLICommand("codex-acp")
+	cmd := agentlaunch.InteractiveCLICommand("codex-acp")
 	got := strings.Join(cmd, "\x00")
 	if got != "codex" {
 		t.Fatalf("command = %q, want codex", got)
@@ -495,8 +495,8 @@ func TestBuildCmuxInteractiveLaunchCommandsSendsPromptsWithEnter(t *testing.T) {
 		CWD:       "/tmp/project",
 	}
 	cmds, err := buildCmuxInteractiveLaunchCommands(opts, []interactivePane{
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 	if err != nil {
 		t.Fatalf("buildCmuxInteractiveLaunchCommands returned error: %v", err)

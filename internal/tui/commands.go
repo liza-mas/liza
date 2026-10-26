@@ -12,7 +12,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
@@ -22,6 +21,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/process"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"gopkg.in/yaml.v3"
 )
 
@@ -284,12 +284,12 @@ func resumeSystemCmd(projectRoot string) tea.Cmd {
 		}
 
 		// Clear provider-scoped stop signals (mirrors CLI resume behavior).
-		sweep := agent.ClearExpiredQuotaSignals(projectRoot)
+		sweep := providersignal.ClearExpiredQuotaSignals(projectRoot)
 		clearErrors := sweep.Failures
-		if matches, err := filepath.Glob(agent.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
+		if matches, err := filepath.Glob(providersignal.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
 			for _, m := range matches {
-				provider := agent.ProviderFromUnavailableSignalFile(m)
-				if clearErr := agent.ClearProviderUnavailableSignal(projectRoot, provider); clearErr != nil {
+				provider := providersignal.ProviderFromUnavailableSignalFile(m)
+				if clearErr := providersignal.ClearProviderUnavailableSignal(projectRoot, provider); clearErr != nil {
 					clearErrors = append(clearErrors, fmt.Sprintf("unavailable/%s: %v", provider, clearErr))
 				}
 			}

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -43,7 +43,7 @@ func resolveRepairCLI(sel RepairCLI, role string, state *models.State, pr models
 	if err != nil {
 		return "", "", err
 	}
-	selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
+	selection, err := agentlaunch.ResolveLaunchSelection(agentlaunch.LaunchSelectionRequest{
 		Role:       role,
 		RoleType:   string(roleType),
 		Config:     state.Config,
@@ -52,17 +52,17 @@ func resolveRepairCLI(sel RepairCLI, role string, state *models.State, pr models
 	if err != nil {
 		return "", "", err
 	}
-	if selection.Source == agent.SelectionSourceModelsFile {
+	if selection.Source == agentlaunch.SelectionSourceModelsFile {
 		cliName = selection.CLI
 	} else {
-		cliName = agent.ResolveDefaultCLIForRole(string(roleType), agent.CLIResolutionConfig{
+		cliName = agentlaunch.ResolveDefaultCLIForRole(string(roleType), agentlaunch.CLIResolutionConfig{
 			DefaultCLI:         state.Config.DefaultCLI,
 			DefaultDoerCLI:     state.Config.DefaultDoerCLI,
 			DefaultReviewerCLI: state.Config.DefaultReviewerCLI,
 		})
 		spawnCLI = cliName
 	}
-	availableCLIs := agent.AvailableCLIs(state.Config)
+	availableCLIs := agentlaunch.AvailableCLIs(state.Config)
 	if !slices.Contains(availableCLIs, cliName) {
 		return "", "", fmt.Errorf("invalid CLI for role %s: %s (must be %s)", role, cliName, strings.Join(availableCLIs, ", "))
 	}

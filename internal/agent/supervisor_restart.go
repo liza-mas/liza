@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 type exit42RestartState struct {
@@ -361,7 +362,7 @@ func blockSpinningTask(bb *db.Blackboard, config SupervisorConfig, pr models.Pip
 		"task_id", taskID,
 		"agent_id", config.AgentID,
 		"count", spinCount)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
 		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
 	}
 	if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, reason); blockErr != nil {
@@ -387,7 +388,7 @@ func stopSpinningOrchestrator(config SupervisorConfig, stateBefore *models.State
 	GetLogger().Error("Orchestrator spinning detected, stopping system",
 		"agent_id", config.AgentID,
 		"count", spinCount)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
 		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
 	}
 	if _, stopErr := ops.Stop(config.ProjectRoot, reason, config.AgentID); stopErr != nil {

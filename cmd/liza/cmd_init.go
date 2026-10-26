@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/interactive"
@@ -511,8 +511,8 @@ func validateDefaultCLIFlag(name, value string) error {
 	if value == "" {
 		return nil
 	}
-	if !slices.Contains(agent.ValidCLIs(), value) {
-		return fmt.Errorf("invalid --%s: %s (must be %s)", name, value, strings.Join(agent.ValidCLIs(), ", "))
+	if !slices.Contains(agentlaunch.ValidCLIs(), value) {
+		return fmt.Errorf("invalid --%s: %s (must be %s)", name, value, strings.Join(agentlaunch.ValidCLIs(), ", "))
 	}
 	return nil
 }

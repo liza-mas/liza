@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/sessionvalidation"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
@@ -205,7 +207,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 	emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 	// A CLI may print its quota failure and still exit 0. Report it as a failed
 	// session, as the ACPX backend does, so the supervisor's quota path runs.
-	if qe := DetectQuotaExhaustion(output, cliName); qe != nil {
+	if qe := providersignal.DetectQuotaExhaustion(output, cliName); qe != nil {
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: cliName,
@@ -238,7 +240,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	agentID := req.AgentID
 	projectRoot := req.ProjectRoot
 	_ = req.AdditionalDirs // CLI execution does not use this; ACP implementations may.
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      cliName,
 		ProfileName:   req.ProfileName,
 		ProfileVars:   req.ProfileVars,
@@ -252,7 +254,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != ToolBackendCLI {
+	if plan.Backend != agentlaunch.ToolBackendCLI {
 		return 1, fmt.Errorf("interactive mode is not supported by %s", cliName)
 	}
 	cmdEnv, err := resolveLaunchEnvironment(plan, projectRoot, agentID, req.Generation, req.Environment)
@@ -392,7 +394,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 	promptFile := req.PromptFile
 	cleanup := func() {}
 	if promptFile == "" {
-		plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+		plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 			ToolName:         req.BackendName,
 			ProfileName:      req.ProfileName,
 			ProfileVars:      req.ProfileVars,
@@ -429,7 +431,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 			}
 		}
 	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:         req.BackendName,
 		ProfileName:      req.ProfileName,
 		ProfileVars:      req.ProfileVars,
@@ -448,7 +450,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 		cleanup()
 		return nil, nil, err
 	}
-	if plan.Backend != ToolBackendCLI {
+	if plan.Backend != agentlaunch.ToolBackendCLI {
 		cleanup()
 		return nil, nil, fmt.Errorf("%s is not a CLI backend", req.BackendName)
 	}

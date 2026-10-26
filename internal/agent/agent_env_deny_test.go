@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -40,7 +41,7 @@ func TestResolveLaunchEnvironmentWithholdsAgentEnvDeny(t *testing.T) {
 	}
 	// The fresh snapshot starts from the real process environment: assert on
 	// names only and never format the environment into a failure message.
-	env, err := resolveLaunchEnvironment(LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
+	env, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
 	if err != nil {
 		t.Fatalf("fresh resolve: %v", err)
 	}
@@ -48,7 +49,7 @@ func TestResolveLaunchEnvironmentWithholdsAgentEnvDeny(t *testing.T) {
 		t.Fatalf("fresh env: %s present=%v, overlay kept=%v; want withheld and kept", deniedHostName, envHasName(env, deniedHostName), slices.Contains(env, "OTHER=kept"))
 	}
 
-	frozen, err := resolveLaunchEnvironment(LaunchPlan{}, root, "coder-1", "gen-1", []string{deniedHostName + "=frozen-value", "OTHER=kept"})
+	frozen, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{}, root, "coder-1", "gen-1", []string{deniedHostName + "=frozen-value", "OTHER=kept"})
 	if err != nil || envHasName(frozen, deniedHostName) {
 		t.Fatalf("frozen env: %s present=%v, err %v; want the denied name re-scrubbed", deniedHostName, envHasName(frozen, deniedHostName), err)
 	}
@@ -56,7 +57,7 @@ func TestResolveLaunchEnvironmentWithholdsAgentEnvDeny(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "agent.env"), []byte(deniedHostName+"=agent-file-value\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = resolveLaunchEnvironment(LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
+	_, err = resolveLaunchEnvironment(agentlaunch.LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
 	if err == nil || !strings.Contains(err.Error(), "agent_env_denied:"+deniedHostName) || !strings.Contains(err.Error(), "config.agent_env_deny") || strings.Contains(err.Error(), "agent-file-value") {
 		t.Fatalf("err = %v, want a named agent_env_denied refusal without the value", err)
 	}

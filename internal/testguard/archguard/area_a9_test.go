@@ -6,20 +6,27 @@ var areaA9 = Area{
 	ID: "A9",
 	Layers: []LayerEntry{
 		{Package: "internal/agent", Layer: layerRuntime},
+		{Package: "internal/agentlaunch", Layer: layerInfrastructure},
 		{Package: "internal/process", Layer: layerRuntime},
+		{Package: "internal/providersignal", Layer: layerInfrastructure},
 	},
 	Allowlist: []AllowEntry{
 		{
-			Importer:  "internal/commands",
-			Imported:  "internal/agent",
-			Owner:     "Scope 20",
-			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 20 per SI-5",
+			Importer: "internal/commands",
+			Imported: "internal/agent",
+			Owner:    "Scope 20",
+			Rationale: "commands/status reads the runtime's read-only wake projection through DetectOrchestratorWakeTriggersForProject " +
+				"and OrchestratorWakeResult; keeping this adapter avoids duplicating the runtime's wake precedence or dragging ops and " +
+				"prompts dependencies into infrastructure; it grants no mutation authority and uses the A8-delivered projection " +
+				"records; every launch and provider-signal capability commands consumes lives in agentlaunch and providersignal",
 		},
 		{
-			Importer:  "internal/tui",
-			Imported:  "internal/agent",
-			Owner:     "Scope 20",
-			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 20 per SI-5",
+			Importer: "internal/tui",
+			Imported: "internal/agent",
+			Owner:    "Scope 20",
+			Rationale: "tui/view shows RolePauseReason, the snapshot-only pause reason the runtime displays; keeping this pure query " +
+				"avoids a second role and checkpoint predicate, and no waiting, resume or mutation side effect crosses the interface; " +
+				"every launch and provider-signal capability tui consumes lives in agentlaunch and providersignal",
 		},
 		{
 			Importer:  "internal/agent",

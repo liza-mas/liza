@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
@@ -106,7 +106,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 			return err
 		}
 		doerCLI, _ := cmd.Flags().GetString("doer-cli")
-		if !containsString(agent.ValidCLIs(), doerCLI) {
+		if !containsString(agentlaunch.ValidCLIs(), doerCLI) {
 			return cliValidationError(fmt.Sprintf("invalid --doer-cli %q", doerCLI))
 		}
 		reviewerSpecs, _ := cmd.Flags().GetStringArray("reviewer")
@@ -120,7 +120,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if !containsString(agent.ValidCLIs(), cliName) {
+			if !containsString(agentlaunch.ValidCLIs(), cliName) {
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
 			prompt := pairingSkillPrompt(pairingReviewerIDPrefix+id, boardPath, false)
@@ -213,7 +213,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 			return err
 		}
 		doerCLI, _ := cmd.Flags().GetString("doer-cli")
-		if !containsString(agent.ValidCLIs(), doerCLI) {
+		if !containsString(agentlaunch.ValidCLIs(), doerCLI) {
 			return cliValidationError(fmt.Sprintf("invalid --doer-cli %q", doerCLI))
 		}
 		reviewerSpecs, _ := cmd.Flags().GetStringArray("reviewer")
@@ -227,7 +227,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if !containsString(agent.ValidCLIs(), cliName) {
+			if !containsString(agentlaunch.ValidCLIs(), cliName) {
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
 			prompt := pairingSkillPrompt(pairingReviewerIDPrefix+id, boardPath, false)

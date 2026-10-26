@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // SupervisorConfig contains all configuration for the agent supervisor
@@ -584,7 +585,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 						"agent_id", config.AgentID,
 						"crash_count", crashCount,
 						"exit_code", exitCode)
-					if alertErr := LogAlert(config.ProjectRoot, "🚨", "CRASH RESTART LOOP", reason); alertErr != nil {
+					if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "CRASH RESTART LOOP", reason); alertErr != nil {
 						GetLogger().Warn("Failed to write crash alert", "error", alertErr)
 					}
 					if blockErr := blockReleasedTaskFromSupervisor(bb, config.ProjectRoot, effectiveTask, config.Authority, released, reason); blockErr != nil {
@@ -612,7 +613,7 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 }
 
 func handleQuotaSignal(config SupervisorConfig) bool {
-	if !CheckQuotaSignal(config.ProjectRoot, config.CLIName) {
+	if !providersignal.CheckQuotaSignal(config.ProjectRoot, config.CLIName) {
 		return false
 	}
 
@@ -623,7 +624,7 @@ func handleQuotaSignal(config SupervisorConfig) bool {
 }
 
 func handleProviderUnavailableSignal(config SupervisorConfig) bool {
-	if !CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) {
+	if !providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) {
 		return false
 	}
 
@@ -634,26 +635,26 @@ func handleProviderUnavailableSignal(config SupervisorConfig) bool {
 }
 
 func handleClassifiedProviderCrash(config SupervisorConfig, output string) bool {
-	if pu := DetectProviderUnavailable(output, config.CLIName); pu != nil {
+	if pu := providersignal.DetectProviderUnavailable(output, config.CLIName); pu != nil {
 		GetLogger().Error("Provider unavailable, terminating",
 			"provider", pu.Provider,
 			"agent_id", config.AgentID,
 			"message", pu.Message)
-		if alertErr := LogProviderUnavailableAlert(config.ProjectRoot, pu); alertErr != nil {
+		if alertErr := providersignal.LogProviderUnavailableAlert(config.ProjectRoot, pu); alertErr != nil {
 			GetLogger().Warn("Failed to write provider unavailable alert", "error", alertErr)
 		}
-		if err := WriteProviderUnavailableSignal(config.ProjectRoot, pu.Provider, pu.Message); err != nil {
+		if err := providersignal.WriteProviderUnavailableSignal(config.ProjectRoot, pu.Provider, pu.Message); err != nil {
 			GetLogger().Warn("Failed to write provider unavailable signal", "error", err)
 		}
 		return true
 	}
 
-	if qe := DetectQuotaExhaustion(output, config.CLIName); qe != nil {
+	if qe := providersignal.DetectQuotaExhaustion(output, config.CLIName); qe != nil {
 		GetLogger().Error("Provider quota exhausted, terminating",
 			"provider", qe.Provider,
 			"agent_id", config.AgentID,
 			"message", qe.Message)
-		if err := RaiseQuotaExhaustion(config.ProjectRoot, qe); err != nil {
+		if err := providersignal.RaiseQuotaExhaustion(config.ProjectRoot, qe); err != nil {
 			GetLogger().Warn("Failed to raise quota exhaustion", "error", err)
 		}
 		return true

@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -324,7 +325,7 @@ func TestSpawnAgent_QuotaSignalBlocksSpawnAndAlerts(t *testing.T) {
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := agent.WriteQuotaSignal(projectRoot, "codex", "quota hit"); err != nil {
+	if err := providersignal.WriteQuotaSignal(projectRoot, "codex", "quota hit"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -374,10 +375,10 @@ func TestSpawnAgent_ExpiredQuotaSignalNoLongerBlocksSpawn(t *testing.T) {
 		"message: You've hit your usage limit\n" +
 		"resets_at: " + past.Format(time.RFC3339) + "\n" +
 		"expires: " + past.Format(time.RFC3339) + "\n"
-	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, "codex"), []byte(expired), 0644); err != nil {
+	if err := os.WriteFile(providersignal.QuotaSignalPath(projectRoot, "codex"), []byte(expired), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -406,7 +407,7 @@ func TestSpawnAgent_ProviderUnavailableSignalBlocksSpawnAndAlerts(t *testing.T) 
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -482,10 +483,10 @@ func TestA9SpawnCheckOrder(t *testing.T) {
 
 	t.Run("quota before unavailable and prerequisites", func(t *testing.T) {
 		projectRoot, alertsPath := setup(t)
-		if err := agent.WriteQuotaSignal(projectRoot, "codex-acp", "quota hit"); err != nil {
+		if err := providersignal.WriteQuotaSignal(projectRoot, "codex-acp", "quota hit"); err != nil {
 			t.Fatal(err)
 		}
-		if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
+		if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
 			t.Fatal(err)
 		}
 		_, err := SpawnAgent(projectRoot, "coder", "codex-acp")
@@ -499,7 +500,7 @@ func TestA9SpawnCheckOrder(t *testing.T) {
 	})
 	t.Run("unavailable before prerequisites", func(t *testing.T) {
 		projectRoot, alertsPath := setup(t)
-		if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
+		if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
 			t.Fatal(err)
 		}
 		_, err := SpawnAgent(projectRoot, "coder", "codex-acp")

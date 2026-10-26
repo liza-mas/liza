@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -231,7 +232,7 @@ func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger stri
 		return
 	}
 
-	cliName := ResolveDefaultCLIForRole("orchestrator", cliResolutionConfig(cfg))
+	cliName := agentlaunch.ResolveDefaultCLIForRole("orchestrator", agentlaunch.CLIResolutionConfigOf(cfg))
 	prompt := buildCheckpointSummaryPrompt(trigger, scope)
 
 	if err := checkpointSummaryRunner(ctx, projectRoot, cliName, prompt, cfg); err != nil {
@@ -432,19 +433,19 @@ func checkpointSummaryCLICommand(
 // catalog, the same source normal agent runs use, so every configured CLI can
 // emit a summary. An ACP tool runs through its CLI counterpart: a summary is a
 // single prompt and needs no ACP session.
-func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config) (LaunchPlan, error) {
+func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config) (agentlaunch.LaunchPlan, error) {
 	if cliName == "vibe" {
 		cliName = "mistral"
 	}
-	registry := AgentToolRegistry(cfg)
-	if tool, ok := registry[cliName]; ok && tool.Backend == ToolBackendACPX {
-		counterpart := acpxAgentNameFromTool(cliName)
-		if cliTool, ok := registry[counterpart]; !ok || cliTool.Backend == ToolBackendACPX {
-			return LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
+	registry := agentlaunch.AgentToolRegistry(cfg)
+	if tool, ok := registry[cliName]; ok && tool.Backend == agentlaunch.ToolBackendACPX {
+		counterpart := agentlaunch.ACPXAgentName(cliName)
+		if cliTool, ok := registry[counterpart]; !ok || cliTool.Backend == agentlaunch.ToolBackendACPX {
+			return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
 		}
 		cliName = counterpart
 	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      cliName,
 		Prompt:        prompt,
 		ProjectRoot:   projectRoot,
@@ -454,10 +455,10 @@ func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models
 		DisableSubagents: true,
 	})
 	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
+		return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
 	}
 	if plan.UsesPromptFile {
-		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
+		return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
 	}
 	return plan, nil
 }

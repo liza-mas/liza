@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
 
@@ -139,22 +141,22 @@ func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string
 		agentSpawnGuard.Unlock()
 	}()
 
-	if agent.CheckQuotaSignal(projectRoot, cli) {
+	if providersignal.CheckQuotaSignal(projectRoot, cli) {
 		err := fmt.Errorf("provider quota exhausted for %s; refusing to spawn %s", cli, role)
-		if alertErr := agent.LogQuotaSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
+		if alertErr := providersignal.LogQuotaSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
 			return nil, errors.Join(err, fmt.Errorf("write quota spawn-blocked alert: %w", alertErr))
 		}
 		return nil, err
 	}
-	if agent.CheckProviderUnavailableSignal(projectRoot, cli) {
+	if providersignal.CheckProviderUnavailableSignal(projectRoot, cli) {
 		err := fmt.Errorf("provider unavailable for %s; refusing to spawn %s", cli, role)
-		if alertErr := agent.LogProviderUnavailableSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
+		if alertErr := providersignal.LogProviderUnavailableSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
 			return nil, errors.Join(err, fmt.Errorf("write provider-unavailable spawn-blocked alert: %w", alertErr))
 		}
 		return nil, err
 	}
 	runtimeConfig := readRuntimeConfig(projectRoot)
-	if err := agent.CheckCLIPrerequisitesWithConfig(cli, runtimeConfig); err != nil {
+	if err := agentlaunch.CheckCLIPrerequisitesWithConfig(cli, runtimeConfig); err != nil {
 		return nil, fmt.Errorf("spawn %s with %s: %w", role, cli, err)
 	}
 

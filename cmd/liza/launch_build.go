@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 )
 
@@ -205,7 +205,7 @@ func pairingSkillPrompt(roleOrReviewerID, boardPath string, yolo bool) string {
 }
 
 func pairingInteractivePane(cliName, prompt string) interactivePane {
-	return interactivePane{CLIName: cliName, Command: agent.InteractiveCLICommand(cliName), Prompt: prompt}
+	return interactivePane{CLIName: cliName, Command: agentlaunch.InteractiveCLICommand(cliName), Prompt: prompt}
 }
 
 func shellJoin(args []string) string {

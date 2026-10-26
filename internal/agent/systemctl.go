@@ -437,7 +437,7 @@ func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, a
 		// background job keeps the CLI alive. That is a provider failure, not
 		// a stalled task: the non-zero exit sends it down the supervisor's
 		// provider-failure path with the claim still held (D-101).
-		if DetectProviderUnavailable(result.Output, config.CLIName) != nil || DetectQuotaExhaustion(result.Output, config.CLIName) != nil {
+		if providerEndedSession(result.Output, config.CLIName) {
 			logger.Warn("Execution progress timeout after the provider ended the session; handling it as a provider failure",
 				"agent_id", config.AgentID,
 				"task_id", taskID)

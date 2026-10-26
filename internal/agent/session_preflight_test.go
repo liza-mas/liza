@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/providers"
@@ -22,12 +23,10 @@ import (
 func TestSupervisorSessionCatalogEnvFiles(t *testing.T) {
 	// A refreshed catalog can add an overlay unknown to the installed binary.
 	// Keep the embedded catalog unchanged to reproduce that version skew.
-	previousCatalog := runtimeCatalog
-	runtimeCatalog = providers.Catalog{Providers: []providers.Provider{{
-		ID: "codex", Backend: ToolBackendCLI,
+	t.Cleanup(agentlaunch.UseRuntimeCatalog(providers.Catalog{Providers: []providers.Provider{{
+		ID: "codex", Backend: agentlaunch.ToolBackendCLI,
 		Runtime: providers.Runtime{EnvFiles: []string{"new-catalog.conf"}},
-	}}}
-	t.Cleanup(func() { runtimeCatalog = previousCatalog })
+	}}}))
 	t.Setenv("CATALOG_OVERLAY_TEST", "inherited")
 
 	for _, tt := range []struct {

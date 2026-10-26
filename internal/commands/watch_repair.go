@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
@@ -133,7 +133,7 @@ func autoRepairEnabled(config WatchConfig) bool {
 // loadAutoRepairRoleModels loads the validated models.yaml. An invalid file
 // raises one AUTO REPAIR FAILED alert per distinct error and skips the tick.
 func loadAutoRepairRoleModels(state *models.State, pr models.PipelineResolver, config WatchConfig, now time.Time, outcome *AutoRepairAgentPoolOutcome) (rolemodels.File, bool) {
-	roleModels, err := agent.LoadValidatedRoleModels(config.ProjectRoot, agent.RoleTypesOf(pr), state.Config)
+	roleModels, err := agentlaunch.LoadValidatedRoleModels(config.ProjectRoot, agentlaunch.RoleTypesOf(pr), state.Config)
 	if err != nil {
 		key := autoRepairModelsErrorKey + err.Error()
 		if _, seen := config.StateCache[key]; !seen {

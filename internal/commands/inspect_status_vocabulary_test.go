@@ -256,7 +256,7 @@ func TestOrchestratorStatusReasonsKeepFormerTriggerSpellings(t *testing.T) {
 	}{
 		{agent.WakeTriggerInitialPlanning, 0, "No tasks exist; initial planning needed"},
 		{agent.WakeTriggerBlocked, 2, "2 task(s) are blocked and need attention"},
-		{wakeTriggerIntegrationFailed, 3, "3 task(s) failed integration"},
+		{agent.OrchestratorWakeTrigger(wakeTriggerIntegrationFailed), 3, "3 task(s) failed integration"},
 		{agent.WakeTriggerHypothesisExhausted, 1, "1 task(s) exhausted hypotheses (2+ failures)"},
 		{agent.WakeTriggerImmediateDiscovery, 4, "4 immediate discovery(ies) need to be converted to tasks"},
 		{agent.WakeTriggerHumanNote, 2, "2 operator note(s) not yet rendered in a completed turn"},
@@ -268,8 +268,8 @@ func TestOrchestratorStatusReasonsKeepFormerTriggerSpellings(t *testing.T) {
 	}
 	spelled := map[agent.OrchestratorWakeTrigger]string{
 		agent.WakeTriggerInitialPlanning: "INITIAL_PLANNING", agent.WakeTriggerBlocked: "BLOCKED_TASKS",
-		wakeTriggerIntegrationFailed:         "INTEGRATION_FAILED",
-		agent.WakeTriggerHypothesisExhausted: "HYPOTHESIS_EXHAUSTED", agent.WakeTriggerImmediateDiscovery: "IMMEDIATE_DISCOVERY",
+		agent.OrchestratorWakeTrigger(wakeTriggerIntegrationFailed): "INTEGRATION_FAILED",
+		agent.WakeTriggerHypothesisExhausted:                        "HYPOTHESIS_EXHAUSTED", agent.WakeTriggerImmediateDiscovery: "IMMEDIATE_DISCOVERY",
 		agent.WakeTriggerHumanNote: "HUMAN_NOTE", agent.WakeTriggerPlanningComplete: "PLANNING_COMPLETE",
 		agent.WakeTriggerManyToOneReady: "MANY_TO_ONE_READY", agent.WakeTriggerSprintComplete: "SPRINT_COMPLETE",
 		agent.WakeTriggerNone: "NONE",

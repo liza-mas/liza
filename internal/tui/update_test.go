@@ -12,7 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -1286,8 +1286,8 @@ func TestResolvedDefaultCLI_NilState(t *testing.T) {
 	m := testModel()
 	// m.state is nil
 	got := m.resolvedDefaultCLI()
-	if got != agent.DefaultCLI {
-		t.Errorf("resolvedDefaultCLI() with nil state = %q, want %q", got, agent.DefaultCLI)
+	if got != agentlaunch.DefaultCLI {
+		t.Errorf("resolvedDefaultCLI() with nil state = %q, want %q", got, agentlaunch.DefaultCLI)
 	}
 }
 
@@ -1306,8 +1306,8 @@ func TestResolvedDefaultCLI_EmptyConfig(t *testing.T) {
 	m := testModel()
 	m.state = &models.State{}
 	got := m.resolvedDefaultCLI()
-	if got != agent.DefaultCLI {
-		t.Errorf("resolvedDefaultCLI() with empty config = %q, want %q", got, agent.DefaultCLI)
+	if got != agentlaunch.DefaultCLI {
+		t.Errorf("resolvedDefaultCLI() with empty config = %q, want %q", got, agentlaunch.DefaultCLI)
 	}
 }
 

@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"github.com/liza-mas/liza/internal/testhelpers/perm"
 )
@@ -188,7 +188,7 @@ func TestResumeCommand_WarnsOnProviderSignalClearFailure(t *testing.T) {
 	state.Config.Mode = models.SystemModePaused
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	signalPath := agent.ProviderUnavailableSignalPath(tmpDir, "codex")
+	signalPath := providersignal.ProviderUnavailableSignalPath(tmpDir, "codex")
 	if err := os.MkdirAll(signalPath, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestResumeCommand_KeepsUnexpiredQuotaSignal(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	resetsAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
-	if err := agent.RaiseQuotaExhaustion(tmpDir, &agent.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+	if err := providersignal.RaiseQuotaExhaustion(tmpDir, &providersignal.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
 		t.Fatal(err)
 	}
 	writeExpiredQuotaSignal(t, tmpDir, "claude")
@@ -235,10 +235,10 @@ func TestResumeCommand_KeepsUnexpiredQuotaSignal(t *testing.T) {
 		}
 	})
 
-	if !agent.CheckQuotaSignal(tmpDir, "codex") {
+	if !providersignal.CheckQuotaSignal(tmpDir, "codex") {
 		t.Error("codex should still be blocked after resume")
 	}
-	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
+	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
 		t.Error("expired claude quota signal should have been removed after resume")
 	}
 	signalFile := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex")
@@ -257,7 +257,7 @@ func writeExpiredQuotaSignal(t *testing.T, projectRoot, provider string) {
 	t.Helper()
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	content := "provider: " + provider + "\ndetected: " + past + "\nmessage: limit\nresets_at: unknown\nexpires: " + past + "\n"
-	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(providersignal.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 }

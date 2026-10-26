@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/gitbash"
 	"github.com/spf13/cobra"
 )
@@ -395,7 +395,7 @@ func cmuxScreenLooksInteractive(screen string) bool {
 
 func cmuxPaneUsesCodex(pane interactivePane) bool {
 	if pane.CLIName != "" {
-		return agent.CLIExecutableName(pane.CLIName) == codexExecutable
+		return agentlaunch.CLIExecutableName(pane.CLIName) == codexExecutable
 	}
 	return len(pane.Command) > 0 && pane.Command[0] == codexExecutable
 }

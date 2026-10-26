@@ -1,4 +1,4 @@
-package agent
+package providersignal
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -47,17 +48,21 @@ type ProviderUnavailable struct {
 // DetectProviderUnavailable scans agent output for provider startup failures
 // that make the provider unable to create a usable agent session.
 func DetectProviderUnavailable(output, cliName string) *ProviderUnavailable {
-	providerUnavailable, _ := classifyProviderUnavailable(output, cliName)
+	providerUnavailable, _ := ClassifyProviderUnavailable(output, cliName)
 	return providerUnavailable
 }
 
-func classifyProviderUnavailable(output, cliName string) (*ProviderUnavailable, string) {
-	provider := acpxAgentNameFromTool(cliName)
+// ClassifyProviderUnavailable is DetectProviderUnavailable that also returns the
+// bounded diagnostic of the matching pattern, the only evidence a caller may
+// persist. Patterns are tried in registry order, each against every
+// diagnostic line.
+func ClassifyProviderUnavailable(output, cliName string) (*ProviderUnavailable, string) {
+	provider := agentlaunch.ACPXAgentName(cliName)
 	for _, p := range providerUnavailablePatterns {
 		if p.Provider != provider {
 			continue
 		}
-		for _, line := range providerDiagnosticLines(output) {
+		for _, line := range DiagnosticLines(output) {
 			matched := true
 			for _, needle := range p.Needles {
 				if !strings.Contains(line, needle) {
@@ -80,7 +85,7 @@ const providerUnavailableSignalPrefix = "provider-unavailable-"
 
 // ProviderUnavailableSignalPath returns the path to the provider-unavailable signal file.
 func ProviderUnavailableSignalPath(projectRoot, provider string) string {
-	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+acpxAgentNameFromTool(provider))
+	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+agentlaunch.ACPXAgentName(provider))
 }
 
 // ProviderUnavailableSignalGlob returns a glob matching provider-unavailable signal files.

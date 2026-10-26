@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/paths"
@@ -192,13 +192,13 @@ func cmuxOptionsFromFlags(cmd *cobra.Command, cwd, defaultWorkspace string) (cmu
 
 func launchAvailableCLIs(projectRoot string) []string {
 	if projectRoot == "" {
-		return agent.ValidCLIs()
+		return agentlaunch.ValidCLIs()
 	}
 	state, err := db.For(paths.New(projectRoot).StatePath()).ReadSnapshot()
 	if err != nil {
-		return agent.ValidCLIs()
+		return agentlaunch.ValidCLIs()
 	}
-	return agent.AvailableCLIs(state.Config)
+	return agentlaunch.AvailableCLIs(state.Config)
 }
 
 // pairingReviewerIDPrefix prefixes a pairing reviewer ID in the adversarial-pairing

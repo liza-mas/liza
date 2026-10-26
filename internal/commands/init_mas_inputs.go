@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/envgate"
@@ -136,8 +136,8 @@ func (m *masInit) loadPipeline() error {
 		}
 	}
 
-	if v := m.params.ValidationExecution; v != "" && v != agent.ValidationExecutionLocal {
-		return fmt.Errorf("--validation-execution must be %q, got %q", agent.ValidationExecutionLocal, v)
+	if v := m.params.ValidationExecution; v != "" && v != agentlaunch.ValidationExecutionLocal {
+		return fmt.Errorf("--validation-execution must be %q, got %q", agentlaunch.ValidationExecutionLocal, v)
 	}
 	return nil
 }

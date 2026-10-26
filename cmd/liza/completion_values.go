@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -23,7 +23,7 @@ func completeValues(values ...string) cobra.CompletionFunc {
 }
 
 func completeCLINames(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return filterCompletionValues(agent.ValidCLIs(), toComplete), cobra.ShellCompDirectiveNoFileComp
+	return filterCompletionValues(agentlaunch.ValidCLIs(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
 func toolIDs() []string {

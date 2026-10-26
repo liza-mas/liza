@@ -4,9 +4,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 const ProviderAuditDegradedAnomalyType = "provider_audit_degraded"
@@ -35,12 +37,12 @@ type ProviderAuditDegraded struct {
 // DetectProviderAuditDegraded scans provider output for non-fatal audit trail
 // degradation such as Codex rollout persistence failures.
 func DetectProviderAuditDegraded(output, cliName string) *ProviderAuditDegraded {
-	provider := acpxAgentNameFromTool(cliName)
+	provider := agentlaunch.ACPXAgentName(cliName)
 	for _, p := range providerAuditPatterns {
 		if p.Provider != provider {
 			continue
 		}
-		for _, line := range providerDiagnosticLines(output) {
+		for _, line := range providersignal.DiagnosticLines(output) {
 			matched := true
 			for _, needle := range p.Needles {
 				if !strings.Contains(line, needle) {
@@ -61,7 +63,7 @@ func DetectProviderAuditDegraded(output, cliName string) *ProviderAuditDegraded 
 
 // LogProviderAuditDegradedAlert appends a provider audit degradation alert.
 func LogProviderAuditDegradedAlert(projectRoot string, pad *ProviderAuditDegraded) error {
-	return LogAlert(projectRoot, "⚠️", "PROVIDER AUDIT DEGRADED", pad.Provider+": "+pad.Message)
+	return providersignal.LogAlert(projectRoot, "⚠️", "PROVIDER AUDIT DEGRADED", pad.Provider+": "+pad.Message)
 }
 
 func handleProviderAuditDegraded(bb *db.Blackboard, config SupervisorConfig, taskID, output string) (bool, error) {

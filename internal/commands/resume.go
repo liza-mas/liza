@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // ResumeCommand resumes the Liza system and prints the result to stdout.
@@ -44,7 +44,7 @@ func ResumeCommand(projectRoot, changedBy string) error {
 
 	// Clear provider-scoped stop signals so restarted agents aren't immediately
 	// blocked; a quota block whose expiry has not passed stays.
-	sweep := agent.ClearExpiredQuotaSignals(projectRoot)
+	sweep := providersignal.ClearExpiredQuotaSignals(projectRoot)
 	for _, provider := range sweep.Cleared {
 		fmt.Printf("  Cleared expired quota signal for provider: %s\n", provider)
 	}
@@ -52,10 +52,10 @@ func ResumeCommand(projectRoot, changedBy string) error {
 		fmt.Printf("  Kept quota signal for provider: %s until %s; delete %s to lift it earlier\n", held.Provider, held.Until.UTC().Format(time.RFC3339), held.File)
 	}
 	clearErrors := sweep.Failures
-	if matches, err := filepath.Glob(agent.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
+	if matches, err := filepath.Glob(providersignal.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
 		for _, m := range matches {
-			provider := agent.ProviderFromUnavailableSignalFile(m)
-			if clearErr := agent.ClearProviderUnavailableSignal(projectRoot, provider); clearErr == nil {
+			provider := providersignal.ProviderFromUnavailableSignalFile(m)
+			if clearErr := providersignal.ClearProviderUnavailableSignal(projectRoot, provider); clearErr == nil {
 				fmt.Printf("  Cleared provider-unavailable signal for provider: %s\n", provider)
 			} else {
 				clearErrors = append(clearErrors, fmt.Sprintf("unavailable/%s: %v", provider, clearErr))

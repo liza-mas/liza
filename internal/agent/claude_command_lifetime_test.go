@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -37,19 +38,19 @@ func envEntries(env []string, name string) []string {
 func TestResolveLaunchEnvironmentRaisesClaudeCommandCeiling(t *testing.T) {
 	tests := []struct {
 		name    string
-		plan    LaunchPlan
+		plan    agentlaunch.LaunchPlan
 		ambient string // "" leaves the variable unset
 		envFile string // claude.env content; "" writes no file
 		want    string
 	}{
-		{name: "unset, provider key", plan: LaunchPlan{ProviderKey: "claude"}, want: claudeCeiling},
-		{name: "unset, tool name alias", plan: LaunchPlan{ToolName: "claude"}, want: claudeCeiling},
-		{name: "ambient higher is kept", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "30000000", want: "30000000"},
-		{name: "ambient lower is raised", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "600000", want: claudeCeiling},
-		{name: "env file lower is raised", plan: LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=600000\n", want: claudeCeiling},
-		{name: "env file higher is kept", plan: LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=30000000\n", want: "30000000"},
-		{name: "malformed is replaced", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "two-hours", want: claudeCeiling},
-		{name: "negative is replaced", plan: LaunchPlan{ProviderKey: "claude"}, ambient: "-5", want: claudeCeiling},
+		{name: "unset, provider key", plan: agentlaunch.LaunchPlan{ProviderKey: "claude"}, want: claudeCeiling},
+		{name: "unset, tool name alias", plan: agentlaunch.LaunchPlan{ToolName: "claude"}, want: claudeCeiling},
+		{name: "ambient higher is kept", plan: agentlaunch.LaunchPlan{ProviderKey: "claude"}, ambient: "30000000", want: "30000000"},
+		{name: "ambient lower is raised", plan: agentlaunch.LaunchPlan{ProviderKey: "claude"}, ambient: "600000", want: claudeCeiling},
+		{name: "env file lower is raised", plan: agentlaunch.LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=600000\n", want: claudeCeiling},
+		{name: "env file higher is kept", plan: agentlaunch.LaunchPlan{ProviderKey: "claude", EnvFiles: []string{"claude.env"}}, envFile: "BASH_MAX_TIMEOUT_MS=30000000\n", want: "30000000"},
+		{name: "malformed is replaced", plan: agentlaunch.LaunchPlan{ProviderKey: "claude"}, ambient: "two-hours", want: claudeCeiling},
+		{name: "negative is replaced", plan: agentlaunch.LaunchPlan{ProviderKey: "claude"}, ambient: "-5", want: claudeCeiling},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,13 +91,13 @@ func TestResolveLaunchEnvironmentLeavesNonClaudeCommandCeilingAlone(t *testing.T
 	root := t.TempDir()
 	t.Setenv("BASH_MAX_TIMEOUT_MS", "")
 	os.Unsetenv("BASH_MAX_TIMEOUT_MS")
-	env, err := resolveLaunchEnvironment(LaunchPlan{ProviderKey: "codex", ToolName: "codex"}, root, "coder-1", "gen-1", nil)
+	env, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{ProviderKey: "codex", ToolName: "codex"}, root, "coder-1", "gen-1", nil)
 	if err != nil || len(envEntries(env, "BASH_MAX_TIMEOUT_MS")) != 0 {
 		t.Fatalf("env = %v, %v; want no ceiling for codex", envEntries(env, "BASH_MAX_TIMEOUT_MS"), err)
 	}
 
 	t.Setenv("BASH_MAX_TIMEOUT_MS", "123")
-	env, err = resolveLaunchEnvironment(LaunchPlan{ProviderKey: "codex", ToolName: "codex"}, root, "coder-1", "gen-1", nil)
+	env, err = resolveLaunchEnvironment(agentlaunch.LaunchPlan{ProviderKey: "codex", ToolName: "codex"}, root, "coder-1", "gen-1", nil)
 	if got := envEntries(env, "BASH_MAX_TIMEOUT_MS"); err != nil || len(got) != 1 || got[0] != "123" {
 		t.Fatalf("env = %v, %v; want the ambient value passed through unchanged", got, err)
 	}
@@ -116,7 +117,7 @@ func TestResolveLaunchEnvironmentStripsClaudeCeilingDeclaredAsRuntimeInput(t *te
 	state.Tasks = append(state.Tasks, task)
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	env, err := resolveLaunchEnvironment(LaunchPlan{ProviderKey: "claude"}, root, "coder-1", "gen-1", nil)
+	env, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{ProviderKey: "claude"}, root, "coder-1", "gen-1", nil)
 	if err != nil || len(envEntries(env, "BASH_MAX_TIMEOUT_MS")) != 0 {
 		t.Fatalf("env = %v, %v; want the declared runtime-input name stripped", envEntries(env, "BASH_MAX_TIMEOUT_MS"), err)
 	}
@@ -126,7 +127,7 @@ func TestResolveLaunchEnvironmentStripsClaudeCeilingDeclaredAsRuntimeInput(t *te
 // verbatim, so the ceiling is decided once per session.
 func TestResolveLaunchEnvironmentReturnsFrozenSnapshotUnchanged(t *testing.T) {
 	frozen := []string{"PATH=/bin", "BASH_MAX_TIMEOUT_MS=600000"}
-	env, err := resolveLaunchEnvironment(LaunchPlan{ProviderKey: "claude"}, t.TempDir(), "coder-1", "gen-1", frozen)
+	env, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{ProviderKey: "claude"}, t.TempDir(), "coder-1", "gen-1", frozen)
 	if err != nil || strings.Join(env, ",") != strings.Join(frozen, ",") {
 		t.Fatalf("env = %v, %v; want the frozen snapshot unchanged", env, err)
 	}

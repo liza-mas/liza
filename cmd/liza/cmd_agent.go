@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
@@ -162,11 +163,11 @@ Example:
 			runtimeConfig = state.Config
 		}
 
-		roleModels, err := agent.LoadValidatedRoleModels(projectRoot, agent.RoleTypesOf(resolver), runtimeConfig)
+		roleModels, err := agentlaunch.LoadValidatedRoleModels(projectRoot, agentlaunch.RoleTypesOf(resolver), runtimeConfig)
 		if err != nil {
 			return err
 		}
-		selection, err := agent.ResolveLaunchSelection(agent.LaunchSelectionRequest{
+		selection, err := agentlaunch.ResolveLaunchSelection(agentlaunch.LaunchSelectionRequest{
 			Role:       role,
 			RoleType:   string(roleType),
 			CLI:        cliName,
@@ -183,17 +184,17 @@ Example:
 		cliName = selection.CLI
 		resolvedProfile := selection.Profile
 
-		availableCLIs := agent.AvailableCLIs(runtimeConfig)
+		availableCLIs := agentlaunch.AvailableCLIs(runtimeConfig)
 		if !slices.Contains(availableCLIs, cliName) {
 			return fmt.Errorf("invalid CLI: %s (must be %s)", cliName, strings.Join(availableCLIs, ", "))
 		}
-		if err := agent.CheckCLIPrerequisitesWithConfig(cliName, runtimeConfig); err != nil {
+		if err := agentlaunch.CheckCLIPrerequisitesWithConfig(cliName, runtimeConfig); err != nil {
 			return err
 		}
 
 		shouldLog := !noLog && !interactive
 
-		contractKey := agent.ContractKeyForCLI(cliName, runtimeConfig)
+		contractKey := agentlaunch.ContractKeyForCLI(cliName, runtimeConfig)
 		// Warn if no product contract symlink is configured for this CLI.
 		if contractKey != "" && contractKey != contractKeyNone && commands.CheckContractConfigured(projectRoot, contractKey) == "" {
 			fmt.Fprintf(supervisorLogs.stderr, "Warning: no %s contract symlink found for %s. Agents may not find the behavioral contract.\n", brand.NameTitle, cliName)
@@ -272,13 +273,13 @@ Example:
 	},
 }
 
-func explainAgentLaunch(cmd *cobra.Command, selection agent.LaunchSelection, projectRoot, outputsDir string, runtimeConfig models.Config) error {
+func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelection, projectRoot, outputsDir string, runtimeConfig models.Config) error {
 	cliName, profile := selection.CLI, selection.Profile
 	promptFile := ""
-	if tool, ok := agent.AgentToolRegistry(runtimeConfig)[cliName]; ok && tool.PromptTransport == agent.PromptTransportFile {
+	if tool, ok := agentlaunch.AgentToolRegistry(runtimeConfig)[cliName]; ok && tool.PromptTransport == agentlaunch.PromptTransportFile {
 		promptFile = "<prompt-file>"
 	}
-	plan, err := agent.ResolveLaunchPlan(agent.LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      cliName,
 		ProfileName:   profile.Name,
 		ProfileVars:   profile.Vars,

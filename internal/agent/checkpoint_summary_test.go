@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -98,8 +99,8 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 		t.Fatal("expected checkpoint summary runner to be called for default config")
 	}
 	// Default CLI is "claude" per cli.go.
-	if gotCLI != DefaultCLI {
-		t.Errorf("cli = %q, want %q", gotCLI, DefaultCLI)
+	if gotCLI != agentlaunch.DefaultCLI {
+		t.Errorf("cli = %q, want %q", gotCLI, agentlaunch.DefaultCLI)
 	}
 	if !strings.Contains(gotPrompt, "checkpoint-summary skill") {
 		t.Errorf("prompt = %q, want to mention checkpoint-summary skill", gotPrompt)
@@ -243,7 +244,7 @@ func TestCheckpointSummaryLaunchPlan_ACPToolUsesCLICounterpart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if plan.Backend != ToolBackendCLI || plan.Executable != "opencode" {
+	if plan.Backend != agentlaunch.ToolBackendCLI || plan.Executable != "opencode" {
 		t.Errorf("plan = backend %q executable %q, want cli/opencode", plan.Backend, plan.Executable)
 	}
 	if !plan.UsesStdin {
@@ -259,7 +260,7 @@ func TestCheckpointSummaryLaunchPlan_Unsupported(t *testing.T) {
 
 func TestCheckpointSummaryLaunchPlan_RejectsPromptFileTransport(t *testing.T) {
 	cfg := models.Config{AgentTools: map[string]models.AgentToolConfig{
-		"filetool": {Backend: ToolBackendCLI, Executable: "filetool", PromptTransport: PromptTransportFile},
+		"filetool": {Backend: agentlaunch.ToolBackendCLI, Executable: "filetool", PromptTransport: agentlaunch.PromptTransportFile},
 	}}
 	if _, err := checkpointSummaryLaunchPlan(t.TempDir(), "filetool", "x", cfg); err == nil {
 		t.Fatal("expected error for prompt-file transport")

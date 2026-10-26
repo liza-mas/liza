@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -135,7 +136,7 @@ func runQuotaTerminationScenario(t *testing.T, untrackedFile string, newAgent fu
 	if calls != 1 {
 		t.Fatalf("provider sessions = %d, want 1", calls)
 	}
-	if !CheckQuotaSignal(projectRoot, "codex") {
+	if !providersignal.CheckQuotaSignal(projectRoot, "codex") {
 		t.Fatal("codex quota signal not set, want the provider parked until its reset")
 	}
 	if status := testhelpers.MustGit(t, worktree, "status", "--short"); status != "" {

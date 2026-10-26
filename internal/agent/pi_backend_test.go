@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -36,7 +37,7 @@ func TestPiLaunchPlanFailsWhenHomeUnresolvable(t *testing.T) {
 		t.Skipf("home still resolves to %q on this platform", home)
 	}
 
-	_, err := ResolveLaunchPlan(LaunchPlanRequest{
+	_, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      "pi",
 		Prompt:        "do it",
 		ProjectRoot:   t.TempDir(),
@@ -47,7 +48,7 @@ func TestPiLaunchPlanFailsWhenHomeUnresolvable(t *testing.T) {
 	}
 
 	// Providers that do not reference globalDir are unaffected.
-	if _, err := ResolveLaunchPlan(LaunchPlanRequest{
+	if _, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      "claude",
 		Prompt:        "do it",
 		ProjectRoot:   t.TempDir(),
@@ -63,7 +64,7 @@ func TestPiLaunchPlanReferencesGlobalInitGate(t *testing.T) {
 	}
 
 	gatePath := expectedPiGatePath(t)
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      "pi",
 		Prompt:        "do it",
 		ProjectRoot:   t.TempDir(),
@@ -77,7 +78,7 @@ func TestPiLaunchPlanReferencesGlobalInitGate(t *testing.T) {
 		t.Fatalf("plan = exe %q args %v stdin %v, want exe %q args %v stdin true", plan.Executable, plan.Args, plan.UsesStdin, "pi", wantArgs)
 	}
 
-	logged, err := ResolveLaunchPlan(LaunchPlanRequest{
+	logged, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      "pi",
 		Prompt:        "do it",
 		OutputsDir:    "/logs",
@@ -99,11 +100,11 @@ func TestDevinLaunchPlanSupportsModelOverride(t *testing.T) {
 			"devin": {
 				RunArgs:         []string{"--permission-mode", "dangerous", "--model", "swe-2-max", "-p", "{{prompt}}"},
 				LoggedRunArgs:   []string{"--permission-mode", "dangerous", "--model", "swe-2-max", "-p", "{{prompt}}"},
-				PromptTransport: PromptTransportArg,
+				PromptTransport: agentlaunch.PromptTransportArg,
 			},
 		},
 	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      "devin",
 		Prompt:        "do it",
 		ProjectRoot:   t.TempDir(),

@@ -1,6 +1,6 @@
 package commands
 
-import "github.com/liza-mas/liza/internal/agent"
+import "github.com/liza-mas/liza/internal/prompts"
 
 // statusFormat is an output format of the status command. Any other value,
 // including the empty string, renders the dashboard.
@@ -36,7 +36,7 @@ const (
 
 // wakeTriggerIntegrationFailed is a trigger name the status reason table still
 // words, although agent no longer declares or emits it.
-const wakeTriggerIntegrationFailed agent.OrchestratorWakeTrigger = "INTEGRATION_FAILED"
+const wakeTriggerIntegrationFailed prompts.WakeTrigger = "INTEGRATION_FAILED"
 
 // Circuit-breaker states the status and watch views read. The owner (A3 ops
 // mode change and the models history check) keeps them unexported.

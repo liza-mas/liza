@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -296,9 +296,9 @@ type Model struct {
 // resolvedDefaultCLI returns the effective global default CLI from config, with nil-safe fallback.
 func (m Model) resolvedDefaultCLI() string {
 	if m.state == nil {
-		return agent.ResolveDefaultCLI("")
+		return agentlaunch.ResolveDefaultCLI("")
 	}
-	return agent.ResolveDefaultCLI(m.state.Config.DefaultCLI)
+	return agentlaunch.ResolveDefaultCLI(m.state.Config.DefaultCLI)
 }
 
 // resolvedDefaultCLIForRole returns the effective default CLI for a role name.
@@ -321,20 +321,20 @@ func (m Model) roleLaunchDefault(role string) (cli string, fromConfig bool, ok b
 	if m.state != nil {
 		config = m.state.Config
 	}
-	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
+	if roleModels, err := agentlaunch.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
 		// A reviewer list starts with item 1, like an agent started without flags.
 		if selection, covered := roleModels.For(role, roles.RoleType(roleType)); covered {
 			return selection.First().CLI, true, true
 		}
 	}
-	return agent.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true
+	return agentlaunch.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true
 }
 
-func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {
+func (m Model) cliResolutionConfig() agentlaunch.CLIResolutionConfig {
 	if m.state == nil {
-		return agent.CLIResolutionConfig{}
+		return agentlaunch.CLIResolutionConfig{}
 	}
-	return agent.CLIResolutionConfig{
+	return agentlaunch.CLIResolutionConfig{
 		DefaultCLI:         m.state.Config.DefaultCLI,
 		DefaultDoerCLI:     m.state.Config.DefaultDoerCLI,
 		DefaultReviewerCLI: m.state.Config.DefaultReviewerCLI,
@@ -343,9 +343,9 @@ func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {
 
 func (m Model) availableCLIs() []string {
 	if m.state == nil {
-		return agent.ValidCLIs()
+		return agentlaunch.ValidCLIs()
 	}
-	return agent.AvailableCLIs(m.state.Config)
+	return agentlaunch.AvailableCLIs(m.state.Config)
 }
 
 // New creates a new Model. Creates the fsnotify watcher and blackboard.

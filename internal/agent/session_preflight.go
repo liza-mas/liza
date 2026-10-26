@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -19,7 +20,7 @@ import (
 
 // resolveLaunchEnvironment refreshes configured overlays once. Subsequent
 // subprocesses consume this snapshot, including executable lookup against PATH.
-func resolveLaunchEnvironment(plan LaunchPlan, root, agentID, generation string, frozen []string) ([]string, error) {
+func resolveLaunchEnvironment(plan agentlaunch.LaunchPlan, root, agentID, generation string, frozen []string) ([]string, error) {
 	if frozen != nil {
 		return scrubRuntimeInputNames(root, append([]string{}, frozen...))
 	}
@@ -61,7 +62,7 @@ const claudeCommandCeilingName = "BASH_MAX_TIMEOUT_MS"
 // stops a legitimate up-to-4 h canonical batch at its 2 h default ceiling
 // (D-90). A larger value already set is kept; the default timeout of ordinary
 // commands is left alone, so commands that ask for nothing stay bounded.
-func withClaudeCommandCeiling(plan LaunchPlan, env []string) []string {
+func withClaudeCommandCeiling(plan agentlaunch.LaunchPlan, env []string) []string {
 	if plan.ProviderKey != "claude" && plan.ToolName != "claude" {
 		return env
 	}
@@ -165,7 +166,7 @@ func prepareSupervisorSession(config SupervisorConfig, runtime models.Config) (*
 	default:
 		return &ops.ValidationSession{}, nil
 	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName: config.CLIName, ProfileName: config.ProfileName,
 		ProfileVars: config.ProfileVars, Model: config.Model, ProjectRoot: config.ProjectRoot,
 		AgentID: config.AgentID, RuntimeConfig: runtime, Interactive: config.Interactive,

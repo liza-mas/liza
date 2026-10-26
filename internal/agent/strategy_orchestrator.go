@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // orchestratorStrategy handles the orchestrator role.
@@ -257,7 +258,7 @@ func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackb
 	})
 	stopped, _ := isSystemStopped(state)
 	if ctx.Err() != nil || stopped || RolePauseReason(state, "orchestrator") != "" ||
-		CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) || CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
+		providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) || providersignal.CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
 		GetLogger().Info("Skipping orchestrator launch after revalidation", "selected_trigger", selected.Trigger, "fresh_trigger", fresh.Trigger)
 		return false, nil
 	}
@@ -386,7 +387,7 @@ func (s *orchestratorStrategy) observeBlockedTurn(bb *db.Blackboard, projectRoot
 	if identity == s.unresolvedBlocked && identity != s.alertedBlocked {
 		message := fmt.Sprintf("consecutive BLOCKED_TASKS turns ended with unchanged blocker state for %s; the wake carried no new blocker input — blocks may require human intervention",
 			strings.Join(blocked, ", "))
-		if err := LogAlert(projectRoot, "⚠️", "BLOCKED_TASKS UNRESOLVED", message); err != nil {
+		if err := providersignal.LogAlert(projectRoot, "⚠️", "BLOCKED_TASKS UNRESOLVED", message); err != nil {
 			GetLogger().Warn("Failed to write blocked-turn alert", "error", err)
 		} else {
 			s.alertedBlocked = identity

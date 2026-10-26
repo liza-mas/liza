@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -161,7 +162,7 @@ func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {
 		t.Fatalf("BlockedReason = %q, provider classification must win before generic crash handling", *task.BlockedReason)
 	}
 
-	canonicalSignal := agent.ProviderUnavailableSignalPath(fixture.projectRoot, "codex")
+	canonicalSignal := providersignal.ProviderUnavailableSignalPath(fixture.projectRoot, "codex")
 	signalData, err := os.ReadFile(canonicalSignal)
 	if err != nil {
 		t.Fatalf("read canonical provider-unavailable signal: %v", err)
@@ -238,7 +239,7 @@ func TestCodexACPProviderUnavailableLeavesUnrelatedFailureOnCrashPath(t *testing
 		t.Fatalf("BlockedReason = %v, want generic crash restart loop reason", task.BlockedReason)
 	}
 
-	canonicalSignal := agent.ProviderUnavailableSignalPath(fixture.projectRoot, "codex")
+	canonicalSignal := providersignal.ProviderUnavailableSignalPath(fixture.projectRoot, "codex")
 	for _, signalPath := range []string{
 		canonicalSignal,
 		filepath.Join(filepath.Dir(canonicalSignal), "provider-unavailable-codex-acp"),

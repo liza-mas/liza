@@ -1,4 +1,4 @@
-package agent
+package agentlaunch
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 type fakeRoleTypes map[string]string
@@ -22,15 +23,6 @@ func (f fakeRoleTypes) RoleType(name string) (roles.RoleType, error) {
 }
 
 var codingPairTypes = fakeRoleTypes{"coder": "doer", "code-reviewer": "reviewer"}
-
-// clearCLIEnv isolates the default CLI chain from the developer's shell.
-func clearCLIEnv(t *testing.T) {
-	t.Helper()
-	for _, suffix := range []string{"DEFAULT_CLI", "DEFAULT_DOER_CLI", "DEFAULT_REVIEWER_CLI"} {
-		t.Setenv(brand.EnvName(suffix), "")
-		t.Setenv(brand.LegacyEnvName(suffix), "")
-	}
-}
 
 func TestDefaultRoleCLIs(t *testing.T) {
 	codexDefault, codexDoer := single("codex", ""), single("codex", "")
@@ -67,7 +59,7 @@ func TestDefaultRoleCLIs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clearCLIEnv(t)
+			testhelpers.ClearCLIEnv(t)
 			for suffix, value := range tt.env {
 				t.Setenv(brand.EnvName(suffix), value)
 			}
@@ -89,7 +81,7 @@ func TestDefaultRoleCLIs(t *testing.T) {
 }
 
 func TestDefaultRoleCLIsUnknownRoleType(t *testing.T) {
-	clearCLIEnv(t)
+	testhelpers.ClearCLIEnv(t)
 	_, err := DefaultRoleCLIs([]string{"ghost"}, codingPairTypes, models.Config{}, rolemodels.File{})
 	if err == nil || !strings.Contains(err.Error(), "role ghost") {
 		t.Fatalf("DefaultRoleCLIs() error = %v, want role ghost resolution error", err)

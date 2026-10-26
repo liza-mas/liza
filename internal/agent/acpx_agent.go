@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/agentlaunch"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
 
@@ -31,7 +32,7 @@ func NewACPXAgent(outputsDir string) *ACPXAgent {
 }
 
 func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      req.BackendName,
 		ProfileName:   req.ProfileName,
 		ProfileVars:   req.ProfileVars,
@@ -66,7 +67,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 	acpxAgent := plan.ACPXAgent
 	sessionName := plan.ACPXSessionName
 	if sessionName == "" {
-		sessionName = acpxSessionName(req.AgentID)
+		sessionName = agentlaunch.ACPXSessionName(req.AgentID)
 	}
 	var warm bool
 	var promptProcess *acpxPromptProcess
@@ -126,7 +127,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		errText := a.maskText(err.Error())
 		maskedErr := maskedError{message: errText, err: err}
 		resultOutput := ""
-		if _, diagnostic := classifyProviderUnavailable(a.maskText(failureEvidence), req.BackendName); diagnostic != "" {
+		if _, diagnostic := providersignal.ClassifyProviderUnavailable(a.maskText(failureEvidence), req.BackendName); diagnostic != "" {
 			resultOutput = diagnostic
 		}
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
@@ -143,7 +144,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		return LLMAgentRunResult{ExitCode: 1, Output: resultOutput, Usage: usage, WarmUsage: warm, SessionID: sessionName}, maskedErr
 	}
 
-	if qe := DetectQuotaExhaustion(output.Text, acpxAgent); qe != nil {
+	if qe := providersignal.DetectQuotaExhaustion(output.Text, acpxAgent); qe != nil {
 		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
 			Kind:        LLMAgentEventCompleted,
 			BackendName: req.BackendName,
@@ -173,7 +174,7 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 }
 
 func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      req.BackendName,
 		ProfileName:   req.ProfileName,
 		ProfileVars:   req.ProfileVars,
@@ -186,7 +187,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != ToolBackendACPX {
+	if plan.Backend != agentlaunch.ToolBackendACPX {
 		return NewCLIAgent(a.outputsDir).RunInteractive(ctx, req)
 	}
 
@@ -250,7 +251,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 	return 0, nil
 }
 
-func interactiveExecutableForACPX(plan LaunchPlan) string {
+func interactiveExecutableForACPX(plan agentlaunch.LaunchPlan) string {
 	switch plan.ACPXAgent {
 	case "cursor":
 		return "cursor-agent"
@@ -267,7 +268,7 @@ func interactiveExecutableForACPX(plan LaunchPlan) string {
 	}
 }
 
-func (a *ACPXAgent) ensureSession(ctx context.Context, agentID, generation, projectRoot string, plan LaunchPlan) error {
+func (a *ACPXAgent) ensureSession(ctx context.Context, agentID, generation, projectRoot string, plan agentlaunch.LaunchPlan) error {
 	args := plan.ACPXEnsureArgs
 	if len(args) == 0 {
 		if strings.TrimSpace(projectRoot) == "" {
@@ -282,7 +283,7 @@ func (a *ACPXAgent) ensureSession(ctx context.Context, agentID, generation, proj
 	return nil
 }
 
-func (a *ACPXAgent) configureSession(ctx context.Context, agentID, generation string, plan LaunchPlan) error {
+func (a *ACPXAgent) configureSession(ctx context.Context, agentID, generation string, plan agentlaunch.LaunchPlan) error {
 	if len(plan.ACPXSetModeArgs) == 0 {
 		return nil
 	}
@@ -295,13 +296,13 @@ func (a *ACPXAgent) configureSession(ctx context.Context, agentID, generation st
 
 func (a *ACPXAgent) boundedProviderFailure(err error, backendName string) (string, maskedError) {
 	errText := a.maskText(err.Error())
-	if _, diagnostic := classifyProviderUnavailable(errText, backendName); diagnostic != "" {
+	if _, diagnostic := providersignal.ClassifyProviderUnavailable(errText, backendName); diagnostic != "" {
 		errText = diagnostic
 	}
 	return errText, maskedError{message: errText, err: err}
 }
 
-func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID, generation string, plan LaunchPlan) bool {
+func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID, generation string, plan agentlaunch.LaunchPlan) bool {
 	if len(plan.ACPXShowArgs) == 0 {
 		return false
 	}
@@ -309,7 +310,7 @@ func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID, genera
 	return err == nil
 }
 
-func (a *ACPXAgent) runACPX(ctx context.Context, plan LaunchPlan, args []string, stdin string) (string, error) {
+func (a *ACPXAgent) runACPX(ctx context.Context, plan agentlaunch.LaunchPlan, args []string, stdin string) (string, error) {
 	cmd, err := snapshotCommand(ctx, plan.Executable, plan.Directory, plan.Environment, args...)
 	if err != nil {
 		return "", err
@@ -336,7 +337,7 @@ type acpxPromptProcess struct {
 	eventBase       LLMAgentEvent
 }
 
-func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan LaunchPlan) (*acpxPromptProcess, error) {
+func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan agentlaunch.LaunchPlan) (*acpxPromptProcess, error) {
 	cmd, err := snapshotCommand(ctx, plan.Executable, req.ProjectRoot, plan.Environment, plan.ACPXPromptArgs...)
 	if err != nil {
 		return nil, err
@@ -578,12 +579,4 @@ func acpxInt(raw any) int {
 	default:
 		return 0
 	}
-}
-
-func acpxSessionName(agentID string) string {
-	binaryName := brand.RuntimeValues().BinaryName
-	if agentID == "" {
-		return binaryName + "-agent"
-	}
-	return binaryName + "-" + agentID
 }

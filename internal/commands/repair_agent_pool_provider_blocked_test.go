@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/procscan"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -30,7 +30,7 @@ const noUsableProviderCategory = "NO USABLE PROVIDER"
 func blockProviderQuota(t *testing.T, projectRoot, provider string) string {
 	t.Helper()
 	resetsAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
-	if err := agent.RaiseQuotaExhaustion(projectRoot, &agent.QuotaExhaustion{Provider: provider, Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+	if err := providersignal.RaiseQuotaExhaustion(projectRoot, &providersignal.QuotaExhaustion{Provider: provider, Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
 		t.Fatal(err)
 	}
 	return resetsAt.Add(time.Minute).Format(time.RFC3339)
@@ -250,7 +250,7 @@ func TestRunAutoRepairAgentPool_BlockedEpisodeEndsAndRestarts(t *testing.T) {
 	}
 
 	resetsAt := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Second)
-	if err := agent.RaiseQuotaExhaustion(h.root, &agent.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+	if err := providersignal.RaiseQuotaExhaustion(h.root, &providersignal.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
 		t.Fatal(err)
 	}
 	outcome := h.tick(state)
@@ -270,7 +270,7 @@ func TestRunAutoRepairAgentPool_BlockedEpisodeEndsAndRestarts(t *testing.T) {
 func TestRunAutoRepairAgentPool_UnreadableSignalIsOneEpisode(t *testing.T) {
 	h := newPoolRepairHarness(t)
 	state := coderBlockedDemand()
-	if err := os.MkdirAll(filepath.Join(agent.QuotaSignalPath(h.root, "codex"), "blocker"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(providersignal.QuotaSignalPath(h.root, "codex"), "blocker"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 

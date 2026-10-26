@@ -41,35 +41,35 @@ func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.Orc
 		ps.Integration = integrationStatusFromProjection(result.Integration)
 	}
 
-	switch result.Trigger {
-	case agent.WakeTriggerInitialPlanning:
+	switch prompts.WakeTrigger(result.Trigger) {
+	case prompts.WakeInitialPlanning:
 		ps.Reason = "No tasks exist; initial planning needed"
-	case agent.WakeTriggerBlocked:
+	case prompts.WakeBlockedTasks:
 		ps.Reason = fmt.Sprintf("%d task(s) are blocked and need attention", count)
 		if state.SprintStalled() {
 			ps.Reason += " (\u26a0\ufe0f sprint stalled \u2014 all non-terminal tasks blocked)"
 		}
 	case wakeTriggerIntegrationFailed:
 		ps.Reason = fmt.Sprintf("%d task(s) failed integration", count)
-	case agent.WakeTriggerHypothesisExhausted:
+	case prompts.WakeHypothesisExhausted:
 		ps.Reason = fmt.Sprintf("%d task(s) exhausted hypotheses (2+ failures)", count)
-	case agent.WakeTriggerImmediateDiscovery:
+	case prompts.WakeImmediateDiscovery:
 		ps.Reason = fmt.Sprintf("%d immediate discovery(ies) need to be converted to tasks", count)
-	case agent.WakeTriggerHumanNote:
+	case prompts.WakeHumanNote:
 		ps.Reason = fmt.Sprintf("%d operator note(s) not yet rendered in a completed turn", count)
-	case agent.WakeTriggerPlanningComplete:
+	case prompts.WakePlanningComplete:
 		ps.Reason = fmt.Sprintf("%d planning task(s) merged with output[]; ready for coding task expansion", count)
-	case agent.WakeTriggerManyToOneReady:
+	case prompts.WakeManyToOneReady:
 		ps.Reason = fmt.Sprintf("%d many-to-one cohort(s) ready for consolidation transition", count)
-	case agent.WakeTriggerCodingComplete, agent.WakeTriggerIntegrationWaiting, agent.WakeTriggerIntegrationBlocked, agent.WakeTriggerIntegrationExhausted, agent.WakeTriggerIntegrationUnavailable:
+	case prompts.WakeCodingComplete, prompts.WakeIntegrationWaiting, prompts.WakeIntegrationBlocked, prompts.WakeIntegrationExhausted, prompts.WakeIntegrationUnavailable:
 		ps.Reason = formatIntegrationLifecycleReason(ps.Integration)
-	case agent.WakeTriggerSprintComplete:
+	case prompts.WakeSprintComplete:
 		if ps.Integration != nil && ps.Integration.Status == integrationStatusComplete {
 			ps.Reason = "Authoritative integration completion is clean for current integration HEAD"
 		} else {
 			ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)
 		}
-	case agent.WakeTriggerNone:
+	case prompts.WakeNone:
 		ps.Reason = "No triggers; orchestrator is idle"
 	default:
 		ps.Reason = "Unknown trigger"
