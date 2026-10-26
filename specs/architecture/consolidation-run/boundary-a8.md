@@ -254,9 +254,34 @@ committed with G8 pending, as `d52` and the plan require. The acceptance manifes
 (`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-20-cp-0-boundary.json`) is written once G8 is
 green (it maps G1–G8 and the boundary obligations; it records no result itself).
 
-## G8 — dispatched CI result (D52): pending
+## G8 — dispatched CI result (D52): green
 
-Status: **pending.** Under D52 the maintainer dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) on a pushed ref
-whose tested SHA equals R1 (`73d9f9ac82491471c45b99b835d57921d89903f5`). Green Linux, Windows and macOS jobs are required.
-No agent pushes, opens a pull request or runs a remote write. The run URL, tested SHA, each job's name and conclusion and
-the UTC observation are recorded here on authorized resume; G8 is not claimed before the jobs complete.
+Status: **green on attempt 1** (D59/D60 retry policy not needed). Under D52 the maintainer dispatched
+`.github/workflows/ci.yml` (`workflow_dispatch`) on a pushed ref whose tested SHA equals R1. The operator supplied the
+result on resume (human note 2026-10-26T19:10Z, maintainer confirmation under the standing auto-approve delegation); the
+agent pushed nothing and read the run back with `gh run view 40382272433 --json …` at 2026-10-26T19:14Z, which agrees with
+the note in every field below.
+
+- Run: https://github.com/liza-mas/liza/actions/runs/40382272433
+- Event: `workflow_dispatch`; ref `g8/a8-73d9f9a`; **tested SHA `73d9f9ac82491471c45b99b835d57921d89903f5`, equal to R1.**
+  The note records that `global-refactoring` and `origin/global-refactoring` still pointed at R1 at 19:10Z.
+- Run conclusion `success`; created 2026-10-26T18:56:52Z, completed 2026-10-26T19:10:13Z.
+
+| Job | Conclusion | Completed (UTC) |
+|---|---|---|
+| Shared CI / Linux tests | success | 19:10:12Z |
+| Shared CI / Linux lint and build | success | 18:59:14Z |
+| Shared CI / macOS compatibility | success | 19:09:53Z |
+| Test (windows) | success | 19:04:11Z |
+| Test (windows, ops-1) | success | 19:00:46Z |
+| Test (windows, ops-2) | success | 19:00:33Z |
+| Test (windows, ops-3) | success | 19:01:24Z |
+| Test (windows, ops-4) | success | 19:02:16Z |
+| Test (windows, rest-1) | success | 19:03:38Z |
+| Test (windows, rest-2) | success | 19:00:39Z |
+| Test (windows, rest-3) | success | 19:03:45Z |
+| Release verified tag | skipped (tag-only job) | 19:10:12Z |
+
+Linux, Windows and macOS are all green at R1, so G8 holds and A9 coding is released from the A8 hold. R1 is the proven
+SHA; the submission base of this unit (R1 plus the G1–G7 record commit) is a later, evidence-only revision and is not
+claimed as CI-tested. No A8 finding needed a correction: the G6 closure recorded above is the only registry change.
