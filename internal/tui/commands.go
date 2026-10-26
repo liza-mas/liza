@@ -263,7 +263,7 @@ func spawnWith(spawn func(string, string, string, ...string) (*exec.Cmd, error),
 // Returns CmdResultMsg with result.
 func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := ops.Pause(projectRoot, reason, "operator")
+		_, err := ops.Pause(projectRoot, reason, commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("pause: %v", err)}
 		}
@@ -278,7 +278,7 @@ func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
 // Returns CmdResultMsg with result.
 func resumeSystemCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := ops.Resume(projectRoot, "operator")
+		result, err := ops.Resume(projectRoot, commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("resume: %v", err)}
 		}
@@ -349,7 +349,7 @@ func toggleAutoResumeCmd(bb *db.Blackboard) tea.Cmd {
 // Returns CmdResultMsg with error on failure.
 func stopSystemCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := ops.Stop(projectRoot, "TUI stop", "operator")
+		_, err := ops.Stop(projectRoot, "TUI stop", commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("stop: %v", err)}
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -158,7 +159,7 @@ The worktree and branch are automatically cleaned up after a successful merge.`,
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, agentID, "reviewer"); err != nil {
+		if err := validateRoleType(resolver, agentID, roles.RoleTypeReviewer); err != nil {
 			return err
 		}
 

@@ -96,7 +96,7 @@ func buildAnomalyLines(state *models.State) *[]string {
 // buildCircuitBreakerStatus reports a tripped circuit breaker for the detailed
 // view, or nil when it is healthy.
 func buildCircuitBreakerStatus(state *models.State) *circuitBreakerStatus {
-	if state.CircuitBreaker.Status == "" || state.CircuitBreaker.Status == "OK" {
+	if state.CircuitBreaker.Status == "" || state.CircuitBreaker.Status == circuitBreakerStatusOK {
 		return nil
 	}
 	cb := &circuitBreakerStatus{

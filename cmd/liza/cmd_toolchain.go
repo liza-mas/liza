@@ -222,7 +222,7 @@ func init() {
 	registerCompletion(toolchainConfigureCmd, "exclude", completeToolIDs)
 	registerCompletion(toolchainDoctorCmd, "tool", completeToolIDsOrAll)
 	registerCompletion(toolchainInstallCmd, "tool", completeToolIDs)
-	registerCompletion(toolchainConfigureCmd, "agent-tools", completeValues("auto", "skip", "force"))
+	registerCompletion(toolchainConfigureCmd, "agent-tools", completeValues(string(toolchain.AgentToolsModeAuto), string(toolchain.AgentToolsModeSkip), string(toolchain.AgentToolsModeForce)))
 
 	addJSONFlag(toolchainListCmd)
 	addJSONFlag(toolchainDoctorCmd)
@@ -314,7 +314,7 @@ func runProjectActivation(projectRoot string, agents []string) error {
 	return commands.InitPairingCommand(commands.InitPairingParams{
 		Agents:         agents,
 		Stdin:          os.Stdin,
-		ContractAction: "global",
+		ContractAction: commands.ContractActionGlobal,
 	})
 }
 
@@ -334,13 +334,13 @@ func applyToolchainEnv(result toolchain.ConfigureResult) {
 func toolDefaults(tool toolchain.Tool) string {
 	var parts []string
 	if tool.LeanDefault {
-		parts = append(parts, "lean")
+		parts = append(parts, string(toolchain.ProfileLean))
 	}
 	if tool.BalancedDefault {
-		parts = append(parts, "balanced")
+		parts = append(parts, string(toolchain.ProfileBalanced))
 	}
 	if tool.FullDefault {
-		parts = append(parts, "full")
+		parts = append(parts, string(toolchain.ProfileFull))
 	}
 	return strings.Join(parts, ",")
 }

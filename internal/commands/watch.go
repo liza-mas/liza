@@ -37,6 +37,21 @@ const (
 	OrchestratorMissingGracePeriod = 60 * time.Second
 )
 
+// Task-state thresholds and key shapes the watch checks share.
+const (
+	// finalTaskAttempt is the last attempt a task gets; its limit warnings and
+	// the reassignment alert name it.
+	finalTaskAttempt = 2
+	// hypothesisExhaustionFailures is how many failed agents exhaust a task's
+	// hypotheses.
+	hypothesisExhaustionFailures = 2
+	// sentinelAssigneePrefix marks an assignee that is a lifecycle sentinel
+	// rather than an agent ID.
+	sentinelAssigneePrefix = "$"
+	// alertIdentitySeparator joins the parts of an alert identity.
+	alertIdentitySeparator = "|"
+)
+
 // watchNow is the clock for time-escalated checks; tests replace it.
 var watchNow = time.Now
 

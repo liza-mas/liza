@@ -111,7 +111,7 @@ omitted as unavailable.`, brand.NameTitle, brand.Command("get"), brand.BinaryNam
 		if all && active {
 			return &ops.PreconditionError{Reason: "--all and --active are mutually exclusive"}
 		}
-		taskList := len(args) == 1 && args[0] == "tasks"
+		taskList := len(args) == 1 && args[0] == commands.InspectTargetTasks
 		if all && !taskList {
 			return &ops.PreconditionError{Reason: "--all is only supported for task listings"}
 		}
@@ -135,7 +135,7 @@ omitted as unavailable.`, brand.NameTitle, brand.Command("get"), brand.BinaryNam
 		if isJSON(cmd) {
 			var warnBuf bytes.Buffer
 			opts := commands.InspectOptions{
-				Format:        "json",
+				Format:        commands.InspectFormatJSON,
 				ProjectRoot:   projectRoot,
 				Summary:       summary,
 				OutputSummary: outputSummary,
@@ -189,7 +189,7 @@ absent optional values are null. See %s --help for query details.`,
 		brand.Command("get-tasks"), brand.Command("get")),
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return getCmd.RunE(cmd, append([]string{"tasks"}, args...))
+		return getCmd.RunE(cmd, append([]string{commands.InspectTargetTasks}, args...))
 	},
 }
 
@@ -289,12 +289,12 @@ func registerSystemInspectCommands() {
 		cmd.Flags().Bool("active", false, "return active work and unfinished handoffs")
 		cmd.Flags().Bool("all", false, "include terminal task history (task listings default to active work)")
 		cmd.Flags().StringArray("field", nil, "project task fields (repeat or comma-separate; e.g. id,rejection_reason,rejection_rca)")
-		registerCompletion(cmd, "format", completeValues("json", "yaml", "table", "value"))
+		registerCompletion(cmd, "format", completeValues(commands.InspectFormatNames()...))
 	}
 	getCmd.Flags().Bool("zombies", false, fmt.Sprintf("return live %s agent processes for this goal that are missing from state", brand.BinaryName))
 
 	// Status command flags
 	statusCmd.Flags().String("format", "", "output format: json, yaml, or dashboard (default)")
 	statusCmd.Flags().Bool("detailed", false, "include anomalies and circuit breaker status")
-	registerCompletion(statusCmd, "format", completeValues("json", "yaml", "dashboard"))
+	registerCompletion(statusCmd, "format", completeValues(commands.StatusFormatNames()...))
 }

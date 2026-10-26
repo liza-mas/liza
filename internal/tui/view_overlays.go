@@ -75,7 +75,7 @@ func (m Model) renderHelpOverlay(height int) string {
 
 	// Join side-by-side if width permits, otherwise stack vertically
 	// Each column needs helpOverlayColumnWidth chars; borders+padding take ~8
-	availWidth := m.width - 8
+	availWidth := m.width - overlayChromeWidth
 	maxSideBySide := availWidth / helpOverlayColumnWidth
 	if maxSideBySide < 1 {
 		maxSideBySide = 1

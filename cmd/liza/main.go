@@ -277,11 +277,15 @@ func resolveOrchestratorID(cmd *cobra.Command) (string, error) {
 	return resolved, nil
 }
 
+// defaultChangedBy is the audit actor of a command run without --changed-by. ops
+// writes the same actor word as an unexported constant (actorHuman).
+const defaultChangedBy = "human"
+
 func resolveChangedBy(cmd *cobra.Command) string {
 	flagValue, _ := cmd.Flags().GetString("changed-by")
 	changedBy, _ := identity.Resolve(identity.Config{
 		FlagValue:    flagValue,
-		DefaultValue: "human",
+		DefaultValue: defaultChangedBy,
 		Required:     false,
 	})
 	return changedBy
@@ -349,7 +353,7 @@ func main() {
 		var fatalErr *updater.FatalError
 		if errors.As(err, &fatalErr) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(lizaerrors.ExitError)
 		}
 		// Non-fatal update failures: MaybeUpdateAndReexec already logged to stderr and returned nil
 		// If we get here with a non-fatal error, it's a reexec error or similar - log and continue
@@ -370,6 +374,6 @@ func main() {
 		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
-		os.Exit(1)
+		os.Exit(lizaerrors.ExitError)
 	}
 }

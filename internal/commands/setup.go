@@ -322,7 +322,7 @@ func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, t
 		if err != nil {
 			return nil, fmt.Errorf("failed to read input: %w", err)
 		}
-		if response != "y" {
+		if response != confirmAnswerY {
 			fmt.Println() // Print newline for clean terminal output
 			return nil, fmt.Errorf("aborted by user")
 		}
@@ -350,7 +350,7 @@ func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, t
 			skipFiles[p] = true
 			continue
 		}
-		if response != "y" {
+		if response != confirmAnswerY {
 			fmt.Fprintln(os.Stderr) // Print newline for clean terminal output
 			skipFiles[p] = true
 			fmt.Fprintf(os.Stderr, "  Skipped %s (kept existing)\n", base)
@@ -638,7 +638,7 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", linkPath)
 				return nil
 			}
-			if response != "y" {
+			if response != confirmAnswerY {
 				return nil
 			}
 		}

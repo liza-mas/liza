@@ -41,7 +41,7 @@ write. Immutable objects are retained for old snapshots.`,
 			}
 		}()
 		if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
-			return ops.WrapLifecycleError("archive-terminal-tasks", nil, fmt.Errorf("archive-terminal-tasks is an operator-only command; agent sessions archive terminal tasks only through authenticated merge maintenance"), models.LifecycleForbidden, "stop", "none")
+			return ops.WrapLifecycleError("archive-terminal-tasks", nil, fmt.Errorf("archive-terminal-tasks is an operator-only command; agent sessions archive terminal tasks only through authenticated merge maintenance"), models.LifecycleForbidden, ops.LifecycleSafeActionStop, ops.LifecycleEffectsNone)
 		}
 		root, err := requireProjectRoot()
 		if err != nil {

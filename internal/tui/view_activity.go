@@ -12,7 +12,7 @@ import (
 // Three source formats per spec §Activity Panel.
 func (m Model) renderActivityPanel(height int) string {
 	title := m.styles.PanelTitle.Render("⚡ ACTIVITY")
-	contentWidth := max(m.width-4, 1) // panel border plus default horizontal padding
+	contentWidth := max(m.width-panelChromeWidth, 1)
 
 	if len(m.activities) == 0 {
 		return m.styles.ActivityPanel.Height(max(height-2, 1)).Render(title)

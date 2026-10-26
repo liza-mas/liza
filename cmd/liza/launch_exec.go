@@ -142,9 +142,9 @@ func runCmuxLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, commands [][]stri
 
 	// Create panes for additional commands
 	for i, paneCommand := range commands[1:] {
-		direction := "right"
+		direction := cmuxSplitRight
 		if i%2 == 1 {
-			direction = "down"
+			direction = cmuxSplitDown
 		}
 		paneArgs := []string{
 			cmuxExecutable, "new-pane",
@@ -211,9 +211,9 @@ func runCmuxInteractiveLaunch(cmd *cobra.Command, opts cmuxLaunchOptions, panes 
 	// Create additional panes and collect surface references
 	surfaceRefs := []string{primarySurfaceRef}
 	for i, pane := range panes[1:] {
-		direction := "right"
+		direction := cmuxSplitRight
 		if i%2 == 1 {
-			direction = "down"
+			direction = cmuxSplitDown
 		}
 		paneArgs := []string{
 			cmuxExecutable, "new-pane",

@@ -100,7 +100,7 @@ func inspectTasks(state *models.State, opts inspectTasksOptions) (any, error) {
 func inspectTask(state *models.State, taskID string, opts inspectTasksOptions) (any, error) {
 	foundTask := state.FindTask(taskID)
 	if foundTask == nil {
-		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootTask), ID: taskID}
 	}
 	if len(opts.Fields) > 0 {
 		projection, err := projectTaskFields(opts.ProjectRoot, foundTask, opts.Fields)
@@ -231,7 +231,7 @@ func taskVisibleInActiveList(task *models.Task, opts inspectTasksOptions) bool {
 	if !models.IsOperationallyTerminal(task, opts.PipelineResolver) {
 		return true
 	}
-	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+	if task.Status != models.TaskStatusMerged || task.TransitionsExecuted[models.ReplannedTransition] || task.PlanHandoffRetired() {
 		return false
 	}
 	if task.AmendsPlan != "" {
@@ -240,7 +240,7 @@ func taskVisibleInActiveList(task *models.Task, opts inspectTasksOptions) bool {
 		}
 		original := opts.State.FindTask(task.AmendsPlan)
 		return original != nil && original.PlanAmendment != nil && original.PlanAmendment.Pending == task.ID &&
-			original.Status == models.TaskStatusMerged && !original.TransitionsExecuted["replanned"] && !original.PlanHandoffRetired()
+			original.Status == models.TaskStatusMerged && !original.TransitionsExecuted[models.ReplannedTransition] && !original.PlanHandoffRetired()
 	}
 	if task.PlanAmendment != nil && task.PlanAmendment.Pending != "" {
 		return true

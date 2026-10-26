@@ -21,6 +21,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// defaultTaskPriority is the priority an added task gets when neither the task
+// file nor --priority sets one; the --priority help text states it.
+const defaultTaskPriority = 1
+
 var claimTaskCmd = &cobra.Command{
 	Use:   "claim-task <task-id> <agent-id>",
 	Short: "Claim a task for a doer agent",
@@ -72,7 +76,7 @@ This pattern prevents TOCTOU races in multi-agent scenarios.`,
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, agentID, string(roles.RoleTypeDoer)); err != nil {
+		if err := validateRoleType(resolver, agentID, roles.RoleTypeDoer); err != nil {
 			return err
 		}
 
@@ -218,7 +222,7 @@ Example YAML file format:
 		}
 
 		if input.Priority == 0 {
-			input.Priority = 1
+			input.Priority = defaultTaskPriority
 		}
 
 		authority, err := resolveOrchestratorAuthority(cmd)
@@ -230,7 +234,7 @@ Example YAML file format:
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, authority.ID, string(roles.RoleTypeOrchestrator)); err != nil {
+		if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 			return err
 		}
 

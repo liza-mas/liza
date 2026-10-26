@@ -20,6 +20,13 @@ import (
 
 // awaitBudgetSecondsDefault and awaitBudgetFlagUsage derive from the single
 // ops-side ceiling so the flag default and the enforced maximum cannot drift.
+// Spellings of two command arguments: the git ref a review commit defaults to and
+// the file argument that names standard input.
+const (
+	headRef      = "HEAD"
+	stdinFileArg = "-"
+)
+
 var awaitBudgetSecondsDefault = int(ops.DefaultAwaitBudget.Seconds())
 
 var awaitBudgetFlagUsage = fmt.Sprintf(
@@ -69,7 +76,7 @@ Updates:
 		}
 
 		taskID := args[0]
-		commitRef := "HEAD"
+		commitRef := headRef
 		if len(args) == 2 {
 			commitRef = args[1]
 		}
@@ -298,7 +305,7 @@ func verdictReason(cmd *cobra.Command, args []string) (string, error) {
 
 	reader := cmd.InOrStdin()
 	var file *os.File
-	if reasonFile != "-" {
+	if reasonFile != stdinFileArg {
 		var err error
 		file, err = os.Open(reasonFile)
 		if err != nil {

@@ -10,6 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Permissions of the adversarial-pairing blackboard directory and file.
+const (
+	pairingBoardDirMode  = 0o755
+	pairingBoardFileMode = 0o644
+)
+
 func ensureAdversarialPairingBlackboard(path, goal string, yolo bool, dryRun bool, cmd *cobra.Command) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil
@@ -22,11 +28,11 @@ func ensureAdversarialPairingBlackboard(path, goal string, yolo bool, dryRun boo
 	if dryRun {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), pairingBoardDirMode); err != nil {
 		return cliValidationWrap("create blackboard directory", err)
 	}
 	content := initialAdversarialPairingBlackboard(goal, yolo, time.Now().UTC())
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, pairingBoardFileMode)
 	if err != nil {
 		return cliValidationWrap("create adversarial-pairing blackboard", err)
 	}

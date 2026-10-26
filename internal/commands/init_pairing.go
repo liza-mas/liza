@@ -304,12 +304,12 @@ func pairingScipSkipReasonText(reason scipsearch.PairingPlanSkipReason) string {
 }
 
 func pairingScipPlanSyntax(language string) string {
-	switch language {
-	case "go":
+	switch scipsearch.Language(language) {
+	case scipsearch.LanguageGo:
 		return "--scip-search-plan go=<module-root>"
-	case "typescript":
+	case scipsearch.LanguageTypeScript:
 		return "--scip-search-plan typescript=<cwd>,<project-root>"
-	case "python":
+	case scipsearch.LanguagePython:
 		return "--scip-search-plan python=<cwd>[,<target-only>]"
 	default:
 		return "--scip-search-plan <language>=<values>"

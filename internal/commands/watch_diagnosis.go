@@ -96,7 +96,7 @@ func failedValidationPreflights(state *models.State, pr models.PipelineResolver,
 				!models.IsRoleTaskReady(state, task, agentState.Role, pr, now) {
 				continue
 			}
-			if record, ok := models.CurrentValidationReadiness(state, task, agentID, now); ok && record.Result == "failed" {
+			if record, ok := models.CurrentValidationReadiness(state, task, agentID, now); ok && record.Result == validationReadinessFailed {
 				failed = append(failed, fmt.Sprintf("%s (%s: %s)", task.ID, agentID, record.Code))
 			}
 		}

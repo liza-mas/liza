@@ -21,7 +21,7 @@ const (
 	initPipelineVersion      = 3 // always v3: the pipeline is mandatory
 	initSprintID             = "sprint-1"
 	initSprintNumber         = 1
-	initCircuitBreakerStatus = "OK"
+	initCircuitBreakerStatus = circuitBreakerStatusOK
 	initAlignmentSummary     = "Initial goal. No tasks defined yet."
 	initGoalIDFormat         = "goal-%d"
 )
@@ -41,7 +41,7 @@ func (m *masInit) resolvePostWorktreeCmd() {
 				postWorktreeCmd = suggested
 			} else {
 				response, err := termutil.ReadSingleKey(m.stdin)
-				if err == nil && response == "y" {
+				if err == nil && response == confirmAnswerY {
 					postWorktreeCmd = suggested
 				}
 			}

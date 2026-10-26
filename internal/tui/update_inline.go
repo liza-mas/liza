@@ -141,7 +141,11 @@ func (m Model) executeStopConfirm(answer string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// inlineConfirmYes is the answer a confirmation key press submits, and the
+// prefix of a typed answer that confirms.
+const inlineConfirmYes = "y"
+
 // isYes reports whether a confirmation answer starts with y, in either case.
 func isYes(answer string) bool {
-	return strings.HasPrefix(strings.ToLower(answer), "y")
+	return strings.HasPrefix(strings.ToLower(answer), inlineConfirmYes)
 }

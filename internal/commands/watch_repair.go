@@ -24,6 +24,24 @@ const autoRepairAgentPoolCachePrefix = "auto-repair-agent-pool:"
 const autoRepairAgentPoolStartCountPrefix = "auto-repair-agent-pool-start-count:"
 const autoRepairAgentPoolSuppressedPrefix = "auto-repair-agent-pool-suppressed:"
 const autoRepairAgentPoolPendingPrefix = "auto-repair-agent-pool-pending:"
+
+// A pending-spawn cache entry is role:pid:agentID:modelsItem after the prefix.
+const (
+	autoRepairPendingEntryFormat    = "%s:%d:%s:%d"
+	autoRepairPendingEntrySeparator = ":"
+	autoRepairPendingEntryFields    = 4
+)
+
+// Positions of the pending-entry fields after the separator split.
+const (
+	pendingEntryRole = iota
+	pendingEntryPID
+	pendingEntryAgentID
+	pendingEntryModelsItem
+)
+
+// registeredProcessKeyFormat keys a registered agent process by role and PID.
+const registeredProcessKeyFormat = "%s:%d"
 const autoRepairAgentPoolPendingTimeoutPrefix = "auto-repair-agent-pool-pending-timeout:"
 const autoRepairAgentPoolUnservablePrefix = "auto-repair-agent-pool-unservable:"
 const autoRepairAgentPoolProviderBlockedPrefix = "auto-repair-agent-pool-provider-blocked:"
@@ -275,7 +293,7 @@ func recordAutoRepairFailedStart(cache map[string]time.Time, role string, now ti
 // explicit ID it was started under (if any) and the models.yaml list item it
 // was started with (0 for none).
 func autoRepairPendingKey(role string, pid int, agentID string, modelsItem int) string {
-	return fmt.Sprintf("%s%s:%d:%s:%d", autoRepairAgentPoolPendingPrefix, role, pid, agentID, modelsItem)
+	return fmt.Sprintf(autoRepairAgentPoolPendingPrefix+autoRepairPendingEntryFormat, role, pid, agentID, modelsItem)
 }
 
 // autoRepairPendingProcessStatus observes a started agent process; tests
@@ -298,7 +316,7 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 	registered := make(map[string]bool, len(state.Agents))
 	for _, agentState := range state.Agents {
 		if agentState.PID > 0 {
-			registered[fmt.Sprintf("%s:%d", agentState.Role, agentState.PID)] = true
+			registered[fmt.Sprintf(registeredProcessKeyFormat, agentState.Role, agentState.PID)] = true
 		}
 	}
 	pending := make(map[string][]int)
@@ -310,20 +328,20 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 		}
 		timeoutKey := autoRepairAgentPoolPendingTimeoutPrefix + entry
 		_, timeoutCounted := cache[timeoutKey]
-		parts := strings.Split(entry, ":")
+		parts := strings.Split(entry, autoRepairPendingEntrySeparator)
 		pid, item := 0, 0
-		if len(parts) == 4 {
-			pid, _ = strconv.Atoi(parts[1])
-			item, _ = strconv.Atoi(parts[3])
+		if len(parts) == autoRepairPendingEntryFields {
+			pid, _ = strconv.Atoi(parts[pendingEntryPID])
+			item, _ = strconv.Atoi(parts[pendingEntryModelsItem])
 		}
-		if pid <= 0 || parts[0] == "" {
+		if pid <= 0 || parts[pendingEntryRole] == "" {
 			delete(cache, key)
 			delete(cache, timeoutKey)
 			continue
 		}
-		role, agentID := parts[0], parts[2]
+		role, agentID := parts[pendingEntryRole], parts[pendingEntryAgentID]
 		switch {
-		case registered[fmt.Sprintf("%s:%d", role, pid)]:
+		case registered[fmt.Sprintf(registeredProcessKeyFormat, role, pid)]:
 			delete(cache, key)
 			delete(cache, timeoutKey)
 			delete(cache, autoRepairAgentPoolStartCountPrefix+role)

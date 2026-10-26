@@ -91,22 +91,22 @@ func formatTaskSummariesTable(tasks []taskSummaryInfo) string {
 	headers := []string{"ID", "STATUS", "ROLE_PAIR", "ATTEMPT", "PRIORITY", "ASSIGNED_TO", "REVIEWING_BY", "DEPS", "OUTPUTS"}
 	var rows [][]string
 	for _, task := range tasks {
-		assignedTo := "-"
+		assignedTo := emptyCell
 		if task.AssignedTo != nil {
 			assignedTo = *task.AssignedTo
 		}
 
-		reviewingBy := "-"
+		reviewingBy := emptyCell
 		if task.ReviewingBy != nil {
 			reviewingBy = *task.ReviewingBy
 		}
 
-		deps := "-"
+		deps := emptyCell
 		if len(task.DependsOn) > 0 {
 			deps = fmt.Sprintf("%d", len(task.DependsOn))
 		}
 
-		outputs := "-"
+		outputs := emptyCell
 		if task.OutputCount > 0 {
 			outputs = fmt.Sprintf("%d", task.OutputCount)
 		}
@@ -136,7 +136,7 @@ func formatTaskOutputSummariesTable(tasks []taskOutputSummaryInfo) string {
 	var rows [][]string
 	for _, task := range tasks {
 		if len(task.Output) == 0 {
-			rows = append(rows, []string{task.ID, task.Status, task.RolePair, "-", "-", "-", "-"})
+			rows = append(rows, []string{task.ID, task.Status, task.RolePair, emptyCell, emptyCell, emptyCell, emptyCell})
 			continue
 		}
 		for _, output := range task.Output {
@@ -297,17 +297,17 @@ func formatTasksTable(tasks []taskInfo) string {
 	var rows [][]string
 
 	for _, task := range tasks {
-		assignedTo := "-"
+		assignedTo := emptyCell
 		if task.AssignedTo != nil {
 			assignedTo = *task.AssignedTo
 		}
 
-		reviewingBy := "-"
+		reviewingBy := emptyCell
 		if task.ReviewingBy != nil {
 			reviewingBy = *task.ReviewingBy
 		}
 
-		deps := "-"
+		deps := emptyCell
 		if len(task.DependsOn) > 0 {
 			deps = fmt.Sprintf("%d", len(task.DependsOn))
 		}

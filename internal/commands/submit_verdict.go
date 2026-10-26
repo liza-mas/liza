@@ -35,11 +35,15 @@ func SubmitVerdictCommandWithAuthorityAndOptions(projectRoot, taskID, verdict, r
 	return nil
 }
 
+// verdictApproved is the stored verdict an approval carries; the owner (A5 ops)
+// keeps its constant unexported.
+const verdictApproved = "APPROVED"
+
 func printVerdictResult(r *ops.VerdictResult) {
 	if printLifecycleResult(r.LifecycleOutcome) {
 		return
 	}
-	if r.Verdict == "APPROVED" {
+	if r.Verdict == verdictApproved {
 		fmt.Printf("APPROVED: %s\n", r.TaskID)
 		fmt.Printf("  approved_by: %s\n", r.AgentID)
 	} else {

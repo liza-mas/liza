@@ -111,22 +111,32 @@ func buildTaskInfo(task *models.Task, projectRoot string) taskInfo {
 	return info
 }
 
+// Keys of the history entry's Extra map that the ops dependency-repair writers
+// fill and the repair receipt reads back. ops keeps them as unexported spellings.
+const (
+	historyExtraRepairSourceTask     = "repair_source_task"
+	historyExtraOperation            = "operation"
+	historyExtraRepairRequestCleared = "repair_request_cleared"
+	historyExtraAffectedTaskIDs      = "affected_task_ids"
+	historyExtraRepairValidation     = "repair_validation"
+)
+
 func latestDependencyRepairReceipt(task *models.Task) *dependencyRepairReceipt {
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
 		if entry.Event != models.TaskEventDependencyRepairApplied &&
-			(entry.Event != models.TaskEventDependenciesRewritten || entry.Extra["repair_source_task"] != task.ID) {
+			(entry.Event != models.TaskEventDependenciesRewritten || entry.Extra[historyExtraRepairSourceTask] != task.ID) {
 			continue
 		}
-		if entry.Extra["operation"] != models.RepairOperationApplyDependencyRepair ||
-			entry.Extra["repair_request_cleared"] != true {
+		if entry.Extra[historyExtraOperation] != models.RepairOperationApplyDependencyRepair ||
+			entry.Extra[historyExtraRepairRequestCleared] != true {
 			continue
 		}
-		affectedTaskIDs, ok := historyExtraStringSlice(entry.Extra["affected_task_ids"])
+		affectedTaskIDs, ok := historyExtraStringSlice(entry.Extra[historyExtraAffectedTaskIDs])
 		if !ok || len(affectedTaskIDs) == 0 {
 			continue
 		}
-		validation, ok := historyExtraStringSlice(entry.Extra["repair_validation"])
+		validation, ok := historyExtraStringSlice(entry.Extra[historyExtraRepairValidation])
 		if !ok || len(validation) == 0 {
 			continue
 		}

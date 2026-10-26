@@ -34,7 +34,7 @@ func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Ti
 
 	// Keep both checks: manual edits or interrupted writes can leave one field stale.
 	// Either value indicates a previously triggered circuit-breaker state.
-	if state.CircuitBreaker.Status == "TRIGGERED" || state.CircuitBreaker.CurrentTrigger != nil {
+	if state.CircuitBreaker.Status == circuitBreakerStatusTriggered || state.CircuitBreaker.CurrentTrigger != nil {
 		delete(cache, circuitBreakerAlertKey)
 		return nil
 	}
@@ -125,7 +125,7 @@ func checkApproachingLimits(state *models.State, resolver models.PipelineResolve
 		// Warn during the last two cycles before the enforced cap.
 		if task.Status == executing && task.Iteration > 0 && task.Iteration >= iterationLimit-approachingLimitWindow && task.Iteration < iterationLimit {
 			var msg string
-			if attemptNum == 2 {
+			if attemptNum == finalTaskAttempt {
 				msg = fmt.Sprintf("%s — attempt 2 (final), iteration %d/%d", task.ID, task.Iteration, iterationLimit)
 			} else {
 				msg = fmt.Sprintf("%s — attempt %d, iteration %d/%d", task.ID, attemptNum, task.Iteration, iterationLimit)
@@ -140,7 +140,7 @@ func checkApproachingLimits(state *models.State, resolver models.PipelineResolve
 
 		if task.ReviewCyclesCurrent > 0 && task.ReviewCyclesCurrent >= reviewLimit-approachingLimitWindow && task.ReviewCyclesCurrent < reviewLimit {
 			var msg string
-			if attemptNum == 2 {
+			if attemptNum == finalTaskAttempt {
 				msg = fmt.Sprintf("%s — attempt 2 (final), review cycle %d/%d", task.ID, task.ReviewCyclesCurrent, reviewLimit)
 			} else {
 				msg = fmt.Sprintf("%s — attempt %d, review cycle %d/%d", task.ID, attemptNum, task.ReviewCyclesCurrent, reviewLimit)

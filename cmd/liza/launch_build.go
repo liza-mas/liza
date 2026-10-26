@@ -9,12 +9,21 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 )
 
+// Pane split directions: WezTerm takes a flag, cmux a word. Panes alternate
+// between the first and the second.
+const (
+	weztermSplitRight  = "--right"
+	weztermSplitBottom = "--bottom"
+	cmuxSplitRight     = "right"
+	cmuxSplitDown      = "down"
+)
+
 func buildWeztermPaneScript(opts weztermLaunchOptions, commands [][]string) string {
 	var b strings.Builder
 	for i, paneCommand := range commands[1:] {
-		direction := "--right"
+		direction := weztermSplitRight
 		if i%2 == 1 {
-			direction = "--bottom"
+			direction = weztermSplitBottom
 		}
 		b.WriteString("wezterm cli split-pane ")
 		b.WriteString(direction)
@@ -51,9 +60,9 @@ func buildWeztermInteractivePaneScript(opts weztermLaunchOptions, panes []intera
 	b.WriteString("  ) &\n")
 	b.WriteString("}\n")
 	for i, pane := range panes[1:] {
-		direction := "--right"
+		direction := weztermSplitRight
 		if i%2 == 1 {
-			direction = "--bottom"
+			direction = weztermSplitBottom
 		}
 		paneVar := fmt.Sprintf("pane_id_%d", i+1)
 		b.WriteString(paneVar)
@@ -104,9 +113,9 @@ func buildCmuxLaunchCommands(opts cmuxLaunchOptions, commands [][]string) ([][]s
 
 	// Create panes for additional commands
 	for i, paneCommand := range commands[1:] {
-		direction := "right"
+		direction := cmuxSplitRight
 		if i%2 == 1 {
-			direction = "down"
+			direction = cmuxSplitDown
 		}
 		paneArgs := []string{
 			cmuxExecutable, "new-pane",
@@ -143,9 +152,9 @@ func buildCmuxInteractiveLaunchCommands(opts cmuxLaunchOptions, panes []interact
 
 	// Create additional panes
 	for i, pane := range panes[1:] {
-		direction := "right"
+		direction := cmuxSplitRight
 		if i%2 == 1 {
-			direction = "down"
+			direction = cmuxSplitDown
 		}
 		paneArgs := []string{
 			cmuxExecutable, "new-pane",

@@ -28,32 +28,32 @@ var (
 // exactStatusColors maps exact status strings to their color.
 var exactStatusColors = map[string]lipgloss.Color{
 	// Agent statuses (direct mapping)
-	"WORKING":   ColorActive,
-	"PLANNING":  ColorPlanning,
-	"STARTING":  ColorPlanning,
-	"REVIEWING": ColorReview,
-	"IDLE":      ColorIdle,
-	"WAITING":   ColorIdle,
-	"HANDOFF":   ColorHandoff,
+	string(models.AgentStatusWorking):   ColorActive,
+	string(models.AgentStatusPlanning):  ColorPlanning,
+	string(models.AgentStatusStarting):  ColorPlanning,
+	string(models.AgentStatusReviewing): ColorReview,
+	string(models.AgentStatusIdle):      ColorIdle,
+	string(models.AgentStatusWaiting):   ColorIdle,
+	string(models.AgentStatusHandoff):   ColorHandoff,
 
 	// System statuses
-	"RUNNING":    ColorActive,
-	"PAUSED":     ColorPlanning,
-	"CHECKPOINT": ColorHandoff,
-	"STOPPED":    ColorRejected,
+	string(models.SystemModeRunning):      ColorActive,
+	string(models.SystemModePaused):       ColorPlanning,
+	string(models.SprintStatusCheckpoint): ColorHandoff,
+	string(models.SystemModeStopped):      ColorRejected,
 
 	// Sprint statuses
-	"COMPLETED":   ColorApproved,
-	"IN_PROGRESS": ColorActive,
-	"ABORTED":     ColorRejected,
+	string(models.SprintStatusCompleted):  ColorApproved,
+	string(models.SprintStatusInProgress): ColorActive,
+	string(models.SprintStatusAborted):    ColorRejected,
 
 	// Task statuses (exact)
-	"MERGED":             ColorApproved,
-	"BLOCKED":            ColorRejected,
-	"INTEGRATION_FAILED": ColorRejected,
-	"ABANDONED":          ColorTerminal,
-	"SUPERSEDED":         ColorTerminal,
-	"DRAFT":              ColorBareDraft,
+	string(models.TaskStatusMerged):            ColorApproved,
+	string(models.TaskStatusBlocked):           ColorRejected,
+	string(models.TaskStatusIntegrationFailed): ColorRejected,
+	string(models.TaskStatusAbandoned):         ColorTerminal,
+	string(models.TaskStatusSuperseded):        ColorTerminal,
+	string(models.TaskStatusDraft):             ColorBareDraft,
 }
 
 // StatusColor returns the lipgloss.Color for a given status string.
@@ -144,8 +144,8 @@ func matchPrefix(status string) (lipgloss.Color, bool) {
 
 // idleDotStatuses are statuses that display hollow ○ instead of filled ●.
 var idleDotStatuses = map[string]bool{
-	"IDLE":    true,
-	"WAITING": true,
+	string(models.AgentStatusIdle):    true,
+	string(models.AgentStatusWaiting): true,
 }
 
 // StatusDot returns "●" for active statuses or "○" for idle/waiting.

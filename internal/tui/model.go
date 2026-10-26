@@ -164,14 +164,21 @@ const (
 	ColumnTierFull                       // ≥ 160 cols: + PID / REVIEWING_BY, DEPS, TIME_IN_STATUS
 )
 
+// Minimum terminal widths of the column tiers above minimal.
+const (
+	columnTierFullMinWidth     = 160
+	columnTierWideMinWidth     = 120
+	columnTierStandardMinWidth = 80
+)
+
 // ColumnTierForWidth returns the column tier for a given terminal width.
 func ColumnTierForWidth(width int) ColumnTier {
 	switch {
-	case width >= 160:
+	case width >= columnTierFullMinWidth:
 		return ColumnTierFull
-	case width >= 120:
+	case width >= columnTierWideMinWidth:
 		return ColumnTierWide
-	case width >= 80:
+	case width >= columnTierStandardMinWidth:
 		return ColumnTierStandard
 	default:
 		return ColumnTierMinimal
@@ -194,13 +201,19 @@ func (f TaskFilter) Next() TaskFilter {
 	return (f + 1) % taskFilterCount
 }
 
+// Task panel title suffixes of the task filters.
+const (
+	taskFilterLabelActive        = "active"
+	taskFilterLabelActiveBlocked = "active+blocked"
+)
+
 // Label is the task panel title suffix for f; empty when unfiltered.
 func (f TaskFilter) Label() string {
 	switch f {
 	case TaskFilterActive:
-		return "active"
+		return taskFilterLabelActive
 	case TaskFilterActiveBlocked:
-		return "active+blocked"
+		return taskFilterLabelActiveBlocked
 	default:
 		return ""
 	}

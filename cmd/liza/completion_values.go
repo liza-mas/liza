@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -119,10 +120,10 @@ func completeGetQueries(cmd *cobra.Command, _ []string, toComplete string) ([]st
 		"sprint.status",
 		"sprint.elapsed",
 		"sprint.metrics.tasks_done",
-		"tasks",
-		"agents",
-		"metrics",
-		"anomalies",
+		commands.InspectTargetTasks,
+		commands.InspectTargetAgents,
+		commands.InspectTargetMetrics,
+		commands.InspectTargetAnomalies,
 	}
 	if state, ok := completionState(cmd); ok {
 		values = append(values, taskIDsFromState(state)...)

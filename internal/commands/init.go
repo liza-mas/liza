@@ -19,6 +19,7 @@ import (
 	"github.com/liza-mas/liza/internal/projectdetect"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/rolemodels"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/termutil"
 )
@@ -380,7 +381,7 @@ func confirmMissingPostWorktreeCmd(params InitParams, projectRoot string, stdin 
 		// the non-interactive path above.
 		return nil
 	}
-	if response != "y" {
+	if response != confirmAnswerY {
 		return fmt.Errorf("initialization cancelled by user")
 	}
 	return nil
@@ -423,7 +424,7 @@ func resolveValidationExecutionTools(params InitParams, projectRoot string, pipe
 		fmt.Fprint(os.Stderr, "Yes enables declared validation prerequisites, checked before agents claim work. (y/n): ")
 		response, err := termutil.ReadSingleKey(stdin)
 		fmt.Fprintln(os.Stderr)
-		if err != nil || response != "y" {
+		if err != nil || response != confirmAnswerY {
 			return nil, nil
 		}
 	} else {
@@ -473,7 +474,7 @@ func initModelsFile(params InitParams) []byte {
 `)
 	if doer != "" || reviewer != "" {
 		b.WriteString("defaults:\n")
-		for _, d := range []struct{ key, cli string }{{"doer", doer}, {"reviewer", reviewer}} {
+		for _, d := range []struct{ key, cli string }{{string(roles.RoleTypeDoer), doer}, {string(roles.RoleTypeReviewer), reviewer}} {
 			if d.cli != "" {
 				fmt.Fprintf(&b, "  %s: {cli: %s}\n", d.key, d.cli)
 			}

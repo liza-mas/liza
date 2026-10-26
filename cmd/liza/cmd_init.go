@@ -23,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	providercatalog "github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/spf13/cobra"
 )
 
@@ -178,7 +179,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			postWorktreeCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
 			validationExecution, _ := cmd.Flags().GetString("validation-execution")
 
-			if result.Mode == "pairing" {
+			if result.Mode == interactive.WizardModePairing {
 				if autoResume {
 					return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
 				}
@@ -195,7 +196,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				}); err != nil {
 					return err
 				}
-				interactive.PrintPostInitSummary("pairing", result.Agents)
+				interactive.PrintPostInitSummary(interactive.WizardModePairing, result.Agents)
 				return nil
 			}
 			if err := commands.InitCommandWithConfig(commands.InitParams{
@@ -223,7 +224,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			}); err != nil {
 				return err
 			}
-			interactive.PrintPostInitSummary("full", result.Agents)
+			interactive.PrintPostInitSummary(interactive.WizardModeFull, result.Agents)
 			return nil
 		}
 
@@ -250,7 +251,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			}); err != nil {
 				return err
 			}
-			interactive.PrintPostInitSummary("pairing", agents)
+			interactive.PrintPostInitSummary(interactive.WizardModePairing, agents)
 			return nil
 		}
 
@@ -286,7 +287,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		}); err != nil {
 			return err
 		}
-		interactive.PrintPostInitSummary("full", agents)
+		interactive.PrintPostInitSummary(interactive.WizardModeFull, agents)
 		return nil
 	},
 }
@@ -727,7 +728,7 @@ func init() {
 	registerCompletion(initCmd, "default-cli", completeCLINames)
 	registerCompletion(initCmd, "default-doer-cli", completeCLINames)
 	registerCompletion(initCmd, "default-reviewer-cli", completeCLINames)
-	registerCompletion(initCmd, "scip-search", completeValues("go", "typescript", "python"))
+	registerCompletion(initCmd, "scip-search", completeValues(string(scipsearch.LanguageGo), string(scipsearch.LanguageTypeScript), string(scipsearch.LanguagePython)))
 
 	// Validate command flags
 	validateCmd.Flags().Bool("skip-spec-check", false, "skip spec file existence check")

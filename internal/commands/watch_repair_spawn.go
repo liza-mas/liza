@@ -10,6 +10,13 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// The log entry auto-repair appends for each process it starts. ops writes the
+// same actor word as an unexported constant (actorSystem).
+const (
+	autoRepairLogActor         = "system"
+	autoRepairLogActionSpawned = "auto_repair_agent_spawned"
+)
+
 // executeAutoRepairStarts starts the planned roles through RepairAgentPool and
 // reports what it did: the roles attempted, the processes spawned and failed,
 // and an AUTO REPAIR FAILED alert when RepairAgentPool returned an error.
@@ -82,8 +89,8 @@ func logAutoRepairAgentPoolSpawn(projectRoot string, spawned []SpawnedAgent) err
 			detail = started.Command
 		}
 		if err := logger.Append(lizalog.Entry{
-			Agent:  "system",
-			Action: "auto_repair_agent_spawned",
+			Agent:  autoRepairLogActor,
+			Action: autoRepairLogActionSpawned,
 			Detail: detail,
 		}); err != nil {
 			return err

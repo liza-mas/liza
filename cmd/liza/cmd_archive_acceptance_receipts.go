@@ -36,7 +36,7 @@ to drain an existing backlog.`,
 			}
 		}()
 		if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
-			return ops.WrapLifecycleError("archive-acceptance-receipts", nil, fmt.Errorf("archive-acceptance-receipts is an operator-only command; agent sessions archive receipts only through their authenticated merge"), models.LifecycleForbidden, "stop", "none")
+			return ops.WrapLifecycleError("archive-acceptance-receipts", nil, fmt.Errorf("archive-acceptance-receipts is an operator-only command; agent sessions archive receipts only through their authenticated merge"), models.LifecycleForbidden, ops.LifecycleSafeActionStop, ops.LifecycleEffectsNone)
 		}
 		root, err := requireProjectRoot()
 		if err != nil {

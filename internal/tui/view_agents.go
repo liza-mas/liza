@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/render"
@@ -212,6 +213,18 @@ func (m Model) agentStatusText(a models.Agent) (string, lipgloss.Color) {
 	return StatusDot(string(a.Status)) + " " + string(a.Status), StatusColor(string(a.Status))
 }
 
+// Agent identity columns: the compact widths apply below the expanded minimum
+// terminal width.
+const (
+	expandedIdentityMinWidth = 90
+	compactAgentIDWidth      = 20
+	compactAgentRoleWidth    = 16
+	expandedAgentIDWidth     = 25
+	expandedAgentRoleWidth   = 21
+	// pausedBreakerLabel shortens the circuit-breaker pause gate to fit the STATUS column.
+	pausedBreakerLabel = "BREAKER"
+)
+
 func (m Model) agentPauseLabel(a models.Agent) string {
 	if m.state == nil || (a.Status != models.AgentStatusIdle && a.Status != models.AgentStatusWaiting) {
 		return ""
@@ -221,18 +234,17 @@ func (m Model) agentPauseLabel(a models.Agent) string {
 	if !strings.HasPrefix(reason, "[") || end < 0 {
 		return ""
 	}
-	if label := reason[1:end]; label != "CIRCUIT BREAKER" {
+	if label := reason[1:end]; label != alerts.CategoryCircuitBreaker.String() {
 		return label
 	}
-	return "BREAKER" // fits the STATUS column
+	return pausedBreakerLabel
 }
 
 func (m Model) agentIdentityColumnWidths() (idWidth, roleWidth int) {
-	const expandedIdentityMinWidth = 90
 	if m.width < expandedIdentityMinWidth {
-		return 20, 16
+		return compactAgentIDWidth, compactAgentRoleWidth
 	}
-	return 25, 21
+	return expandedAgentIDWidth, expandedAgentRoleWidth
 }
 
 func (m Model) agentCurrentTaskColumnWidth() int {

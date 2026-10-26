@@ -166,7 +166,7 @@ func (m Model) handleInlineKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleConfirmationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, inlineYesKey):
-		return m.confirmInline("y")
+		return m.confirmInline(inlineConfirmYes)
 	case key.Matches(msg, inlineNoKey):
 		m.closeInlinePrompt()
 		m.terminateTarget = ""

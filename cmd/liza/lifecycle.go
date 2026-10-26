@@ -128,7 +128,7 @@ func (call *lifecycleCLIInvocation) finish(retErr *error) {
 		} else if errors.As(*retErr, &permission) {
 			outcome, action = models.LifecycleForbidden, ops.LifecycleSafeActionStop
 		}
-		*retErr = ops.WrapLifecycleError(call.cmd.Name(), nil, *retErr, outcome, action, "none")
+		*retErr = ops.WrapLifecycleError(call.cmd.Name(), nil, *retErr, outcome, action, ops.LifecycleEffectsNone)
 	}
 	var failure *ops.LifecycleError
 	if !errors.As(*retErr, &failure) {

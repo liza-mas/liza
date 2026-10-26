@@ -21,6 +21,14 @@ var awaitSubcommands = map[string]struct{}{
 	"await-resubmission": {},
 }
 
+// Wire spellings of the Claude Code Stop hook: the decision this command emits
+// and the background-job fields of the envelope it reads.
+const (
+	stopGuardDecisionBlock     = "block"
+	stopGuardKeyBackgroundJobs = "background_tasks"
+	backgroundJobStatusRunning = "running"
+)
+
 type stopGuardDecision struct {
 	Decision string `json:"decision"`
 	Reason   string `json:"reason"`
@@ -48,7 +56,7 @@ func StopGuardCommand(in io.Reader, out io.Writer, getenv func(string) string) e
 	if !block {
 		return nil
 	}
-	return json.NewEncoder(out).Encode(stopGuardDecision{Decision: "block", Reason: reason})
+	return json.NewEncoder(out).Encode(stopGuardDecision{Decision: stopGuardDecisionBlock, Reason: reason})
 }
 
 // stopGuardReason decides whether the turn must stay open. It fails closed on
@@ -61,7 +69,7 @@ func stopGuardReason(input []byte, binaryName string) (string, bool) {
 	if err := json.Unmarshal(input, &envelope); err != nil {
 		return unreadable, true
 	}
-	raw, ok := envelope["background_tasks"]
+	raw, ok := envelope[stopGuardKeyBackgroundJobs]
 	if !ok || string(raw) == "null" {
 		return "", false
 	}
@@ -80,7 +88,7 @@ func stopGuardReason(input []byte, binaryName string) (string, bool) {
 		if err := json.Unmarshal(entry, &task); err != nil || task.ID == nil || task.Status == nil {
 			return unreadable, true
 		}
-		if *task.Status != "running" {
+		if *task.Status != backgroundJobStatusRunning {
 			continue
 		}
 		command := ""

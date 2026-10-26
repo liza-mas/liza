@@ -95,27 +95,28 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	if len(args) != 1 {
 		return "", &errors.ValidationError{Message: "a field or ID query accepts exactly one argument; use tasks <task-id> for a literal task ID"}
 	}
-	if root, _, dotted := strings.Cut(query, "."); dotted {
+	if root, _, dotted := strings.Cut(query, queryPathSeparator); dotted {
 		// Reserved state/computed paths retain precedence over task IDs.
-		if query == "tasks.completion_rate" || query == "tasks.avg_iteration_count" {
+		if isReservedTasksComputedQuery(query) {
 			return handleFieldQuery(state, query, opts)
 		}
-		if root == "task" {
-			path := strings.TrimPrefix(query, "task.")
-			if dot := strings.LastIndex(path, "."); dot > 0 {
+		queryRoot := inspectQueryRoot(root)
+		if queryRoot == inspectRootTask {
+			path := strings.TrimPrefix(query, taskQueryPrefix)
+			if dot := strings.LastIndex(path, queryPathSeparator); dot > 0 {
 				field := path[dot+1:]
-				if slices.Contains([]string{"age", "time_in_status", "transition_id"}, field) {
+				if isTaskComputedField(field) {
 					if task := state.FindTask(path[:dot]); task != nil {
 						return handleTaskFieldQuery(task, field, opts)
 					}
 				}
 			}
 		}
-		if root == "tasks" || root == "task" {
-			return handleTaskQuery(state, strings.TrimPrefix(query, root+"."), opts)
+		if queryRoot == inspectRootTasks || queryRoot == inspectRootTask {
+			return handleTaskQuery(state, strings.TrimPrefix(query, root+queryPathSeparator), opts)
 		}
 		_, stateFieldErr := getField(state, root)
-		if stateFieldErr == nil || isInspectTarget(root) || root == "agent" || root == "version" {
+		if stateFieldErr == nil || isInspectTarget(root) || queryRoot == inspectRootAgent || queryRoot == inspectRootVersion {
 			return handleFieldQuery(state, query, opts)
 		}
 		return handleTaskQuery(state, query, opts)

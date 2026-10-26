@@ -8,8 +8,43 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// diagnosticUnknown is the value shown for a diagnostic field that is absent or
+// empty, and the fallback operation's name.
+const diagnosticUnknown = "unknown"
+
+// Keys of an integration-failure diagnostic. The ops writer persists the
+// structured diagnostic; the fallback below builds the same shape for a legacy
+// state, and the alert text reads three of the keys.
 const (
-	integrationFailureFallbackOperation = "unknown"
+	diagnosticKeyOperation          = "operation"
+	diagnosticKeyReason             = "reason"
+	diagnosticKeyStatus             = "status"
+	diagnosticKeyRecoveryHint       = "recovery_hint"
+	diagnosticKeyWorktreeState      = "worktree_state"
+	diagnosticKeyWorktreeRecorded   = "worktree_recorded"
+	diagnosticKeyWorktree           = "worktree"
+	diagnosticKeyWorktreeMissing    = "worktree_missing"
+	diagnosticKeyWorktreeCheckError = "worktree_check_error"
+	diagnosticKeyFailedBy           = "failed_by"
+	// historyExtraDiagnostic and historyExtraPRURL are keys of the history entry's
+	// Extra map that the ops writer fills.
+	historyExtraDiagnostic = "diagnostic"
+	historyExtraPRURL      = "pr_url"
+)
+
+// worktreeState is what the fallback diagnostic reports about the task's worktree.
+type worktreeState string
+
+const (
+	worktreeStateNotRecorded       worktreeState = "not_recorded"
+	worktreeStateRecordedUnchecked worktreeState = "recorded_unchecked"
+	worktreeStatePresent           worktreeState = "present"
+	worktreeStateMissing           worktreeState = "missing"
+	worktreeStateUnknown           worktreeState = diagnosticUnknown
+)
+
+const (
+	integrationFailureFallbackOperation = diagnosticUnknown
 	integrationFailureFallbackReason    = "legacy INTEGRATION_FAILED state has no structured diagnostic"
 	integrationFailureFallbackHint      = "inspect task history; if a PR was merged externally, run reconcile-merged with --merge-commit and --pr-url; otherwise use supersede-task/cancel-task or recreate the worktree before retrying"
 )
@@ -23,7 +58,7 @@ func latestIntegrationFailureDiagnostic(task *models.Task, projectRoot string) m
 		if entry.Event != models.TaskEventIntegrationFailed || entry.Extra == nil {
 			continue
 		}
-		diagnostic, ok := entry.Extra["diagnostic"].(map[string]any)
+		diagnostic, ok := entry.Extra[historyExtraDiagnostic].(map[string]any)
 		if ok {
 			return cloneStringAnyMap(diagnostic)
 		}
@@ -36,40 +71,40 @@ func latestIntegrationFailureDiagnostic(task *models.Task, projectRoot string) m
 
 func fallbackIntegrationFailureDiagnostic(task *models.Task, projectRoot string) map[string]any {
 	diagnostic := map[string]any{
-		"operation":     integrationFailureFallbackOperation,
-		"reason":        integrationFailureFallbackReason,
-		"status":        string(task.Status),
-		"recovery_hint": integrationFailureFallbackHint,
+		diagnosticKeyOperation:    integrationFailureFallbackOperation,
+		diagnosticKeyReason:       integrationFailureFallbackReason,
+		diagnosticKeyStatus:       string(task.Status),
+		diagnosticKeyRecoveryHint: integrationFailureFallbackHint,
 	}
 	if task.Worktree == nil || *task.Worktree == "" {
-		diagnostic["worktree_state"] = "not_recorded"
-		diagnostic["worktree_recorded"] = false
+		diagnostic[diagnosticKeyWorktreeState] = string(worktreeStateNotRecorded)
+		diagnostic[diagnosticKeyWorktreeRecorded] = false
 	} else {
-		diagnostic["worktree"] = *task.Worktree
-		diagnostic["worktree_recorded"] = true
+		diagnostic[diagnosticKeyWorktree] = *task.Worktree
+		diagnostic[diagnosticKeyWorktreeRecorded] = true
 		addWorktreePresence(projectRoot, *task.Worktree, diagnostic)
 	}
 	if len(task.FailedBy) > 0 {
-		diagnostic["failed_by"] = append([]string(nil), task.FailedBy...)
+		diagnostic[diagnosticKeyFailedBy] = append([]string(nil), task.FailedBy...)
 	}
 	return diagnostic
 }
 
 func addWorktreePresence(projectRoot, worktree string, diagnostic map[string]any) {
 	if projectRoot == "" {
-		diagnostic["worktree_state"] = "recorded_unchecked"
+		diagnostic[diagnosticKeyWorktreeState] = string(worktreeStateRecordedUnchecked)
 		return
 	}
 	worktreePath := filepath.Join(projectRoot, worktree)
 	if _, err := os.Stat(worktreePath); err == nil {
-		diagnostic["worktree_state"] = "present"
-		diagnostic["worktree_missing"] = false
+		diagnostic[diagnosticKeyWorktreeState] = string(worktreeStatePresent)
+		diagnostic[diagnosticKeyWorktreeMissing] = false
 	} else if os.IsNotExist(err) {
-		diagnostic["worktree_state"] = "missing"
-		diagnostic["worktree_missing"] = true
+		diagnostic[diagnosticKeyWorktreeState] = string(worktreeStateMissing)
+		diagnostic[diagnosticKeyWorktreeMissing] = true
 	} else {
-		diagnostic["worktree_state"] = "unknown"
-		diagnostic["worktree_check_error"] = err.Error()
+		diagnostic[diagnosticKeyWorktreeState] = string(worktreeStateUnknown)
+		diagnostic[diagnosticKeyWorktreeCheckError] = err.Error()
 	}
 }
 
@@ -84,7 +119,7 @@ func latestIntegrationPRURL(task *models.Task) *string {
 		default:
 			continue
 		}
-		value, ok := entry.Extra["pr_url"].(string)
+		value, ok := entry.Extra[historyExtraPRURL].(string)
 		if !ok || value == "" {
 			continue
 		}
@@ -100,15 +135,15 @@ func integrationFailureAlertMessage(task *models.Task, projectRoot string) strin
 	}
 	return fmt.Sprintf("%s — operation=%s reason=%s recovery_hint=%s",
 		task.ID,
-		stringDiagnosticValue(diagnostic, "operation"),
-		stringDiagnosticValue(diagnostic, "reason"),
-		stringDiagnosticValue(diagnostic, "recovery_hint"))
+		stringDiagnosticValue(diagnostic, diagnosticKeyOperation),
+		stringDiagnosticValue(diagnostic, diagnosticKeyReason),
+		stringDiagnosticValue(diagnostic, diagnosticKeyRecoveryHint))
 }
 
 func stringDiagnosticValue(diagnostic map[string]any, key string) string {
 	value, ok := diagnostic[key]
 	if !ok || value == nil {
-		return "unknown"
+		return diagnosticUnknown
 	}
 	if s, ok := value.(string); ok && s != "" {
 		return s

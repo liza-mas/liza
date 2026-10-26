@@ -81,7 +81,7 @@ func setMistralSystemPrompt(configPath string, reader *bufio.Reader, promptID st
 			fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping config.toml update\n")
 			return nil
 		}
-		if response != "y" {
+		if response != confirmAnswerY {
 			fmt.Fprintln(os.Stderr) // Print newline for clean terminal output
 			fmt.Fprintf(os.Stderr, "  Skipped %s\n", configPath)
 			return nil

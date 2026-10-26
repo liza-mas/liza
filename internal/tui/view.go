@@ -18,6 +18,16 @@ const (
 	minActivityHeight = 5 // border(2) + title(1) + at least 2 entries
 )
 
+// Panel layout, in terminal columns and rows.
+const (
+	// panelChromeWidth is a panel's border plus its default horizontal padding.
+	panelChromeWidth = 4
+	// overlayChromeWidth is an overlay's border plus its padding.
+	overlayChromeWidth = 8
+	// headerFooterHeight is the rows the header and the footer take.
+	headerFooterHeight = 2
+)
+
 // emptyCell is the table cell of an absent value.
 const emptyCell = "—"
 
@@ -54,7 +64,7 @@ func (m Model) View() string {
 	}
 
 	// Fixed-height elements: header (1), footer (1), notice and alert banner (0 or 1 each)
-	fixedHeight := 2 // header + footer
+	fixedHeight := headerFooterHeight
 	if awaitingHuman != "" {
 		fixedHeight++
 	}

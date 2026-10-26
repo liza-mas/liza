@@ -52,7 +52,7 @@ func checkBlockedTasks(state *models.State, cache map[string]time.Time) []Alert 
 		// when no unblocked check was observed, and its key lets MarkBlocked
 		// and every watcher log one line per episode between them.
 		if episodeStart := models.LatestHistoryTime(&task, models.TaskEventBlocked); !episodeStart.IsZero() {
-			alert.Identity = message + "|" + episodeStart.UTC().Format(time.RFC3339Nano)
+			alert.Identity = message + alertIdentitySeparator + episodeStart.UTC().Format(time.RFC3339Nano)
 			alert.OnceKey = alerts.BlockedEpisodeKey(task.ID, episodeStart, message)
 		}
 		blocked = append(blocked, alert)
@@ -77,7 +77,7 @@ func checkOrphanedRejected(state *models.State, pr models.PipelineResolver) []Al
 		}
 		// A sentinel assignee (e.g. "$transitioning") is a transition in
 		// progress, not an orphaned assignment.
-		if task.AssignedTo == nil || strings.HasPrefix(*task.AssignedTo, "$") {
+		if task.AssignedTo == nil || strings.HasPrefix(*task.AssignedTo, sentinelAssigneePrefix) {
 			continue
 		}
 
@@ -165,14 +165,14 @@ func checkHypothesisExhaustion(state *models.State) []Alert {
 		if task.Status == models.TaskStatusBlocked {
 			continue
 		}
-		if len(task.FailedBy) >= 2 {
+		if len(task.FailedBy) >= hypothesisExhaustionFailures {
 			raised = append(raised, Alert{
 				Timestamp: now,
 				Level:     AlertLevelCritical,
 				Category:  alerts.CategoryHypothesisExhaustion.String(),
 				Message:   fmt.Sprintf("%s — requires rescope", task.ID),
 				// Another failed doer is a new condition.
-				Identity: task.ID + "|" + strings.Join(slices.Sorted(slices.Values(task.FailedBy)), ","),
+				Identity: task.ID + alertIdentitySeparator + strings.Join(slices.Sorted(slices.Values(task.FailedBy)), ","),
 			})
 		}
 	}
@@ -188,7 +188,7 @@ func checkReassigned(state *models.State, cache map[string]time.Time) []Alert {
 		if task.Status.IsTerminal() {
 			continue
 		}
-		if task.EffectiveAttempt() != 2 {
+		if task.EffectiveAttempt() != finalTaskAttempt {
 			continue
 		}
 
@@ -225,7 +225,7 @@ func checkStaleDrafts(state *models.State) []Alert {
 				Message: fmt.Sprintf("%s — created %dmin ago, never finalized (Orchestrator crash?)",
 					task.ID, int(age.Minutes())),
 				// The message carries the age; the draft is the condition.
-				Identity: task.ID + "|" + task.Created.UTC().Format(time.RFC3339Nano),
+				Identity: task.ID + alertIdentitySeparator + task.Created.UTC().Format(time.RFC3339Nano),
 			})
 		}
 	}

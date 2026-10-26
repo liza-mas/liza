@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -60,33 +61,33 @@ type interactivePane struct {
 func masLaunchPresets() map[masLaunchPreset][]string {
 	return map[masLaunchPreset][]string{
 		masPresetTechnicalSpec: {
-			"orchestrator",
-			"code-planner",
-			"code-plan-reviewer",
-			"coder",
-			"code-reviewer",
+			roles.Orchestrator,
+			roles.CodePlanner,
+			roles.CodePlanReviewer,
+			roles.Coder,
+			roles.CodeReviewer,
 		},
 		masPresetFunctionalSpec: {
-			"orchestrator",
-			"architect",
-			"architecture-reviewer",
-			"code-planner",
-			"code-plan-reviewer",
-			"coder",
-			"code-reviewer",
+			roles.Orchestrator,
+			roles.Architect,
+			roles.ArchitectureReviewer,
+			roles.CodePlanner,
+			roles.CodePlanReviewer,
+			roles.Coder,
+			roles.CodeReviewer,
 		},
 		masPresetGeneralObjective: {
-			"orchestrator",
-			"epic-planner",
-			"epic-plan-reviewer",
-			"us-writer",
-			"us-reviewer",
-			"architect",
-			"architecture-reviewer",
-			"code-planner",
-			"code-plan-reviewer",
-			"coder",
-			"code-reviewer",
+			roles.Orchestrator,
+			roles.EpicPlanner,
+			roles.EpicPlanReviewer,
+			roles.USWriter,
+			roles.USReviewer,
+			roles.Architect,
+			roles.ArchitectureReviewer,
+			roles.CodePlanner,
+			roles.CodePlanReviewer,
+			roles.Coder,
+			roles.CodeReviewer,
 		},
 	}
 }
@@ -200,6 +201,10 @@ func launchAvailableCLIs(projectRoot string) []string {
 	return agent.AvailableCLIs(state.Config)
 }
 
+// pairingReviewerIDPrefix prefixes a pairing reviewer ID in the adversarial-pairing
+// skill prompt; a --reviewer spec may carry it and loses it on parse.
+const pairingReviewerIDPrefix = "reviewer-"
+
 func parseReviewerLaunchSpec(spec string) (string, string, error) {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
@@ -207,13 +212,13 @@ func parseReviewerLaunchSpec(spec string) (string, string, error) {
 	}
 	if strings.Contains(spec, "=") {
 		parts := strings.SplitN(spec, "=", 2)
-		id := strings.TrimPrefix(strings.TrimSpace(parts[0]), "reviewer-")
+		id := strings.TrimPrefix(strings.TrimSpace(parts[0]), pairingReviewerIDPrefix)
 		cliName := strings.TrimSpace(parts[1])
 		if id == "" || cliName == "" {
 			return "", "", cliValidationError(fmt.Sprintf("invalid reviewer spec %q; use id=cli or cli", spec))
 		}
 		return id, cliName, nil
 	}
-	id := strings.TrimPrefix(spec, "reviewer-")
+	id := strings.TrimPrefix(spec, pairingReviewerIDPrefix)
 	return id, id, nil
 }

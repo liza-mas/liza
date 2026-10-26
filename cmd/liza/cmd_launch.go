@@ -6,6 +6,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -109,7 +110,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 		if len(reviewerSpecs) == 0 {
 			reviewerSpecs = []string{"codex", "codex-2=codex"}
 		}
-		doerPrompt := pairingSkillPrompt("doer", boardPath, yolo)
+		doerPrompt := pairingSkillPrompt(string(roles.RoleTypeDoer), boardPath, yolo)
 		panes := []interactivePane{pairingInteractivePane(doerCLI, doerPrompt)}
 		for _, spec := range reviewerSpecs {
 			id, cliName, err := parseReviewerLaunchSpec(spec)
@@ -119,7 +120,7 @@ var launchWeztermAdversarialPairingCmd = &cobra.Command{
 			if !containsString(agent.ValidCLIs(), cliName) {
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
-			prompt := pairingSkillPrompt("reviewer-"+id, boardPath, false)
+			prompt := pairingSkillPrompt(pairingReviewerIDPrefix+id, boardPath, false)
 			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 
@@ -216,7 +217,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 		if len(reviewerSpecs) == 0 {
 			reviewerSpecs = []string{"codex", "codex-2=codex"}
 		}
-		doerPrompt := pairingSkillPrompt("doer", boardPath, yolo)
+		doerPrompt := pairingSkillPrompt(string(roles.RoleTypeDoer), boardPath, yolo)
 		panes := []interactivePane{pairingInteractivePane(doerCLI, doerPrompt)}
 		for _, spec := range reviewerSpecs {
 			id, cliName, err := parseReviewerLaunchSpec(spec)
@@ -226,7 +227,7 @@ var launchCmuxAdversarialPairingCmd = &cobra.Command{
 			if !containsString(agent.ValidCLIs(), cliName) {
 				return cliValidationError(fmt.Sprintf("invalid reviewer CLI %q", cliName))
 			}
-			prompt := pairingSkillPrompt("reviewer-"+id, boardPath, false)
+			prompt := pairingSkillPrompt(pairingReviewerIDPrefix+id, boardPath, false)
 			panes = append(panes, pairingInteractivePane(cliName, prompt))
 		}
 

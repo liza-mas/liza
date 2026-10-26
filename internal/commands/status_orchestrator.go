@@ -10,6 +10,11 @@ import (
 	"github.com/liza-mas/liza/internal/prompts"
 )
 
+// integrationStatusComplete is the status of an integration completion that is
+// clean for the current integration HEAD. internal/prompts writes it as a literal
+// and names no constant.
+const integrationStatusComplete = "complete"
+
 // buildOrchestratorStatus determines orchestrator state
 func buildOrchestratorStatus(state *models.State, projectRoot string) orchestratorStatus {
 	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
@@ -59,7 +64,7 @@ func buildOrchestratorStatusFromWakeResult(state *models.State, result agent.Orc
 	case agent.WakeTriggerCodingComplete, agent.WakeTriggerIntegrationWaiting, agent.WakeTriggerIntegrationBlocked, agent.WakeTriggerIntegrationExhausted, agent.WakeTriggerIntegrationUnavailable:
 		ps.Reason = formatIntegrationLifecycleReason(ps.Integration)
 	case agent.WakeTriggerSprintComplete:
-		if ps.Integration != nil && ps.Integration.Status == "complete" {
+		if ps.Integration != nil && ps.Integration.Status == integrationStatusComplete {
 			ps.Reason = "Authoritative integration completion is clean for current integration HEAD"
 		} else {
 			ps.Reason = fmt.Sprintf("All %d planned task(s) reached terminal state; sprint complete", count)

@@ -195,13 +195,20 @@ Examples:
 	},
 }
 
+// The detail ops attaches to a rejected retarget: the key and its value. ops keeps
+// both as unexported spellings.
+const (
+	retargetRejectedDetailKey = "diagnostic_action"
+	retargetRejectedAction    = "retarget_dependency_rejected"
+)
+
 func writeRetargetDependencyVerboseDiagnostic(stderr io.Writer, err error) {
 	if err == nil {
 		return
 	}
 
 	details := jsonout.ErrorDetails(err)
-	if details["diagnostic_action"] != "retarget_dependency_rejected" {
+	if details[retargetRejectedDetailKey] != retargetRejectedAction {
 		return
 	}
 	_, message := jsonout.ClassifyError(err)

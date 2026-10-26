@@ -9,6 +9,10 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 )
 
+// shortCommitWidth is how many leading characters of a commit SHA the merge
+// summary shows.
+const shortCommitWidth = 7
+
 // WtMergeCommand merges an approved task into the integration branch and prints status.
 // Delegates business logic to ops.MergeWorktree.
 // Returns *ops.IntegrationFailedError if merge conflicts or integration tests fail.
@@ -90,8 +94,8 @@ func printMergeResult(r *ops.MergeResult) {
 	}
 
 	shortCommit := r.MergeCommit
-	if len(shortCommit) > 7 {
-		shortCommit = shortCommit[:7]
+	if len(shortCommit) > shortCommitWidth {
+		shortCommit = shortCommit[:shortCommitWidth]
 	}
 	fmt.Printf("✓ Task %s merged successfully\n", r.TaskID)
 	fmt.Printf("  Merge commit: %s\n", shortCommit)

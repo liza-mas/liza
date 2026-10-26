@@ -426,7 +426,7 @@ Requirements:
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, authority.ID, string(roles.RoleTypeOrchestrator)); err != nil {
+		if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 			return err
 		}
 
@@ -439,6 +439,10 @@ Requirements:
 		return commands.AssessBlockedWithAuthorityCommand(projectRoot, taskID, note, authority, opts)
 	},
 }
+
+// maxBlockedQuestions is the most --question values one canonical reconciliation
+// takes (the blocking protocol). ops names the same limit without exporting it.
+const maxBlockedQuestions = 3
 
 func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions, error) {
 	reason, _ := cmd.Flags().GetString("reason")
@@ -471,7 +475,7 @@ func assessBlockedOptionsFromFlags(cmd *cobra.Command) (ops.AssessBlockedOptions
 	if len(questions) == 0 {
 		return ops.AssessBlockedOptions{}, cliValidationError("--question is required for canonical metadata reconciliation")
 	}
-	if len(questions) > 3 {
+	if len(questions) > maxBlockedQuestions {
 		return ops.AssessBlockedOptions{}, cliValidationError("--question may be repeated at most 3 times")
 	}
 	for _, question := range questions {
@@ -535,7 +539,7 @@ Requirements:
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, authority.ID, string(roles.RoleTypeOrchestrator)); err != nil {
+		if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 			return err
 		}
 

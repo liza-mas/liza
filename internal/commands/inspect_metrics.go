@@ -162,7 +162,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 		if _, exists := agentStats[agentID]; !exists {
 			agentStats[agentID] = &AgentMetricsInfo{
 				AgentID: agentID,
-				Role:    "unknown",
+				Role:    unknownRoleLabel,
 			}
 		}
 
@@ -192,7 +192,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 	for _, stats := range agentStats {
 		totalTasks := stats.TasksCompleted + stats.TasksInProgress + stats.TasksFailed
 		if totalTasks > 0 {
-			stats.SuccessRatePercent = (stats.TasksCompleted * 100) / totalTasks
+			stats.SuccessRatePercent = (stats.TasksCompleted * percentScale) / totalTasks
 		}
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -82,7 +83,7 @@ Material corrections require reviewed amend-plan work or replan --reason.`,
 			if err != nil {
 				return err
 			}
-			if err := validateRoleType(resolver, authority.ID, "orchestrator"); err != nil {
+			if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 				return err
 			}
 			input.Authority = &authority

@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -49,7 +50,7 @@ Unmatched evidence remains non-gating regardless of disposition.`,
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, authority.ID, "orchestrator"); err != nil {
+		if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 			return err
 		}
 		if err := validateAllowedOperation(resolver, authority.ID, "reconcile-verdict"); err != nil {

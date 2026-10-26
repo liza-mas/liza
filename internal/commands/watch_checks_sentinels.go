@@ -107,7 +107,7 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 	activeSentinels := make(map[string]bool)
 
 	for _, task := range state.Tasks {
-		if task.AssignedTo == nil || !strings.HasPrefix(*task.AssignedTo, "$") {
+		if task.AssignedTo == nil || !strings.HasPrefix(*task.AssignedTo, sentinelAssigneePrefix) {
 			continue
 		}
 		activeSentinels[task.ID] = true
@@ -124,7 +124,7 @@ func checkStaleSentinels(state *models.State, cache map[string]time.Time) []Aler
 				Level:     AlertLevelCritical,
 				Category:  alerts.CategoryStaleSentinel.String(),
 				Message:   fmt.Sprintf("%s stuck in transition — manual repair needed", task.ID),
-				Identity:  task.ID + "|" + *task.AssignedTo,
+				Identity:  task.ID + alertIdentitySeparator + *task.AssignedTo,
 			})
 		}
 	}

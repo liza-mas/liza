@@ -156,7 +156,7 @@ func reconcileStuckAlerts(raised []Alert, cache map[string]time.Time) []Alert {
 		deduped = append(deduped, alert)
 	}
 
-	invalidStatePrefix := stuckAlertCachePrefix + alerts.CategoryInvalidState.String() + ":"
+	invalidStatePrefix := stuckAlertCacheKey(Alert{Category: alerts.CategoryInvalidState.String()})
 	for key := range cache {
 		if !strings.HasPrefix(key, stuckAlertCachePrefix) || activeKeys[key] {
 			continue

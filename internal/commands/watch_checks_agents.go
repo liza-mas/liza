@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/procscan"
 	"github.com/liza-mas/liza/internal/rolemodels"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -82,7 +83,7 @@ func checkRegisteredAgentsWithoutLiveProcess(state *models.State) []Alert {
 			continue
 		}
 		processDescription := "no live process"
-		if observation.Raw.State == "mismatched" {
+		if observation.Raw.State == procscan.AgentProcessMismatched {
 			processDescription = "mismatched process"
 		}
 		raised = append(raised, Alert{
@@ -138,7 +139,7 @@ func checkRunningTasksWithoutLiveProcess(state *models.State, pr models.Pipeline
 			continue
 		}
 		processDescription := "no live process"
-		if processStatus.State == "mismatched" {
+		if processStatus.State == procscan.AgentProcessMismatched {
 			processDescription = "mismatched process"
 		}
 
@@ -278,7 +279,7 @@ func runningTaskOwner(task *models.Task, pr models.PipelineResolver) (string, ro
 		if task.AssignedTo == nil || *task.AssignedTo == "" {
 			return "", "", false
 		}
-		if strings.HasPrefix(*task.AssignedTo, "$") {
+		if strings.HasPrefix(*task.AssignedTo, sentinelAssigneePrefix) {
 			return "", "", false
 		}
 		return *task.AssignedTo, roles.RoleTypeDoer, true

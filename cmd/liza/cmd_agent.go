@@ -24,6 +24,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// autoAssignAgentIDAttempts bounds how many candidate IDs a launch tries when it
+// picks the agent ID itself.
+const autoAssignAgentIDAttempts = 5
+
+// contractKeyNone is the provider catalog's contract key for a CLI that reads no
+// behavioral contract file. The catalog (internal/providers) names no constant.
+const contractKeyNone = "none"
+
 var agentCmd = &cobra.Command{
 	Use:   "agent <role> [initial-task-id]",
 	Short: "Run agent supervisor loop",
@@ -187,7 +195,7 @@ Example:
 
 		contractKey := agent.ContractKeyForCLI(cliName, runtimeConfig)
 		// Warn if no product contract symlink is configured for this CLI.
-		if contractKey != "" && contractKey != "none" && commands.CheckContractConfigured(projectRoot, contractKey) == "" {
+		if contractKey != "" && contractKey != contractKeyNone && commands.CheckContractConfigured(projectRoot, contractKey) == "" {
 			fmt.Fprintf(supervisorLogs.stderr, "Warning: no %s contract symlink found for %s. Agents may not find the behavioral contract.\n", brand.NameTitle, cliName)
 			fmt.Fprintf(supervisorLogs.stderr, "  Run '%s' to create one.\n", contractInitCommandForMissingContract(cliName, contractKey))
 		}
@@ -222,7 +230,7 @@ Example:
 
 		if autoAssigned {
 			bb := db.For(statePath)
-			_, err = agent.AutoAssignAgentID(bb, role, 5, func(candidateID string) error {
+			_, err = agent.AutoAssignAgentID(bb, role, autoAssignAgentIDAttempts, func(candidateID string) error {
 				fmt.Fprintf(supervisorLogs.stderr, "Auto-assigned agent ID: %s\n", candidateID)
 				config := agent.SupervisorConfig{
 					AgentID:     candidateID,

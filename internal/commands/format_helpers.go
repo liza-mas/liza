@@ -28,9 +28,18 @@ func formatKeyValue(data map[string]any) string {
 // dashboardSection represents one section of a dashboard
 type dashboardSection struct {
 	Title   string
-	Content any    // Can be map[string]any or table data
-	Format  string // "kv", "table", or "text"
+	Content any // Can be map[string]any or table data
+	Format  dashboardSectionFormat
 }
+
+// dashboardSectionFormat is how a dashboard section renders its content.
+type dashboardSectionFormat string
+
+const (
+	dashboardFormatKeyValue dashboardSectionFormat = "kv"
+	dashboardFormatTable    dashboardSectionFormat = "table"
+	dashboardFormatText     dashboardSectionFormat = "text"
+)
 
 func formatDashboard(sections []dashboardSection) string {
 	var output []string
@@ -42,15 +51,15 @@ func formatDashboard(sections []dashboardSection) string {
 
 		// Format section content based on type
 		switch section.Format {
-		case "kv":
+		case dashboardFormatKeyValue:
 			if data, ok := section.Content.(map[string]any); ok {
 				output = append(output, formatKeyValue(data))
 			}
-		case "table":
+		case dashboardFormatTable:
 			// Table format expects Content to have Headers and Rows fields
 			// This is a simplified version - can be extended
 			output = append(output, "")
-		case "text":
+		case dashboardFormatText:
 			output = append(output, fmt.Sprintf("%v", section.Content))
 		}
 

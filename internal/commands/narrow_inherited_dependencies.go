@@ -17,6 +17,13 @@ func NarrowInheritedDependenciesWithAuthorityAndOptionsCommand(projectRoot, prod
 	return printNarrowInheritedDependenciesResult(result, err)
 }
 
+// Child actions a narrowing result reports. The owner (A4 ops) keeps its
+// narrowAction constants unexported; the result carries the spellings as strings.
+const (
+	narrowChildActionNarrowed = "narrowed"
+	narrowChildActionSkipped  = "skipped"
+)
+
 func printNarrowInheritedDependenciesResult(result *ops.NarrowInheritedDependenciesResult, err error) error {
 	if err != nil {
 		return fmt.Errorf("narrow inherited dependencies: %w", err)
@@ -30,7 +37,7 @@ func printNarrowInheritedDependenciesResult(result *ops.NarrowInheritedDependenc
 		result.ProducerID, result.Transition, result.Narrowed, result.Unchanged, result.Skipped)
 	for _, child := range result.Children {
 		switch child.Action {
-		case "narrowed":
+		case narrowChildActionNarrowed:
 			fmt.Printf("  %s: -%d +%d -> %d dependencies\n", child.TaskID, len(child.RemovedDependencies), len(child.AddedDependencies), len(child.CanonicalDependencies))
 			if len(child.RemovedDependencies) > 0 {
 				fmt.Printf("    removed: %s\n", strings.Join(child.RemovedDependencies, ", "))
@@ -38,7 +45,7 @@ func printNarrowInheritedDependenciesResult(result *ops.NarrowInheritedDependenc
 			if len(child.AddedDependencies) > 0 {
 				fmt.Printf("    added: %s\n", strings.Join(child.AddedDependencies, ", "))
 			}
-		case "skipped":
+		case narrowChildActionSkipped:
 			fmt.Printf("  %s: skipped (%s)\n", child.TaskID, child.SkipReason)
 		default:
 			fmt.Printf("  %s: unchanged\n", child.TaskID)

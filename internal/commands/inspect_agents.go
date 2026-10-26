@@ -133,7 +133,7 @@ func inspectAgent(state *models.State, agentID string, opts inspectAgentsOptions
 	// Find the agent
 	agent, exists := state.Agents[agentID]
 	if !exists {
-		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootAgent), ID: agentID}
 	}
 
 	// Find the task this agent is working on (if any)
@@ -304,17 +304,17 @@ func formatAgentsTable(agents []agentInfo) string {
 	var rows [][]string
 
 	for _, agent := range agents {
-		currentTask := "-"
+		currentTask := emptyCell
 		if agent.CurrentTask != nil {
 			currentTask = *agent.CurrentTask
 		}
 
-		provider := "-"
+		provider := emptyCell
 		if agent.Provider != "" {
 			provider = agent.Provider
 		}
 
-		timeOnTask := "-"
+		timeOnTask := emptyCell
 		if agent.TimeOnTask != "" {
 			timeOnTask = agent.TimeOnTask
 		}
@@ -323,7 +323,7 @@ func formatAgentsTable(agents []agentInfo) string {
 		switch {
 		case agent.PID == 0:
 			pidDisplay = "- n/a"
-		case agent.ProcessStatus == "running":
+		case agent.ProcessStatus == processStatusRunning:
 			pidDisplay = fmt.Sprintf("%d ✓", agent.PID)
 		default:
 			pidDisplay = fmt.Sprintf("%d ✗", agent.PID)
@@ -348,7 +348,7 @@ func formatAgentsTable(agents []agentInfo) string {
 
 func formatAgentHealthForTable(agent agentInfo) string {
 	if agent.Health == "" {
-		return "-"
+		return emptyCell
 	}
 	if agent.HealthReason == "" {
 		return agent.Health

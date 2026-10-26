@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
@@ -164,6 +165,12 @@ func configRun(run func(*cobra.Command, []string) error) func(*cobra.Command, []
 }
 
 // setAutoResumeConfig exposes the native policy setter on the operator path.
+// The two values config.auto_resume accepts.
+const (
+	boolArgTrue  = "true"
+	boolArgFalse = "false"
+)
+
 func setAutoResumeConfig(cmd *cobra.Command, projectRoot, agentID string, args []string) error {
 	if agentID != "" {
 		return cliValidationError("config.auto_resume is operator-only; identified agents cannot set it")
@@ -171,10 +178,10 @@ func setAutoResumeConfig(cmd *cobra.Command, projectRoot, agentID string, args [
 	if cmd.Flags().Changed("replace") || cmd.Flags().Changed("reason") {
 		return cliValidationError("config.auto_resume does not use --replace or --reason")
 	}
-	if args[1] != "true" && args[1] != "false" {
+	if args[1] != boolArgTrue && args[1] != boolArgFalse {
 		return cliValidationError("config.auto_resume takes exactly true or false")
 	}
-	result, err := ops.SetAutoResumeWithResult(projectRoot, args[1] == "true")
+	result, err := ops.SetAutoResumeWithResult(projectRoot, args[1] == boolArgTrue)
 	if isJSON(cmd) {
 		return jsonout.WriteResult(os.Stdout, result, nil, err)
 	}
@@ -271,7 +278,7 @@ func init() {
 		addJSONFlag(cmd)
 		cmd.ValidArgsFunction = completeConfigKeys
 	}
-	configGetCmd.Flags().String("format", "value", "Output format: json, yaml, table, value")
+	configGetCmd.Flags().String("format", commands.InspectFormatValue, "Output format: json, yaml, table, value")
 	configSetCmd.Flags().Bool("replace", false, "Replace a different existing value (requires --reason)")
 	configSetCmd.Flags().String("reason", "", "Reason for the configuration change")
 	addAgentIDFlag(configSetCmd)

@@ -25,6 +25,8 @@ const (
 	taskDescriptionMinWidth     = 16
 	taskRowPrefixWidth          = 2
 	taskPanelBorderWidth        = 2
+	// taskPanelTitleMinGap is the least spacing between the panel title and its metrics.
+	taskPanelTitleMinGap = 2
 )
 
 // taskColumn is one column of the task panel. A zero width marks the flex column.
@@ -88,10 +90,10 @@ func (m Model) renderTaskPanelTitle() string {
 	titleWidth := lipgloss.Width(title)
 	metricsWidth := lipgloss.Width(metricsStyled)
 	// Account for panel border padding (2 chars each side)
-	availWidth := m.width - 4
+	availWidth := m.width - panelChromeWidth
 	gap := availWidth - titleWidth - metricsWidth
-	if gap < 2 {
-		gap = 2
+	if gap < taskPanelTitleMinGap {
+		gap = taskPanelTitleMinGap
 	}
 	return title + strings.Repeat(" ", gap) + metricsStyled
 }

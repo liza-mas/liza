@@ -12,6 +12,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Permissions of the supervisor log files and of the bootstrap status file.
+const (
+	supervisorLogFileMode       = 0o644
+	supervisorBootstrapFileMode = 0o600
+)
+
 type supervisorLogs struct {
 	stderr        io.Writer
 	persist       bool
@@ -33,11 +39,11 @@ func openSupervisorLogs(cmd *cobra.Command) (*supervisorLogs, error) {
 			agent.SupervisorStdoutLogFlag, agent.SupervisorStderrLogFlag)
 	}
 
-	stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, supervisorLogFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("create supervisor stdout log: %w", err)
 	}
-	stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, supervisorLogFileMode)
 	if err != nil {
 		closeErr := stdoutFile.Close()
 		removeErr := os.Remove(stdoutPath)
@@ -76,7 +82,7 @@ func writeSupervisorBootstrapStatus(cmd *cobra.Command, status string) error {
 	if path == "" {
 		return nil
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, supervisorBootstrapFileMode)
 	if err != nil {
 		return fmt.Errorf("write supervisor bootstrap status: %w", err)
 	}

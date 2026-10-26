@@ -92,13 +92,13 @@ func writeAgentsSection(b *strings.Builder, agents []agentStatus) {
 	headers := []string{"ID", "Role", "Status", "Health", "PID", "Task", "Heartbeat", "Process"}
 	rows := make([][]string, len(agents))
 	for i, agent := range agents {
-		pidStr := "-"
+		pidStr := emptyCell
 		if agent.PID != 0 {
 			pidStr = fmt.Sprintf("%d", agent.PID)
 		}
 		health := agent.Health
 		if health == "" {
-			health = "-"
+			health = emptyCell
 		}
 		rows[i] = []string{
 			agent.ID,
