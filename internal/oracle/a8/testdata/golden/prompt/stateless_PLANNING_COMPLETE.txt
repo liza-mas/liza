@@ -1,0 +1,24 @@
+Planning tasks have been merged with output[]. You own their hand-off: automatic paths create children only from plans you pass, and an auto-resumed checkpoint gets no human review after yours.
+
+You have FULL autonomy to run CLI commands immediately; do not wait for permission.
+
+--- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
+
+THEN:
+1. Run: liza update-sprint-metrics --json
+2. If any plan is passed or ready: liza sprint-checkpoint --json
+   The checkpoint gates downstream task creation and generates a sprint summary. If every plan awaits amendment, was replanned or held, do not checkpoint.
+
+SUCCESS CRITERIA:
+- Every listed plan is passed, held, replanned or awaiting reviewed amendment; passed and ready plans are checkpointed.
+
+DELIVERY REPORT (final response, from state and evidence; task counts do not replace it):
+- Merged planning/architecture; merged implementation; integrated behavior demonstrated; final acceptance complete/pending/failed/unavailable — with task or artifact refs, unknowns stated.
+- Must coverage and outstanding proof; delivered and deferred Should/Could; Won't exclusions preserved.
+- Dominant blocking chain, its consumers, the next concrete change; whether the latest recovery removed its cause and advanced its consumer.
+Compare within one lineage — replacements add no delivery; heartbeats and log growth are activity, not progress. Judge a planning-only run against its intended deliverable, not against absent coding. Report observed counts and elapsed intervals with their scope; invent no planning-to-coding ratio, stall duration, or halt threshold; unknown accounting stays unknown. Report only: no extra checkpoint, no prose over the sprint summary, no analysis tasks.
+
+❌ INCORRECT (DO NOT DO THIS):
+1. Create child tasks directly or edit merged plan files yourself — amend-plan/replan route material corrections to ordinary planner/reviewer review.
+2. Pass a plan whose checks you did not run, or a held plan; clearing a hold is operator-only.
+3. Exit with a listed plan undecided.

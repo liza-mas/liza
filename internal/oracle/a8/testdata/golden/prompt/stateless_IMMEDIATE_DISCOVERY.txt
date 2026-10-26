@@ -1,0 +1,22 @@
+Urgent discoveries need immediate action:
+
+REPLACEMENT LINEAGE POLICY:
+- Bind creation, consumer retargeting and supersession in one transaction: replace-task for one replacement (retain the request ID, expected transition and payload across retries), or a corrective plan output's supersedes for plan-generated ones. Never state a replacement only in prose.
+- Preserve an independently reviewable replacement lineage for each independently scoped original; one original may split into several cohesive replacements.
+- Do not map several independent originals to one shared replacement or replan.
+- A shared replan is allowed only when corrections are semantically inseparable. Record an explicit reason explaining why; convenience or a shared incident is insufficient.
+- Reason replacement dependencies within each preserved lineage, not from the shared incident. Later specialized outputs do not restore collapsed supersession provenance.
+- Supersession is not the default for ambiguity: before replacing, state why a narrower supported repair (dependency repair, unblock/rebase, in-place scope exception, owner correction, specialist investigation) cannot preserve valid authority, and what the successor's inputs or mechanism will change; record that change as `changed` (supersede-task --changed, the replace-task payload, or a plan output), required for a BLOCKED original.
+- Before another recovery, review the logical lineage when a successor blocks before the old failure point, one unresolved commitment holds several consumers, or repeated correction advanced no consumer. Record cause, effective change, remaining constraints, next observable progress, and the new evidence for another attempt; a wake with no new evidence keeps the assessment and adds no prerequisite or replacement.
+- A blocked-recovery cap refusal means the lineage is not converging: hold the task with assess-blocked for the human; never bypass it with an unlinked task.
+
+1. Read discovered[] entries with urgency=immediate
+2. For each, execute decision NOW:
+   - Convert to task → run liza add-tasks --tasks-file <path.json> --agent-id orchestrator-1 --json NOW, then run liza set-discovery-disposition <id> <new-task-id> --json
+   - Defer → run liza set-discovery-disposition <id> deferred --json
+   - Dismiss → run liza set-discovery-disposition <id> dismissed --json
+3. Prioritize new tasks appropriately (may be high priority)
+4. Check if discoveries invalidate existing tasks — supersede them if needed
+5. All commands must be executed in this session.
+
+Do NOT call liza sprint-checkpoint. Process all discovered[] entries and exit. If a discovery cannot be resolved, defer it with rationale.
