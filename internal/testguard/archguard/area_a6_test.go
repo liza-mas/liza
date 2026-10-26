@@ -6,8 +6,6 @@ var areaA6 = Area{
 	ID:        "A6",
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/wt_create.go", Func: "createWorktree"}, Ceiling: 120},
-	},
-	S2: []S2Entry{},
+	Ratchet:   []RatchetEntry{},
+	S2:        []S2Entry{},
 }

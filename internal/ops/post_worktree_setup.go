@@ -32,6 +32,9 @@ const (
 	// shell exits, so a background process the command started cannot hold
 	// the setup open.
 	postWorktreeSetupWaitDelay = 10 * time.Second
+	// Outcome record statuses persisted in the worktree's private outcome file.
+	worktreeSetupOutcomeOK     = "ok"
+	worktreeSetupOutcomeFailed = "failed"
 )
 
 var (
@@ -396,9 +399,9 @@ func readWorktreeSetupOutcome(path string) (worktreeSetupOutcome, bool, error) {
 	}
 	var ok bool
 	switch fields[1] {
-	case "ok":
+	case worktreeSetupOutcomeOK:
 		ok = true
-	case "failed":
+	case worktreeSetupOutcomeFailed:
 	default:
 		return worktreeSetupOutcome{}, false, errMalformedWorktreeSetupOutcome
 	}
@@ -421,9 +424,9 @@ func recordWorktreeSetupOutcome(path string, ok bool, at time.Time) (uint64, err
 		return 0, fmt.Errorf("worktree setup outcome sequence exhausted")
 	}
 	seq := previous.Seq + 1
-	status := "failed"
+	status := worktreeSetupOutcomeFailed
 	if ok {
-		status = "ok"
+		status = worktreeSetupOutcomeOK
 	}
 	if err := writeWorktreeSetupFile(path, fmt.Appendf(nil, "%d %s %s\n", seq, status, at.Format(time.RFC3339Nano))); err != nil {
 		return 0, err
