@@ -35,7 +35,7 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 			if decision.PlanningSettled || decision.FreezeContributingSet || decision.ContributingSet != nil || decision.GlobalRequest != nil {
 				t.Fatalf("pending decomposition decision = %#v, want unsettled with no cohort or global request", decision)
 			}
-			if decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingPlanning {
+			if decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingPlanning) {
 				t.Fatalf("pending decomposition waiting = %#v, want %q", decision.Waiting, integrationProgressWaitingPlanning)
 			}
 		}
@@ -517,7 +517,7 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 			inFlight := withLedger(name)
 			inFlight.Tasks = append(inFlight.Tasks, progressAnalysis("global-1", "global:1", models.IntegrationAnalysisPhaseGlobal, 1, head))
 			decision = evaluateProgress(t, inFlight, available, head)
-			if decision.Blocked != nil || decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingGlobalAnalysis || decision.DeferredValidationRequest != requested {
+			if decision.Blocked != nil || decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingGlobalAnalysis) || decision.DeferredValidationRequest != requested {
 				t.Fatalf("in-flight analysis decision = %#v, want global analysis wait with batch request %q", decision, requested)
 			}
 

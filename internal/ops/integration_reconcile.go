@@ -18,9 +18,19 @@ import (
 )
 
 const (
-	sliceIntegrationRolePair        = "slice-integration-pair"
-	globalIntegrationRolePair       = "integration-pair"
+	sliceIntegrationRolePair  = "slice-integration-pair"
+	globalIntegrationRolePair = "integration-pair"
+	codingRolePair            = baseCommitSnapshotRolePair
+	codePlanningRolePair      = legacyPlanningRolePair
+
 	maxIntegrationReconcileAttempts = 3
+
+	// integrationReconcileLockLabel names the completion-linearization hold of
+	// one reconciliation attempt.
+	integrationReconcileLockLabel = "reconcile integration analyses"
+	// integrationAnalysisTaskIDPrefix precedes the colon-free analysis key in
+	// the ID of the task that carries an analysis.
+	integrationAnalysisTaskIDPrefix = "integration-"
 )
 
 var errIntegrationReconcileChanged = errors.New("integration reconciliation input changed")
@@ -151,7 +161,7 @@ func reconcileIntegrationAnalyses(projectRoot string, completionLockHeld bool) (
 		if completionLockHeld {
 			err = apply()
 		} else {
-			err = withEffectiveIntegrationCompletionLinearization(projectRoot, "reconcile integration analyses", apply)
+			err = withEffectiveIntegrationCompletionLinearization(projectRoot, integrationReconcileLockLabel, apply)
 		}
 		if errors.Is(err, errIntegrationReconcileChanged) {
 			continue
@@ -589,7 +599,7 @@ func projectNonCleanIntegrationClosure(
 }
 
 func integrationAnalysisTaskID(key string) string {
-	return "integration-" + strings.ReplaceAll(key, ":", "-")
+	return integrationAnalysisTaskIDPrefix + strings.ReplaceAll(key, ":", "-")
 }
 
 func analysisRolePair(phase models.IntegrationAnalysisPhase) (string, error) {

@@ -387,7 +387,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pending decomposition progress error = %v", err)
 		}
-		if decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingPlanning {
+		if decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingPlanning) {
 			t.Fatalf("pending decomposition decision = %#v, want planning wait", decision)
 		}
 	})
@@ -459,7 +459,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 			t.Fatalf("blocked slice reconciliation error = %v", err)
 		}
 		closure := blocked.readState(t).Goal.Integration.Closure
-		if closure == nil || closure.Status != models.IntegrationClosureStatusBlocked || closure.Reason != integrationProgressBlockedAnalysis || result.Reason == nil || result.Reason.Code != integrationProgressBlockedAnalysis {
+		if closure == nil || closure.Status != models.IntegrationClosureStatusBlocked || closure.Reason != string(integrationProgressBlockedAnalysis) || result.Reason == nil || result.Reason.Code != string(integrationProgressBlockedAnalysis) {
 			t.Fatalf("blocked slice closure=%#v result=%#v", closure, result)
 		}
 
@@ -486,7 +486,7 @@ func TestReconcileIntegrationAnalyses(t *testing.T) {
 		}
 		state := exhausted.readState(t)
 		closure = state.Goal.Integration.Closure
-		if closure == nil || closure.Status != models.IntegrationClosureStatusExhausted || closure.Reason != integrationProgressBlockedExhausted || result.Reason == nil || !result.Changed {
+		if closure == nil || closure.Status != models.IntegrationClosureStatusExhausted || closure.Reason != string(integrationProgressBlockedExhausted) || result.Reason == nil || !result.Changed {
 			t.Fatalf("exhausted closure=%#v result=%#v", closure, result)
 		}
 		if state.FindTask("integration-global-2") != nil {

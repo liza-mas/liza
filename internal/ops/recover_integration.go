@@ -16,6 +16,15 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+const (
+	recoverIntegrationOperation = "recover-integration"
+	// integrationRecoveryRefPrefix prefixes the ref that pins a recovered
+	// analysis report; statevalidate checks the same spelling.
+	integrationRecoveryRefPrefix = "refs/integration-recovery/"
+	// prematureGlobalGeneration is the only analysis premature recovery retires.
+	prematureGlobalGeneration = 1
+)
+
 // RecoverIntegrationResult names the evidence preserved by operator recovery.
 type RecoverIntegrationResult struct {
 	models.LifecycleOutcome
@@ -30,7 +39,7 @@ type RecoverIntegrationResult struct {
 // It is an operator operation: no agent authority is inferred or manufactured.
 func RecoverIntegration(projectRoot, taskID, reason string, dryRun bool) (result *RecoverIntegrationResult, retErr error) {
 	defer func() {
-		retErr = WrapLifecycleError("recover-integration", nil, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(recoverIntegrationOperation, nil, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}()
 	if err := paths.ValidateTaskID(taskID); err != nil {
 		return nil, err
@@ -39,8 +48,8 @@ func RecoverIntegration(projectRoot, taskID, reason string, dryRun bool) (result
 	if taskID == "" || reason == "" {
 		return nil, fmt.Errorf("task ID and recovery reason are required")
 	}
-	err := withOwnershipTaskLock(projectRoot, taskID, "recover-integration", func() error {
-		return withTaskReviewLock(projectRoot, taskID, "recover-integration", func() error {
+	err := withOwnershipTaskLock(projectRoot, taskID, recoverIntegrationOperation, func() error {
+		return withTaskReviewLock(projectRoot, taskID, recoverIntegrationOperation, func() error {
 			var err error
 			result, err = recoverIntegrationLocked(projectRoot, taskID, reason, dryRun)
 			return err
@@ -69,7 +78,7 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		if err := statevalidate.ValidatePrematureRecovery(state); err != nil {
 			return nil, err
 		}
-		return &RecoverIntegrationResult{LifecycleOutcome: NewLifecycleOutcome("recover-integration", state.FindTask(taskID), models.LifecycleAlreadyCompleted, "continue", "none"), TaskID: taskID, DryRun: dryRun, Replayed: true, Recovery: r}, nil
+		return &RecoverIntegrationResult{LifecycleOutcome: NewLifecycleOutcome(recoverIntegrationOperation, state.FindTask(taskID), models.LifecycleAlreadyCompleted, LifecycleSafeActionContinue, LifecycleEffectsNone), TaskID: taskID, DryRun: dryRun, Replayed: true, Recovery: r}, nil
 	}
 	task, err := validatePrematureIntegrationRecovery(state, taskID, pb.resolver)
 	if err != nil {
@@ -83,9 +92,9 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		At: time.Now().UTC(), Reason: reason, AnalysisTaskID: taskID,
 		PreviousContributingSet: *state.Goal.Integration.ContributingSet,
 		SourceCommit:            task.IntegrationAnalysis.SourceCommit, ReportCommit: *task.ReviewCommit,
-		PreservationRef: "refs/integration-recovery/" + taskID,
+		PreservationRef: integrationRecoveryRefPrefix + taskID,
 	}
-	result := &RecoverIntegrationResult{LifecycleOutcome: NewLifecycleOutcome("recover-integration", task, models.LifecycleCompleted, "continue", "none"), TaskID: taskID, DryRun: dryRun, Recovery: recovery}
+	result := &RecoverIntegrationResult{LifecycleOutcome: NewLifecycleOutcome(recoverIntegrationOperation, task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsNone), TaskID: taskID, DryRun: dryRun, Recovery: recovery}
 	existingPin, pinErr := gw.ResolveCommit(recovery.PreservationRef)
 	if pinErr == nil && existingPin != recovery.ReportCommit {
 		return nil, fmt.Errorf("preservation ref already points to a different commit")
@@ -96,7 +105,7 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 	// A create-only ref protects the submitted report before cancellation removes
 	// the ordinary task branch. A prior equal pin is safe after an interrupted call.
 	if pinErr != nil {
-		if err := gw.UpdateRef(recovery.PreservationRef, recovery.ReportCommit, strings.Repeat("0", len(recovery.ReportCommit))); err != nil {
+		if err := gw.UpdateRef(recovery.PreservationRef, recovery.ReportCommit, createOnlyOldValue(recovery.ReportCommit)); err != nil {
 			return nil, err
 		}
 	}
@@ -121,18 +130,18 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		currentTask.Worktree = nil
 		clearAttemptState(currentTask, attemptStateRetire)
 		retireRuntimeInputBindings(current, currentTask, nil, recovery.At)
-		actor := "human"
-		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{Time: recovery.At, Event: models.TaskEventAbandoned, Agent: &actor, Reason: &reason, Extra: map[string]any{"operation": "recover-integration", "report_commit": recovery.ReportCommit, "preservation_ref": recovery.PreservationRef}})
+		actor := actorHuman
+		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{Time: recovery.At, Event: models.TaskEventAbandoned, Agent: &actor, Reason: &reason, Extra: map[string]any{"operation": recoverIntegrationOperation, "report_commit": recovery.ReportCommit, "preservation_ref": recovery.PreservationRef}})
 		current.Goal.Integration.ContributingSet = nil
 		current.Goal.Integration.PrematureRecovery = recovery
-		result.LifecycleOutcome = NewLifecycleOutcome("recover-integration", currentTask, models.LifecycleCompleted, "continue", "committed")
+		result.LifecycleOutcome = NewLifecycleOutcome(recoverIntegrationOperation, currentTask, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
 		if err := statevalidate.ValidateIntegrationLifecycleTransition(previous, current); err != nil {
 			return err
 		}
 		return statevalidate.ValidateCandidate(current, bb.ReadSnapshot, projectRoot, false, os.Stderr)
 	})
 	if err != nil {
-		return nil, WrapLifecycleError("recover-integration", task, fmt.Errorf("recovery refused; submitted report remains preserved at %s: %w", recovery.PreservationRef, err), models.LifecycleStateChanged, "requery", "unknown")
+		return nil, WrapLifecycleError(recoverIntegrationOperation, task, fmt.Errorf("recovery refused; submitted report remains preserved at %s: %w", recovery.PreservationRef, err), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown)
 	}
 	if err := gw.RemoveWorktreeDir(taskID); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("worktree cleanup: %v", err))
@@ -141,6 +150,12 @@ func recoverIntegrationLocked(projectRoot, taskID, reason string, dryRun bool) (
 		result.Warnings = append(result.Warnings, fmt.Sprintf("task branch cleanup: %v", err))
 	}
 	return result, nil
+}
+
+// createOnlyOldValue is the all-zero object ID, of the commit's width, that
+// makes update-ref create a ref only while it does not exist.
+func createOnlyOldValue(commit string) string {
+	return strings.Repeat("0", len(commit))
 }
 
 func validatePrematureIntegrationRecovery(state *models.State, taskID string, resolver *pipeline.Resolver) (*models.Task, error) {
@@ -156,7 +171,7 @@ func validatePrematureIntegrationRecovery(state *models.State, taskID string, re
 		return nil, fmt.Errorf("analysis task not found")
 	}
 	m := task.IntegrationAnalysis
-	if m.Key != "global:1" || m.Phase != models.IntegrationAnalysisPhaseGlobal || m.Generation != 1 || len(m.DescendantChanges) != 0 || len(m.RootTaskIDs) != 0 || len(task.EffectiveParentTasks()) != 0 {
+	if m.Key != globalAnalysisKey(prematureGlobalGeneration) || m.Phase != models.IntegrationAnalysisPhaseGlobal || m.Generation != prematureGlobalGeneration || len(m.DescendantChanges) != 0 || len(m.RootTaskIDs) != 0 || len(task.EffectiveParentTasks()) != 0 {
 		return nil, fmt.Errorf("recovery requires the premature global:1 analysis with no contributors")
 	}
 	submitted, err := resolver.SubmittedStatus(task.RolePair)

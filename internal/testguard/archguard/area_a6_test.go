@@ -7,8 +7,6 @@ var areaA6 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/integration_progress.go"}, Ceiling: 1138},
-		{Key: Key{File: "internal/ops/integration_progress.go", Func: "integrationProgressEvaluator.evaluateCoverage"}, Ceiling: 112},
 		{Key: Key{File: "internal/ops/reconcile_merged.go", Func: "reconcileMergedWithOptionalAuthority"}, Ceiling: 119},
 		{Key: Key{File: "internal/ops/wt_create.go", Func: "createWorktree"}, Ceiling: 120},
 		{Key: Key{File: "internal/ops/wt_merge.go"}, Ceiling: 1403},
