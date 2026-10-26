@@ -1,0 +1,60 @@
+--- requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=true models_item=1
+2: role=code-reviewer cli=codex agent_id=code-reviewer-2 from_config=true models_item=2
+--- result
+{
+"cli": "",
+"dry_run": false,
+"missing": [
+{
+"role": "code-reviewer",
+"task_ids": [
+"task-fresh",
+"task-second"
+],
+"task_count": 2,
+"spawn_count": 2,
+"agent_ids": [
+"code-reviewer-1",
+"code-reviewer-2"
+],
+"models_items": [
+1,
+2
+]
+}
+],
+"spawned": [
+{
+"role": "code-reviewer",
+"agent_id": "code-reviewer-2",
+"cli": "codex",
+"models_item": 2,
+"command": "liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2",
+"pid": 4001
+}
+],
+"failed": [
+{
+"role": "code-reviewer",
+"cli": "claude",
+"command": "liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1",
+"error": "oracle launcher refused item 1"
+}
+],
+"commands": [
+"liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1",
+"liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2"
+]
+}
+--- error
+started 1 of 2 planned agent(s): code-reviewer: oracle launcher refused item 1
+--- rendered output
+Roles with claimable work not covered by idle agents:
+code-reviewer: 2 task(s) (task-fresh, task-second); starting 2 agent(s)
+Started agent processes:
+liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2 (pid 4001)
+Failed to start agent processes:
+liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1: oracle launcher refused item 1
+--- rendered error
+started 1 of 2 planned agent(s): code-reviewer: oracle launcher refused item 1

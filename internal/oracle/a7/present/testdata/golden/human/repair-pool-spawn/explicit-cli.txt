@@ -1,0 +1,113 @@
+--- requests
+1: role=code-reviewer cli=codex agent_id=code-reviewer-1 from_config=false models_item=0
+2: role=coder cli=codex agent_id= from_config=false models_item=0
+3: role=coder cli=codex agent_id= from_config=false models_item=0
+4: role=orchestrator cli=codex agent_id= from_config=false models_item=0
+--- result
+{
+"cli": "codex",
+"dry_run": false,
+"missing": [
+{
+"role": "code-reviewer",
+"task_ids": [
+"task-review"
+],
+"task_count": 1,
+"spawn_count": 1,
+"agent_ids": [
+"code-reviewer-1"
+],
+"cli": "codex"
+},
+{
+"role": "coder",
+"task_ids": [
+"task-doer-a",
+"task-doer-b",
+"task-validated"
+],
+"task_count": 3,
+"spawn_count": 2,
+"cli": "codex"
+},
+{
+"role": "orchestrator",
+"task_ids": [],
+"task_count": 0,
+"spawn_count": 1,
+"cli": "codex",
+"reason": "no live orchestrator while goal is IN_PROGRESS"
+}
+],
+"degraded": [
+{
+"agent_id": "coder-9",
+"role": "coder",
+"reason": "fixture degraded capacity",
+"last_error": "fixture launch refused",
+"recover_hint": "fixture recover hint"
+}
+],
+"spawned": [
+{
+"role": "code-reviewer",
+"agent_id": "code-reviewer-1",
+"cli": "codex",
+"command": "liza agent code-reviewer --cli codex --agent-id code-reviewer-1",
+"pid": 4001
+},
+{
+"role": "coder",
+"cli": "codex",
+"command": "liza agent coder --cli codex",
+"pid": 4002
+},
+{
+"role": "coder",
+"cli": "codex",
+"command": "liza agent coder --cli codex",
+"pid": 4003
+},
+{
+"role": "orchestrator",
+"cli": "codex",
+"command": "liza agent orchestrator --cli codex"
+}
+],
+"commands": [
+"liza agent code-reviewer --cli codex --agent-id code-reviewer-1",
+"liza agent coder --cli codex",
+"liza agent coder --cli codex",
+"liza agent orchestrator --cli codex"
+],
+"validation": [
+{
+"agent_id": "coder-1",
+"role": "coder",
+"task_id": "task-validated",
+"status": "unverified",
+"recover_hint": "Let this session run fresh validation preflight; successful observations are not reusable launch authorization."
+}
+]
+}
+--- error
+none
+--- rendered output
+Task validation capacity (last observation):
+coder-1 (coder), task task-validated: unverified
+hint: Let this session run fresh validation preflight; successful observations are not reusable launch authorization.
+Degraded agent capacity:
+coder-9 (coder): fixture degraded capacity
+hint: fixture recover hint
+Roles with claimable work not covered by idle agents:
+code-reviewer: 1 task(s) (task-review); starting 1 agent(s)
+coder: 3 task(s) (task-doer-a, task-doer-b, task-validated); starting 2 agent(s)
+Missing orchestrator: orchestrator (no live orchestrator while goal is IN_PROGRESS)
+Started agent processes:
+liza agent code-reviewer --cli codex --agent-id code-reviewer-1 (pid 4001)
+liza agent coder --cli codex (pid 4002)
+liza agent coder --cli codex (pid 4003)
+liza agent orchestrator --cli codex
+--- rendered error
+none

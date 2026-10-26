@@ -1,0 +1,71 @@
+--- requests
+none
+--- result
+{
+"cli": "",
+"dry_run": false,
+"missing": null,
+"provider_blocked": [
+{
+"role": "code-reviewer",
+"cli": "claude",
+"until": "<TIME>",
+"task_ids": [
+"task-review"
+]
+},
+{
+"role": "coder",
+"cli": "claude",
+"until": "<TIME>",
+"task_ids": [
+"task-doer-a",
+"task-doer-b",
+"task-validated"
+]
+},
+{
+"role": "orchestrator",
+"cli": "claude",
+"until": "<TIME>",
+"task_ids": [],
+"reason": "no live orchestrator while goal is IN_PROGRESS"
+}
+],
+"degraded": [
+{
+"agent_id": "coder-9",
+"role": "coder",
+"reason": "fixture degraded capacity",
+"last_error": "fixture launch refused",
+"recover_hint": "fixture recover hint"
+}
+],
+"validation": [
+{
+"agent_id": "coder-1",
+"role": "coder",
+"task_id": "task-validated",
+"status": "unverified",
+"recover_hint": "Let this session run fresh validation preflight; successful observations are not reusable launch authorization."
+}
+]
+}
+--- error
+none
+--- rendered output
+Task validation capacity (last observation):
+coder-1 (coder), task task-validated: unverified
+hint: Let this session run fresh validation preflight; successful observations are not reusable launch authorization.
+Degraded agent capacity:
+coder-9 (coder): fixture degraded capacity
+hint: fixture recover hint
+Roles with claimable work and no usable provider (not started):
+code-reviewer: 1 claimable task(s) (task-review) and no usable provider: --cli claude is quota-exhausted until <TIME>
+hint: auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent code-reviewer --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+coder: 3 claimable task(s) (task-doer-a, task-doer-b, task-validated) and no usable provider: --cli claude is quota-exhausted until <TIME>
+hint: auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent coder --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+orchestrator: no live orchestrator while goal is IN_PROGRESS and no usable provider: --cli claude is quota-exhausted until <TIME>
+hint: auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent orchestrator --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+--- rendered error
+none

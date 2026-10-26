@@ -1,0 +1,5 @@
+provider: claude
+detected: 2001-01-01T00:00:00Z
+message: fixture quota exhausted
+resets_at: 2999-01-01T00:00:00Z
+expires: 2999-01-01T00:00:00Z

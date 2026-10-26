@@ -1,0 +1,8 @@
+exit 0
+--- stdout
+Roles with claimable work not covered by idle agents:
+code-reviewer: 2 task(s) (task-fresh, task-second); starting 2 agent(s)
+Dry run; would spawn:
+liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1
+liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2
+--- stderr
