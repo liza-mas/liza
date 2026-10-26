@@ -9,10 +9,10 @@ import (
 )
 
 // PrintPostInitSummary prints a styled "What's Next" banner after initialization.
-func PrintPostInitSummary(mode string, agents []string) {
+func PrintPostInitSummary(mode WizardMode, agents []string) {
 	var content string
 
-	if mode == "pairing" {
+	if mode == WizardModePairing {
 		agentList := strings.Join(agents, ", ")
 		content = fmt.Sprintf(`%s pairing mode enabled (%s)
 

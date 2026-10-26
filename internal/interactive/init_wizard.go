@@ -14,14 +14,24 @@ import (
 	"github.com/liza-mas/liza/internal/providers"
 )
 
+// WizardMode is the kind of workspace the init wizard sets up.
+type WizardMode string
+
+const (
+	// WizardModePairing installs agent contracts only.
+	WizardModePairing WizardMode = "pairing"
+	// WizardModeFull initializes the multi-agent workspace.
+	WizardModeFull WizardMode = "full"
+)
+
 // InitWizardResult holds all choices made during the interactive init wizard.
 type InitWizardResult struct {
-	Mode            string            // "pairing" or "full"
-	Agents          []string          // selected agents (e.g. "claude", "codex", "cursor")
-	Description     string            // project goal (full mode only)
-	SpecRef         string            // spec file path (full mode only)
-	EntryPoint      string            // entry point (full mode only)
-	ContractActions map[string]string // provider-scoped conflict actions keyed by canonical provider ID
+	Mode            WizardMode                         // WizardModePairing or WizardModeFull
+	Agents          []string                           // selected agents (e.g. "claude", "codex", "cursor")
+	Description     string                             // project goal (full mode only)
+	SpecRef         string                             // spec file path (full mode only)
+	EntryPoint      string                             // entry point (full mode only)
+	ContractActions map[string]commands.ContractAction // provider-scoped conflict actions keyed by canonical provider ID
 }
 
 // RunInitWizard runs the interactive init wizard and returns the user's choices.
@@ -32,11 +42,11 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 	}
 
 	// Screen 1: Mode selection
-	err := huh.NewSelect[string]().
+	err := huh.NewSelect[WizardMode]().
 		Title(fmt.Sprintf("How would you like to use %s?", brand.NameTitle)).
 		Options(
-			huh.NewOption(fmt.Sprintf("Start with Pairing — AI agents follow %s quality contracts (recommended for first use)", brand.NameTitle), "pairing"),
-			huh.NewOption("Full Multi-Agent System — Orchestrated workspace with sprints, reviews, and task decomposition", "full"),
+			huh.NewOption(fmt.Sprintf("Start with Pairing — AI agents follow %s quality contracts (recommended for first use)", brand.NameTitle), WizardModePairing),
+			huh.NewOption("Full Multi-Agent System — Orchestrated workspace with sprints, reviews, and task decomposition", WizardModeFull),
 		).
 		Value(&result.Mode).
 		Run()
@@ -69,7 +79,7 @@ func RunInitWizard(projectRoot string) (*InitWizardResult, error) {
 	}
 
 	// Screen 3 (full mode only): Project details
-	if result.Mode == "full" {
+	if result.Mode == WizardModeFull {
 		err = huh.NewForm(
 			huh.NewGroup(
 				huh.NewInput().
@@ -203,16 +213,16 @@ func isManagedContractSymlink(path, contractTarget string) bool {
 	return err == nil && target == contractTarget
 }
 
-func contractConflictActions(conflict ContractConflict) []string {
-	actions := make([]string, 0, 4)
+func contractConflictActions(conflict ContractConflict) []commands.ContractAction {
+	actions := make([]commands.ContractAction, 0, 4)
 	if conflict.GlobalAvailable {
-		actions = append(actions, "global")
+		actions = append(actions, commands.ContractActionGlobal)
 	}
-	actions = append(actions, "rename")
+	actions = append(actions, commands.ContractActionRename)
 	if conflict.LocalAvailable {
-		actions = append(actions, "local")
+		actions = append(actions, commands.ContractActionLocal)
 	}
-	return append(actions, "skip")
+	return append(actions, commands.ContractActionSkip)
 }
 
 func contractConflictProviderNames(conflict ContractConflict) string {
@@ -248,28 +258,28 @@ func resolveContractConflicts(projectRoot string, result *InitWizardResult) erro
 		return nil
 	}
 
-	result.ContractActions = make(map[string]string, len(conflicts))
+	result.ContractActions = make(map[string]commands.ContractAction, len(conflicts))
 	for _, conflict := range conflicts {
-		var action string
-		options := make([]huh.Option[string], 0, 4)
+		var action commands.ContractAction
+		options := make([]huh.Option[commands.ContractAction], 0, 4)
 		for _, candidate := range contractConflictActions(conflict) {
 			switch candidate {
-			case "global":
+			case commands.ContractActionGlobal:
 				options = append(options, huh.NewOption(fmt.Sprintf("Use global config instead (keeps your existing %s)", conflict.FileName), candidate))
-			case "rename":
+			case commands.ContractActionRename:
 				options = append(options, huh.NewOption(fmt.Sprintf("Rename existing to %s.bak and place %s contract at repo root", conflict.FileName, brand.NameTitle), candidate))
-			case "local":
+			case commands.ContractActionLocal:
 				label := "Use each provider's local fallback"
 				if conflict.LocalFallback != "" {
 					label = fmt.Sprintf("Use %s", conflict.LocalFallback)
 				}
 				options = append(options, huh.NewOption(label+" (local override, should be gitignored)", candidate))
-			case "skip":
+			case commands.ContractActionSkip:
 				options = append(options, huh.NewOption("Skip — don't create this contract", candidate))
 			}
 		}
 
-		if err := huh.NewSelect[string]().
+		if err := huh.NewSelect[commands.ContractAction]().
 			Title(fmt.Sprintf("%s already exists for %s. Where should %s place its contract?", conflict.FileName, contractConflictProviderNames(conflict), brand.NameTitle)).
 			Options(options...).
 			Value(&action).

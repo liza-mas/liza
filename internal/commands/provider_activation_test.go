@@ -209,7 +209,7 @@ func TestCreateContractSymlinksRecordsGlobalFirstLocalFallbackActivation(t *test
 	}
 
 	activations, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
-		ProviderActions: map[string]string{provider.ID: "local"},
+		ProviderActions: map[string]ContractAction{provider.ID: "local"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -276,7 +276,7 @@ func TestActivateProviderContractsPreservesRecordedGlobalFirstLocalFallback(t *t
 		}},
 	}
 	if err := activateProviderContracts(projectRoot, contractTarget, []providers.Provider{claude}, providers.EmbeddedCatalog(), contractSymlinkOptions{
-		ProviderActions: map[string]string{claude.ID: "local"},
+		ProviderActions: map[string]ContractAction{claude.ID: "local"},
 	}); err != nil {
 		t.Fatalf("first activateProviderContracts() error = %v", err)
 	}
@@ -386,7 +386,7 @@ func TestActivateProviderContractsReconcilesRecordedLocalFallbackAcrossReruns(t 
 	}
 
 	if err := activateProviderContracts(projectRoot, contractTarget, []providers.Provider{claude}, providers.EmbeddedCatalog(), contractSymlinkOptions{
-		ProviderActions: map[string]string{claude.ID: "local"},
+		ProviderActions: map[string]ContractAction{claude.ID: "local"},
 	}); err != nil {
 		t.Fatalf("local activateProviderContracts() error = %v", err)
 	}
@@ -449,7 +449,7 @@ func TestActivateProviderContractsReplacesRecordedLocalFallbackWithRepoPath(t *t
 				}},
 			}
 			if err := activateProviderContracts(projectRoot, contractTarget, []providers.Provider{claude}, providers.EmbeddedCatalog(), contractSymlinkOptions{
-				ProviderActions: map[string]string{claude.ID: "local"},
+				ProviderActions: map[string]ContractAction{claude.ID: "local"},
 			}); err != nil {
 				t.Fatalf("local activateProviderContracts() error = %v", err)
 			}
@@ -467,7 +467,7 @@ func TestActivateProviderContractsReplacesRecordedLocalFallbackWithRepoPath(t *t
 			}
 
 			if err := activateProviderContracts(projectRoot, contractTarget, []providers.Provider{claude}, providers.EmbeddedCatalog(), contractSymlinkOptions{
-				ProviderActions: map[string]string{claude.ID: "rename"},
+				ProviderActions: map[string]ContractAction{claude.ID: "rename"},
 			}); err != nil {
 				t.Fatalf("repo replacement activateProviderContracts() error = %v", err)
 			}

@@ -2120,7 +2120,7 @@ func TestInitCommand_ContractActionLocalCreatesCLAUDELocalMd(t *testing.T) {
 		Description:     "Test goal",
 		SpecRef:         "specs/vision.md",
 		Agents:          []string{"claude"},
-		ContractActions: map[string]string{"claude": "local"},
+		ContractActions: map[string]ContractAction{"claude": "local"},
 	})
 	if err != nil {
 		t.Fatalf("InitCommand failed: %v", err)
@@ -3806,7 +3806,7 @@ func TestInitPairingCommand_ProviderScopedConflictActionPreservesGlobalFirst(t *
 
 	if err := InitPairingCommand(InitPairingParams{
 		Agents:          []string{"cursor"},
-		ContractActions: map[string]string{"cursor-acp": "rename"},
+		ContractActions: map[string]ContractAction{"cursor-acp": "rename"},
 	}); err != nil {
 		t.Fatalf("InitPairingCommand() error = %v", err)
 	}

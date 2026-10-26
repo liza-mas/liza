@@ -18,11 +18,14 @@ import (
 	"github.com/liza-mas/liza/internal/termutil"
 )
 
+// setupAgentToolsFile is the tool-routing contract a user may replace with --agent-tools.
+const setupAgentToolsFile = "AGENT_TOOLS.md"
+
 // userCustomizableFiles are files that users are expected to edit.
 // These get individual overwrite prompts even after the bulk confirmation,
 // because losing customizations is more costly than re-running setup.
 var userCustomizableFiles = map[string]bool{
-	"AGENT_TOOLS.md": true,
+	setupAgentToolsFile: true,
 }
 
 // retiredSkillNames are formerly deployed skills that setup removes during an
@@ -43,6 +46,23 @@ type SetupParams struct {
 	Stdin          io.Reader // input for interactive prompts (nil = os.Stdin)
 }
 
+// setupPreflight holds what setup resolves before it changes anything on disk.
+type setupPreflight struct {
+	customAgentTools []byte
+	existing         []string
+	fresh            []string
+	autoSkip         map[string]bool
+	providerIDs      []string
+	providers        []providers.Provider
+}
+
+// setupInstalled reports what the install phase wrote.
+type setupInstalled struct {
+	written      []string
+	autoReplaced []string
+	homeDir      string
+}
+
 // SetupCommand performs one-time global setup by writing contracts and skills
 // to the target directory.
 func SetupCommand(params SetupParams) error {
@@ -54,109 +74,142 @@ func SetupCommand(params SetupParams) error {
 	// consuming from the same underlying reader (which causes EOF for later readers).
 	stdin := bufio.NewReader(rawStdin)
 
+	preflight, err := prepareSetup(params)
+	if err != nil {
+		return err
+	}
+	skipFiles, err := confirmOverwrites(preflight.existing, preflight.fresh, params.Force, params.AutoConfirm, params.TargetDir, stdin, preflight.autoSkip)
+	if err != nil {
+		return err
+	}
+	installed, err := installSetupFiles(params, preflight, skipFiles, stdin)
+	if err != nil {
+		return err
+	}
+	if err := installSetupProviders(params, installed.homeDir, preflight.providers, stdin); err != nil {
+		return err
+	}
+
+	printSetupSummary(params.TargetDir, installed.written, skipFiles, installed.autoReplaced, preflight.providerIDs)
+	return nil
+}
+
+// prepareSetup validates the inputs and resolves the files and providers setup
+// will touch, before any filesystem change other than creating the target directory.
+func prepareSetup(params SetupParams) (setupPreflight, error) {
+	var preflight setupPreflight
 	// Early validation: read custom agent-tools file before any filesystem changes.
-	var customAgentTools []byte
 	if params.AgentToolsPath != "" {
 		content, err := os.ReadFile(params.AgentToolsPath)
 		if err != nil {
-			return fmt.Errorf("failed to read custom agent-tools file %s: %w", params.AgentToolsPath, err)
+			return preflight, fmt.Errorf("failed to read custom agent-tools file %s: %w", params.AgentToolsPath, err)
 		}
-		customAgentTools = content
+		preflight.customAgentTools = content
 	}
 
-	if err := os.MkdirAll(params.TargetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", params.TargetDir, err)
+	if err := os.MkdirAll(params.TargetDir, initDirMode); err != nil {
+		return preflight, fmt.Errorf("failed to create directory %s: %w", params.TargetDir, err)
 	}
 	warnLegacyGlobalRoot(params.HomeDir, params.TargetDir)
 
 	planned := embedded.PlanGlobalFiles(params.TargetDir)
-	existing, fresh := partitionByExistence(planned)
+	preflight.existing, preflight.fresh = partitionByExistence(planned)
 
 	// When --agent-tools is provided, auto-skip the embedded AGENT_TOOLS.md
 	// so confirmOverwrites won't prompt for it.
-	var autoSkip map[string]bool
-	if customAgentTools != nil {
-		autoSkip = map[string]bool{
-			filepath.Join(params.TargetDir, "AGENT_TOOLS.md"): true,
+	if preflight.customAgentTools != nil {
+		preflight.autoSkip = map[string]bool{
+			filepath.Join(params.TargetDir, setupAgentToolsFile): true,
 		}
 	}
 	catalog := loadProviderCatalog(params.HomeDir)
-	setupProviderIDs := append([]string{}, params.ProviderIDs...)
-	setupProviderIDs = append(setupProviderIDs, canonicalSetupProviderIDs(params.Agents)...)
-	selectedProviders, err := resolveCatalogProviders(catalog, setupProviderIDs)
+	preflight.providerIDs = append([]string{}, params.ProviderIDs...)
+	preflight.providerIDs = append(preflight.providerIDs, canonicalSetupProviderIDs(params.Agents)...)
+	selected, err := resolveCatalogProviders(catalog, preflight.providerIDs)
 	if err != nil {
-		return err
+		return preflight, err
 	}
+	preflight.providers = selected
+	return preflight, nil
+}
 
-	skipFiles, err := confirmOverwrites(existing, fresh, params.Force, params.AutoConfirm, params.TargetDir, stdin, autoSkip)
-	if err != nil {
-		return err
-	}
-
-	for _, p := range existing {
+// installSetupFiles backs up and writes the global files the user did not skip,
+// removes retired skills, applies a custom AGENT_TOOLS.md and writes the pipeline
+// configuration.
+func installSetupFiles(params SetupParams, preflight setupPreflight, skipFiles map[string]bool, stdin *bufio.Reader) (setupInstalled, error) {
+	var installed setupInstalled
+	for _, p := range preflight.existing {
 		if skipFiles[p] {
 			continue
 		}
 		if err := backupFile(p); err != nil {
-			return fmt.Errorf("failed to backup %s: %w", p, err)
+			return installed, fmt.Errorf("failed to backup %s: %w", p, err)
 		}
 	}
 
 	written, err := embedded.WriteGlobalFiles(params.TargetDir, skipFiles)
 	if err != nil {
-		return fmt.Errorf("failed to write global files: %w", err)
+		return installed, fmt.Errorf("failed to write global files: %w", err)
 	}
-	homeDir := params.HomeDir
-	if len(selectedProviders) > 0 && homeDir == "" {
-		homeDir, err = paths.UserHomeDir()
+	installed.written = written
+	installed.homeDir = params.HomeDir
+	if len(preflight.providers) > 0 && installed.homeDir == "" {
+		installed.homeDir, err = paths.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("failed to determine home directory: %w", err)
+			return installed, fmt.Errorf("failed to determine home directory: %w", err)
 		}
 	}
-	if err := removeRetiredSkills(params.TargetDir, homeDir, selectedProviders); err != nil {
-		return fmt.Errorf("failed to remove retired skills: %w", err)
+	if err := removeRetiredSkills(params.TargetDir, installed.homeDir, preflight.providers); err != nil {
+		return installed, fmt.Errorf("failed to remove retired skills: %w", err)
 	}
 
 	// Write custom AGENT_TOOLS.md, replacing the embedded version.
-	var autoReplaced []string
-	if customAgentTools != nil {
-		agentToolsTarget := filepath.Join(params.TargetDir, "AGENT_TOOLS.md")
-
-		// Back up existing file before overwriting (data-loss protection).
-		if _, err := os.Stat(agentToolsTarget); err == nil {
-			if err := backupFile(agentToolsTarget); err != nil {
-				return fmt.Errorf("failed to backup %s: %w", agentToolsTarget, err)
-			}
+	if preflight.customAgentTools != nil {
+		agentToolsTarget, err := writeCustomAgentTools(params.TargetDir, preflight.customAgentTools)
+		if err != nil {
+			return installed, err
 		}
-
-		contentWithFrontmatter := embedded.PrependFrontmatter(customAgentTools)
-		if err := os.WriteFile(agentToolsTarget, contentWithFrontmatter, 0644); err != nil {
-			return fmt.Errorf("failed to write custom AGENT_TOOLS.md: %w", err)
-		}
-		written = append(written, agentToolsTarget)
-		autoReplaced = append(autoReplaced, agentToolsTarget)
+		installed.written = append(installed.written, agentToolsTarget)
+		installed.autoReplaced = append(installed.autoReplaced, agentToolsTarget)
 	}
 
 	if err := embedded.WritePipelineConfigWithOptions(params.TargetDir, stdin, embedded.ConfirmOptions{AutoConfirm: params.AutoConfirm}); err != nil {
-		return fmt.Errorf("failed to write pipeline.yaml: %w", err)
+		return installed, fmt.Errorf("failed to write pipeline.yaml: %w", err)
+	}
+	return installed, nil
+}
+
+// writeCustomAgentTools replaces the embedded AGENT_TOOLS.md with the user's
+// file, backing up an existing one first (data-loss protection).
+func writeCustomAgentTools(targetDir string, content []byte) (string, error) {
+	agentToolsTarget := filepath.Join(targetDir, setupAgentToolsFile)
+	if _, err := os.Stat(agentToolsTarget); err == nil {
+		if err := backupFile(agentToolsTarget); err != nil {
+			return "", fmt.Errorf("failed to backup %s: %w", agentToolsTarget, err)
+		}
 	}
 
-	// Create agent skill symlinks (after main setup so sources exist).
-	if len(selectedProviders) > 0 {
-		if err := setupAgentSymlinks(homeDir, params.TargetDir, selectedProviders, stdin, params.AutoConfirm); err != nil {
+	contentWithFrontmatter := embedded.PrependFrontmatter(content)
+	if err := os.WriteFile(agentToolsTarget, contentWithFrontmatter, initFileMode); err != nil {
+		return "", fmt.Errorf("failed to write custom AGENT_TOOLS.md: %w", err)
+	}
+	return agentToolsTarget, nil
+}
+
+// installSetupProviders links the selected providers' skills (after main setup so
+// the sources exist) and deploys the pi init-gate extension its run_args reference.
+func installSetupProviders(params SetupParams, homeDir string, selected []providers.Provider, stdin *bufio.Reader) error {
+	if len(selected) > 0 {
+		if err := setupAgentSymlinks(homeDir, params.TargetDir, selected, stdin, params.AutoConfirm); err != nil {
 			return fmt.Errorf("agent symlink setup failed: %w", err)
 		}
 	}
 
-	// Deploy the pi init-gate extension when the pi provider is selected so
-	// the pi provider's run_args always reference an existing file.
-	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
+	if providerHasAsset(selected, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
 		if err := embedded.WritePiInitGate(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
 		}
 	}
-
-	printSetupSummary(params.TargetDir, written, skipFiles, autoReplaced, setupProviderIDs)
 	return nil
 }
 
@@ -384,13 +437,13 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, re
 		configDir := filepath.Join(homeDir, cfg.ConfigDir)
 		skillsDir := filepath.Join(configDir, cfg.SkillsDir)
 
-		if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		if err := os.MkdirAll(skillsDir, initDirMode); err != nil {
 			return fmt.Errorf("failed to create %s: %w", skillsDir, err)
 		}
 
 		for _, dir := range cfg.ExtraDirs {
 			dirPath := filepath.Join(configDir, dir)
-			if err := os.MkdirAll(dirPath, 0755); err != nil {
+			if err := os.MkdirAll(dirPath, initDirMode); err != nil {
 				return fmt.Errorf("failed to create %s: %w", dirPath, err)
 			}
 		}
@@ -416,7 +469,7 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, re
 			target := filepath.Join(lizaDir, extra.Source)
 			linkPath := filepath.Join(configDir, extra.Target)
 
-			if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(linkPath), initDirMode); err != nil {
 				return fmt.Errorf("failed to create parent dir for %s: %w", linkPath, err)
 			}
 
@@ -460,8 +513,8 @@ func repairExistingProviderContractSymlink(homeDir, globalDir string, provider p
 		linkPaths = append(linkPaths, defaultPath)
 	}
 
-	staleTarget := filepath.Join(homeDir, nameDerivedDir, "CORE.md")
-	correctTarget := filepath.Join(globalDir, "CORE.md")
+	staleTarget := filepath.Join(homeDir, nameDerivedDir, globalContractFileName)
+	correctTarget := filepath.Join(globalDir, globalContractFileName)
 	for _, linkPath := range linkPaths {
 		if err := repairProviderContractSymlinkAtPath(linkPath, staleTarget, correctTarget); err != nil {
 			return err

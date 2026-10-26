@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -48,7 +49,7 @@ func TestDetectContractConflicts_PreferredGlobalPathUnavailable(t *testing.T) {
 	if len(conflicts) != 1 || len(conflicts[0].Providers) != 1 || conflicts[0].Providers[0].ID != "claude" || conflicts[0].FileName != "CLAUDE.md" {
 		t.Fatalf("DetectContractConflicts() = %+v, want Claude conflict", conflicts)
 	}
-	if got, want := contractConflictActions(conflicts[0]), []string{"rename", "skip"}; !slices.Equal(got, want) {
+	if got, want := contractConflictActions(conflicts[0]), []commands.ContractAction{"rename", "skip"}; !slices.Equal(got, want) {
 		t.Fatalf("occupied global actions = %v, want %v", got, want)
 	}
 }
@@ -103,7 +104,7 @@ func TestDetectContractConflicts_UnresolvablePreferredGlobalPath(t *testing.T) {
 	if len(conflicts) != 1 || len(conflicts[0].Providers) != 1 || conflicts[0].Providers[0].ID != "claude" {
 		t.Fatalf("DetectContractConflicts() = %+v, want Claude conflict", conflicts)
 	}
-	if got, want := contractConflictActions(conflicts[0]), []string{"rename", "skip"}; !slices.Equal(got, want) {
+	if got, want := contractConflictActions(conflicts[0]), []commands.ContractAction{"rename", "skip"}; !slices.Equal(got, want) {
 		t.Fatalf("unresolvable global actions = %v, want %v", got, want)
 	}
 }
@@ -131,7 +132,7 @@ func TestDetectContractConflicts_OccupiedLocalFallbackIsUnavailable(t *testing.T
 	if len(conflicts) != 1 {
 		t.Fatalf("DetectContractConflicts() = %+v, want Claude conflict", conflicts)
 	}
-	if got, want := contractConflictActions(conflicts[0]), []string{"rename", "skip"}; !slices.Equal(got, want) {
+	if got, want := contractConflictActions(conflicts[0]), []commands.ContractAction{"rename", "skip"}; !slices.Equal(got, want) {
 		t.Fatalf("occupied fallback actions = %v, want %v", got, want)
 	}
 }
@@ -168,7 +169,7 @@ func TestDetectContractConflicts_GroupsProvidersSharingRepoPath(t *testing.T) {
 	if got, want := conflicts[0].RepoPath, filepath.Join(projectRoot, "AGENTS.md"); got != want {
 		t.Fatalf("conflict repo path = %q, want %q", got, want)
 	}
-	if got, want := contractConflictActions(conflicts[0]), []string{"rename", "skip"}; !slices.Equal(got, want) {
+	if got, want := contractConflictActions(conflicts[0]), []commands.ContractAction{"rename", "skip"}; !slices.Equal(got, want) {
 		t.Fatalf("shared-path actions = %v, want %v", got, want)
 	}
 }
@@ -177,11 +178,11 @@ func TestContractConflictActionsFollowDestinationAvailability(t *testing.T) {
 	tests := []struct {
 		name     string
 		conflict ContractConflict
-		want     []string
+		want     []commands.ContractAction
 	}{
-		{name: "no fallback", conflict: ContractConflict{}, want: []string{"rename", "skip"}},
-		{name: "global and local", conflict: ContractConflict{GlobalAvailable: true, LocalAvailable: true}, want: []string{"global", "rename", "local", "skip"}},
-		{name: "local only", conflict: ContractConflict{LocalAvailable: true}, want: []string{"rename", "local", "skip"}},
+		{name: "no fallback", conflict: ContractConflict{}, want: []commands.ContractAction{"rename", "skip"}},
+		{name: "global and local", conflict: ContractConflict{GlobalAvailable: true, LocalAvailable: true}, want: []commands.ContractAction{"global", "rename", "local", "skip"}},
+		{name: "local only", conflict: ContractConflict{LocalAvailable: true}, want: []commands.ContractAction{"rename", "local", "skip"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
