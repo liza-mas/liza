@@ -19,7 +19,7 @@ func (e *integrationProgressEvaluator) evaluateCoverage(
 	lifecycle *models.IntegrationLifecycle,
 	capability pipeline.SlicedIntegrationCapability,
 ) (bool, error) {
-	if decision.ContributingSet == nil || len(decision.ContributingSet.Scopes) < 2 {
+	if decision.ContributingSet == nil || len(decision.ContributingSet.Scopes) < slicedCohortMinScopes {
 		return true, nil
 	}
 	records, err := coverageRecordsByPlan(lifecycle)

@@ -73,7 +73,7 @@ func reconcileMergedWithOptionalAuthority(projectRoot, taskID, mergeCommit, prUR
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		currentTask := state.FindTask(taskID)
 		if currentTask == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if currentTask.Status != originalStatus {
 			return &PreconditionError{Reason: fmt.Sprintf("cannot reconcile task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)}

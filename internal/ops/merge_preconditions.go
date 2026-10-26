@@ -21,7 +21,7 @@ func (m *mergeInvocation) checkPreconditions() error {
 	m.pb = pb
 
 	if !models.IsApprovedForMerge(m.task, pb.pr) {
-		return WrapLifecycleError(integrationOperationWTMerge, m.task, &PreconditionError{Reason: fmt.Sprintf("task must be in an approved state to merge (current status: %s)", m.task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+		return WrapLifecycleError(integrationOperationWTMerge, m.task, &PreconditionError{Reason: fmt.Sprintf("task must be in an approved state to merge (current status: %s)", m.task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 
 	if m.task.ReviewCommit == nil {
@@ -79,10 +79,10 @@ func (m *mergeInvocation) prepare() error {
 		}
 		live := s.FindTask(m.taskID)
 		if live == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: m.taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: m.taskID}
 		}
 		if !models.IsApprovedForMerge(live, m.pb.pr) || live.ReviewCommit == nil || *live.ReviewCommit != m.reviewCommit {
-			return WrapLifecycleError(integrationOperationWTMerge, live, fmt.Errorf("approved review boundary changed"), models.LifecycleStateChanged, "requery", "none")
+			return WrapLifecycleError(integrationOperationWTMerge, live, fmt.Errorf("approved review boundary changed"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 		}
 		if err := PrepareLifecycleRequest(live, m.request, m.state.Agents); err != nil {
 			return err

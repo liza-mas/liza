@@ -129,7 +129,7 @@ func TestDeferredValidationUnstoppableDescendantsFailClosed(t *testing.T) {
 	}
 	state, _ := f.bb.Read()
 	head := testhelpers.MustGit(t, f.root, "rev-parse", "HEAD")
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredUnsettled {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredUnsettled) {
 		t.Fatalf("gate = %#v, want blocked %s", blocked, integrationProgressBlockedDeferredUnsettled)
 	}
 	if started, err := startDeferredValidationIfDueWith(f.root, func(string) error { return nil }); err != nil || started {

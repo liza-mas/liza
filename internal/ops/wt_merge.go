@@ -143,7 +143,7 @@ func MergeWorktreeWithAuthorityAndOptions(projectRoot, taskID string, authority 
 func mergeWorktreeLifecycle(projectRoot, taskID, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, mergeExtra ...map[string]any) (result *MergeResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
 	defer func() {
-		retErr = WrapLifecycleError(integrationOperationWTMerge, nil, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(integrationOperationWTMerge, nil, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {

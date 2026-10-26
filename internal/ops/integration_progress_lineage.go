@@ -94,7 +94,7 @@ func (e *integrationProgressEvaluator) resolveAnalysisRepairs(analysisTaskID str
 	result := lineageResolution{settled: true, merged: true}
 	for _, leafID := range leaves {
 		leaf := e.tasks[leafID]
-		if leaf.RolePair == "code-planning-pair" && len(leaf.Output) > 0 {
+		if leaf.RolePair == codePlanningRolePair && len(leaf.Output) > 0 {
 			result.settled = false
 			result.merged = false
 			result.taskIDs = append(result.taskIDs, leafID)

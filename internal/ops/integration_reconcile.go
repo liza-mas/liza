@@ -25,6 +25,10 @@ const (
 
 	maxIntegrationReconcileAttempts = 3
 
+	// integrationAnalysisTaskPriority is the priority of a generated slice or
+	// global analysis task.
+	integrationAnalysisTaskPriority = 1
+
 	// integrationReconcileLockLabel names the completion-linearization hold of
 	// one reconciliation attempt.
 	integrationReconcileLockLabel = "reconcile integration analyses"
@@ -331,7 +335,7 @@ func materializeIntegrationAnalysis(
 		RolePair:            rolePair,
 		Description:         analysisDescription(request),
 		Status:              initialStatus,
-		Priority:            1,
+		Priority:            integrationAnalysisTaskPriority,
 		SpecRef:             refs.spec,
 		PlanRef:             refs.plan,
 		ArchRef:             refs.arch,
@@ -497,7 +501,7 @@ func sliceAnalysisSurface(
 		if modeErr != nil {
 			return nil, nil, nil, modeErr
 		}
-		if present && (mode == "100644" || mode == "100755") {
+		if present && (mode == gitModeRegularFile || mode == gitModeExecutableFile) {
 			snapshotPaths = append(snapshotPaths, path)
 		}
 	}
@@ -514,7 +518,7 @@ func globalAnalysisParents(
 		return nil, fmt.Errorf("global integration request has no contributing set")
 	}
 	parents := make([]string, 0, len(cohort.Scopes)+1)
-	if len(cohort.Scopes) < 2 {
+	if len(cohort.Scopes) < slicedCohortMinScopes {
 		for _, scope := range cohort.Scopes {
 			parents = append(parents, scope.RootTaskIDs...)
 		}

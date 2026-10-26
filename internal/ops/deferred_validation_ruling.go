@@ -68,7 +68,7 @@ func validateRulingCommand(command, ruling string, needRuling bool) error {
 func auditDeferredValidation(action deferredValidationRulingAction, outcome, command, ruling string) {
 	mask := secretmask.New()
 	log.Printf("deferred_validation action=%s outcome=%s actor=%q command=%q ruling=%q",
-		action, outcome, "operator", mask.MaskText(command), boundPostWorktreeCmd(mask.MaskText(ruling)))
+		action, outcome, actorOperator, mask.MaskText(command), boundPostWorktreeCmd(mask.MaskText(ruling)))
 }
 
 // RuleDeferredValidation records an operator ruling deferring command. An
@@ -172,7 +172,7 @@ func SettleDeferredValidation(projectRoot, ruling string) (*DeferredValidationRu
 		return nil, &PreconditionError{Reason: "--ruling must record what the operator confirmed"}
 	}
 	dir := deferredValidationDir(projectRoot)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, deferredValidationDirMode); err != nil {
 		return nil, err
 	}
 	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationSettle)
@@ -216,7 +216,7 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 		return nil, &PreconditionError{Reason: "--ruling must name the decision that authorizes this abort"}
 	}
 	dir := deferredValidationDir(projectRoot)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, deferredValidationDirMode); err != nil {
 		return nil, err
 	}
 	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationAbort)
@@ -225,7 +225,7 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 	}
 	if acquired {
 		_ = held.Release()
-		return nil, &PreconditionError{Reason: fmt.Sprintf("no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by %s when unsettled", brand.Command(deferredValidationOperation, "settle"))}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by %s when unsettled", brand.Command(deferredValidationOperation, string(rulingActionSettle)))}
 	}
 	result := &DeferredValidationRulingResult{Action: string(rulingActionAbort)}
 	err = db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
@@ -235,7 +235,7 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 			return &PreconditionError{Reason: "no live deferred-validation batch: the runner holds no batch record"}
 		}
 		if ledger.Runner.Unsettled != "" {
-			return &PreconditionError{Reason: fmt.Sprintf("the runner record is unsettled (%s); confirm none of its processes still runs, then run %s", ledger.Runner.Unsettled, brand.Command(deferredValidationOperation, "settle"))}
+			return &PreconditionError{Reason: fmt.Sprintf("the runner record is unsettled (%s); confirm none of its processes still runs, then run %s", ledger.Runner.Unsettled, brand.Command(deferredValidationOperation, string(rulingActionSettle)))}
 		}
 		if ledger.Runner.Abort != nil {
 			result.Outcome = string(rulingOutcomeUnchanged)
@@ -307,7 +307,7 @@ func ReadDeferredValidationStatus(projectRoot string) (*DeferredValidationStatus
 		}
 		// Batches were masked in the runner's environment; mask again in the
 		// viewer's, whose secrets can differ.
-		first := max(0, len(ledger.Batches)-5)
+		first := max(0, len(ledger.Batches)-deferredValidationStatusBatches)
 		for _, batch := range ledger.Batches[first:] {
 			batch.Reason = mask(batch.Reason)
 			batch.Results = slices.Clone(batch.Results)

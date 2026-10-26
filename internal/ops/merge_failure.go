@@ -88,7 +88,7 @@ func markIntegrationFailedWithDiagnosticAuthority(
 	return modifyLifecycleState(bb, authority, func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if !models.IsApprovedForMerge(t, pr) {
 			return fmt.Errorf("task %s status changed concurrently (now %s)", taskID, t.Status)
@@ -268,7 +268,7 @@ func (m *mergeInvocation) classifyPublicationFailure(err error) error {
 		if lockTimeout {
 			result = models.LifecycleRetryable
 		}
-		return &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationWTMerge, nil, result, "requery", m.effects), Err: err}
+		return &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationWTMerge, nil, result, LifecycleSafeActionRequery, m.effects), Err: err}
 	}
 	var artifactErr *candidateArtifactGuardError
 	if errors.As(err, &artifactErr) {

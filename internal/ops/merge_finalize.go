@@ -62,7 +62,7 @@ func (m *mergeInvocation) commitMerged() error {
 	err := modifyLifecycleState(m.bb, m.authority, func(s *models.State) error {
 		t := s.FindTask(m.taskID)
 		if t == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: m.taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: m.taskID}
 		}
 		if err := ValidateLifecyclePreparation(t, m.request); err != nil {
 			return err

@@ -32,9 +32,37 @@ const (
 	// shell exits, so a background process the command started cannot hold
 	// the setup open.
 	postWorktreeSetupWaitDelay = 10 * time.Second
-	// Outcome record statuses persisted in the worktree's private outcome file.
-	worktreeSetupOutcomeOK     = "ok"
-	worktreeSetupOutcomeFailed = "failed"
+	// postWorktreeSetupDefaultRetryDelay and worktreeSetupDefaultLockSlack seed
+	// the test-adjustable retry delay and lock slack below.
+	postWorktreeSetupDefaultRetryDelay = 2 * time.Second
+	worktreeSetupDefaultLockSlack      = time.Minute
+	// The extensions of a worktree's private setup output and outcome files.
+	worktreeSetupOutputExt  = ".log"
+	worktreeSetupOutcomeExt = ".outcome"
+	// worktreeSetupLockOperation labels the hold of one worktree's setup, and
+	// worktreeSetupLockPurposePrefix precedes the path digest in the purpose
+	// that keys its file lock.
+	worktreeSetupLockOperation     = "worktree-setup"
+	worktreeSetupLockPurposePrefix = "worktree-setup-"
+	// worktreeSetupOutcomeFields is the field count of an outcome record:
+	// sequence, status and time.
+	worktreeSetupOutcomeFields = 3
+	// worktreeSetupDigestBytes is how many bytes of the resolved worktree
+	// path's SHA-256 key the private setup file names.
+	worktreeSetupDigestBytes = 8
+	// worktreeSetupDirMode and worktreeSetupFileMode are the permissions of the
+	// private setup directory and of its files.
+	worktreeSetupDirMode  = 0o700
+	worktreeSetupFileMode = 0o600
+)
+
+// worktreeSetupOutcomeStatus is the status word persisted in the worktree's
+// private outcome file.
+type worktreeSetupOutcomeStatus string
+
+const (
+	worktreeSetupOutcomeOK     worktreeSetupOutcomeStatus = "ok"
+	worktreeSetupOutcomeFailed worktreeSetupOutcomeStatus = "failed"
 )
 
 var (
@@ -43,11 +71,11 @@ var (
 )
 
 func init() {
-	postWorktreeSetupRetryDelayNanos.Store(int64(2 * time.Second))
+	postWorktreeSetupRetryDelayNanos.Store(int64(postWorktreeSetupDefaultRetryDelay))
 	// A waiter waits for a holder's full setup bound plus this slack (output
 	// draining, cleanup, bookkeeping); one that outlasts it fails closed like
 	// any other setup failure.
-	worktreeSetupLockSlackNanos.Store(int64(time.Minute))
+	worktreeSetupLockSlackNanos.Store(int64(worktreeSetupDefaultLockSlack))
 }
 
 // SetWorktreeSetupLockSlackForTest temporarily changes how much longer than its
@@ -97,7 +125,7 @@ func RunPostWorktreeCmd(projectRoot, cmdStr, dir string, timeout time.Duration, 
 	var setupErr *PostWorktreeSetupError
 	var passedSeq uint64
 	entered := false
-	lockErr := lock.WithTimeout(lockWait).WithLockOperation("worktree-setup", func() error {
+	lockErr := lock.WithTimeout(lockWait).WithLockOperation(worktreeSetupLockOperation, func() error {
 		entered = true
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -286,16 +314,16 @@ type worktreeSetupArtifacts struct {
 func newWorktreeSetupArtifacts(projectRoot, dir string) (worktreeSetupArtifacts, error) {
 	resolved := resolvedSetupPath(dir)
 	sum := sha256.Sum256([]byte(resolved))
-	digest := hex.EncodeToString(sum[:8])
+	digest := hex.EncodeToString(sum[:worktreeSetupDigestBytes])
 	setupDir := paths.New(projectRoot).WorktreeSetupDir()
-	if err := os.MkdirAll(setupDir, 0o700); err != nil {
+	if err := os.MkdirAll(setupDir, worktreeSetupDirMode); err != nil {
 		return worktreeSetupArtifacts{}, fmt.Errorf("create worktree setup directory: %w", err)
 	}
 	key := filepath.Base(resolved) + "-" + digest
 	return worktreeSetupArtifacts{
 		digest:      digest,
-		outputPath:  filepath.Join(setupDir, key+".log"),
-		outcomePath: filepath.Join(setupDir, key+".outcome"),
+		outputPath:  filepath.Join(setupDir, key+worktreeSetupOutputExt),
+		outcomePath: filepath.Join(setupDir, key+worktreeSetupOutcomeExt),
 	}, nil
 }
 
@@ -314,7 +342,7 @@ func resolvedSetupPath(dir string) string {
 }
 
 func worktreeSetupLock(projectRoot, digest string) (*filelock.FileLock, error) {
-	purpose := "worktree-setup-" + digest
+	purpose := worktreeSetupLockPurposePrefix + digest
 	lock, err := projectFileLock(projectRoot, purpose)
 	if err == nil {
 		return lock, nil
@@ -356,7 +384,7 @@ func writePrivateFile(path string, data []byte) error {
 	}
 	tmpPath := tmp.Name()
 	defer func() { _ = os.Remove(tmpPath) }()
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := tmp.Chmod(worktreeSetupFileMode); err != nil {
 		_ = tmp.Close()
 		return err
 	}
@@ -390,7 +418,7 @@ func readWorktreeSetupOutcome(path string) (worktreeSetupOutcome, bool, error) {
 		return worktreeSetupOutcome{}, false, err
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) != 3 {
+	if len(fields) != worktreeSetupOutcomeFields {
 		return worktreeSetupOutcome{}, false, errMalformedWorktreeSetupOutcome
 	}
 	seq, err := strconv.ParseUint(fields[0], 10, 64)
@@ -398,7 +426,7 @@ func readWorktreeSetupOutcome(path string) (worktreeSetupOutcome, bool, error) {
 		return worktreeSetupOutcome{}, false, errMalformedWorktreeSetupOutcome
 	}
 	var ok bool
-	switch fields[1] {
+	switch worktreeSetupOutcomeStatus(fields[1]) {
 	case worktreeSetupOutcomeOK:
 		ok = true
 	case worktreeSetupOutcomeFailed:

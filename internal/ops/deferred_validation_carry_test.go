@@ -226,7 +226,7 @@ func TestDeferredValidationForceRecoversFromWrongScope(t *testing.T) {
 		t.Fatalf("the forced batch did not execute the command: %d runs", runs())
 	}
 	state, _ = f.bb.Read()
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredFailed {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredFailed) {
 		t.Fatalf("gate after the forced failure = %#v", blocked)
 	}
 	if again := f.run(false); again.Outcome != "skipped" || again.Reason != "failed_at_head" {

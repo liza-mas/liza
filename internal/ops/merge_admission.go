@@ -114,7 +114,7 @@ func retireProvenMergePreparation(bb *db.Blackboard, taskID string, authority *m
 		}
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if !interruptedMergePreparation(task, request) ||
 			!sameLifecycleRequest(task.Lifecycle.Preparation.LifecycleIdentity, prepared.LifecycleIdentity) ||

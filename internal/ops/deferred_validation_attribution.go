@@ -86,7 +86,7 @@ func (r *deferredValidationRunner) knownRed(state *models.State, commands []mode
 		now := time.Now().UTC()
 		known[command.CommandSHA256] = models.DeferredValidationResult{
 			Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultKnownRed,
-			ExitCode: -1, StartedAt: now, FinishedAt: now, CarriedFrom: batch.Commit, OwnedBy: owner,
+			ExitCode: acceptanceExitUnknown, StartedAt: now, FinishedAt: now, CarriedFrom: batch.Commit, OwnedBy: owner,
 		}
 	}
 	return known
@@ -114,7 +114,7 @@ func deferredSoleCulprit(batch *models.DeferredValidationBatch, commandSHA strin
 // no such discovery was converted to a task, or the fix merged or died.
 func deferredFixInFlight(state *models.State, resolver *models.DependencyResolver, culprit, commandSHA string) string {
 	for _, discovery := range state.Discovered {
-		if discovery.By != models.DeferredValidationDiscoveryBy || discovery.Extra["culprit_task"] != culprit || discovery.Extra["command_sha256"] != commandSHA {
+		if discovery.By != models.DeferredValidationDiscoveryBy || discovery.Extra[deferredDiscoveryKeyCulpritTask] != culprit || discovery.Extra[deferredDiscoveryKeyCommandSHA256] != commandSHA {
 			continue
 		}
 		if discovery.ConvertedToTask == nil || discoveryDisposition(*discovery.ConvertedToTask).isSentinel() {
@@ -144,7 +144,7 @@ func (r *deferredValidationRunner) unchangedSince(ctx context.Context, from, hea
 	}
 	args := append([]string{"--glob-pathspecs", "diff", "--quiet", "--no-ext-diff", "--no-renames", from, head, "--"}, pathspecs...)
 	res := r.git(ctx, r.root, args...)
-	if res.err != nil && !res.halted && res.exitCode == 1 {
+	if res.err != nil && !res.halted && res.exitCode == deferredGitExitNegative {
 		return false, execResult{}
 	}
 	return res.err == nil, res
@@ -156,7 +156,7 @@ func (r *deferredValidationRunner) unchangedSince(ctx context.Context, from, hea
 // scope without paths, or one carrying its own pathspec magic is refused.
 func deferredCarryPathspecs(config models.Config, command string) ([]string, bool) {
 	invalid := func(pattern string) bool {
-		return strings.TrimSpace(pattern) == "" || strings.HasPrefix(pattern, ":")
+		return strings.TrimSpace(pattern) == "" || strings.HasPrefix(pattern, deferredPathspecMagicPrefix)
 	}
 	pathspecs := []string{"."}
 	if scope := models.DeferredValidationScopeFor(config, command); scope != nil {
@@ -170,7 +170,7 @@ func deferredCarryPathspecs(config models.Config, command string) ([]string, boo
 			if invalid(inert) {
 				return nil, false
 			}
-			pathspecs = append(pathspecs, ":(exclude)"+inert)
+			pathspecs = append(pathspecs, deferredPathspecExcludePrefix+inert)
 		}
 	}
 	return pathspecs, true
@@ -197,21 +197,21 @@ func (r *deferredValidationRunner) bisect(ctx context.Context, state *models.Sta
 		return culprit, true
 	}
 	if baseline == "" {
-		return unattributedCulprit(culprit, "no_baseline"), false
+		return unattributedCulprit(culprit, string(deferredValidationUnattributedNoBaseline)), false
 	}
 	ancestor, res := r.isAncestor(ctx, baseline, head)
 	if res.halted {
 		return culprit, true
 	}
 	if !ancestor {
-		return unattributedCulprit(culprit, "baseline_not_in_ancestry"), false
+		return unattributedCulprit(culprit, string(deferredValidationUnattributedBaselineNotAncestor)), false
 	}
 	candidates, res := r.bisectCandidates(ctx, state, baseline, head)
 	if res.halted {
 		return culprit, true
 	}
 	if res.err != nil {
-		return unattributedCulprit(culprit, "history_unavailable"), false
+		return unattributedCulprit(culprit, string(deferredValidationUnattributedHistoryUnavailable)), false
 	}
 	return r.bisectSearch(ctx, state, worktree, head, command, baseline, candidates, culprit)
 }
@@ -267,7 +267,7 @@ func (r *deferredValidationRunner) bisectSearch(ctx context.Context, state *mode
 			return status, false
 		}
 		status := models.DeferredValidationResultUnavailable
-		exitCode := -1
+		exitCode := acceptanceExitUnknown
 		if res := r.prepareProbe(ctx, state, worktree, rev); res.halted {
 			return status, true
 		} else if res.err == nil {
@@ -288,9 +288,9 @@ func (r *deferredValidationRunner) bisectSearch(ctx context.Context, state *mode
 	switch status {
 	case models.DeferredValidationResultPassed:
 	case models.DeferredValidationResultFailed:
-		return unattributedCulprit(culprit, "fails_at_baseline"), false
+		return unattributedCulprit(culprit, string(deferredValidationUnattributedFailsAtBaseline)), false
 	default:
-		return unattributedCulprit(culprit, fmt.Sprintf("setup_unavailable at %s", baseline)), false
+		return unattributedCulprit(culprit, fmt.Sprintf(deferredValidationReasonSetupUnavailableFormat, baseline)), false
 	}
 	lo, hi := -1, len(candidates)
 	for hi-lo > 1 {
@@ -305,11 +305,11 @@ func (r *deferredValidationRunner) bisectSearch(ctx context.Context, state *mode
 		case models.DeferredValidationResultFailed:
 			hi = mid
 		default:
-			return unattributedCulprit(culprit, fmt.Sprintf("setup_unavailable at %s", candidates[mid].commit)), false
+			return unattributedCulprit(culprit, fmt.Sprintf(deferredValidationReasonSetupUnavailableFormat, candidates[mid].commit)), false
 		}
 	}
 	if hi == len(candidates) {
-		return unattributedCulprit(culprit, "fails_after_last_merge"), false
+		return unattributedCulprit(culprit, string(deferredValidationUnattributedFailsAfterLastMerge)), false
 	}
 	// hi-lo == 1: the predecessor (baseline or candidates[lo]) was executed and
 	// passed, and candidates[hi] was executed and failed (at head, by the batch).

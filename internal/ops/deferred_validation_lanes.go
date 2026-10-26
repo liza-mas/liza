@@ -65,7 +65,7 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 	defer stopKill()
 	cmd, err := build(ctx)
 	if err != nil {
-		return execResult{exitCode: -1, err: err}
+		return execResult{exitCode: acceptanceExitUnknown, err: err}
 	}
 	output := &acceptanceOutputBuffer{remaining: acceptanceOutputLimit, cancel: cancel}
 	cmd.Stdout, cmd.Stderr = output, output
@@ -92,12 +92,12 @@ func (r *deferredValidationRunner) run(ctx context.Context, timeout time.Duratio
 	if err != nil {
 		// A start refused once the abort fired never ran: it is a halt.
 		halted := errors.Is(err, errDeferredValidationHalted) || errors.Is(err, errDeferredValidationUnstoppable) || (bound && kill.Err() != nil)
-		return execResult{exitCode: -1, err: err, halted: halted}
+		return execResult{exitCode: acceptanceExitUnknown, err: err, halted: halted}
 	}
 	err = cmd.Wait()
 	interrupted := !stopKill()
 	raw := output.buffer.String()
-	result := execResult{exitCode: -1, err: err, output: r.mask(raw), raw: raw}
+	result := execResult{exitCode: acceptanceExitUnknown, err: err, output: r.mask(raw), raw: raw}
 	if cmd.ProcessState != nil {
 		result.exitCode = cmd.ProcessState.ExitCode()
 	}
@@ -141,7 +141,7 @@ func (r *deferredValidationRunner) gitRun(ctx context.Context, admit bool, dir s
 // halted or failed probe is returned in res; exit 1 means "not an ancestor".
 func (r *deferredValidationRunner) isAncestor(ctx context.Context, ancestor, descendant string) (bool, execResult) {
 	res := r.git(ctx, r.root, "merge-base", "--is-ancestor", ancestor, descendant)
-	if res.err != nil && !res.halted && res.exitCode == 1 {
+	if res.err != nil && !res.halted && res.exitCode == deferredGitExitNegative {
 		res.err = nil
 		return false, res
 	}
@@ -162,9 +162,9 @@ func (r *deferredValidationRunner) deferralBefore(ctx context.Context, deferral 
 // so a worktree an earlier runner left is reused rather than leaked.
 func (r *deferredValidationRunner) laneWorktree(i int) string {
 	if i == 0 {
-		return filepath.Join(r.dir, "worktree")
+		return filepath.Join(r.dir, deferredLaneWorktreeName)
 	}
-	return filepath.Join(r.dir, fmt.Sprintf("worktree-%d", i))
+	return filepath.Join(r.dir, fmt.Sprintf(deferredLaneWorktreeFormat, i))
 }
 
 // resetLanes recreates n lane worktrees from scratch at commit, so nothing a
@@ -175,9 +175,9 @@ func (r *deferredValidationRunner) resetLanes(ctx context.Context, commit string
 	if res := r.git(ctx, r.root, "worktree", "prune"); res.err != nil {
 		return nil, res
 	}
-	extra, err := filepath.Glob(filepath.Join(r.dir, "worktree-*"))
+	extra, err := filepath.Glob(filepath.Join(r.dir, deferredLaneWorktreeGlob))
 	if err != nil {
-		return nil, execResult{exitCode: -1, err: err}
+		return nil, execResult{exitCode: acceptanceExitUnknown, err: err}
 	}
 	for _, worktree := range append([]string{r.laneWorktree(0)}, extra...) {
 		if res := r.removeWorktree(ctx, worktree); res.err != nil {
@@ -287,14 +287,14 @@ func (r *deferredValidationRunner) checkClean(ctx context.Context, worktree, rev
 		return head
 	}
 	if strings.TrimSpace(head.raw) != rev {
-		return execResult{exitCode: -1, err: fmt.Errorf("batch worktree HEAD is not %s", rev)}
+		return execResult{exitCode: acceptanceExitUnknown, err: fmt.Errorf("batch worktree HEAD is not %s", rev)}
 	}
 	status := git(ctx, worktree, "--no-optional-locks", "status", "--short")
 	if status.err != nil {
 		return status
 	}
 	if strings.TrimSpace(status.raw) != "" {
-		return execResult{exitCode: -1, err: fmt.Errorf("batch worktree has changes: %s", status.output)}
+		return execResult{exitCode: acceptanceExitUnknown, err: fmt.Errorf("batch worktree has changes: %s", status.output)}
 	}
 	return execResult{exitCode: 0}
 }
@@ -307,7 +307,7 @@ func (r *deferredValidationRunner) checkClean(ctx context.Context, worktree, rev
 // grace bounds the runner, so it waits until they free (D-223); an ended
 // batch, or a halt observed meanwhile, stops the wait.
 func (r *deferredValidationRunner) probe(ctx context.Context, config models.Config, worktree, rev string, command models.DeferredValidationCommand, keepOutput bool) (models.DeferredValidationResult, bool) {
-	result := models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, ExitCode: -1}
+	result := models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, ExitCode: acceptanceExitUnknown}
 	slots := newQueuedAdmissionSlots()
 	stopWatching := r.watchHalt()
 	err := slots.acquire(r.waits, r.root, models.AdmissionLimitsFor(config, []string{command.Command}))
@@ -520,7 +520,7 @@ func (r *deferredValidationRunner) execute(ctx context.Context, state *models.St
 }
 
 func (r *deferredValidationRunner) notRun(command models.DeferredValidationCommand) models.DeferredValidationResult {
-	return models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultNotRun, ExitCode: -1}
+	return models.DeferredValidationResult{Command: r.mask(command.Command), CommandSHA256: command.CommandSHA256, Status: models.DeferredValidationResultNotRun, ExitCode: acceptanceExitUnknown}
 }
 
 // deferredValidationLane is what one lane observed: its command's result at

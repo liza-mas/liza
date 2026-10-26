@@ -23,7 +23,16 @@ const (
 	runLiveDefaultTimeoutSeconds = 600
 	runLiveMaxTimeoutSeconds     = 3600
 	runLiveWaitDelay             = 5 * time.Second
+
+	// runLiveShellFlag and runLiveShellWrapperArgs describe the `<shell> -c
+	// <command>` wrapper whose command runLiveConsumptiveMatch also compares.
+	runLiveShellFlag        = "-c"
+	runLiveShellWrapperArgs = 3
 )
+
+// runLiveShells are the shells whose `-c` wrapper is looked through; any other
+// program is compared as typed.
+var runLiveShells = []string{"sh", "bash", "zsh", "dash"}
 
 // RunLiveInput runs one local live command for a task (ADR-0169).
 type RunLiveInput struct {
@@ -117,7 +126,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("run-live timed out after %d seconds", timeout)}
 	}
-	result := &RunLiveResult{ExitCode: -1, Output: mask(output.buffer.String())}
+	result := &RunLiveResult{ExitCode: acceptanceExitUnknown, Output: mask(output.buffer.String())}
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
@@ -133,7 +142,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 // spaces, or a `sh|bash|zsh|dash -c <command>` wrapper around it.
 func runLiveConsumptiveMatch(task *models.Task, argv []string) (string, string) {
 	candidates := []string{strings.Join(argv, " ")}
-	if len(argv) == 3 && argv[1] == "-c" && slices.Contains([]string{"sh", "bash", "zsh", "dash"}, filepath.Base(argv[0])) {
+	if len(argv) == runLiveShellWrapperArgs && argv[1] == runLiveShellFlag && slices.Contains(runLiveShells, filepath.Base(argv[0])) {
 		candidates = append(candidates, argv[2])
 	}
 	for _, input := range task.RuntimeInputs {

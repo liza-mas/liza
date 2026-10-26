@@ -37,12 +37,16 @@ const (
 	deferredValidationTokenBytes = 16
 	// IntegrationProgressWaitingDeferredValidation is the stable integration
 	// wait on which the orchestrator supervisor retries a pending batch.
-	IntegrationProgressWaitingDeferredValidation = "deferred_validation_pending"
+	IntegrationProgressWaitingDeferredValidation = string(integrationProgressWaitingDeferred)
 
-	integrationProgressBlockedDeferredFailed    = "deferred_validation_failed"
-	integrationProgressBlockedDeferredInfra     = "deferred_validation_infra"
-	integrationProgressBlockedDeferredUnsettled = "deferred_validation_unsettled"
-	integrationProgressBlockedDeferredAborted   = "deferred_validation_aborted"
+	// The deferred-validation members of the integration progress code set
+	// (integrationProgressCode); the gate converts them where it assigns
+	// IntegrationProgressReason.Code.
+	integrationProgressWaitingDeferred          integrationProgressCode = "deferred_validation_pending"
+	integrationProgressBlockedDeferredFailed    integrationProgressCode = "deferred_validation_failed"
+	integrationProgressBlockedDeferredInfra     integrationProgressCode = "deferred_validation_infra"
+	integrationProgressBlockedDeferredUnsettled integrationProgressCode = "deferred_validation_unsettled"
+	integrationProgressBlockedDeferredAborted   integrationProgressCode = "deferred_validation_aborted"
 
 	// deferredValidationRunnerLockName is the runner's OS lock file in the
 	// deferred-validation directory, and the labels its holders record.
@@ -54,6 +58,63 @@ const (
 	// deferredValidationRunnerLogName is the runner's diagnostics file in the
 	// deferred-validation directory.
 	deferredValidationRunnerLogName = "runner.log"
+	// deferredValidationDirMode and deferredValidationLogFileMode are the
+	// permissions of the deferred-validation directory and the runner log.
+	deferredValidationDirMode     = 0o755
+	deferredValidationLogFileMode = 0o644
+	// The lane worktrees under the deferred-validation directory: lane 0 keeps
+	// the plain name, later lanes number it, and the glob finds the numbered
+	// leftovers of a larger earlier batch.
+	deferredLaneWorktreeName   = "worktree"
+	deferredLaneWorktreeFormat = "worktree-%d"
+	deferredLaneWorktreeGlob   = "worktree-*"
+	// A scope or inert-path entry opening with deferredPathspecMagicPrefix
+	// carries its own pathspec magic and is refused; an inert path is excluded
+	// with deferredPathspecExcludePrefix.
+	deferredPathspecMagicPrefix   = ":"
+	deferredPathspecExcludePrefix = ":(exclude)"
+	// deferredAlertOnceKeyFormat dedupes the alert of one culprit of one batch,
+	// and deferredDiscoveryIDFormat names the discovery recorded for the
+	// batch's n-th culprit.
+	deferredAlertOnceKeyFormat = "deferred-validation:%d:%s"
+	deferredDiscoveryIDFormat  = "deferred-validation-%d-%d"
+	// deferredGitExitNegative is the exit status a quiet Git query returns for
+	// a no answer: not an ancestor, or differences exist.
+	deferredGitExitNegative = 1
+	// deferredValidationStatusBatches is how many of the latest batches the
+	// status report carries.
+	deferredValidationStatusBatches = 5
+
+	// The deferred-validation subcommands and flag that guidance text and the
+	// runner spawn name through the branded command line.
+	deferredValidationSubcommandStatus = "status"
+	deferredValidationSubcommandRun    = "run"
+	deferredValidationFlagForce        = "--force"
+
+	// The keys of the Extra map of a discovery a failed batch records for a
+	// culprit; deferredFixInFlight and deferredDiscoveryExists read the owner
+	// and command keys back.
+	deferredDiscoveryKeyBatch         = "batch"
+	deferredDiscoveryKeyBatchCommit   = "batch_commit"
+	deferredDiscoveryKeyCommandSHA256 = "command_sha256"
+	deferredDiscoveryKeyCulpritTask   = "culprit_task"
+	deferredDiscoveryKeyMergeCommit   = "merge_commit"
+)
+
+// deferredValidationUnattributedReason is why a culprit carries no task: the
+// persisted DeferredValidationCulprit.Reason keeps its string type and takes
+// these values by conversion. A setup that cannot be prepared at a commit
+// reasons with deferredValidationReasonSetupUnavailableFormat instead.
+type deferredValidationUnattributedReason string
+
+const (
+	deferredValidationUnattributedNoBaseline          deferredValidationUnattributedReason = "no_baseline"
+	deferredValidationUnattributedBaselineNotAncestor deferredValidationUnattributedReason = "baseline_not_in_ancestry"
+	deferredValidationUnattributedHistoryUnavailable  deferredValidationUnattributedReason = "history_unavailable"
+	deferredValidationUnattributedFailsAtBaseline     deferredValidationUnattributedReason = "fails_at_baseline"
+	deferredValidationUnattributedFailsAfterLastMerge deferredValidationUnattributedReason = "fails_after_last_merge"
+
+	deferredValidationReasonSetupUnavailableFormat = "setup_unavailable at %s"
 )
 
 // deferredValidationEndReason is why a batch or runner record ended without a
@@ -97,6 +158,11 @@ const (
 	deferredValidationSkipCovered      deferredValidationSkipReason = "covered"
 	deferredValidationSkipFailedAtHead deferredValidationSkipReason = "failed_at_head"
 	deferredValidationSkipAborted      deferredValidationSkipReason = "aborted_at_head"
+
+	// The reasons deferredValidationWanted gives when no batch is due.
+	deferredValidationSkipNothingDeferred   deferredValidationSkipReason = "nothing_deferred"
+	deferredValidationSkipAttemptsExhausted deferredValidationSkipReason = "attempts_exhausted"
+	deferredValidationSkipNotDue            deferredValidationSkipReason = "not_due"
 )
 
 // errDeferredValidationHalted marks a start refused by a halt or stop.

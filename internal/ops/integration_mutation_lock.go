@@ -21,14 +21,21 @@ const (
 	integrationLockForward  = "forward "
 	integrationLockRollback = "rollback "
 	integrationLockRestore  = "restore "
+	// integrationLockVerifyClean labels the hold that checks a clean analysis
+	// source against the live integration ref.
+	integrationLockVerifyClean = "verify clean integration source"
 )
+
+// integrationMutationLockName is the project file lock that serializes
+// integration ref advancement and main-index sync and restore.
+const integrationMutationLockName = "integration-mutation"
 
 func withIntegrationMutationLock(projectRoot, operation string, fn func() error) error {
 	return withIntegrationMutationLockTimeout(projectRoot, operation, integrationMutationLockTimeout, fn)
 }
 
 func withIntegrationMutationLockTimeout(projectRoot, operation string, timeout time.Duration, fn func() error) error {
-	lock, err := projectFileLock(projectRoot, "integration-mutation")
+	lock, err := projectFileLock(projectRoot, integrationMutationLockName)
 	if err != nil {
 		return err
 	}
@@ -57,7 +64,7 @@ type cleanIntegrationSourceVerification struct {
 func verifyCleanIntegrationSource(projectRoot, sourceCommit string) (cleanIntegrationSourceVerification, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
 	verification := cleanIntegrationSourceVerification{SourceCommit: sourceCommit}
-	err := withIntegrationMutationLock(projectRoot, "verify clean integration source", func() error {
+	err := withIntegrationMutationLock(projectRoot, integrationLockVerifyClean, func() error {
 		state, readErr := bb.Read()
 		if readErr != nil {
 			return fmt.Errorf("failed to read state for clean integration verification: %w", readErr)

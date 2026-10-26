@@ -123,8 +123,8 @@ func deferredValidationGate(state *models.State, integrationHEAD string) (waitin
 	}
 	if runner := ledger.Runner; runner != nil && runner.Unsettled != "" {
 		return nil, &IntegrationProgressReason{
-			Code:     integrationProgressBlockedDeferredUnsettled,
-			Guidance: fmt.Sprintf("a deferred-validation runner ended with %s; confirm none of its processes still runs, then run %s", runner.Unsettled, brand.Command(deferredValidationOperation, "settle")),
+			Code:     string(integrationProgressBlockedDeferredUnsettled),
+			Guidance: fmt.Sprintf("a deferred-validation runner ended with %s; confirm none of its processes still runs, then run %s", runner.Unsettled, brand.Command(deferredValidationOperation, string(rulingActionSettle))),
 		}
 	}
 	if latest := latestDeferredBatchAt(ledger, integrationHEAD); latest != nil {
@@ -132,30 +132,30 @@ func deferredValidationGate(state *models.State, integrationHEAD string) (waitin
 			return nil, nil
 		}
 		if latest.Status == models.DeferredValidationBatchFailed {
-			guidance := fmt.Sprintf("deferred-validation batch %d failed at integration HEAD; merge a correction or retire an obsolete command (%s)", latest.ID, brand.Command(deferredValidationOperation, "status"))
+			guidance := fmt.Sprintf("deferred-validation batch %d failed at integration HEAD; merge a correction or retire an obsolete command (%s)", latest.ID, brand.Command(deferredValidationOperation, deferredValidationSubcommandStatus))
 			if owners := deferredKnownRedOwners(latest); len(owners) > 0 {
 				guidance += fmt.Sprintf("; known red, fix in flight: %s", strings.Join(owners, ", "))
 			}
 			return nil, &IntegrationProgressReason{
-				Code:     integrationProgressBlockedDeferredFailed,
+				Code:     string(integrationProgressBlockedDeferredFailed),
 				TaskIDs:  deferredCulpritTasks(latest),
 				Guidance: guidance,
 			}
 		}
 		if deferredAbortedByOperator(latest) {
 			return nil, &IntegrationProgressReason{
-				Code:     integrationProgressBlockedDeferredAborted,
-				Guidance: fmt.Sprintf("deferred-validation batch %d was aborted by the operator at integration HEAD; merge, or run %s", latest.ID, brand.Command(deferredValidationOperation, "run", "--force")),
+				Code:     string(integrationProgressBlockedDeferredAborted),
+				Guidance: fmt.Sprintf("deferred-validation batch %d was aborted by the operator at integration HEAD; merge, or run %s", latest.ID, brand.Command(deferredValidationOperation, deferredValidationSubcommandRun, deferredValidationFlagForce)),
 			}
 		}
 	}
 	if deferredValidationAttemptsAt(ledger, integrationHEAD) >= models.DeferredValidationMaxAttemptsPerCommit {
 		return nil, &IntegrationProgressReason{
-			Code:     integrationProgressBlockedDeferredInfra,
-			Guidance: fmt.Sprintf("deferred-validation batches at integration HEAD ended %d times without a verdict; fix the environment, then run %s", models.DeferredValidationMaxAttemptsPerCommit, brand.Command(deferredValidationOperation, "run", "--force")),
+			Code:     string(integrationProgressBlockedDeferredInfra),
+			Guidance: fmt.Sprintf("deferred-validation batches at integration HEAD ended %d times without a verdict; fix the environment, then run %s", models.DeferredValidationMaxAttemptsPerCommit, brand.Command(deferredValidationOperation, deferredValidationSubcommandRun, deferredValidationFlagForce)),
 		}
 	}
-	return progressReason(IntegrationProgressWaitingDeferredValidation), nil
+	return progressReason(integrationProgressWaitingDeferred), nil
 }
 
 func deferredCulpritTasks(batch *models.DeferredValidationBatch) []string {
@@ -289,7 +289,7 @@ func deferredValidationWanted(projectRoot string, state *models.State, head stri
 	ledger := deferredValidationLedger(state)
 	commands := ledger.EffectiveCommands()
 	if len(commands) == 0 {
-		return false, "nothing_deferred", nil
+		return false, string(deferredValidationSkipNothingDeferred), nil
 	}
 	latest := latestDeferredBatchAt(ledger, head)
 	if !force {
@@ -303,7 +303,7 @@ func deferredValidationWanted(projectRoot string, state *models.State, head stri
 			return false, string(deferredValidationSkipAborted), nil
 		}
 		if deferredValidationAttemptsAt(ledger, head) >= models.DeferredValidationMaxAttemptsPerCommit {
-			return false, "attempts_exhausted", nil
+			return false, string(deferredValidationSkipAttemptsExhausted), nil
 		}
 	}
 	if explicit || force {
@@ -319,7 +319,7 @@ func deferredValidationWanted(projectRoot string, state *models.State, head stri
 	if deferredValidationRequired(projectRoot, state, head) {
 		return true, "", nil
 	}
-	return false, "not_due", nil
+	return false, string(deferredValidationSkipNotDue), nil
 }
 
 // deferredValidationRequired reports whether the integration gate is waiting
@@ -360,7 +360,7 @@ func startDeferredValidationIfDueWith(projectRoot string, spawn func(string) err
 	if err != nil || !wanted {
 		return false, err
 	}
-	if err := os.MkdirAll(deferredValidationDir(projectRoot), 0o755); err != nil {
+	if err := os.MkdirAll(deferredValidationDir(projectRoot), deferredValidationDirMode); err != nil {
 		return false, err
 	}
 	held, acquired, err := filelock.New(filepath.Join(deferredValidationDir(projectRoot), deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationProbe)
@@ -389,12 +389,12 @@ func spawnDeferredValidationRunner(projectRoot string) error {
 	if err != nil {
 		return fmt.Errorf("locate %s executable: %w", brand.BinaryName, err)
 	}
-	logFile, err := os.OpenFile(filepath.Join(deferredValidationDir(projectRoot), deferredValidationRunnerLogName), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	logFile, err := os.OpenFile(filepath.Join(deferredValidationDir(projectRoot), deferredValidationRunnerLogName), os.O_CREATE|os.O_APPEND|os.O_WRONLY, deferredValidationLogFileMode)
 	if err != nil {
 		return err
 	}
 	defer logFile.Close()
-	cmd := exec.Command(binary, deferredValidationOperation, "run")
+	cmd := exec.Command(binary, deferredValidationOperation, deferredValidationSubcommandRun)
 	cmd.Dir = projectRoot
 	cmd.Env = withoutAgentIdentity(os.Environ())
 	cmd.Stdout, cmd.Stderr = logFile, logFile
@@ -417,9 +417,14 @@ func spawnDeferredValidationRunner(projectRoot string) error {
 	return nil
 }
 
+// taskIDEnvSuffix is the suffix brand turns into the session's task variable;
+// agentIDEnvSuffix and agentGenerationEnvSuffix name the other two identity
+// variables a spawned runner must not inherit.
+const taskIDEnvSuffix = "TASK_ID"
+
 func withoutAgentIdentity(environ []string) []string {
 	drop := map[string]bool{}
-	for _, name := range []string{"AGENT_ID", "AGENT_GENERATION", "TASK_ID"} {
+	for _, name := range []string{agentIDEnvSuffix, agentGenerationEnvSuffix, taskIDEnvSuffix} {
 		drop[brand.EnvName(name)] = true
 		drop[brand.LegacyEnvName(name)] = true
 	}

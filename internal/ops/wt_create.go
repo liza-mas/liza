@@ -24,7 +24,7 @@ import (
 // the per-worktree git hooks live. Git resolves core.hooksPath (set via
 // --worktree) to this directory. See InstallWorktreePreCommitHook.
 func worktreeHooksDirName() string {
-	return paths.ProjectDirName() + "-hooks"
+	return paths.ProjectDirName() + worktreeHooksDirSuffix
 }
 
 // Named values of the provisioning steps (K7); the bytes and modes are the
@@ -40,6 +40,19 @@ const (
 	provisionClaudeConfigWarn = "provision-claude-config"
 	copyWorktreeEnvFilesWarn  = "copy-worktree-env-files"
 	installPreCommitHookWarn  = "install-pre-commit-hook"
+	// worktreeCreateOperation labels the shared project lifecycle hold of
+	// worktree creation.
+	worktreeCreateOperation = "worktree-create"
+	// worktreeHooksDirSuffix follows the project directory name in the name of
+	// the per-worktree hooks directory.
+	worktreeHooksDirSuffix = "-hooks"
+
+	// The file names ProvisionWorktreeEnvFiles recognises as environment
+	// files: the plain name, a dotted variant, an extension and the direnv name.
+	worktreeEnvFileName   = ".env"
+	worktreeEnvFilePrefix = ".env."
+	worktreeEnvFileSuffix = ".env"
+	worktreeEnvrcFileName = ".envrc"
 )
 
 // CreateWorktreeResult contains the outcome of creating a worktree.
@@ -56,7 +69,7 @@ type CreateWorktreeResult struct {
 // deletes any existing worktree first (for reassignment). No terminal I/O.
 func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResult, error) {
 	var result *CreateWorktreeResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "worktree-create", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, worktreeCreateOperation, func() error {
 		var createErr error
 		result, createErr = createWorktree(projectRoot, taskID, fresh)
 		return createErr
@@ -155,7 +168,7 @@ func recordWorktreeBaseCommit(bb *db.Blackboard, gitWrapper *git.Git, taskID, ba
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		task.BaseCommit = &baseCommit
 		return nil
@@ -332,10 +345,10 @@ func copyEnvFileUnlessReserved(src, dst string, mode os.FileMode, deny map[strin
 }
 
 func isWorktreeEnvFileCandidate(name string) bool {
-	return name == ".env" ||
-		strings.HasPrefix(name, ".env.") ||
-		strings.HasSuffix(name, ".env") ||
-		name == ".envrc"
+	return name == worktreeEnvFileName ||
+		strings.HasPrefix(name, worktreeEnvFilePrefix) ||
+		strings.HasSuffix(name, worktreeEnvFileSuffix) ||
+		name == worktreeEnvrcFileName
 }
 
 func checkIgnored(dir, rel string) error {

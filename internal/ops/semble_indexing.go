@@ -18,6 +18,13 @@ const (
 	sembleWorktreeIgnoreFile         = ".sembleignore"
 	maxSemblePreparationWarningBytes = 512
 	maxSembleMissingPatternsListed   = 8
+	// sembleIgnoreFileMode is the permission of the generated .sembleignore.
+	sembleIgnoreFileMode = 0o644
+	// sembleWarningEllipsis ends a preparation warning cut to its byte bound.
+	sembleWarningEllipsis = "..."
+	// sembleLsFilesUnmatchedExit is the exit status of `git ls-files
+	// --error-unmatch` for a path Git does not track.
+	sembleLsFilesUnmatchedExit = 1
 )
 
 var prepareSembleWorktreeIgnoreMu sync.Mutex
@@ -68,7 +75,7 @@ func trackedSembleIgnore(worktreeDir string) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if gitExitCode(err) == 1 {
+	if gitExitCode(err) == sembleLsFilesUnmatchedExit {
 		return false, nil
 	}
 	return false, err
@@ -95,7 +102,7 @@ func ensureGeneratedSembleIgnore(ignorePath string) error {
 }
 
 func writeGeneratedSembleIgnore(ignorePath string) error {
-	return os.WriteFile(ignorePath, []byte(semble.GeneratedWorktreeIgnorePayload()), 0o644)
+	return os.WriteFile(ignorePath, []byte(semble.GeneratedWorktreeIgnorePayload()), sembleIgnoreFileMode)
 }
 
 func appendMissingGeneratedSembleIgnorePatterns(ignorePath string, content []byte, missing []string) error {
@@ -107,7 +114,7 @@ func appendMissingGeneratedSembleIgnorePatterns(ignorePath string, content []byt
 		next = append(next, pattern...)
 		next = append(next, '\n')
 	}
-	return os.WriteFile(ignorePath, next, 0o644)
+	return os.WriteFile(ignorePath, next, sembleIgnoreFileMode)
 }
 
 func missingSembleIgnorePatterns(ignorePath string) ([]string, error) {
@@ -185,7 +192,7 @@ func boundedSemblePreparationWarning(message string) string {
 	if len(message) <= maxSemblePreparationWarningBytes {
 		return message
 	}
-	return message[:maxSemblePreparationWarningBytes-3] + "..."
+	return message[:maxSemblePreparationWarningBytes-len(sembleWarningEllipsis)] + sembleWarningEllipsis
 }
 
 func gitExitCode(err error) int {
@@ -193,5 +200,5 @@ func gitExitCode(err error) int {
 	if errors.As(err, &exitErr) {
 		return exitErr.ExitCode()
 	}
-	return -1
+	return acceptanceExitUnknown
 }

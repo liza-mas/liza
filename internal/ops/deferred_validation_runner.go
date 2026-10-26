@@ -59,7 +59,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 		return nil, &PreconditionError{Reason: fmt.Sprintf("deferred-validation batches are not supported on %s: the runner cannot establish that a command's descendants ended; run the batch from a supported host or retire the command", runtime.GOOS)}
 	}
 	dir := deferredValidationDir(projectRoot)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, deferredValidationDirMode); err != nil {
 		return nil, err
 	}
 	held, acquired, err := filelock.New(filepath.Join(dir, deferredValidationRunnerLockName)).TryHold(lockLabelDeferredValidationRun)
@@ -137,7 +137,7 @@ func runDeferredValidation(ctx context.Context, projectRoot string, opts RunDefe
 		result.Batches = append(result.Batches, published)
 		if r.isOrphaned() {
 			result.Reason = published.Reason
-			return result, &PreconditionError{Reason: fmt.Sprintf("a deferred-validation step left processes that could not be stopped; the runner record stays unsettled: confirm none still runs, then run %s", brand.Command(deferredValidationOperation, "settle"))}
+			return result, &PreconditionError{Reason: fmt.Sprintf("a deferred-validation step left processes that could not be stopped; the runner record stays unsettled: confirm none still runs, then run %s", brand.Command(deferredValidationOperation, string(rulingActionSettle)))}
 		}
 		if published.Status == models.DeferredValidationBatchAborted {
 			result.Reason = published.Reason
@@ -314,7 +314,7 @@ func (r *deferredValidationRunner) claim(head string) (string, error) {
 			if !r.follows || predecessor.Unsettled != "" {
 				// An unsettled record is a runner that knew its processes
 				// might outlive it; holding the lock proves nothing then.
-				return &PreconditionError{Reason: fmt.Sprintf("predecessor deferred-validation runner (pid %d, token %s) did not finish: confirm none of its processes still run, then run %s", predecessor.PID, predecessor.Token, brand.Command(deferredValidationOperation, "settle"))}
+				return &PreconditionError{Reason: fmt.Sprintf("predecessor deferred-validation runner (pid %d, token %s) did not finish: confirm none of its processes still run, then run %s", predecessor.PID, predecessor.Token, brand.Command(deferredValidationOperation, string(rulingActionSettle)))}
 			}
 			now := time.Now().UTC()
 			ledger.AppendBatch(models.DeferredValidationBatch{
@@ -362,7 +362,7 @@ func (r *deferredValidationRunner) publish(token string, batch models.DeferredVa
 			Level:     alerts.AlertLevelCritical,
 			Category:  deferredValidationAlertCategory,
 			Message:   deferredCulpritSummary(batch, culprit),
-			OnceKey:   fmt.Sprintf("deferred-validation:%d:%s", batch.ID, culprit.CommandSHA256),
+			OnceKey:   fmt.Sprintf(deferredAlertOnceKeyFormat, batch.ID, culprit.CommandSHA256),
 		})
 	}
 	return batch, nil
@@ -382,7 +382,7 @@ func recordDeferredValidationDiscoveries(state *models.State, batch models.Defer
 			continue
 		}
 		state.Discovered = append(state.Discovered, models.Discovery{
-			ID:             fmt.Sprintf("deferred-validation-%d-%d", batch.ID, i+1),
+			ID:             fmt.Sprintf(deferredDiscoveryIDFormat, batch.ID, i+1),
 			By:             models.DeferredValidationDiscoveryBy,
 			During:         owner,
 			Description:    deferredCulpritSummary(batch, culprit),
@@ -391,11 +391,11 @@ func recordDeferredValidationDiscoveries(state *models.State, batch models.Defer
 			Recommendation: deferredCulpritRecommendation(culprit),
 			Created:        time.Now().UTC(),
 			Extra: map[string]any{
-				"batch":          batch.ID,
-				"batch_commit":   batch.Commit,
-				"command_sha256": culprit.CommandSHA256,
-				"culprit_task":   owner,
-				"merge_commit":   culprit.MergeCommit,
+				deferredDiscoveryKeyBatch:         batch.ID,
+				deferredDiscoveryKeyBatchCommit:   batch.Commit,
+				deferredDiscoveryKeyCommandSHA256: culprit.CommandSHA256,
+				deferredDiscoveryKeyCulpritTask:   owner,
+				deferredDiscoveryKeyMergeCommit:   culprit.MergeCommit,
 			},
 		})
 		recorded = append(recorded, culprit)
@@ -405,7 +405,7 @@ func recordDeferredValidationDiscoveries(state *models.State, batch models.Defer
 
 func deferredDiscoveryExists(state *models.State, owner, commandSHA string) bool {
 	for _, discovery := range state.Discovered {
-		if discovery.By == models.DeferredValidationDiscoveryBy && discovery.Extra["culprit_task"] == owner && discovery.Extra["command_sha256"] == commandSHA {
+		if discovery.By == models.DeferredValidationDiscoveryBy && discovery.Extra[deferredDiscoveryKeyCulpritTask] == owner && discovery.Extra[deferredDiscoveryKeyCommandSHA256] == commandSHA {
 			return true
 		}
 	}
@@ -426,7 +426,7 @@ func deferredCulpritSummary(batch models.DeferredValidationBatch, culprit models
 }
 
 func deferredCulpritRecommendation(culprit models.DeferredValidationCulprit) string {
-	status := brand.Command(deferredValidationOperation, "status")
+	status := brand.Command(deferredValidationOperation, deferredValidationSubcommandStatus)
 	if culprit.TaskID != "" {
 		return fmt.Sprintf("Create a correction for %s that makes the command pass. If the command is obsolete (renamed or removed), ask the operator to retire it. Details: %s", culprit.TaskID, status)
 	}

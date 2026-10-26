@@ -30,6 +30,11 @@ const (
 	integrationProgressBlockedCapability integrationProgressCode = pipeline.SlicedIntegrationUpgradeRequired
 )
 
+// slicedCohortMinScopes is how many scopes a contributing set needs before its
+// scopes are covered by slice evidence: a smaller set needs no coverage, and
+// its global analysis takes the scopes' root tasks as parents.
+const slicedCohortMinScopes = 2
+
 // IntegrationProgressDecision is the pure projection consumed by integration
 // reconciliation and completion gates.
 type IntegrationProgressDecision struct {

@@ -488,9 +488,9 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 	}
 	completion := map[string]struct{ waiting, blocked string }{
 		"no batch":           {waiting: IntegrationProgressWaitingDeferredValidation},
-		"failed":             {blocked: integrationProgressBlockedDeferredFailed},
-		"attempts exhausted": {blocked: integrationProgressBlockedDeferredInfra},
-		"unsettled runner":   {blocked: integrationProgressBlockedDeferredUnsettled},
+		"failed":             {blocked: string(integrationProgressBlockedDeferredFailed)},
+		"attempts exhausted": {blocked: string(integrationProgressBlockedDeferredInfra)},
+		"unsettled runner":   {blocked: string(integrationProgressBlockedDeferredUnsettled)},
 		"covering pass":      {},
 	}
 	withLedger := func(name string) *models.State {

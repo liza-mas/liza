@@ -131,7 +131,7 @@ func TestDeferredValidationOperatorAbortEndsTheLiveBatch(t *testing.T) {
 		t.Fatalf("same HEAD after an operator abort: %#v", again)
 	}
 	state, _ := f.bb.Read()
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredAborted {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredAborted) {
 		t.Fatalf("gate = %#v, want %s", blocked, integrationProgressBlockedDeferredAborted)
 	}
 	if err := os.Remove(slowArmed); err != nil {
