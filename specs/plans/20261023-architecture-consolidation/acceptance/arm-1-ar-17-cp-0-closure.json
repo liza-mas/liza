@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-closure",
+      "file": "internal/testguard/archguard/area_a7_test.go",
+      "assertion": "TestAreaA7RatchetHoldsOnlyInitProject fails for any A7 ratchet entry other than ops InitProject, for a missing InitProject key, for any allowlist entry and for any S2 entry (all four branches were driven red by a temporary extra ratchet entry, a temporary allowlist entry, a temporary S2 entry and a removed InitProject key, and the file was restored); the whole archguard package, which carries the S1 size guard and rejects a stale or lowered-ceiling entry, passes at index 1.",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-shims",
+      "approved_reference_id": "a7-shims"
+    },
+    {
+      "obligation_id": "AC-sites",
+      "approved_reference_id": "a7-sites"
+    },
+    {
+      "obligation_id": "AC-k1-inventory",
+      "approved_reference_id": "k1-ruling"
+    },
+    {
+      "obligation_id": "AC-adr",
+      "approved_reference_id": "a7-proof"
+    },
+    {
+      "obligation_id": "AC-references",
+      "approved_reference_id": "shared-files"
+    },
+    {
+      "obligation_id": "AC-issue-evidence",
+      "approved_reference_id": "issues-policy"
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "goal-docs"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "The test target (go test ./...) runs the archguard, jsonout, commands, tui, interactive, cmd/liza and oracle suites including TestAreaA7RatchetHoldsOnlyInitProject at index 2; lint at index 3, test-e2e at index 4 and the race run over the five A7 presentation packages at index 5 are mandatory with it, and index 0 (git diff --check over the declared documents, the guard file and this manifest) proves the whitespace integrity of every touched document.",
+      "command_index": 2
+    }
+  ]
+}
