@@ -92,12 +92,9 @@ Persistent record of issues identified by architectural analysis skills.
   - [Dual Contract Delivery Paths](#dual-contract-delivery-paths)
   - [Kill Switch Granularity](#kill-switch-granularity)
 - [Structural Debt](#structural-debt)
-  - [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc)
-  - [Duplicate Initialization Implementations](#duplicate-initialization-implementations)
   - [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners)
   - [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners)
   - [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc)
-  - [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc)
   - [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates)
   - [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership)
   - [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity)
@@ -167,17 +164,14 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 | **low** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
-| **medium** | STRUCTURAL DEBT | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) |
 | **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — mitigated, open |
-| **medium** | STRUCTURAL DEBT | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) |
 | **medium** | STRUCTURAL DEBT | [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners) |
-| **medium** | STRUCTURAL DEBT | [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) |
 | **medium** | CROSS-CUTTING | [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates) |
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 33 medium, 16 low — 66 open issues total. *(2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 30 medium, 16 low — 63 open issues total. *(2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -642,6 +636,8 @@ Neither matches the invariant's description of hard enforcement during verdict s
 **Implication:** Git invocations on the unhardened path inherit the operator's locale, so any output parsing is locale-dependent, and they are unbounded — a hung Git process has no timeout. Both sites are in initialization, which runs before any supervisor or watchdog exists to detect the hang. The hardening is real but not structurally enforced, so each new Git call site is a coin flip.
 
 **Direction:** Route all Git invocation through `gitenv`. Consider a pre-commit or lint guard rejecting `exec.Command("git"` outside `internal/gitenv`, which converts a convention into a check.
+
+**Update (2026-10-26):** The initialization half is resolved: C4 (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`) deleted `internal/ops/init_project.go` and runs the four init helper subprocesses of `internal/commands` through `gitenv` timed runners in the project root. The remaining raw call is `exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")` in `cmd/liza/launch_resolve.go` (formerly `cmd_launch.go`), the `--cwd` path the run keeps out of scope. The entry stays open for it and for the lint guard.
 
 ### Agent Lease Renewal Ignores Configured Lease Duration
 
@@ -1202,30 +1198,6 @@ If human attention becomes bottleneck (competing priorities, vacation, scaling),
 
 File sizes in issue titles retain the original assessment values to preserve existing anchors. The 2026-09-06 measurements are: `proceed.go` 1,563 lines, `commands/init.go` 1,418, `supervisor.go` 1,131, `watch.go` 1,407, and `embedded.go` 1,635. Function sizes and rankings below are historical 2026-07-24 measurements, not a fresh function-level assessment.
 
-### Decompose init.go (1,268 LOC)
-
-**Skill:** code-quality-assessment
-**Category:** RECOMMENDATION (P1 — reassessed 2026-07-24)
-**Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#12-decompose-internalcommandsinitgo)
-
-**Issue:** `internal/commands/init.go` reached 1,268 LOC, up from 854 at the 2026-04-13 assessment. `InitCommandWithConfig` grew from 315 to 405 LOC. Sequential phases including project detection, artifact setup, configuration generation, and interactive prompting remain concentrated in the same command implementation.
-
-**Implication:** Brownfield init evolution is constrained by the monolithic function. Adding detection, migration, or interactive behavior requires understanding a 405 LOC control flow and increases regression scope.
-
-**Direction:** Extract each phase into its own function or file. Phases are sequential with clear data boundaries.
-
-### Duplicate Initialization Implementations
-
-**Skill:** software-architecture-review
-**Category:** STRUCTURAL DEBT
-**Related:** [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc), [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening)
-
-**Issue:** `internal/commands/init.go` (1,268 LOC) and `internal/ops/init_project.go` are parallel initialization implementations carrying near-verbatim duplicated helpers. They have already diverged: the `commands` path routes Git through `internal/gitenv`, the `ops` path calls `exec.Command("git", ...)` directly. `InitCommandWithConfig` (405 LOC) and `InitProject` (222 LOC) are the second and sixth longest functions in the repository.
-
-**Implication:** Initialization fixes land in one implementation and miss the other, and the existing divergence is already a hardening gap rather than a cosmetic one. This is distinct from the file-size debt tracked in *Decompose init.go*: decomposing either file does not converge the two implementations, and decomposing both independently would double the duplicated surface.
-
-**Direction:** Establish a single owner for initialization mechanics before decomposing either file, otherwise decomposition entrenches the duplication. Converging the Git call sites on `gitenv` is the smallest useful first step and closes the known divergence.
-
 ### Provider Stop-Signal Recovery Has Multiple Owners
 
 **Skill:** software-architecture-review
@@ -1263,18 +1235,6 @@ File sizes in issue titles retain the original assessment values to preserve exi
 **Direction:** Extract restart tracking and spinning policy into focused files, then simplify `RunSupervisor` around a small set of named lifecycle phases. Preserve the existing `CLIAgent` execution boundary.
 
 **Traceability (#156, mitigated):** Reviewer-claim policy lives in `internal/agent/claim_breaker.go`, with an executable `supervisor.go` file-size budget in `internal/agent/supervisor_test.go`. [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) records the bounded policy; broader supervisor decomposition remains open.
-
-### Decompose watch.go (1,407 LOC)
-
-**Skill:** code-quality-assessment
-**Category:** RECOMMENDATION (P1 — escalated 2026-07-24)
-**Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#14-decompose-internalcommandswatchgo)
-
-**Issue:** `internal/commands/watch.go` grew from 846 LOC at the 2026-04-13 assessment to 1,407 LOC. It combines state observation, anomaly diagnosis, automated repair, lifecycle decisions, and human-facing reporting in one command implementation.
-
-**Implication:** Monitoring is becoming a parallel orchestration surface. A change to repair policy or output formatting requires navigating unrelated concerns, and command-level tests must cover an increasingly broad state space.
-
-**Direction:** Separate observation, diagnosis, repair policy, lifecycle actions, and rendering while preserving the command's public behavior and existing tests.
 
 ### CI Does Not Enforce Cross-Language Quality Gates
 
@@ -1323,6 +1283,9 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-09-20:** [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) — help alignment and regression coverage (`43dacebcfd2e61d37456f5104690999202388c95`).
 - **2026-10-25:** [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) — concern-file split with an unchanged exported API (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`).
 - **2026-10-25:** [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) — responsibility-cluster split within the S1 limits and an unchanged exported A4 surface (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`).
+- **2026-10-26:** [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) — MAS and pairing init phases split into concern files within the S1 limits (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`).
+- **2026-10-26:** [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) — watch checks, diagnosis, auto-repair policy and alert output split into concern files within the S1 limits (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`).
+- **2026-10-26:** [Duplicate Initialization Implementations](#duplicate-initialization-implementations) — C4 deleted `ops.InitProject`; the CLI init path is the only implementation and runs its Git through `gitenv` (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`).
 
 ---
 
@@ -1351,10 +1314,35 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) | FRAGILITY | 2026-09-20 — CLI help requires `spec_ref`; `TestMutationCommandWiring` pins required and optional fields (`43dacebcfd2e61d37456f5104690999202388c95`) |
 | [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) | STRUCTURAL DEBT | 2026-10-25 — `embedded.go` split into artifact-family files with the 38 exported declarations unchanged (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`); A2 boundary record `specs/architecture/consolidation-run/boundary-a2.md` |
 | [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) | STRUCTURAL DEBT | 2026-10-25 — `proceed.go` split into transition entry plus child, cohort, inherited-dependency, pass and recovery concern files, 638 lines against 2,052 at the starting commit, longest function 53 lines (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`); A4 boundary record `specs/architecture/consolidation-run/boundary-a4.md` |
+| [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) | STRUCTURAL DEBT | 2026-10-26 — `init.go` 516 lines against 1,684 at the starting commit, `InitCommandWithConfig` 60 lines against 471, init and setup concerns in ten files with the longest function 70 lines (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
+| [Duplicate Initialization Implementations](#duplicate-initialization-implementations) | STRUCTURAL DEBT | 2026-10-26 — `internal/ops/init_project.go` and its tests deleted, no `InitProject` or `InitProjectParams` reference left in `cmd` or `internal` outside the immutable start snapshot; init Git runs through `gitenv` timed runners in the project root (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
+| [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) | STRUCTURAL DEBT | 2026-10-26 — `watch.go` 151 lines against 2,084 at the starting commit, `RunAutoRepairAgentPool` 35 lines against 133, watch concerns in eleven files with the longest function 76 lines (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 
 ---
 
 ## Fix Details
+
+### Decompose init.go (1,268 LOC)
+
+**Resolution:** `e11874725b7221a36733ef863557a7aeef6fe85f` (`refactor(commands): separate MAS init phases out of InitCommandWithConfig`) and `2c289761fc7ed8da922b9736bd31119d740ded7e` (`refactor(commands): separate pairing init, contract placement and setup phases`) replaced the 1,684-line `internal/commands/init.go` (the file had grown beyond the 1,268 LOC in the title) with a 516-line orchestration file and concern files for MAS inputs, layout, installation and state (`init_mas_*.go`), the integration branch (`init_integration_branch.go`), pairing init, contract placement and the Mistral contract (`init_pairing.go`, `init_contract_placement.go`, `init_mistral_contract.go`) and setup (`setup.go`). These are the phases the Direction named.
+
+**Evidence:** Measured with `go/parser` at integration `4cd8d7d7811ea85b5de90484256ab162301f7169`: `InitCommandWithConfig` 60 lines (471 at the starting commit `96c9ad69aee983ce2b929dd681b6ba43bf920535`), `InitPairingCommand` 42 (182), `createContractSymlinksForProviders` 36 (192), `SetupCommand` 28 (114); the init and setup files total ten with the longest 663 lines and the longest function 70 lines. The A7 ratchet, allowlist and S2 are empty (`TestAreaA7RatchetAllowlistAndS2AreEmpty`). A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md`; closure evidence in ADR 0226.
+
+**Related:** [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening) and [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) stay open.
+
+### Duplicate Initialization Implementations
+
+**Resolution:** `009d4835a6ab4f0b428a3e97aba13b63297ba9ba` (`refactor(c4): delete ops.InitProject and run init branch Git in the project root`, merged at `4cd8d7d7811ea85b5de90484256ab162301f7169`) deleted `internal/ops/init_project.go` and `internal/ops/init_project_test.go`. The CLI path in `internal/commands` is the only initialization implementation, and its four branch helper subprocesses (`check-ref-format --branch`, `rev-parse --verify <name>`, `rev-parse --verify HEAD`, `branch <name> HEAD`) run through `gitenv` timed runners in the project root.
+
+**Evidence:** At `4cd8d7d7811ea85b5de90484256ab162301f7169`, `git grep -n -w -e InitProject -e InitProjectParams -- cmd internal` lists only `internal/testguard/archguard/s1_snapshot_test.go` (the immutable start snapshot). `TestInitGitTargetsProjectRoot*`, `TestInitBranchValidationPrecedence_NonRepository` and `TestInitGitTimeout_HelpersReportTimeout` pass; the red run on the pre-C4 tree is recorded in `4cd8d7d78`. The `await` integration fixture initializes through the CLI entry. A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md`.
+
+**Related:** The initialization half of [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening) is resolved with this entry; the `cmd/liza` `--cwd` call keeps that entry open.
+
+### Decompose watch.go (1,407 LOC)
+
+**Resolution:** `6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49` (`refactor(commands): separate watch checks, diagnosis, auto-repair policy and alert output`) replaced the 2,084-line `internal/commands/watch.go` (the file had grown beyond the 1,407 LOC in the title) with a 151-line loop file and concern files for the state snapshot, task, agent, sprint and sentinel checks (`watch_snapshot.go`, `watch_checks_*.go`), orchestrator checks, diagnosis, auto-repair policy and spawn (`watch_orchestrator.go`, `watch_diagnosis.go`, `watch_repair.go`, `watch_repair_spawn.go`) and alert parsing, keys and output (`watch_reconcile.go`). These are the observation, diagnosis, repair-policy and output concerns the Direction named; alert categories are typed in `alerts.Category`.
+
+**Evidence:** Measured with `go/parser` at integration `4cd8d7d7811ea85b5de90484256ab162301f7169`: `watch.go` 151 lines (2,084 at the starting commit), `RunAutoRepairAgentPool` 35 lines (133); the eleven watch files total 2,328 lines, the largest 447 and the longest function 76. The A7 ratchet, allowlist and S2 are empty (`TestAreaA7RatchetAllowlistAndS2AreEmpty`). A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md`; closure evidence in ADR 0226.
 
 ### Decompose proceed.go (1,500 LOC)
 
