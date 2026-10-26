@@ -456,3 +456,68 @@ func TestSpawnAgent_CodexACPRequiresACPXBeforeSpawn(t *testing.T) {
 		t.Fatalf("SpawnAgent error = %q, want install hint", err)
 	}
 }
+
+// PB-9 (A9 extraction): the spawn gate checks the quota signal, then the
+// provider-unavailable signal, then the CLI prerequisites, and a refusal stops
+// at the first failing check.
+func TestA9SpawnCheckOrder(t *testing.T) {
+	setup := func(t *testing.T) (string, string) {
+		t.Helper()
+		projectRoot := t.TempDir()
+		lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
+		if err := os.MkdirAll(lizaDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", t.TempDir())
+		return projectRoot, filepath.Join(lizaDir, "alerts.log")
+	}
+	alerts := func(t *testing.T, path string) string {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	t.Run("quota before unavailable and prerequisites", func(t *testing.T) {
+		projectRoot, alertsPath := setup(t)
+		if err := agent.WriteQuotaSignal(projectRoot, "codex-acp", "quota hit"); err != nil {
+			t.Fatal(err)
+		}
+		if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
+			t.Fatal(err)
+		}
+		_, err := SpawnAgent(projectRoot, "coder", "codex-acp")
+		if err == nil || err.Error() != "provider quota exhausted for codex-acp; refusing to spawn coder" {
+			t.Fatalf("SpawnAgent error = %v, want the quota refusal first", err)
+		}
+		got := alerts(t, alertsPath)
+		if !strings.Contains(got, "PROVIDER QUOTA SPAWN BLOCKED") || strings.Contains(got, "PROVIDER UNAVAILABLE SPAWN BLOCKED") {
+			t.Fatalf("alerts = %q, want only the quota spawn-blocked alert", got)
+		}
+	})
+	t.Run("unavailable before prerequisites", func(t *testing.T) {
+		projectRoot, alertsPath := setup(t)
+		if err := agent.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
+			t.Fatal(err)
+		}
+		_, err := SpawnAgent(projectRoot, "coder", "codex-acp")
+		if err == nil || err.Error() != "provider unavailable for codex-acp; refusing to spawn coder" {
+			t.Fatalf("SpawnAgent error = %v, want the provider-unavailable refusal before the prerequisite check", err)
+		}
+		if got := alerts(t, alertsPath); !strings.Contains(got, "PROVIDER UNAVAILABLE SPAWN BLOCKED") {
+			t.Fatalf("alerts = %q, want the unavailable spawn-blocked alert", got)
+		}
+	})
+	t.Run("prerequisites last, with no alert", func(t *testing.T) {
+		projectRoot, alertsPath := setup(t)
+		_, err := SpawnAgent(projectRoot, "coder", "codex-acp")
+		if err == nil || !strings.HasPrefix(err.Error(), "spawn coder with codex-acp: codex-acp requires acpx on PATH") {
+			t.Fatalf("SpawnAgent error = %v, want the prerequisite refusal", err)
+		}
+		if got := alerts(t, alertsPath); got != "" {
+			t.Fatalf("alerts = %q, want none for a prerequisite refusal", got)
+		}
+	})
+}
