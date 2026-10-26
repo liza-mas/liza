@@ -36,7 +36,6 @@ var areaA9 = Area{
 		},
 	},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/agent/acpx_agent.go", Func: "ACPXAgent.Run"}, Ceiling: 141},
 		{Key: Key{File: "internal/agent/claiming.go", Func: "claimDoerTaskWithOptionalAuthority"}, Ceiling: 126},
 		{Key: Key{File: "internal/agent/claiming.go", Func: "handleApprovedMergesWithOptionalAuthority"}, Ceiling: 107},
 		{Key: Key{File: "internal/agent/supervisor.go", Func: "RunSupervisor"}, Ceiling: 521},

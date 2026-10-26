@@ -33,6 +33,46 @@ func NewACPXAgent(outputsDir string) *ACPXAgent {
 }
 
 func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
+	plan, failed, err := a.prepareRun(req)
+	if err != nil {
+		return failed, err
+	}
+	sessionName := plan.ACPXSessionName
+	if sessionName == "" {
+		sessionName = agentlaunch.ACPXSessionName(req.AgentID)
+	}
+	turn := acpxTurn{
+		req: req,
+		base: LLMAgentEvent{
+			BackendName: req.BackendName,
+			AgentID:     req.AgentID,
+			TaskID:      req.TaskID,
+			SessionID:   sessionName,
+		},
+		acpxAgent: plan.ACPXAgent,
+	}
+	promptProcess, warm, err := a.launchPrompt(ctx, req, plan, sessionName)
+	turn.warm = warm
+	if err != nil {
+		errText, maskedErr := a.boundedProviderFailure(err, req.BackendName)
+		emitLLMAgentFailed(ctx, req.EventSink, turn.base, errText)
+		return turn.result(1, errText, LLMAgentUsage{}), maskedErr
+	}
+	a.markSessionSeen(sessionName)
+	started := turn.base
+	started.Kind = LLMAgentEventStarted
+	started.Payload = map[string]any{llmAgentPayloadMode: llmAgentModeACPX, llmAgentPayloadACPXAgent: turn.acpxAgent}
+	emitLLMAgentEvent(ctx, req.EventSink, started)
+
+	output, usage, failureEvidence, err := a.waitACPXPrompt(ctx, req, promptProcess)
+	emitLLMAgentUsage(ctx, req.EventSink, turn.base, usage)
+	return a.completeRun(ctx, turn, output, usage, failureEvidence, err)
+}
+
+// prepareRun resolves the launch plan, environment and tool-result plan of one
+// run and registers the plan's secrets with the masker. On failure it returns
+// the result the failed run reports.
+func (a *ACPXAgent) prepareRun(req LLMAgentRunRequest) (agentlaunch.LaunchPlan, LLMAgentRunResult, error) {
 	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      req.BackendName,
 		ProfileName:   req.ProfileName,
@@ -48,31 +88,33 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		RuntimeConfig: req.RuntimeConfig,
 	})
 	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+		return plan, LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
 	}
 	plan.Environment, err = resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
 	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1}, err
+		return plan, LLMAgentRunResult{ExitCode: 1}, err
 	}
 	engine, err := os.Executable()
 	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1}, fmt.Errorf("resolve tool-result engine executable")
+		return plan, LLMAgentRunResult{ExitCode: 1}, fmt.Errorf("resolve tool-result engine executable")
 	}
 	plan, err = prepareDevinToolResultPlan(req, plan, engine)
 	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+		return plan, LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
 	}
 	if a.masker != nil {
 		a.masker.AddEntries(plan.Environment)
 	}
-	acpxAgent := plan.ACPXAgent
-	sessionName := plan.ACPXSessionName
-	if sessionName == "" {
-		sessionName = agentlaunch.ACPXSessionName(req.AgentID)
-	}
+	return plan, LLMAgentRunResult{}, nil
+}
+
+// launchPrompt ensures and configures the session, then starts the prompt
+// process, all inside the launch gate; the caller waits outside it. It reports
+// whether the session was already warm, also when the launch fails.
+func (a *ACPXAgent) launchPrompt(ctx context.Context, req LLMAgentRunRequest, plan agentlaunch.LaunchPlan, sessionName string) (*acpxPromptProcess, bool, error) {
 	var warm bool
 	var promptProcess *acpxPromptProcess
-	err = req.LaunchGate.launch(ctx, func() error {
+	err := req.LaunchGate.launch(ctx, func() error {
 		warm = a.hasSeenSession(sessionName) || a.sessionExists(ctx, req.ProjectRoot, req.AgentID, req.Generation, plan)
 		if err := a.ensureSession(ctx, req.AgentID, req.Generation, req.ProjectRoot, plan); err != nil {
 			return err
@@ -84,94 +126,41 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 		promptProcess, err = a.startACPXPrompt(ctx, req, plan)
 		return err
 	})
-	if err != nil {
-		errText, maskedErr := a.boundedProviderFailure(err, req.BackendName)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     errText,
-			Payload: map[string]any{
-				"error": errText,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: errText, WarmUsage: warm, SessionID: sessionName}, maskedErr
-	}
-	a.markSessionSeen(sessionName)
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventStarted,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"mode":       "acpx",
-			"acpx_agent": acpxAgent,
-		},
-	})
+	return promptProcess, warm, err
+}
 
-	output, usage, failureEvidence, err := a.waitACPXPrompt(ctx, req, promptProcess)
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventUsage,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"usage": usage,
-		},
-	})
+// acpxTurn is the identity of one ACPX turn that its events and result share.
+type acpxTurn struct {
+	req       LLMAgentRunRequest
+	base      LLMAgentEvent
+	acpxAgent string
+	warm      bool
+}
 
-	if err != nil {
-		errText := a.maskText(err.Error())
-		maskedErr := maskedError{message: errText, err: err}
+func (t acpxTurn) result(exitCode int, output string, usage LLMAgentUsage) LLMAgentRunResult {
+	return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: usage, WarmUsage: t.warm, SessionID: t.base.SessionID}
+}
+
+// completeRun maps the prompt's outcome to the run result and its completed
+// event: an error (with only a classifiable provider-unavailable diagnostic as
+// output), a quota message printed by a successful turn, or success.
+func (a *ACPXAgent) completeRun(ctx context.Context, turn acpxTurn, output acpxOutput, usage LLMAgentUsage, failureEvidence string, runErr error) (LLMAgentRunResult, error) {
+	sink := turn.req.EventSink
+	if runErr != nil {
+		errText := a.maskText(runErr.Error())
 		resultOutput := ""
-		if _, diagnostic := providersignal.ClassifyProviderUnavailable(a.maskText(failureEvidence), req.BackendName); diagnostic != "" {
+		if _, diagnostic := providersignal.ClassifyProviderUnavailable(a.maskText(failureEvidence), turn.req.BackendName); diagnostic != "" {
 			resultOutput = diagnostic
 		}
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     errText,
-			Payload: map[string]any{
-				"error": errText,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: resultOutput, Usage: usage, WarmUsage: warm, SessionID: sessionName}, maskedErr
+		emitLLMAgentFailed(ctx, sink, turn.base, errText)
+		return turn.result(1, resultOutput, usage), maskedError{message: errText, err: runErr}
 	}
-
-	if qe := providersignal.DetectQuotaExhaustion(output.Text, acpxAgent); qe != nil {
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     qe.Message,
-			Payload: map[string]any{
-				"exit_code": 1,
-				"quota":     true,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: output.Text, Usage: usage, WarmUsage: warm, SessionID: sessionName}, nil
+	if qe := providersignal.DetectQuotaExhaustion(output.Text, turn.acpxAgent); qe != nil {
+		emitLLMAgentQuotaExhausted(ctx, sink, turn.base, qe.Message)
+		return turn.result(1, output.Text, usage), nil
 	}
-
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventCompleted,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"exit_code": 0,
-		},
-	})
-	return LLMAgentRunResult{ExitCode: 0, Output: output.Text, Usage: usage, WarmUsage: warm, SessionID: sessionName}, nil
+	emitLLMAgentExited(ctx, sink, turn.base, 0)
+	return turn.result(0, output.Text, usage), nil
 }
 
 func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
