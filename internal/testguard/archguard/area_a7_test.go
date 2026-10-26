@@ -14,12 +14,6 @@ var areaA7 = Area{
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/ops/init_project.go", Func: "InitProject"}, Ceiling: 229},
-		{Key: Key{File: "internal/tui/update.go", Func: "Model.Update"}, Ceiling: 196},
-		{Key: Key{File: "internal/tui/update.go", Func: "Model.executeInlineAction"}, Ceiling: 108},
-		{Key: Key{File: "internal/tui/view.go"}, Ceiling: 978},
-		{Key: Key{File: "internal/tui/view.go", Func: "Model.View"}, Ceiling: 106},
-		{Key: Key{File: "internal/tui/view.go", Func: "Model.renderAgentPanel"}, Ceiling: 157},
-		{Key: Key{File: "internal/tui/view.go", Func: "Model.renderTaskPanel"}, Ceiling: 208},
 	},
 	S2: []S2Entry{},
 }

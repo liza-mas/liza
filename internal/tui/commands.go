@@ -219,9 +219,12 @@ func recentlySpawnedAgentPIDs(spawned []commands.SpawnedAgent) []int {
 	return pids
 }
 
-// tickCmd returns a tea.Cmd that fires a TickMsg after 10 seconds.
+// tickInterval is the poll period for anomaly checks and heartbeat refresh.
+const tickInterval = 10 * time.Second
+
+// tickCmd returns a tea.Cmd that fires a TickMsg after tickInterval.
 func tickCmd() tea.Cmd {
-	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }
@@ -354,12 +357,15 @@ func stopSystemCmd(projectRoot string) tea.Cmd {
 	}
 }
 
+// terminateWait bounds how long terminateAgentCmd waits for the agent process to stop.
+const terminateWait = 5 * time.Second
+
 // terminateAgentCmd stops an agent process before removing its state entry.
 // Uses force=true and allowRunningPID=true since the TUI is an interactive context.
 // Returns CmdResultMsg with result.
 func terminateAgentCmd(projectRoot, agentID string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := terminateAgent(projectRoot, agentID, true, true, "terminated via TUI", 5*time.Second)
+		_, err := terminateAgent(projectRoot, agentID, true, true, "terminated via TUI", terminateWait)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("terminate %s: %v", agentID, err)}
 		}

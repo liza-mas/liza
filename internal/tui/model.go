@@ -36,6 +36,22 @@ const (
 	InlineActionTerminateConfirm              // t (phase 2) — collecting y/n confirmation
 )
 
+// isConfirmation reports whether the action collects a y/n answer, accepted as
+// a single keypress.
+func (a InlineAction) isConfirmation() bool {
+	return a == InlineActionStopConfirm || a == InlineActionTerminateConfirm
+}
+
+// hasCompletions reports whether Tab cycles completion candidates for the action.
+func (a InlineAction) hasCompletions() bool {
+	switch a {
+	case InlineActionSpawn, InlineActionSpawnWith, InlineActionSpawnCLI, InlineActionTerminate:
+		return true
+	default:
+		return false
+	}
+}
+
 // rolesMsg carries loaded role metadata and terminal states from pipeline config.
 type rolesMsg struct {
 	Roles           []string
@@ -128,7 +144,7 @@ func (e errMsg) Error() string { return e.err.Error() }
 // anomaly alerts, and blackboard anomalies into a single chronological list.
 type ActivityEntry struct {
 	Timestamp time.Time
-	Source    string // "log", "alert", "anomaly"
+	Source    ActivityKind
 	Agent     string // empty for alerts/anomalies
 	Action    string
 	Task      string // empty if not task-specific
