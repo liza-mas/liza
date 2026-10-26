@@ -457,7 +457,8 @@ Example:
 	},
 }
 
-func init() {
+// registerTaskDependencyCommands registers the task dependency repair commands; the single init in cmd_task.go calls it in the original registration order.
+func registerTaskDependencyCommands() {
 	for _, cmd := range []*cobra.Command{supersedeTaskCmd, retargetDependencyCmd, narrowInheritedDependenciesCmd, applyDependencyRepairCmd, repairSupersededDependenciesCmd} {
 		addLifecycleFlags(cmd)
 	}

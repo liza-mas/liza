@@ -549,4 +549,6 @@ func init() {
 
 	// Start command flags
 	startCmd.Flags().String("reason", "", "optional reason for starting the system")
+
+	registerSystemInspectCommands()
 }

@@ -294,7 +294,8 @@ Disposition values:
 	},
 }
 
-func init() {
+// registerTaskRecordCommands registers the task record commands; the single init in cmd_task.go calls it in the original registration order.
+func registerTaskRecordCommands() {
 	addLifecycleFlags(setTaskOutputCmd)
 	rootCmd.AddCommand(writeCheckpointCmd)
 	rootCmd.AddCommand(setTaskOutputCmd)

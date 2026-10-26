@@ -269,7 +269,8 @@ Examples:
 	},
 }
 
-func init() {
+// registerSystemInspectCommands registers the system inspection commands; the single init in cmd_system.go calls it in the original registration order.
+func registerSystemInspectCommands() {
 	rootCmd.AddCommand(getCmd)
 	rootCmd.AddCommand(getTasksCmd)
 	rootCmd.AddCommand(statusCmd)

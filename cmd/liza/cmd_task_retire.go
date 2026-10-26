@@ -183,7 +183,8 @@ in MERGED state cannot be deleted by default (as they represent integrated work)
 	},
 }
 
-func init() {
+// registerTaskRetirementCommands registers the task retirement commands; the single init in cmd_task.go calls it in the original registration order.
+func registerTaskRetirementCommands() {
 	addLifecycleFlags(cancelTaskCmd)
 	rootCmd.AddCommand(cancelTaskCmd)
 	rootCmd.AddCommand(reconcileMergedCmd)

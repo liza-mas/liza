@@ -387,7 +387,18 @@ Example:
 	},
 }
 
+// init registers every task command family in the order they were registered
+// before the families moved to their own files.
 func init() {
+	registerTaskAuthoringCommands()
+	registerTaskDependencyCommands()
+	registerTaskRetirementCommands()
+	registerTaskBlockedCommands()
+	registerTaskRecordCommands()
+}
+
+// registerTaskAuthoringCommands registers claim-task, add-task and add-tasks.
+func registerTaskAuthoringCommands() {
 	addLifecycleFlags(claimTaskCmd)
 	rootCmd.AddCommand(claimTaskCmd)
 	rootCmd.AddCommand(addTaskCmd)

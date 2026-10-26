@@ -548,7 +548,8 @@ Requirements:
 	},
 }
 
-func init() {
+// registerTaskBlockedCommands registers the blocked-task recovery commands; the single init in cmd_task.go calls it in the original registration order.
+func registerTaskBlockedCommands() {
 	for _, cmd := range []*cobra.Command{unblockTaskCmd, assessHypothesisExhaustedCmd, markBlockedCmd, assessBlockedCmd} {
 		addLifecycleFlags(cmd)
 	}
