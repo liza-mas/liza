@@ -8,36 +8,38 @@ sites and the reconciliation of the plan's K7 vocabulary rows (`a7-k7`). Source 
 ## Coding HEAD
 
 - Integration HEAD at claim (A1, A3–A6 delivered; A7 Tasks 2–10 merged, the last being `f71ac787f`): `f71ac787f938db5417c24a2b509af0edd16b75b9`.
-- The tables describe the production tree of the code commit `d36ca99a346dac5fbc1f1f0b522a7cad5cf78a78`, committed on top of that HEAD; line numbers are that tree's (the inventory and its manifest are added by the commit after it, which edits no Go file). Table 2 is derived from `git diff f71ac787f d36ca99a3 -- cmd internal` restricted to non-test files.
-- No oracle file, fixture or golden is added or edited by this task (`git diff --stat f71ac787f d36ca99a3 -- internal/oracle` is empty): every substitution keeps its value, so no oracle-first checkpoint is needed.
-- Production files changed by this task: 81, all inside the five A7 packages; no file of `internal/alerts`, `internal/errors`, `internal/ops`, `internal/models` or any other owner package changes (table 6).
+- The tables describe the production tree of the code commit `bd43a89e5`, committed on top of that HEAD; line numbers are that tree's (the inventory and its manifest are added by the commit after it, which edits no Go file). Table 2 is derived from `git diff f71ac787f bd43a89e5 -- cmd internal` restricted to non-test files.
+- No oracle file, fixture or golden is added or edited by this task (`git diff --stat f71ac787f bd43a89e5 -- internal/oracle` is empty): every substitution keeps its value, so no oracle-first checkpoint is needed.
+- Production files changed by this task: 83, all inside the five A7 packages; no file of `internal/alerts`, `internal/errors`, `internal/ops`, `internal/models` or any other owner package changes (table 6).
 
 ## Method
 
-1. File list: the 126 non-test files of the five A7 packages (`cmd/liza`, `internal/commands`, `internal/interactive`, `internal/jsonout`, `internal/tui`) that exist at the run start `96c9ad69a` (area partition) plus the 53 files the A7 tasks created (names and creating task in table 1): 179 production files. The set is not a glob: the generator asserts that (partition at `96c9ad69a` − deleted) ∪ (added by `git diff --name-status 96c9ad69a..d36ca99a3`) equals the tree's non-test files of the five packages, and fails otherwise. `*_test.go` files, `internal/ops/init_project.go` (out of scope) and the 5 files of the adoption-only packages `internal/alerts` and `internal/errors` are outside table 1; those files are scanned for the adoption sites of table 6 and are not edited.
-2. Every string, integer, float and character literal of those files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite element or field, map key or index, call argument with its argument position, declaration…): **5860** literals at this tree.
+1. File list: the 126 non-test files of the five A7 packages (`cmd/liza`, `internal/commands`, `internal/interactive`, `internal/jsonout`, `internal/tui`) that exist at the run start `96c9ad69a` (area partition) plus the 53 files the A7 tasks created (names and creating task in table 1): 179 production files. The set is not a glob: the generator asserts that (partition at `96c9ad69a` − deleted) ∪ (added by `git diff --name-status 96c9ad69a..bd43a89e5`) equals the tree's non-test files of the five packages, and fails otherwise. `*_test.go` files, `internal/ops/init_project.go` (out of scope) and the 5 files of the adoption-only packages `internal/alerts` and `internal/errors` are outside table 1; those files are scanned for the adoption sites of table 6 and are not edited.
+2. Every string, integer, float and character literal of those files was extracted with a `go/parser` scan (import paths and struct tags excluded) with its syntactic context (comparison, `case`, composite element or field, map key or index, call argument with its argument position, declaration…): **5834** literals at this tree.
 3. Each literal was read at its use site. Same-value, same-meaning constants of the owner packages (`models`, `roles`, `pipeline`, `ops`, `alerts`, `errors`, `scipsearch`, `toolchain`, `procscan`, `interactive` and the A7 packages themselves) were matched by value; a match of the same meaning is adopted (R1). Same-value constants of a different meaning are false friends (table 4).
 4. A literal that is finite control-flow vocabulary, or a repeated or unexplained magic value, without an owner is named in its A7 concern (R4), or — when the owner package keeps the same spelling unexported or unnamed — named in A7 beside its use without editing the owner (R3, table 5). A finite set that decides control flow or crosses a boundary as a closed vocabulary is typed (R2).
 5. Every remaining literal is classified (R5) with a reason in table 3; the generator raises on a literal it cannot place, so none is unclassified or deferred. Role names, tool and provider identities, operation names and configured commands stay dynamic (ADR-0045, table 9).
-6. Completeness check: the scan of the committed tree yields 5860 rows; each is a row of table 3 (5561 retained, grouped by file and reason) or part of a constant or variable declaration (299 rows, tables 2b and 3b).
+6. Completeness check: the scan of the committed tree yields 5834 rows; each is a row of table 3 (5492 retained, grouped by file and reason) or part of a constant or variable declaration (342 rows, tables 2b and 3b).
 
 Rules: **R1** adopt an existing owner constant or type; **R2** type a finite set; **R3** name in A7 a value whose owner keeps it unexported or unnamed; **R4** name an unowned value in its A7 concern; **R5** classify retained literal data or a dynamic identity with a reason.
+Fixed branch selectors (a literal compared, switched on, matched as a prefix or suffix, or probed in text so that the branch taken depends on it) are named (R4) in the concern that owns the branch, even where a text function such as `strings.HasSuffix` or `strings.Contains` carries them: the status-color affixes of `tui/styles.go`, the cmux screen probes and reference kinds, the Windows shell selector, the stop-guard command-line tokens, the environment `no` spelling, the lock-timeout message fragments, the query path separator and the flag-syntax prefixes. R5 keeps only the delimiters of text being parsed or composed (list, line and key=value separators, quote and path syntax), frozen flag and command spellings, external-tool vocabulary, display text and the provider, role, tool and operation identities that stay dynamic (ADR-0045); each row of table 3 states which of these it is.
+
 Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **typed** (defined type, one constant per value), **helper** (new function or variable that replaces repeated literals), **classified** (retained literal data or dynamic identity, with reason).
 
 ## Summary
 
 | Outcome | Count |
 |---|---|
-| Substitution sites in this task (table 2: adopted, named, typed or helper use sites) | 301 |
-| Declarations added by this task (table 2b) | 138 = 129 constants, 4 types, 1 variable, 4 helper functions |
+| Substitution sites in this task (table 2: adopted, named, typed or helper use sites) | 363 |
+| Declarations added by this task (table 2b) | 181 = 172 constants, 4 types, 1 variable, 4 helper functions |
 | Constants added inside function bodies by this task (counted in table 1 "named constants") | 0 |
 | Pre-existing named constants in A7 files (table 3b) | 204 |
-| Retained literals classified R5 (table 3, grouped by file and reason) | 5561 |
-| Literals scanned at this tree | 5860 = 5561 retained (table 3) + 299 inside declarations of named constants and variables (tables 2b and 3b) |
+| Retained literals classified R5 (table 3, grouped by file and reason) | 5492 |
+| Literals scanned at this tree | 5834 = 5492 retained (table 3) + 342 inside declarations of named constants and variables (tables 2b and 3b) |
 | Unclassified / deferred | 0 |
 | New defined types | 4 (`dashboardSectionFormat`, `inspectQueryRoot`, `computedField`, `worktreeState`) |
 | BLOCKED findings against A1, A3 or A6 closure (prospective symbol not delivered) | 0 |
-| Owner gaps recorded (table 5) | see table 5 (0 rows) |
+| Owner gaps recorded (table 5) | 17 rows |
 
 ## 1. A7 files
 
@@ -59,7 +61,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `cmd/liza/cmd_human_note.go` | area partition | 76 | 17 | 0 | 0 | 0 |
 | `cmd/liza/cmd_index_refresh.go` | area partition | 41 | 9 | 0 | 0 | 0 |
 | `cmd/liza/cmd_init.go` | area partition | 741 | 257 | 6 | 0 | 0 |
-| `cmd/liza/cmd_launch.go` | area partition | 295 | 154 | 4 | 0 | 0 |
+| `cmd/liza/cmd_launch.go` | area partition | 298 | 153 | 6 | 1 | 1 |
 | `cmd/liza/cmd_plan_check.go` | area partition | 242 | 71 | 1 | 0 | 0 |
 | `cmd/liza/cmd_provision.go` | area partition | 83 | 26 | 1 | 1 | 1 |
 | `cmd/liza/cmd_reaffirm_proof.go` | area partition | 104 | 20 | 3 | 1 | 1 |
@@ -86,17 +88,17 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `cmd/liza/cmd_tool_result_codex.go` | area partition | 54 | 18 | 0 | 0 | 2 |
 | `cmd/liza/cmd_tool_result_run.go` | area partition | 53 | 30 | 0 | 0 | 0 |
 | `cmd/liza/cmd_tool_result_store.go` | private, Task 3 (`d7321e525`) | 78 | 16 | 0 | 0 | 4 |
-| `cmd/liza/cmd_toolchain.go` | area partition | 378 | 124 | 5 | 0 | 0 |
+| `cmd/liza/cmd_toolchain.go` | area partition | 378 | 123 | 6 | 0 | 0 |
 | `cmd/liza/cmd_usage.go` | area partition | 116 | 42 | 1 | 0 | 0 |
 | `cmd/liza/cmd_validate_payload.go` | area partition | 110 | 28 | 0 | 0 | 0 |
 | `cmd/liza/cmd_worktree.go` | area partition | 195 | 24 | 1 | 0 | 0 |
-| `cmd/liza/completion_values.go` | area partition | 226 | 19 | 4 | 0 | 0 |
-| `cmd/liza/launch_build.go` | private, Task 4 (`7c9291a91`) | 249 | 136 | 8 | 4 | 4 |
-| `cmd/liza/launch_exec.go` | private, Task 4 (`7c9291a91`) | 396 | 126 | 4 | 0 | 8 |
+| `cmd/liza/completion_values.go` | area partition | 229 | 19 | 5 | 1 | 1 |
+| `cmd/liza/launch_build.go` | private, Task 4 (`7c9291a91`) | 249 | 133 | 11 | 4 | 4 |
+| `cmd/liza/launch_exec.go` | private, Task 4 (`7c9291a91`) | 425 | 118 | 24 | 14 | 22 |
 | `cmd/liza/launch_pairing_seed.go` | private, Task 4 (`7c9291a91`) | 104 | 13 | 2 | 2 | 2 |
 | `cmd/liza/launch_resolve.go` | private, Task 4 (`7c9291a91`) | 224 | 56 | 25 | 1 | 7 |
 | `cmd/liza/lifecycle.go` | area partition | 160 | 25 | 1 | 0 | 0 |
-| `cmd/liza/main.go` | area partition | 379 | 97 | 3 | 1 | 2 |
+| `cmd/liza/main.go` | area partition | 387 | 94 | 9 | 5 | 6 |
 | `cmd/liza/rbac.go` | area partition | 116 | 12 | 0 | 0 | 0 |
 | `cmd/liza/supervisor_logs.go` | area partition | 144 | 17 | 3 | 2 | 2 |
 | `internal/commands/add_task.go` | area partition | 97 | 4 | 0 | 0 | 0 |
@@ -118,7 +120,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/commands/doc.go` | area partition | 3 | 0 | 0 | 0 | 0 |
 | `internal/commands/format_helpers.go` | area partition | 70 | 12 | 3 | 4 | 3 |
 | `internal/commands/handoff.go` | area partition | 25 | 3 | 0 | 0 | 0 |
-| `internal/commands/init.go` | area partition | 509 | 50 | 3 | 0 | 0 |
+| `internal/commands/init.go` | area partition | 516 | 50 | 5 | 2 | 2 |
 | `internal/commands/init_contract_placement.go` | private, Task 6 (`2c289761f`) | 474 | 86 | 0 | 0 | 9 |
 | `internal/commands/init_integration_branch.go` | private, Task 5 (`e11874725`) | 71 | 14 | 0 | 0 | 0 |
 | `internal/commands/init_mas_inputs.go` | private, Task 5 (`e11874725`) | 206 | 32 | 0 | 0 | 1 |
@@ -130,7 +132,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/commands/inspect.go` | area partition | 283 | 54 | 9 | 0 | 0 |
 | `internal/commands/inspect_agents.go` | area partition | 362 | 57 | 6 | 0 | 0 |
 | `internal/commands/inspect_anomalies.go` | area partition | 175 | 26 | 0 | 0 | 1 |
-| `internal/commands/inspect_field.go` | area partition | 408 | 77 | 42 | 0 | 0 |
+| `internal/commands/inspect_field.go` | area partition | 408 | 70 | 49 | 0 | 0 |
 | `internal/commands/inspect_metrics.go` | area partition | 329 | 42 | 2 | 0 | 0 |
 | `internal/commands/inspect_task_assembly.go` | private, Task 7 (`bd42d1b34`) | 242 | 13 | 5 | 5 | 5 |
 | `internal/commands/inspect_task_render.go` | private, Task 7 (`bd42d1b34`) | 420 | 158 | 8 | 0 | 0 |
@@ -148,12 +150,12 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/commands/prompt_vocabulary.go` | private, this task (Task 11) | 8 | 2 | 0 | 2 | 2 |
 | `internal/commands/provider_activation.go` | area partition | 408 | 52 | 0 | 0 | 1 |
 | `internal/commands/providers.go` | area partition | 131 | 24 | 0 | 0 | 1 |
-| `internal/commands/recover_agent.go` | area partition | 91 | 18 | 1 | 0 | 0 |
+| `internal/commands/recover_agent.go` | area partition | 91 | 16 | 3 | 0 | 0 |
 | `internal/commands/recover_task.go` | area partition | 76 | 16 | 0 | 0 | 0 |
 | `internal/commands/rejection_rca.go` | area partition | 73 | 7 | 0 | 0 | 0 |
 | `internal/commands/release_claim.go` | area partition | 32 | 3 | 0 | 0 | 0 |
 | `internal/commands/repair_acceptance_commits.go` | area partition | 83 | 18 | 0 | 0 | 0 |
-| `internal/commands/repair_agent_pool.go` | area partition | 375 | 40 | 0 | 0 | 0 |
+| `internal/commands/repair_agent_pool.go` | area partition | 379 | 40 | 1 | 1 | 1 |
 | `internal/commands/repair_agent_pool_capacity.go` | private, Task 8 (`e8da46d69`) | 622 | 34 | 0 | 0 | 4 |
 | `internal/commands/repair_agent_pool_render.go` | private, Task 8 (`e8da46d69`) | 129 | 43 | 0 | 0 | 0 |
 | `internal/commands/repair_agent_pool_spawn.go` | private, Task 8 (`e8da46d69`) | 83 | 10 | 0 | 0 | 0 |
@@ -177,7 +179,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/commands/status_types.go` | private, Task 7 (`bd42d1b34`) | 157 | 0 | 0 | 0 | 0 |
 | `internal/commands/status_vocabulary.go` | private, Task 7 (`bd42d1b34`) | 53 | 15 | 0 | 4 | 15 |
 | `internal/commands/stop.go` | area partition | 21 | 3 | 0 | 0 | 0 |
-| `internal/commands/stop_guard.go` | area partition | 187 | 39 | 3 | 3 | 5 |
+| `internal/commands/stop_guard.go` | area partition | 201 | 38 | 9 | 11 | 13 |
 | `internal/commands/submit_review.go` | area partition | 54 | 10 | 0 | 0 | 0 |
 | `internal/commands/submit_verdict.go` | area partition | 65 | 20 | 1 | 1 | 1 |
 | `internal/commands/supersede_task.go` | area partition | 52 | 6 | 0 | 0 | 0 |
@@ -205,14 +207,14 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/interactive/init_wizard.go` | area partition | 294 | 63 | 0 | 0 | 2 |
 | `internal/interactive/post_init.go` | area partition | 44 | 6 | 0 | 0 | 0 |
 | `internal/interactive/tty.go` | area partition | 18 | 0 | 0 | 0 | 0 |
-| `internal/jsonout/classify.go` | area partition | 115 | 35 | 0 | 0 | 0 |
+| `internal/jsonout/classify.go` | area partition | 122 | 35 | 2 | 3 | 3 |
 | `internal/jsonout/classify_slots.go` | private, Task 2 (`c6dcfdf8c`) | 206 | 50 | 0 | 0 | 16 |
 | `internal/jsonout/envelope.go` | area partition | 64 | 1 | 0 | 0 | 0 |
 | `internal/tui/activity.go` | private, Task 10 (`f71ac787f`) | 159 | 16 | 0 | 0 | 9 |
 | `internal/tui/commands.go` | area partition | 421 | 34 | 3 | 0 | 2 |
 | `internal/tui/keymap.go` | area partition | 98 | 33 | 0 | 0 | 0 |
 | `internal/tui/model.go` | area partition | 375 | 12 | 5 | 5 | 23 |
-| `internal/tui/styles.go` | area partition | 287 | 52 | 22 | 0 | 0 |
+| `internal/tui/styles.go` | area partition | 300 | 52 | 31 | 9 | 9 |
 | `internal/tui/update.go` | area partition | 201 | 3 | 0 | 0 | 2 |
 | `internal/tui/update_inline.go` | private, Task 10 (`f71ac787f`) | 151 | 16 | 1 | 1 | 1 |
 | `internal/tui/update_keys.go` | private, Task 10 (`f71ac787f`) | 227 | 21 | 1 | 0 | 0 |
@@ -223,7 +225,7 @@ Outcome vocabulary: **adopted**, **named** (new constant, value unchanged), **ty
 | `internal/tui/view_overlays.go` | private, Task 10 (`f71ac787f`) | 98 | 21 | 1 | 0 | 1 |
 | `internal/tui/view_tasks.go` | private, Task 10 (`f71ac787f`) | 286 | 55 | 3 | 1 | 13 |
 
-Totals: 179 files, 29800 lines, 5860 literals, 301 substitution sites, 138 declarations added.
+Totals: 179 files, 29888 lines, 5834 literals, 363 substitution sites, 181 declarations added.
 
 ## 2. Adopted, named and typed (substitutions of this task)
 
@@ -245,10 +247,12 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `cmd/liza/cmd_init.go:254` | V12 | R1 | adopted | `interactive.WizardModePairing` | `"pairing"` | A7 `internal/interactive/init_wizard.go` |
 | `cmd/liza/cmd_init.go:290` | V12 | R1 | adopted | `interactive.WizardModeFull` | `"full"` | A7 `internal/interactive/init_wizard.go` |
 | `cmd/liza/cmd_init.go:731` | V12 | R1 | adopted | `scipsearch.LanguageGo`, `scipsearch.LanguageTypeScript`, `scipsearch.LanguagePython` | `"go"`, `"typescript"`, `"python"` | `scipsearch/languages.go` |
-| `cmd/liza/cmd_launch.go:113` | V4 | R1 | adopted | `roles.RoleTypeDoer` | `"doer"` | A1 `roles/roles.go` |
-| `cmd/liza/cmd_launch.go:123` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
-| `cmd/liza/cmd_launch.go:220` | V4 | R1 | adopted | `roles.RoleTypeDoer` | `"doer"` | A1 `roles/roles.go` |
-| `cmd/liza/cmd_launch.go:230` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
+| `cmd/liza/cmd_launch.go:73` | V12 | R4 | named | `cliFlag` | `"--cli"` | A7 `cmd/liza/cmd_launch.go` |
+| `cmd/liza/cmd_launch.go:116` | V4 | R1 | adopted | `roles.RoleTypeDoer` | `"doer"` | A1 `roles/roles.go` |
+| `cmd/liza/cmd_launch.go:126` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
+| `cmd/liza/cmd_launch.go:180` | V12 | R4 | named | `cliFlag` | `"--cli"` | A7 `cmd/liza/cmd_launch.go` |
+| `cmd/liza/cmd_launch.go:223` | V4 | R1 | adopted | `roles.RoleTypeDoer` | `"doer"` | A1 `roles/roles.go` |
+| `cmd/liza/cmd_launch.go:233` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
 | `cmd/liza/cmd_plan_check.go:86` | V4 | R1 | adopted | `roles.RoleTypeOrchestrator` | `"orchestrator"` | A1 `roles/roles.go` |
 | `cmd/liza/cmd_provision.go:71` | V10 | R4 | named | `provisionInstanceIDWidth` | `16` | A7 `cmd/liza/cmd_provision.go` |
 | `cmd/liza/cmd_reaffirm_proof.go:62` | V4 | R1 | adopted | `roles.RoleTypeOrchestrator` | `"orchestrator"` | A1 `roles/roles.go` |
@@ -267,6 +271,7 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `cmd/liza/cmd_task.go:225` | V10 | R4 | named | `defaultTaskPriority` | `1` | A7 `cmd/liza/cmd_task.go` |
 | `cmd/liza/cmd_task_blocked.go:478` | V10 | R3 | named | `maxBlockedQuestions` | `3` | A7 `cmd/liza/cmd_task_blocked.go`; owner keeps it unexported or unnamed (table 5) |
 | `cmd/liza/cmd_task_dependencies.go:211` | V12 | R3 | named | `retargetRejectedDetailKey`, `retargetRejectedAction` | `"diagnostic_action"`, `"retarget_dependency_rejected"` | A7 `cmd/liza/cmd_task_dependencies.go`; owner keeps it unexported or unnamed (table 5) |
+| `cmd/liza/cmd_toolchain.go:203` | V12 | R4 | named | `toolSelectorAll` | `"all"` | A7 `cmd/liza/completion_values.go` |
 | `cmd/liza/cmd_toolchain.go:225` | V12 | R1 | adopted | `toolchain.AgentToolsModeAuto`, `toolchain.AgentToolsModeSkip`, `toolchain.AgentToolsModeForce` | `"auto"`, `"skip"`, `"force"` | `toolchain/configure.go` |
 | `cmd/liza/cmd_toolchain.go:317` | V12 | R1 | adopted | `commands.ContractActionGlobal` | `"global"` | A7 `internal/commands/init_contract_placement.go` |
 | `cmd/liza/cmd_toolchain.go:337` | V12 | R1 | adopted | `toolchain.ProfileLean` | `"lean"` | `toolchain/catalog.go` |
@@ -274,22 +279,46 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `cmd/liza/cmd_toolchain.go:343` | V12 | R1 | adopted | `toolchain.ProfileFull` | `"full"` | `toolchain/catalog.go` |
 | `cmd/liza/cmd_usage.go:107` | V7 | R4 | named | `commands.InspectFormatTable` | `"table"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `cmd/liza/cmd_worktree.go:162` | V4 | R1 | adopted | `roles.RoleTypeReviewer` | `"reviewer"` | A1 `roles/roles.go` |
-| `cmd/liza/completion_values.go:123` | V7 | R4 | named | `commands.InspectTargetTasks` | `"tasks"` | A7 `internal/commands/inspect_vocabulary.go` |
-| `cmd/liza/completion_values.go:124` | V7 | R4 | named | `commands.InspectTargetAgents` | `"agents"` | A7 `internal/commands/inspect_vocabulary.go` |
-| `cmd/liza/completion_values.go:125` | V7 | R4 | named | `commands.InspectTargetMetrics` | `"metrics"` | A7 `internal/commands/inspect_vocabulary.go` |
-| `cmd/liza/completion_values.go:126` | V7 | R4 | named | `commands.InspectTargetAnomalies` | `"anomalies"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `cmd/liza/completion_values.go:45` | V12 | R4 | named | `toolSelectorAll` | `"all"` | A7 `cmd/liza/completion_values.go` |
+| `cmd/liza/completion_values.go:126` | V7 | R4 | named | `commands.InspectTargetTasks` | `"tasks"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `cmd/liza/completion_values.go:127` | V7 | R4 | named | `commands.InspectTargetAgents` | `"agents"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `cmd/liza/completion_values.go:128` | V7 | R4 | named | `commands.InspectTargetMetrics` | `"metrics"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `cmd/liza/completion_values.go:129` | V7 | R4 | named | `commands.InspectTargetAnomalies` | `"anomalies"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `cmd/liza/launch_build.go:24` | V9 | R4 | named | `weztermSplitRight` | `"--right"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:26` | V9 | R4 | named | `weztermSplitBottom` | `"--bottom"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:63` | V9 | R4 | named | `weztermSplitRight` | `"--right"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:65` | V9 | R4 | named | `weztermSplitBottom` | `"--bottom"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:116` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:118` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_build.go:128` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
 | `cmd/liza/launch_build.go:155` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
 | `cmd/liza/launch_build.go:157` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
-| `cmd/liza/launch_exec.go:145` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
-| `cmd/liza/launch_exec.go:147` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
-| `cmd/liza/launch_exec.go:214` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
-| `cmd/liza/launch_exec.go:216` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_build.go:168` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_build.go:191` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:167` | V9 | R4 | named | `cmuxRefWorkspace` | `"workspace"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:174` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_exec.go:176` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_exec.go:188` | V9 | R4 | named | `cmuxRefSurface` | `"surface"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:195` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:231` | V9 | R4 | named | `cmuxRefWorkspace` | `"workspace"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:243` | V9 | R4 | named | `cmuxSplitRight` | `"right"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_exec.go:245` | V9 | R4 | named | `cmuxSplitDown` | `"down"` | A7 `cmd/liza/launch_build.go` |
+| `cmd/liza/launch_exec.go:257` | V9 | R4 | named | `cmuxRefSurface` | `"surface"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:265` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:298` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:321` | V9 | R4 | named | `cmuxRefSurface` | `"surface"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:342` | V9 | R4 | named | `cmuxKeyEnter` | `"enter"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:373` | V9 | R4 | named | `cmuxHostPickerTitle`, `cmuxHostPickerSubmitHint` | `"Pick host for agent"`, `"enter submit"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:377` | V9 | R4 | named | `cmuxPromptEchoPrefix`, `cmuxWorkingMarker` | `"› "`, `"Working"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:381` | V9 | R4 | named | `cmuxCodexBanner` | `"OpenAI Codex"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:385` | V9 | R4 | named | `cmuxStartingMCPMarker` | `"Starting MCP servers"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:386` | V9 | R4 | named | `cmuxInterruptHint` | `"esc to interrupt"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:387` | V9 | R4 | named | `cmuxWorkingMarker` | `"Working"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:393` | V9 | R4 | named | `cmuxPromptMarker` | `"›"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:398` | V12 | R4 | named | `codexExecutable` | `"codex"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:400` | V12 | R4 | named | `codexExecutable` | `"codex"` | A7 `cmd/liza/launch_exec.go` |
+| `cmd/liza/launch_exec.go:418` | V12 | R3 | named | `goosWindows` | `"windows"` | A7 `cmd/liza/launch_exec.go`; owner keeps it unexported or unnamed (table 5) |
+| `cmd/liza/launch_exec.go:424` | V12 | R4 | named | `posixShellPath` | `"/bin/sh"` | A7 `cmd/liza/launch_exec.go` |
 | `cmd/liza/launch_pairing_seed.go:31` | V9 | R4 | named | `pairingBoardDirMode` | `0o755` | A7 `cmd/liza/launch_pairing_seed.go` |
 | `cmd/liza/launch_pairing_seed.go:35` | V9 | R4 | named | `pairingBoardFileMode` | `0o644` | A7 `cmd/liza/launch_pairing_seed.go` |
 | `cmd/liza/launch_resolve.go:64` | V4 | R1 | adopted | `roles.Orchestrator` | `"orchestrator"` | A1 `roles/roles.go` |
@@ -318,9 +347,15 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `cmd/liza/launch_resolve.go:215` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
 | `cmd/liza/launch_resolve.go:222` | V9 | R4 | named | `pairingReviewerIDPrefix` | `"reviewer-"` | A7 `cmd/liza/launch_resolve.go` |
 | `cmd/liza/lifecycle.go:131` | V5 | R1 | adopted | `ops.LifecycleEffectsNone` | `"none"` | A3–A6 `ops` `ops/lifecycle_result.go` |
-| `cmd/liza/main.go:288` | V12 | R3 | named | `defaultChangedBy` | `"human"` | A7 `cmd/liza/main.go`; owner keeps it unexported or unnamed (table 5) |
-| `cmd/liza/main.go:356` | V10 | R1 | adopted | `lizaerrors.ExitError` | `1` | A1 (adoption only) `errors/errors.go` |
-| `cmd/liza/main.go:377` | V10 | R1 | adopted | `lizaerrors.ExitError` | `1` | A1 (adoption only) `errors/errors.go` |
+| `cmd/liza/main.go:195` | V12 | R4 | named | `jsonFlagToken` | `"--json"` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:235` | V12 | R4 | named | `flagValueDelimiter` | `"="` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:236` | V12 | R4 | named | `longFlagPrefix` | `"--"` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:237` | V12 | R4 | named | `longFlagPrefix` | `"--"` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:243` | V12 | R4 | named | `shortFlagPrefix`, `longFlagPrefix` | `"-"`, `"--"` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:244` | V12 | R4 | named | `shortFlagPrefix` | `"-"` | A7 `cmd/liza/main.go` |
+| `cmd/liza/main.go:296` | V12 | R3 | named | `defaultChangedBy` | `"human"` | A7 `cmd/liza/main.go`; owner keeps it unexported or unnamed (table 5) |
+| `cmd/liza/main.go:364` | V10 | R1 | adopted | `lizaerrors.ExitError` | `1` | A1 (adoption only) `errors/errors.go` |
+| `cmd/liza/main.go:385` | V10 | R1 | adopted | `lizaerrors.ExitError` | `1` | A1 (adoption only) `errors/errors.go` |
 | `cmd/liza/supervisor_logs.go:42` | V10 | R4 | named | `supervisorLogFileMode` | `0o644` | A7 `cmd/liza/supervisor_logs.go` |
 | `cmd/liza/supervisor_logs.go:46` | V10 | R4 | named | `supervisorLogFileMode` | `0o644` | A7 `cmd/liza/supervisor_logs.go` |
 | `cmd/liza/supervisor_logs.go:85` | V10 | R4 | named | `supervisorBootstrapFileMode` | `0o600` | A7 `cmd/liza/supervisor_logs.go` |
@@ -333,9 +368,11 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/commands/format_helpers.go:54` | V7 | R2 | typed | `dashboardFormatKeyValue` | `"kv"` | A7 `internal/commands/format_helpers.go` |
 | `internal/commands/format_helpers.go:58` | V7 | R2 | typed | `dashboardFormatTable` | `"table"` | A7 `internal/commands/format_helpers.go` |
 | `internal/commands/format_helpers.go:62` | V7 | R2 | typed | `dashboardFormatText` | `"text"` | A7 `internal/commands/format_helpers.go` |
-| `internal/commands/init.go:384` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
-| `internal/commands/init.go:427` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
-| `internal/commands/init.go:477` | V4 | R1 | adopted | `roles.RoleTypeDoer`, `roles.RoleTypeReviewer` | `"doer"`, `"reviewer"` | A1 `roles/roles.go` |
+| `internal/commands/init.go:137` | V12 | R4 | named | `sembleMessagePrefix` | `"semble:"` | A7 `internal/commands/init.go` |
+| `internal/commands/init.go:138` | V12 | R4 | named | `sembleMessageLead` | `"semble: "` | A7 `internal/commands/init.go` |
+| `internal/commands/init.go:391` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
+| `internal/commands/init.go:434` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
+| `internal/commands/init.go:484` | V4 | R1 | adopted | `roles.RoleTypeDoer`, `roles.RoleTypeReviewer` | `"doer"`, `"reviewer"` | A1 `roles/roles.go` |
 | `internal/commands/init_mas_state.go:24` | V12 | R3 | named | `circuitBreakerStatusOK` | `"OK"` | A7 `internal/commands/status_vocabulary.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/commands/init_mas_state.go:44` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
 | `internal/commands/init_mistral_contract.go:84` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
@@ -357,15 +394,22 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/commands/inspect_agents.go:317` | V12 | R4 | named | `emptyCell` | `"-"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_agents.go:326` | V12 | R1 | adopted | `processStatusRunning` | `"running"` | A7 `internal/commands/status_vocabulary.go` |
 | `internal/commands/inspect_agents.go:351` | V12 | R4 | named | `emptyCell` | `"-"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:24` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:30` | V7 | R2 | typed | `inspectRootVersion` | `"version"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:47` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:73` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:80` | V12 | R4 | named | `sprintTimelinePath` | `"sprint.timeline"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:95` | V7/V12 | R4 | named | `inspectTagKey`, `tagOmitted` | `"inspect"`, `"-"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:98` | V12 | R4 | named | `yamlTagKey` | `"yaml"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:99` | V12 | R4 | named | `tagOmitted` | `"-"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:187` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:192` | V7 | R2 | typed | `inspectRootTask` | `"task"` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:194` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:211` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:212` | V12 | R4 | named | `taskFieldGenerationDigest` | `"generation_digest"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:213` | V7 | R2 | typed | `inspectRootTask` | `"task"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:215` | V7 | R4 | helper | `isTaskComputedField` | `"transition_id", "age", "time_in_status"` (composed) | A7 `internal/commands/inspect_vocabulary.go` |
+| `internal/commands/inspect_field.go:244` | V12 | R4 | named | `queryPathSeparator` | `"."` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:250` | V7 | R2 | typed | `inspectRootAgent`, `inspectRootTask` | `"agent"`, `"task"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:251` | V7 | R2 | typed | `inspectRootAgent`, `inspectRootTask` | `"agent"`, `"task"` | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/inspect_field.go:256` | V7 | R4 | named | `inspectRootAgents` | `"agents"` | A7 `internal/commands/inspect_vocabulary.go` |
@@ -442,7 +486,10 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/commands/integration_failure_diagnostics.go:146` | V12 | R4 | named | `diagnosticUnknown` | `"unknown"` | A7 `internal/commands/integration_failure_diagnostics.go` |
 | `internal/commands/narrow_inherited_dependencies.go:40` | V12 | R3 | named | `narrowChildActionNarrowed` | `"narrowed"` | A7 `internal/commands/narrow_inherited_dependencies.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/commands/narrow_inherited_dependencies.go:48` | V12 | R3 | named | `narrowChildActionSkipped` | `"skipped"` | A7 `internal/commands/narrow_inherited_dependencies.go`; owner keeps it unexported or unnamed (table 5) |
+| `internal/commands/recover_agent.go:18` | V12 | R1 | adopted | `agentFlagAgentID` | `"--agent-id"` | A7 `internal/commands/repair_agent_pool_start.go` |
+| `internal/commands/recover_agent.go:19` | V12 | R1 | adopted | `agentFlagCLI` | `"--cli"` | A7 `internal/commands/repair_agent_pool_start.go` |
 | `internal/commands/recover_agent.go:75` | V5 | R1 | adopted | `ops.LifecycleSafeActionRequery`, `ops.LifecycleEffectsCommitted` | `"requery"`, `"committed"` | A3–A6 `ops` `ops/lifecycle_result.go` |
+| `internal/commands/repair_agent_pool.go:205` | V12 | R4 | named | `envBooleanNo` | `"no"` | A7 `internal/commands/repair_agent_pool.go` |
 | `internal/commands/setup.go:325` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
 | `internal/commands/setup.go:353` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
 | `internal/commands/setup.go:641` | V12 | R4 | named | `confirmAnswerY` | `"y"` | A7 `internal/commands/prompt_vocabulary.go` |
@@ -452,7 +499,13 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/commands/status_sections.go:99` | V12 | R3 | named | `circuitBreakerStatusOK` | `"OK"` | A7 `internal/commands/status_vocabulary.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/commands/stop_guard.go:59` | V12 | R4 | named | `stopGuardDecisionBlock` | `"block"` | A7 `internal/commands/stop_guard.go` |
 | `internal/commands/stop_guard.go:72` | V12 | R4 | named | `stopGuardKeyBackgroundJobs` | `"background_tasks"` | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:73` | V12 | R4 | named | `jsonNullLiteral` | `"null"` | A7 `internal/commands/stop_guard.go` |
 | `internal/commands/stop_guard.go:91` | V12 | R4 | named | `backgroundJobStatusRunning` | `"running"` | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:128` | V10 | R4 | named | `shellMetacharacters` | `` ";&\|<>`$()\\\n*?[]{}~#!" `` | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:135` | V12 | R4 | named | `windowsExecutableSuffix` | `".exe"` | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:142` | V12 | R4 | named | `flagProjectRootShort`, `flagProjectRoot` | `"-C"`, `"--project-root"` | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:144` | V12 | R4 | named | `flagProjectRootShort`, `flagValueSeparator`, `flagProjectRoot` | `"-C=", "--project-root=", "-v", "--verbose"` (composed) | A7 `internal/commands/stop_guard.go` |
+| `internal/commands/stop_guard.go:145` | V12 | R4 | named | `flagVerboseShort`, `flagVerbose` | `"-v"`, `"--verbose"` | A7 `internal/commands/stop_guard.go` |
 | `internal/commands/submit_verdict.go:46` | V12 | R3 | named | `verdictApproved` | `"APPROVED"` | A7 `internal/commands/submit_verdict.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/commands/usage_report.go:39` | V7 | R4 | helper | `inspectFormats` | `"json", "yaml", "table", "value", ""` (composed) | A7 `internal/commands/inspect_vocabulary.go` |
 | `internal/commands/usage_report.go:177` | V7 | R1 | adopted | `inspectFormatTable` | `"table"` | A7 `internal/commands/inspect_vocabulary.go` |
@@ -490,6 +543,8 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/commands/watch_repair_spawn.go:93` | V12 | R3 | named | `autoRepairLogActionSpawned` | `"auto_repair_agent_spawned"` | A7 `internal/commands/watch_repair_spawn.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/commands/wt_merge.go:97` | V10 | R4 | named | `shortCommitWidth` | `7` | A7 `internal/commands/wt_merge.go` |
 | `internal/commands/wt_merge.go:98` | V10 | R4 | named | `shortCommitWidth` | `7` | A7 `internal/commands/wt_merge.go` |
+| `internal/jsonout/classify.go:106` | V1 | R4 | named | `lockMessageFragment` | `"lock"` | A7 `internal/jsonout/classify.go` |
+| `internal/jsonout/classify.go:107` | V1 | R4 | named | `timeoutMessageFragment`, `timedOutMessageFragment` | `"timeout"`, `"timed out"` | A7 `internal/jsonout/classify.go` |
 | `internal/tui/commands.go:266` | V12 | R3 | named | `commands.OperatorActor` | `"operator"` | A7 `internal/commands/agent_health.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/tui/commands.go:281` | V12 | R3 | named | `commands.OperatorActor` | `"operator"` | A7 `internal/commands/agent_health.go`; owner keeps it unexported or unnamed (table 5) |
 | `internal/tui/commands.go:352` | V12 | R3 | named | `commands.OperatorActor` | `"operator"` | A7 `internal/commands/agent_health.go`; owner keeps it unexported or unnamed (table 5) |
@@ -518,8 +573,17 @@ Derived from `git diff` of the non-test A7 files: each row is a changed line tha
 | `internal/tui/styles.go:54` | V4 | R1 | adopted | `models.TaskStatusAbandoned` | `"ABANDONED"` | A1 `models/task_status.go` |
 | `internal/tui/styles.go:55` | V4 | R1 | adopted | `models.TaskStatusSuperseded` | `"SUPERSEDED"` | A1 `models/task_status.go` |
 | `internal/tui/styles.go:56` | V4 | R1 | adopted | `models.TaskStatusDraft` | `"DRAFT"` | A1 `models/task_status.go` |
-| `internal/tui/styles.go:147` | V4 | R1 | adopted | `models.AgentStatusIdle` | `"IDLE"` | A1 `models/agent.go` |
-| `internal/tui/styles.go:148` | V4 | R1 | adopted | `models.AgentStatusWaiting` | `"WAITING"` | A1 `models/agent.go` |
+| `internal/tui/styles.go:128` | V12 | R4 | named | `statusSuffixPartiallyApproved` | `"_PARTIALLY_APPROVED"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:130` | V12 | R4 | named | `statusSuffixApproved` | `"_APPROVED"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:132` | V12 | R4 | named | `statusSuffixRejected` | `"_REJECTED"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:134` | V12 | R4 | named | `statusSuffixPlanning` | `"_PLANNING"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:136` | V12 | R4 | named | `statusSuffixToReview` | `"_TO_REVIEW"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:138` | V12 | R4 | named | `statusSuffixReadyForReview` | `"_READY_FOR_REVIEW"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:147` | V12 | R4 | named | `statusPrefixImplementing` | `"IMPLEMENTING_"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:149` | V12 | R4 | named | `statusPrefixReviewing` | `"REVIEWING_"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:151` | V12 | R4 | named | `statusPrefixDraft` | `"DRAFT_"` | A7 `internal/tui/styles.go` |
+| `internal/tui/styles.go:160` | V4 | R1 | adopted | `models.AgentStatusIdle` | `"IDLE"` | A1 `models/agent.go` |
+| `internal/tui/styles.go:161` | V4 | R1 | adopted | `models.AgentStatusWaiting` | `"WAITING"` | A1 `models/agent.go` |
 | `internal/tui/update_inline.go:150` | V8 | R4 | named | `inlineConfirmYes` | `"y"` | A7 `internal/tui/update_inline.go` |
 | `internal/tui/update_keys.go:169` | V8 | R4 | named | `inlineConfirmYes` | `"y"` | A7 `internal/tui/update_inline.go` |
 | `internal/tui/view.go:67` | V10 | R4 | named | `headerFooterHeight` | `2` | A7 `internal/tui/view.go` |
@@ -543,6 +607,7 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `cmd/liza/cmd_agent.go:33` | constant | V12 | R3 | `contractKeyNone` |  | `"none"` |
 | `cmd/liza/cmd_config.go:170` | constant | V12 | R4 | `boolArgTrue` |  | `"true"` |
 | `cmd/liza/cmd_config.go:171` | constant | V12 | R4 | `boolArgFalse` |  | `"false"` |
+| `cmd/liza/cmd_launch.go:14` | constant | V12 | R4 | `cliFlag` |  | `"--cli"` |
 | `cmd/liza/cmd_provision.go:17` | constant | V10 | R4 | `provisionInstanceIDWidth` |  | `16` |
 | `cmd/liza/cmd_reaffirm_proof.go:87` | constant | V10 | R4 | `shortObjectIDWidth` |  | `8` |
 | `cmd/liza/cmd_review.go:26` | constant | V12 | R4 | `headRef` |  | `"HEAD"` |
@@ -551,14 +616,33 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `cmd/liza/cmd_task_blocked.go:445` | constant | V10 | R3 | `maxBlockedQuestions` |  | `3` |
 | `cmd/liza/cmd_task_dependencies.go:201` | constant | V12 | R3 | `retargetRejectedDetailKey` |  | `"diagnostic_action"` |
 | `cmd/liza/cmd_task_dependencies.go:202` | constant | V12 | R3 | `retargetRejectedAction` |  | `"retarget_dependency_rejected"` |
+| `cmd/liza/completion_values.go:42` | constant | V12 | R4 | `toolSelectorAll` |  | `"all"` |
 | `cmd/liza/launch_build.go:15` | constant | V9 | R4 | `weztermSplitRight` |  | `"--right"` |
 | `cmd/liza/launch_build.go:16` | constant | V9 | R4 | `weztermSplitBottom` |  | `"--bottom"` |
 | `cmd/liza/launch_build.go:17` | constant | V9 | R4 | `cmuxSplitRight` |  | `"right"` |
 | `cmd/liza/launch_build.go:18` | constant | V9 | R4 | `cmuxSplitDown` |  | `"down"` |
+| `cmd/liza/launch_exec.go:22` | constant | V12 | R3 | `goosWindows` |  | `"windows"` |
+| `cmd/liza/launch_exec.go:25` | constant | V12 | R4 | `posixShellPath` |  | `"/bin/sh"` |
+| `cmd/liza/launch_exec.go:29` | constant | V12 | R4 | `codexExecutable` |  | `"codex"` |
+| `cmd/liza/launch_exec.go:33` | constant | V9 | R4 | `cmuxRefWorkspace` |  | `"workspace"` |
+| `cmd/liza/launch_exec.go:34` | constant | V9 | R4 | `cmuxRefSurface` |  | `"surface"` |
+| `cmd/liza/launch_exec.go:35` | constant | V9 | R4 | `cmuxKeyEnter` |  | `"enter"` |
+| `cmd/liza/launch_exec.go:40` | constant | V9 | R4 | `cmuxHostPickerTitle` |  | `"Pick host for agent"` |
+| `cmd/liza/launch_exec.go:41` | constant | V9 | R4 | `cmuxHostPickerSubmitHint` |  | `"enter submit"` |
+| `cmd/liza/launch_exec.go:42` | constant | V9 | R4 | `cmuxPromptMarker` |  | `"›"` |
+| `cmd/liza/launch_exec.go:43` | constant | V9 | R4 | `cmuxPromptEchoPrefix` |  | `"› "` |
+| `cmd/liza/launch_exec.go:44` | constant | V9 | R4 | `cmuxWorkingMarker` |  | `"Working"` |
+| `cmd/liza/launch_exec.go:45` | constant | V9 | R4 | `cmuxCodexBanner` |  | `"OpenAI Codex"` |
+| `cmd/liza/launch_exec.go:46` | constant | V9 | R4 | `cmuxStartingMCPMarker` |  | `"Starting MCP servers"` |
+| `cmd/liza/launch_exec.go:47` | constant | V9 | R4 | `cmuxInterruptHint` |  | `"esc to interrupt"` |
 | `cmd/liza/launch_pairing_seed.go:15` | constant | V9 | R4 | `pairingBoardDirMode` |  | `0o755` |
 | `cmd/liza/launch_pairing_seed.go:16` | constant | V9 | R4 | `pairingBoardFileMode` |  | `0o644` |
 | `cmd/liza/launch_resolve.go:206` | constant | V9 | R4 | `pairingReviewerIDPrefix` |  | `"reviewer-"` |
-| `cmd/liza/main.go:282` | constant | V12 | R3 | `defaultChangedBy` |  | `"human"` |
+| `cmd/liza/main.go:228` | constant | V12 | R4 | `jsonFlagToken` |  | `"--json"` |
+| `cmd/liza/main.go:229` | constant | V12 | R4 | `longFlagPrefix` |  | `"--"` |
+| `cmd/liza/main.go:230` | constant | V12 | R4 | `shortFlagPrefix` |  | `"-"` |
+| `cmd/liza/main.go:231` | constant | V12 | R4 | `flagValueDelimiter` |  | `"="` |
+| `cmd/liza/main.go:290` | constant | V12 | R3 | `defaultChangedBy` |  | `"human"` |
 | `cmd/liza/supervisor_logs.go:17` | constant | V10 | R4 | `supervisorLogFileMode` |  | `0o644` |
 | `cmd/liza/supervisor_logs.go:18` | constant | V10 | R4 | `supervisorBootstrapFileMode` |  | `0o600` |
 | `internal/commands/agent_health.go:22` | constant | V12 | R3 | `OperatorActor` |  | `"operator"` |
@@ -567,6 +651,8 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `internal/commands/format_helpers.go:39` | constant | V7 | R2 | `dashboardFormatKeyValue` | `dashboardSectionFormat` | `"kv"` |
 | `internal/commands/format_helpers.go:40` | constant | V7 | R2 | `dashboardFormatTable` | `dashboardSectionFormat` | `"table"` |
 | `internal/commands/format_helpers.go:41` | constant | V7 | R2 | `dashboardFormatText` | `dashboardSectionFormat` | `"text"` |
+| `internal/commands/init.go:128` | constant | V12 | R4 | `sembleMessagePrefix` |  | `"semble:"` |
+| `internal/commands/init.go:129` | constant | V12 | R4 | `sembleMessageLead` |  | `"semble: "` |
 | `internal/commands/inspect_task_assembly.go:117` | constant | V12 | R3 | `historyExtraRepairSourceTask` |  | `"repair_source_task"` |
 | `internal/commands/inspect_task_assembly.go:118` | constant | V12 | R3 | `historyExtraOperation` |  | `"operation"` |
 | `internal/commands/inspect_task_assembly.go:119` | constant | V12 | R3 | `historyExtraRepairRequestCleared` |  | `"repair_request_cleared"` |
@@ -638,6 +724,7 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `internal/commands/narrow_inherited_dependencies.go:24` | constant | V12 | R3 | `narrowChildActionSkipped` |  | `"skipped"` |
 | `internal/commands/prompt_vocabulary.go:6` | constant | V12 | R4 | `confirmAnswerY` |  | `"y"` |
 | `internal/commands/prompt_vocabulary.go:7` | constant | V12 | R4 | `confirmAnswerYes` |  | `"yes"` |
+| `internal/commands/repair_agent_pool.go:195` | constant | V12 | R4 | `envBooleanNo` |  | `"no"` |
 | `internal/commands/status_orchestrator.go:16` | constant | V12 | R3 | `integrationStatusComplete` |  | `"complete"` |
 | `internal/commands/status_vocabulary.go:14` | constant | V7 | R2 | `statusFormatDashboard` | `statusFormat` | `"dashboard"` |
 | `internal/commands/status_vocabulary.go:19` | function | V7 | R4 | `StatusFormatNames` |  |  |
@@ -646,6 +733,14 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `internal/commands/stop_guard.go:27` | constant | V12 | R4 | `stopGuardDecisionBlock` |  | `"block"` |
 | `internal/commands/stop_guard.go:28` | constant | V12 | R4 | `stopGuardKeyBackgroundJobs` |  | `"background_tasks"` |
 | `internal/commands/stop_guard.go:29` | constant | V12 | R4 | `backgroundJobStatusRunning` |  | `"running"` |
+| `internal/commands/stop_guard.go:113` | constant | V10 | R4 | `shellMetacharacters` |  | `` ";&\|<>`$()\\\n*?[]{}~#!" `` |
+| `internal/commands/stop_guard.go:114` | constant | V12 | R4 | `windowsExecutableSuffix` |  | `".exe"` |
+| `internal/commands/stop_guard.go:115` | constant | V12 | R4 | `flagProjectRootShort` |  | `"-C"` |
+| `internal/commands/stop_guard.go:116` | constant | V12 | R4 | `flagProjectRoot` |  | `"--project-root"` |
+| `internal/commands/stop_guard.go:117` | constant | V12 | R4 | `flagVerboseShort` |  | `"-v"` |
+| `internal/commands/stop_guard.go:118` | constant | V12 | R4 | `flagVerbose` |  | `"--verbose"` |
+| `internal/commands/stop_guard.go:119` | constant | V12 | R4 | `flagValueSeparator` |  | `"="` |
+| `internal/commands/stop_guard.go:120` | constant | V12 | R4 | `jsonNullLiteral` |  | `"null"` |
 | `internal/commands/submit_verdict.go:40` | constant | V12 | R3 | `verdictApproved` |  | `"APPROVED"` |
 | `internal/commands/watch.go:44` | constant | V10 | R4 | `finalTaskAttempt` |  | `2` |
 | `internal/commands/watch.go:47` | constant | V10 | R4 | `hypothesisExhaustionFailures` |  | `2` |
@@ -662,11 +757,23 @@ A further 32 uses sit in code this task added (the new helper bodies and declara
 | `internal/commands/watch_repair_spawn.go:16` | constant | V12 | R3 | `autoRepairLogActor` |  | `"system"` |
 | `internal/commands/watch_repair_spawn.go:17` | constant | V12 | R3 | `autoRepairLogActionSpawned` |  | `"auto_repair_agent_spawned"` |
 | `internal/commands/wt_merge.go:14` | constant | V10 | R4 | `shortCommitWidth` |  | `7` |
+| `internal/jsonout/classify.go:95` | constant | V1 | R4 | `lockMessageFragment` |  | `"lock"` |
+| `internal/jsonout/classify.go:96` | constant | V1 | R4 | `timeoutMessageFragment` |  | `"timeout"` |
+| `internal/jsonout/classify.go:97` | constant | V1 | R4 | `timedOutMessageFragment` |  | `"timed out"` |
 | `internal/tui/model.go:169` | constant | V10 | R4 | `columnTierFullMinWidth` |  | `160` |
 | `internal/tui/model.go:170` | constant | V10 | R4 | `columnTierWideMinWidth` |  | `120` |
 | `internal/tui/model.go:171` | constant | V10 | R4 | `columnTierStandardMinWidth` |  | `80` |
 | `internal/tui/model.go:206` | constant | V8 | R4 | `taskFilterLabelActive` |  | `"active"` |
 | `internal/tui/model.go:207` | constant | V8 | R4 | `taskFilterLabelActiveBlocked` |  | `"active+blocked"` |
+| `internal/tui/styles.go:115` | constant | V12 | R4 | `statusSuffixPartiallyApproved` |  | `"_PARTIALLY_APPROVED"` |
+| `internal/tui/styles.go:116` | constant | V12 | R4 | `statusSuffixApproved` |  | `"_APPROVED"` |
+| `internal/tui/styles.go:117` | constant | V12 | R4 | `statusSuffixRejected` |  | `"_REJECTED"` |
+| `internal/tui/styles.go:118` | constant | V12 | R4 | `statusSuffixPlanning` |  | `"_PLANNING"` |
+| `internal/tui/styles.go:119` | constant | V12 | R4 | `statusSuffixToReview` |  | `"_TO_REVIEW"` |
+| `internal/tui/styles.go:120` | constant | V12 | R4 | `statusSuffixReadyForReview` |  | `"_READY_FOR_REVIEW"` |
+| `internal/tui/styles.go:121` | constant | V12 | R4 | `statusPrefixImplementing` |  | `"IMPLEMENTING_"` |
+| `internal/tui/styles.go:122` | constant | V12 | R4 | `statusPrefixReviewing` |  | `"REVIEWING_"` |
+| `internal/tui/styles.go:123` | constant | V12 | R4 | `statusPrefixDraft` |  | `"DRAFT_"` |
 | `internal/tui/update_inline.go:146` | constant | V8 | R4 | `inlineConfirmYes` |  | `"y"` |
 | `internal/tui/view.go:24` | constant | V10 | R4 | `panelChromeWidth` |  | `4` |
 | `internal/tui/view.go:26` | constant | V10 | R4 | `overlayChromeWidth` |  | `8` |
@@ -800,7 +907,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_config.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 3 | 20, 30, 42 |
 | `cmd/liza/cmd_config.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 11 | 26, 26, 32, 32, 99, 99, 99, 99, 99, 99, 99 |
 | `cmd/liza/cmd_config.go` | dynamic identity | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | 1 | 137 |
-| `cmd/liza/cmd_config.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 1 | 242 |
+| `cmd/liza/cmd_config.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 1 | 242 |
 | `cmd/liza/cmd_defer_provider_dependency.go` | message or display text | cobra help text (frozen --help output) | 2 | 16, 17 |
 | `cmd/liza/cmd_defer_provider_dependency.go` | message or display text | flag usage text (frozen --help output) | 3 | 70, 71, 72 |
 | `cmd/liza/cmd_defer_provider_dependency.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 2 | 41, 61 |
@@ -862,29 +969,28 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_init.go` | dynamic identity | entry-point name of the default pipeline (pipeline configuration, ADR-0045; masLaunchPreset names the three launch presets in cmd/liza) | 4 | 727, 727, 727, 727 |
 | `cmd/liza/cmd_init.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 8 | 497, 497, 497, 497, 497, 497, 497, 497 |
 | `cmd/liza/cmd_init.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 1 | 642 |
-| `cmd/liza/cmd_init.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 3 | 145, 148, 151 |
-| `cmd/liza/cmd_init.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 431, 651 |
 | `cmd/liza/cmd_init.go` | other literal | flag default value (frozen CLI surface) | 2 | 701, 704 |
-| `cmd/liza/cmd_launch.go` | message or display text | cobra help text (frozen --help output) | 4 | 30, 88, 137, 195 |
-| `cmd/liza/cmd_launch.go` | message or display text | flag usage text (frozen --help output) | 19 | 252, 253, 255, 259, 260, 262, 265, 266, 273, 274, 275, 276, 277, 281, 282, 289, 290, 291, 292 |
-| `cmd/liza/cmd_launch.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 25 | 15, 20, 25, 31, 49, 63, 68, 75, 97, 107, 121, 138, 156, 170, 175, 182, 204, 214, 228, 254, 261, 267, 268, 283, 284 |
-| `cmd/liza/cmd_launch.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 14 | 62, 66, 169, 173, 252, 253, 254, 259, 260, 261, 267, 274, 283, 290 |
-| `cmd/liza/cmd_launch.go` | number | cobra argument arity of the command (frozen CLI surface) | 2 | 89, 196 |
-| `cmd/liza/cmd_launch.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 56, 163 |
-| `cmd/liza/cmd_launch.go` | number | length, count or arity comparison against a small number of arguments or elements | 6 | 45, 74, 110, 152, 181, 217 |
-| `cmd/liza/cmd_launch.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 2 | 56, 163 |
-| `cmd/liza/cmd_launch.go` | number | position in a fixed-layout slice or arguments list | 2 | 95, 202 |
-| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name defined on the command (frozen CLI surface) | 25 | 252, 253, 254, 255, 259, 260, 261, 262, 265, 266, 267, 268, 273, 274, 275, 276, 277, 281, 282, 283, 284, 289, 290, 291, 292 |
-| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 18 | 42, 44, 53, 55, 99, 100, 101, 105, 109, 149, 151, 160, 162, 206, 207, 208, 212, 216 |
-| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name the completion function attaches to (frozen CLI surface) | 10 | 269, 270, 271, 278, 279, 285, 286, 287, 293, 294 |
-| `cmd/liza/cmd_launch.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 5 | 14, 29, 87, 136, 194 |
-| `cmd/liza/cmd_launch.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 4 | 267, 268, 283, 284 |
-| `cmd/liza/cmd_launch.go` | external argv | subcommand word of the relaunch argv that follows the branded binary name | 4 | 58, 65, 165, 172 |
-| `cmd/liza/cmd_launch.go` | dynamic identity | default reviewer launch spec: provider identity pair (dynamic, ADR-0045) | 2 | 111, 218 |
-| `cmd/liza/cmd_launch.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 111, 218 |
-| `cmd/liza/cmd_launch.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 4 | 78, 127, 185, 234 |
-| `cmd/liza/cmd_launch.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 70, 177 |
-| `cmd/liza/cmd_launch.go` | other literal | flag default value (frozen CLI surface) | 2 | 273, 289 |
+| `cmd/liza/cmd_init.go` | other literal | flag label quoted in the default-CLI error text (display text) | 3 | 145, 148, 151 |
+| `cmd/liza/cmd_init.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 2 | 431, 651 |
+| `cmd/liza/cmd_launch.go` | message or display text | cobra help text (frozen --help output) | 4 | 33, 91, 140, 198 |
+| `cmd/liza/cmd_launch.go` | message or display text | flag usage text (frozen --help output) | 19 | 255, 256, 258, 262, 263, 265, 268, 269, 276, 277, 278, 279, 280, 284, 285, 292, 293, 294, 295 |
+| `cmd/liza/cmd_launch.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 25 | 18, 23, 28, 34, 52, 66, 71, 78, 100, 110, 124, 141, 159, 173, 178, 185, 207, 217, 231, 257, 264, 270, 271, 286, 287 |
+| `cmd/liza/cmd_launch.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 14 | 65, 69, 172, 176, 255, 256, 257, 262, 263, 264, 270, 277, 286, 293 |
+| `cmd/liza/cmd_launch.go` | number | cobra argument arity of the command (frozen CLI surface) | 2 | 92, 199 |
+| `cmd/liza/cmd_launch.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 59, 166 |
+| `cmd/liza/cmd_launch.go` | number | length, count or arity comparison against a small number of arguments or elements | 6 | 48, 77, 113, 155, 184, 220 |
+| `cmd/liza/cmd_launch.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 2 | 59, 166 |
+| `cmd/liza/cmd_launch.go` | number | position in a fixed-layout slice or arguments list | 2 | 98, 205 |
+| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name defined on the command (frozen CLI surface) | 25 | 255, 256, 257, 258, 262, 263, 264, 265, 268, 269, 270, 271, 276, 277, 278, 279, 280, 284, 285, 286, 287, 292, 293, 294, 295 |
+| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 18 | 45, 47, 56, 58, 102, 103, 104, 108, 112, 152, 154, 163, 165, 209, 210, 211, 215, 219 |
+| `cmd/liza/cmd_launch.go` | flag or CLI spelling | flag name the completion function attaches to (frozen CLI surface) | 10 | 272, 273, 274, 281, 282, 288, 289, 290, 296, 297 |
+| `cmd/liza/cmd_launch.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 5 | 17, 32, 90, 139, 197 |
+| `cmd/liza/cmd_launch.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 4 | 270, 271, 286, 287 |
+| `cmd/liza/cmd_launch.go` | external argv | subcommand word of the relaunch argv that follows the branded binary name | 4 | 61, 68, 168, 175 |
+| `cmd/liza/cmd_launch.go` | dynamic identity | default reviewer launch spec: provider identity pair (dynamic, ADR-0045) | 2 | 114, 221 |
+| `cmd/liza/cmd_launch.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 114, 221 |
+| `cmd/liza/cmd_launch.go` | other literal | flag default value (frozen CLI surface) | 2 | 276, 292 |
+| `cmd/liza/cmd_launch.go` | other literal | session name suffix appended to the branded binary name (display label of the terminal session) | 4 | 81, 130, 188, 237 |
 | `cmd/liza/cmd_plan_check.go` | message or display text | cobra help text (frozen --help output) | 2 | 23, 24 |
 | `cmd/liza/cmd_plan_check.go` | message or display text | display word or placeholder printed to the user (frozen human output) | 3 | 208, 210, 212 |
 | `cmd/liza/cmd_plan_check.go` | message or display text | flag usage text (frozen --help output) | 8 | 234, 235, 236, 237, 238, 239, 240, 241 |
@@ -956,7 +1062,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_rejection_rca.go` | flag or CLI spelling | flag name, flag spelling or environment suffix of a flag table (frozen CLI surface) | 4 | 162, 162, 163, 163 |
 | `cmd/liza/cmd_rejection_rca.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 2 | 68, 68 |
 | `cmd/liza/cmd_rejection_rca.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 4 | 46, 46, 46, 46 |
-| `cmd/liza/cmd_rejection_rca.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 7 | 36, 37, 46, 46, 46, 54, 55 |
+| `cmd/liza/cmd_rejection_rca.go` | other literal | help text of the rejection-RCA command (frozen --help output) | 7 | 36, 37, 46, 46, 46, 54, 55 |
 | `cmd/liza/cmd_release_blocked_chain.go` | message or display text | cobra help text (frozen --help output) | 1 | 18 |
 | `cmd/liza/cmd_release_blocked_chain.go` | message or display text | flag usage text (frozen --help output) | 1 | 71 |
 | `cmd/liza/cmd_release_blocked_chain.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 3 | 19, 43, 61 |
@@ -990,7 +1096,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_replace_task.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 8 | 35, 35, 35, 35, 35, 35, 35, 35 |
 | `cmd/liza/cmd_replace_task.go` | dynamic identity | operation label recorded in the lifecycle error or audit entry (operations stay dynamic, ADR-0045) | 1 | 103 |
 | `cmd/liza/cmd_replace_task.go` | dynamic identity | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | 1 | 71 |
-| `cmd/liza/cmd_replace_task.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 98 |
+| `cmd/liza/cmd_replace_task.go` | other literal | operation name of the payload schema validated (operation names stay dynamic, ADR-0045) | 1 | 98 |
 | `cmd/liza/cmd_reserve_provider.go` | message or display text | cobra help text (frozen --help output) | 1 | 16 |
 | `cmd/liza/cmd_reserve_provider.go` | message or display text | flag usage text (frozen --help output) | 4 | 90, 91, 92, 93 |
 | `cmd/liza/cmd_reserve_provider.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 4 | 17, 76, 78, 80 |
@@ -1021,8 +1127,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_review.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 6 | 48, 122, 206, 349, 420, 491 |
 | `cmd/liza/cmd_review.go` | data | completion candidate value (frozen completion output) | 2 | 661, 661 |
 | `cmd/liza/cmd_review.go` | dynamic identity | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | 5 | 99, 170, 271, 462, 531 |
-| `cmd/liza/cmd_review.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 35 |
 | `cmd/liza/cmd_review.go` | other literal | flag default value (frozen CLI surface) | 1 | 695 |
+| `cmd/liza/cmd_review.go` | other literal | provider identity whose await interval is read (dynamic, ADR-0045) | 1 | 35 |
 | `cmd/liza/cmd_run_live.go` | message or display text | cobra help text (frozen --help output) | 1 | 15 |
 | `cmd/liza/cmd_run_live.go` | message or display text | flag usage text (frozen --help output) | 2 | 73, 74 |
 | `cmd/liza/cmd_run_live.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 2 | 16, 36 |
@@ -1088,7 +1194,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_task.go` | branded composition | environment variable suffix looked up through brand.LookupEnv (the brand supplies the prefix) | 1 | 279 |
 | `cmd/liza/cmd_task.go` | dynamic identity | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | 1 | 377 |
 | `cmd/liza/cmd_task.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 1 | 359 |
-| `cmd/liza/cmd_task.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 1 | 198 |
+| `cmd/liza/cmd_task.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 1 | 198 |
 | `cmd/liza/cmd_task_blocked.go` | message or display text | cobra help text (frozen --help output) | 9 | 22, 23, 31, 105, 106, 364, 365, 491, 492 |
 | `cmd/liza/cmd_task_blocked.go` | message or display text | flag usage text (frozen --help output) | 39 | 579, 580, 581, 582, 583, 584, 585, 586, 587, 588, 589, 590, 597, 597, 598, 599, 600, 601, 602, 603, 604, 605, 611, 612, 613, 614, 615, 616, 617, 618, 619, 620, 621, 622, 623, 624, 625, 629, 630 |
 | `cmd/liza/cmd_task_blocked.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 22 | 235, 240, 244, 255, 261, 285, 300, 304, 310, 313, 317, 330, 333, 336, 339, 342, 453, 462, 473, 476, 479, 483 |
@@ -1122,7 +1228,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_task_dependencies.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 5 | 21, 111, 228, 317, 393 |
 | `cmd/liza/cmd_task_dependencies.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 7 | 45, 45, 45, 124, 258, 327, 402 |
 | `cmd/liza/cmd_task_dependencies.go` | dynamic identity | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | 5 | 93, 181, 303, 379, 454 |
-| `cmd/liza/cmd_task_dependencies.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 74, 147 |
+| `cmd/liza/cmd_task_dependencies.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 2 | 74, 147 |
 | `cmd/liza/cmd_task_dependencies.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 512 |
 | `cmd/liza/cmd_task_records.go` | message or display text | cobra help text (frozen --help output) | 9 | 22, 23, 26, 106, 107, 153, 168, 261, 262 |
 | `cmd/liza/cmd_task_records.go` | message or display text | flag usage text (frozen --help output) | 9 | 313, 314, 315, 316, 317, 318, 319, 320, 326 |
@@ -1215,9 +1321,9 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_toolchain.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 14 | 53, 88, 89, 90, 91, 131, 132, 133, 134, 135, 136, 240, 241, 242 |
 | `cmd/liza/cmd_toolchain.go` | flag or CLI spelling | flag name the completion function attaches to (frozen CLI surface) | 12 | 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225 |
 | `cmd/liza/cmd_toolchain.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 5 | 21, 27, 46, 81, 124 |
-| `cmd/liza/cmd_toolchain.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 326, 360 |
 | `cmd/liza/cmd_toolchain.go` | other literal | environment variable name of an external tool or test hook | 2 | 323, 323 |
-| `cmd/liza/cmd_toolchain.go` | other literal | flag default value (frozen CLI surface) | 2 | 203, 210 |
+| `cmd/liza/cmd_toolchain.go` | other literal | flag default value (frozen CLI surface) | 1 | 210 |
+| `cmd/liza/cmd_toolchain.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 2 | 326, 360 |
 | `cmd/liza/cmd_usage.go` | message or display text | cobra help text (frozen --help output) | 2 | 20, 25 |
 | `cmd/liza/cmd_usage.go` | message or display text | flag usage text (frozen --help output) | 8 | 107, 108, 109, 110, 111, 112, 113, 114 |
 | `cmd/liza/cmd_usage.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 2 | 68, 78 |
@@ -1247,13 +1353,12 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/cmd_worktree.go` | flag or CLI spelling | flag name the completion function attaches to (frozen CLI surface) | 1 | 186 |
 | `cmd/liza/cmd_worktree.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 3 | 18, 59, 103 |
 | `cmd/liza/cmd_worktree.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 1 | 112 |
-| `cmd/liza/completion_values.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 167, 171, 185, 199, 212 |
-| `cmd/liza/completion_values.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 4 | 56, 183, 197, 209 |
-| `cmd/liza/completion_values.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 65, 136 |
-| `cmd/liza/completion_values.go` | number | number of positional arguments the completion switch handles | 2 | 73, 75 |
-| `cmd/liza/completion_values.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 1 | 169 |
-| `cmd/liza/completion_values.go` | data | field-query completion candidate (frozen completion output) | 4 | 118, 120, 121, 122 |
-| `cmd/liza/completion_values.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 1 | 42 |
+| `cmd/liza/completion_values.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 170, 174, 188, 202, 215 |
+| `cmd/liza/completion_values.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 4 | 59, 186, 200, 212 |
+| `cmd/liza/completion_values.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 68, 139 |
+| `cmd/liza/completion_values.go` | number | number of positional arguments the completion switch handles | 2 | 76, 78 |
+| `cmd/liza/completion_values.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 1 | 172 |
+| `cmd/liza/completion_values.go` | data | field-query completion candidate (frozen completion output) | 4 | 121, 123, 124, 125 |
 | `cmd/liza/launch_build.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 40 | 28, 30, 32, 34, 36, 38, 45, 47, 48, 49, 50, 51, 53, 54, 56, 57, 59, 60, 61, 67, 69, 71, 73, 75, 77, 79, 81, 83, 86, 88, 89, 91, 97, 127, 128, 136, 166, 173, 228, 230 |
 | `cmd/liza/launch_build.go` | message or display text | placeholder shown in the dry-run launch script (display text) | 3 | 112, 151, 175 |
 | `cmd/liza/launch_build.go` | message or display text | separator of a rendered list (display text) | 1 | 216 |
@@ -1261,30 +1366,24 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/launch_build.go` | number | length, count or arity comparison against a small number of arguments or elements | 10 | 25, 64, 96, 117, 135, 156, 174, 227, 238, 245 |
 | `cmd/liza/launch_build.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 12 | 23, 25, 62, 64, 67, 115, 117, 127, 128, 154, 156, 166 |
 | `cmd/liza/launch_build.go` | number | position in a fixed-layout slice or arguments list | 5 | 37, 87, 90, 107, 146 |
-| `cmd/liza/launch_build.go` | external argv | cmux or wezterm CLI argument (external CLI vocabulary; the launch contract is pinned by the A7 launch oracle) | 39 | 104, 105, 106, 107, 121, 122, 122, 123, 124, 127, 127, 127, 128, 128, 128, 128, 143, 144, 145, 146, 160, 161, 161, 162, 163, 167, 167, 167, 168, 168, 168, 168, 179, 180, 181, 188, 189, 190, 191 |
-| `cmd/liza/launch_build.go` | character | POSIX shell single-quote syntax of shellQuote | 3 | 221, 223, 223 |
+| `cmd/liza/launch_build.go` | external argv | cmux or wezterm CLI argument (external CLI vocabulary; the launch contract is pinned by the A7 launch oracle) | 36 | 104, 105, 106, 107, 121, 122, 122, 123, 124, 127, 127, 127, 128, 128, 128, 143, 144, 145, 146, 160, 161, 161, 162, 163, 167, 167, 167, 168, 168, 168, 179, 180, 181, 188, 189, 190 |
+| `cmd/liza/launch_build.go` | character | POSIX shell single-quote syntax of shellQuote | 5 | 221, 223, 223, 223, 223 |
 | `cmd/liza/launch_build.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 8 | 238, 238, 238, 238, 238, 238, 238, 242 |
-| `cmd/liza/launch_build.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 2 | 44, 44 |
-| `cmd/liza/launch_build.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 4 | 223, 223, 231, 232 |
+| `cmd/liza/launch_build.go` | other literal | fragment of the generated shell function name (identifier syntax, not a vocabulary) | 2 | 44, 44 |
 | `cmd/liza/launch_build.go` | other literal | name of the shell function the generated wezterm script defines | 1 | 246 |
 | `cmd/liza/launch_build.go` | other literal | pairing skill invocation text composed into the launch prompt | 3 | 200, 200, 202 |
-| `cmd/liza/launch_exec.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 26 | 39, 43, 61, 75, 79, 97, 111, 124, 136, 164, 167, 175, 188, 200, 226, 234, 237, 266, 270, 278, 284, 290, 297, 314, 329, 381 |
-| `cmd/liza/launch_exec.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 290, 338, 368, 381, 392 |
-| `cmd/liza/launch_exec.go` | number | external CLI argument (cmux workspace position) | 4 | 134, 155, 198, 224 |
-| `cmd/liza/launch_exec.go` | number | length, count or arity comparison against a small number of arguments or elements | 7 | 38, 74, 110, 146, 174, 215, 371 |
-| `cmd/liza/launch_exec.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 4 | 144, 146, 213, 215 |
-| `cmd/liza/launch_exec.go` | number | position in a fixed-layout slice or arguments list | 7 | 132, 134, 155, 196, 198, 224, 371 |
-| `cmd/liza/launch_exec.go` | number | zero: emptiness, count or sign test, initial value or default | 1 | 268 |
-| `cmd/liza/launch_exec.go` | external argv | cmux or wezterm CLI argument (external CLI vocabulary; the launch contract is pinned by the A7 launch oracle) | 30 | 47, 48, 49, 50, 51, 53, 83, 84, 85, 86, 87, 89, 129, 130, 131, 132, 150, 151, 151, 152, 153, 193, 194, 195, 196, 219, 220, 220, 221, 222 |
-| `cmd/liza/launch_exec.go` | external argv | external command argument: cmux, wezterm or Git vocabulary (not a Liza set; C4 Git literals are preserved) | 12 | 257, 257, 257, 261, 261, 261, 288, 288, 336, 336, 336, 336 |
-| `cmd/liza/launch_exec.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 369, 371 |
-| `cmd/liza/launch_exec.go` | other literal | POSIX shell path of the launcher script | 1 | 395 |
-| `cmd/liza/launch_exec.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 9 | 138, 159, 166, 202, 228, 236, 269, 292, 313 |
-| `cmd/liza/launch_exec.go` | other literal | cmux reference separator (kind:number) | 1 | 375 |
-| `cmd/liza/launch_exec.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 6 | 344, 344, 348, 348, 352, 364 |
-| `cmd/liza/launch_exec.go` | other literal | environment variable name of an external tool or test hook | 1 | 392 |
-| `cmd/liza/launch_exec.go` | other literal | provider UI text the cmux readiness probe waits for in the pane | 3 | 356, 357, 358 |
-| `cmd/liza/launch_exec.go` | platform identifier | runtime.GOOS platform identifier (Go names no constant) | 1 | 389 |
+| `cmd/liza/launch_build.go` | other literal | trailing zeros and decimal point trimmed from a formatted number | 2 | 231, 232 |
+| `cmd/liza/launch_exec.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 26 | 68, 72, 90, 104, 108, 126, 140, 153, 165, 193, 196, 204, 217, 229, 255, 263, 266, 295, 299, 307, 313, 319, 326, 343, 358, 410 |
+| `cmd/liza/launch_exec.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 319, 367, 397, 410, 421 |
+| `cmd/liza/launch_exec.go` | number | external CLI argument (cmux workspace position) | 4 | 163, 184, 227, 253 |
+| `cmd/liza/launch_exec.go` | number | length, count or arity comparison against a small number of arguments or elements | 7 | 67, 103, 139, 175, 203, 244, 400 |
+| `cmd/liza/launch_exec.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 4 | 173, 175, 242, 244 |
+| `cmd/liza/launch_exec.go` | number | position in a fixed-layout slice or arguments list | 7 | 161, 163, 184, 225, 227, 253, 400 |
+| `cmd/liza/launch_exec.go` | number | zero: emptiness, count or sign test, initial value or default | 1 | 297 |
+| `cmd/liza/launch_exec.go` | external argv | cmux or wezterm CLI argument (external CLI vocabulary; the launch contract is pinned by the A7 launch oracle) | 30 | 76, 77, 78, 79, 80, 82, 112, 113, 114, 115, 116, 118, 158, 159, 160, 161, 179, 180, 180, 181, 182, 222, 223, 224, 225, 248, 249, 249, 250, 251 |
+| `cmd/liza/launch_exec.go` | external argv | external command argument: cmux, wezterm or Git vocabulary (not a Liza set; C4 Git literals are preserved) | 12 | 286, 286, 286, 290, 290, 290, 317, 317, 365, 365, 365, 365 |
+| `cmd/liza/launch_exec.go` | other literal | cmux reference separator (kind:number) | 1 | 404 |
+| `cmd/liza/launch_exec.go` | other literal | environment variable name of an external tool or test hook | 1 | 421 |
 | `cmd/liza/launch_pairing_seed.go` | message or display text | display word or placeholder printed to the user (frozen human output) | 2 | 52, 54 |
 | `cmd/liza/launch_pairing_seed.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 8 | 23, 26, 32, 37, 41, 44, 46, 56 |
 | `cmd/liza/launch_pairing_seed.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 25 |
@@ -1296,7 +1395,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/launch_resolve.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 9 | 96, 160, 164, 168, 170, 171, 180, 182, 189 |
 | `cmd/liza/launch_resolve.go` | external argv | external command argument: cmux, wezterm or Git vocabulary (not a Liza set; C4 Git literals are preserved) | 4 | 127, 127, 127, 127 |
 | `cmd/liza/launch_resolve.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 143 |
-| `cmd/liza/launch_resolve.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 213, 214 |
+| `cmd/liza/launch_resolve.go` | other literal | delimiter of an id=cli reviewer spec (parsing syntax, not a branch selector) | 2 | 213, 214 |
 | `cmd/liza/lifecycle.go` | message or display text | flag usage text (frozen --help output) | 2 | 65, 66 |
 | `cmd/liza/lifecycle.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 5 | 71, 77, 86, 89, 145 |
 | `cmd/liza/lifecycle.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 8 | 56, 56, 65, 66, 85, 85, 91, 91 |
@@ -1307,19 +1406,17 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `cmd/liza/lifecycle.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 4 | 82, 83, 85, 85 |
 | `cmd/liza/lifecycle.go` | cobra definition | command name compared to skip the lifecycle context for that command | 1 | 108 |
 | `cmd/liza/main.go` | message or display text | cobra help text (frozen --help output) | 2 | 45, 46 |
-| `cmd/liza/main.go` | message or display text | flag usage text (frozen --help output) | 10 | 312, 313, 321, 321, 322, 327, 327, 332, 343, 343 |
-| `cmd/liza/main.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 19 | 34, 35, 76, 90, 93, 106, 114, 123, 135, 138, 159, 170, 185, 212, 220, 275, 355, 360, 375 |
-| `cmd/liza/main.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 29 | 51, 57, 61, 65, 69, 72, 85, 92, 105, 113, 122, 131, 134, 147, 159, 207, 212, 215, 216, 232, 244, 256, 262, 275, 299, 303, 313, 327, 343 |
-| `cmd/liza/main.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 228, 237 |
-| `cmd/liza/main.go` | flag or CLI spelling | flag name defined on the command (frozen CLI surface) | 7 | 312, 313, 321, 322, 327, 332, 343 |
-| `cmd/liza/main.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 8 | 50, 153, 179, 205, 210, 251, 285, 337 |
-| `cmd/liza/main.go` | flag or CLI spelling | flag shorthand letter (frozen CLI surface) | 2 | 312, 313 |
-| `cmd/liza/main.go` | flag or CLI spelling | flag spelling compared in argument scanning (frozen CLI surface) | 1 | 195 |
+| `cmd/liza/main.go` | message or display text | flag usage text (frozen --help output) | 10 | 320, 321, 329, 329, 330, 335, 335, 340, 351, 351 |
+| `cmd/liza/main.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 19 | 34, 35, 76, 90, 93, 106, 114, 123, 135, 138, 159, 170, 185, 212, 220, 283, 363, 368, 383 |
+| `cmd/liza/main.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 29 | 51, 57, 61, 65, 69, 72, 85, 92, 105, 113, 122, 131, 134, 147, 159, 207, 212, 215, 216, 240, 252, 264, 270, 283, 307, 311, 321, 335, 351 |
+| `cmd/liza/main.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 236, 245 |
+| `cmd/liza/main.go` | flag or CLI spelling | flag name defined on the command (frozen CLI surface) | 7 | 320, 321, 329, 330, 335, 340, 351 |
+| `cmd/liza/main.go` | flag or CLI spelling | flag name read from the parsed command line (frozen CLI surface) | 8 | 50, 153, 179, 205, 210, 259, 293, 345 |
+| `cmd/liza/main.go` | flag or CLI spelling | flag shorthand letter (frozen CLI surface) | 2 | 320, 321 |
 | `cmd/liza/main.go` | cobra definition | cobra Use: command name and argument grammar (frozen CLI surface) | 1 | 44 |
-| `cmd/liza/main.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 3 | 159, 327, 343 |
-| `cmd/liza/main.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 301 |
-| `cmd/liza/main.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 6 | 227, 228, 229, 235, 235, 236 |
-| `cmd/liza/main.go` | other literal | flag default value (frozen CLI surface) | 1 | 322 |
+| `cmd/liza/main.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 3 | 159, 335, 351 |
+| `cmd/liza/main.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 309 |
+| `cmd/liza/main.go` | other literal | flag default value (frozen CLI surface) | 1 | 330 |
 | `cmd/liza/rbac.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 6 | 53, 63, 75, 92, 101, 114 |
 | `cmd/liza/rbac.go` | message or display text | separator of a rendered list (display text) | 1 | 86 |
 | `cmd/liza/rbac.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 38 |
@@ -1362,16 +1459,15 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/format_helpers.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 2 | 61, 66 |
 | `internal/commands/format_helpers.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 10 |
 | `internal/commands/handoff.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 3 | 15, 22, 23 |
-| `internal/commands/init.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 131 |
-| `internal/commands/init.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 21 | 230, 232, 360, 362, 364, 365, 366, 370, 372, 385, 399, 410, 412, 423, 424, 431, 467, 476, 479, 483, 489 |
-| `internal/commands/init.go` | message or display text | separator of a rendered list (display text) | 4 | 360, 423, 431, 452 |
-| `internal/commands/init.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 10 | 127, 306, 355, 355, 460, 463, 475, 475, 478, 504 |
-| `internal/commands/init.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 173, 447 |
-| `internal/commands/init.go` | number | length, count or arity comparison against a small number of arguments or elements | 3 | 203, 323, 359 |
-| `internal/commands/init.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 2 | 173, 174 |
-| `internal/commands/init.go` | data | completion candidate value (frozen completion output) | 3 | 187, 188, 189 |
-| `internal/commands/init.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 169, 186 |
-| `internal/commands/init.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 130, 503 |
+| `internal/commands/init.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 21 | 237, 239, 367, 369, 371, 372, 373, 377, 379, 392, 406, 417, 419, 430, 431, 438, 474, 483, 486, 490, 496 |
+| `internal/commands/init.go` | message or display text | separator of a rendered list (display text) | 4 | 367, 430, 438, 459 |
+| `internal/commands/init.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 10 | 134, 313, 362, 362, 467, 470, 482, 482, 485, 511 |
+| `internal/commands/init.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 180, 454 |
+| `internal/commands/init.go` | number | length, count or arity comparison against a small number of arguments or elements | 3 | 210, 330, 366 |
+| `internal/commands/init.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 2 | 180, 181 |
+| `internal/commands/init.go` | data | completion candidate value (frozen completion output) | 3 | 194, 195, 196 |
+| `internal/commands/init.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 176, 193 |
+| `internal/commands/init.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 1 | 510 |
 | `internal/commands/init_contract_placement.go` | message or display text | display word or placeholder printed to the user (frozen human output) | 2 | 442, 444 |
 | `internal/commands/init_contract_placement.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 43 | 181, 214, 232, 237, 241, 245, 265, 272, 276, 277, 280, 291, 315, 318, 321, 323, 326, 331, 339, 345, 350, 354, 355, 357, 363, 390, 396, 410, 412, 415, 418, 420, 423, 438, 446, 450, 454, 455, 458, 463, 466, 468, 471 |
 | `internal/commands/init_contract_placement.go` | message or display text | separator of a rendered list (display text) | 1 | 396 |
@@ -1380,7 +1476,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/init_contract_placement.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 1 | 311 |
 | `internal/commands/init_contract_placement.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 1 | 396 |
 | `internal/commands/init_contract_placement.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 82 |
-| `internal/commands/init_contract_placement.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 422 |
+| `internal/commands/init_contract_placement.go` | other literal | gitignore anchor syntax around the excluded path (slash prefix and suffix) | 1 | 422 |
 | `internal/commands/init_contract_placement.go` | other literal | suffix of the backup a contract file is moved to | 1 | 310 |
 | `internal/commands/init_integration_branch.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 5 | 14, 24, 36, 53, 67 |
 | `internal/commands/init_integration_branch.go` | external argv | external command argument: cmux, wezterm or Git vocabulary (not a Liza set; C4 Git literals are preserved) | 9 | 34, 34, 50, 50, 60, 60, 65, 65, 65 |
@@ -1389,13 +1485,13 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/init_mas_inputs.go` | number | length, count or arity comparison against a small number of arguments or elements | 1 | 54 |
 | `internal/commands/init_mas_inputs.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 5 | 160, 160, 160, 160, 160 |
 | `internal/commands/init_mas_inputs.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 171 |
-| `internal/commands/init_mas_inputs.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 159 |
+| `internal/commands/init_mas_inputs.go` | other literal | name of the external pre-commit executable looked up on PATH | 1 | 159 |
 | `internal/commands/init_mas_install.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 11 | 28, 54, 63, 68, 73, 83, 86, 95, 107, 113, 119 |
 | `internal/commands/init_mas_install.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 2 | 18, 93 |
 | `internal/commands/init_mas_install.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 22, 93 |
 | `internal/commands/init_mas_layout.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 7 | 30, 42, 47, 52, 68, 75, 80 |
 | `internal/commands/init_mas_layout.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 72 |
-| `internal/commands/init_mas_layout.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 2 | 46, 46 |
+| `internal/commands/init_mas_layout.go` | other literal | gitignore anchor syntax around the excluded path (slash prefix and suffix) | 2 | 46, 46 |
 | `internal/commands/init_mas_state.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 15 | 37, 38, 40, 49, 65, 72, 203, 211, 219, 225, 231, 238, 239, 249, 250 |
 | `internal/commands/init_mas_state.go` | message or display text | separator of a rendered list (display text) | 1 | 49 |
 | `internal/commands/init_mas_state.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 2 | 34, 36 |
@@ -1407,8 +1503,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/init_mistral_contract.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 15 | 22, 28, 36, 51, 57, 59, 62, 69, 74, 75, 77, 81, 86, 109, 111 |
 | `internal/commands/init_mistral_contract.go` | message or display text | separator of a rendered list (display text) | 1 | 108 |
 | `internal/commands/init_mistral_contract.go` | path | path segment or file name (layout of a directory the command reads or writes) | 1 | 34 |
-| `internal/commands/init_mistral_contract.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 56 |
-| `internal/commands/init_mistral_contract.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 92, 96 |
+| `internal/commands/init_mistral_contract.go` | other literal | argument of a helper: written text (data of its call) | 1 | 56 |
+| `internal/commands/init_mistral_contract.go` | other literal | line and key=value delimiter of the parsed contract config text (parsing syntax) | 2 | 92, 96 |
 | `internal/commands/init_pairing.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 5 | 300, 309, 311, 313, 315 |
 | `internal/commands/init_pairing.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 22 | 84, 92, 104, 109, 111, 167, 176, 206, 212, 215, 222, 231, 237, 243, 250, 257, 275, 281, 288, 290, 292, 293 |
 | `internal/commands/init_pairing.go` | message or display text | separator of a rendered list (display text) | 1 | 290 |
@@ -1425,7 +1521,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/inspect.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 2 | 279, 279 |
 | `internal/commands/inspect.go` | wire key | key copied from a human note Extra map into the inspect row (frozen --json bytes) | 2 | 249, 249 |
 | `internal/commands/inspect.go` | wire key | key or value of a JSON object written or read at the command boundary (frozen --json bytes or the provider hook protocol) | 3 | 245, 246, 247 |
-| `internal/commands/inspect.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 53, 149 |
+| `internal/commands/inspect.go` | dynamic identity | separator after the role of an agent id prefix query (role names stay dynamic, ADR-0045) | 1 | 149 |
+| `internal/commands/inspect.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 1 | 53 |
 | `internal/commands/inspect_agents.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 4 | 249, 264, 300, 325 |
 | `internal/commands/inspect_agents.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 11 | 101, 222, 224, 241, 243, 256, 270, 293, 327, 329, 342 |
 | `internal/commands/inspect_agents.go` | message or display text | separator of a rendered list (display text) | 2 | 270, 272 |
@@ -1433,7 +1530,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/inspect_agents.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 14 | 62, 65, 209, 222, 224, 229, 241, 243, 278, 293, 313, 318, 350, 353 |
 | `internal/commands/inspect_agents.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 3 | 59, 253, 268 |
 | `internal/commands/inspect_agents.go` | number | length, count or arity comparison against a small number of arguments or elements | 4 | 124, 248, 299, 324 |
-| `internal/commands/inspect_agents.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 361 |
+| `internal/commands/inspect_agents.go` | other literal | name of a text/template registered by the render package (template identity, not a branch selector) | 1 | 361 |
 | `internal/commands/inspect_agents.go` | other literal | separator, whitespace or glyph of composed output text | 2 | 341, 356 |
 | `internal/commands/inspect_anomalies.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 2 | 126, 174 |
 | `internal/commands/inspect_anomalies.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 3 | 117, 119, 163 |
@@ -1442,10 +1539,9 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/inspect_anomalies.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 7 | 81, 86, 91, 104, 117, 119, 151 |
 | `internal/commands/inspect_anomalies.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 154, 160 |
 | `internal/commands/inspect_anomalies.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 125, 150 |
-| `internal/commands/inspect_anomalies.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 134 |
 | `internal/commands/inspect_anomalies.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 137 |
+| `internal/commands/inspect_anomalies.go` | other literal | time layout of the displayed timestamp | 1 | 134 |
 | `internal/commands/inspect_field.go` | message or display text | message or hint text of a classified error, diagnostic or prompt (jsonout classifies untyped errors by substring) | 1 | 199 |
-| `internal/commands/inspect_field.go` | message or display text | separator of a rendered list (display text) | 1 | 47 |
 | `internal/commands/inspect_field.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 21 | 20, 25, 34, 46, 49, 56, 57, 65, 66, 72, 82, 99, 130, 137, 156, 160, 192, 199, 203, 212, 250 |
 | `internal/commands/inspect_field.go` | number | length, count or arity comparison against a small number of arguments or elements | 13 | 30, 52, 76, 198, 245, 250, 251, 263, 270, 293, 312, 323, 346 |
 | `internal/commands/inspect_field.go` | number | path segment position | 1 | 88 |
@@ -1453,28 +1549,28 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/inspect_field.go` | number | zero: emptiness, count or sign test, initial value or default | 10 | 93, 285, 294, 296, 313, 315, 324, 326, 347, 349 |
 | `internal/commands/inspect_field.go` | data | NotFoundError.Entity label (error detail text, not read by any switch) | 6 | 21, 26, 31, 47, 82, 246 |
 | `internal/commands/inspect_field.go` | data | field name carried in a payload diagnostic | 2 | 264, 271 |
-| `internal/commands/inspect_field.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 226 |
-| `internal/commands/inspect_field.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 6 | 24, 98, 187, 194, 211, 244 |
-| `internal/commands/inspect_field.go` | other literal | field path separator or prefix of the rendered query path | 1 | 73 |
+| `internal/commands/inspect_field.go` | other literal | list, line or key=value delimiter of the parsed CLI, environment or file text (parsing syntax, not a branch selector) | 1 | 98 |
+| `internal/commands/inspect_field.go` | other literal | prefix of the rendered query path (display text) | 1 | 226 |
 | `internal/commands/inspect_metrics.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 310 |
 | `internal/commands/inspect_metrics.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 21 | 224, 226, 246, 248, 263, 265, 267, 276, 278, 282, 284, 288, 291, 294, 297, 302, 320, 321, 322, 323, 324 |
 | `internal/commands/inspect_metrics.go` | message or display text | table column header or row label (frozen human output) | 7 | 313, 313, 313, 313, 313, 313, 313 |
 | `internal/commands/inspect_metrics.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 7 | 211, 224, 226, 233, 246, 248, 256 |
 | `internal/commands/inspect_metrics.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 200 |
 | `internal/commands/inspect_metrics.go` | number | length, count or arity comparison against a small number of arguments or elements | 3 | 194, 296, 309 |
-| `internal/commands/inspect_metrics.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 254 |
+| `internal/commands/inspect_metrics.go` | other literal | name of a text/template registered by the render package (template identity, not a branch selector) | 1 | 254 |
 | `internal/commands/inspect_metrics.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 258 |
 | `internal/commands/inspect_task_assembly.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 235 |
 | `internal/commands/inspect_task_assembly.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 207, 232 |
 | `internal/commands/inspect_task_assembly.go` | number | length, count or arity comparison against a small number of arguments or elements | 4 | 48, 125, 136, 140 |
 | `internal/commands/inspect_task_assembly.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 1 | 125 |
+| `internal/commands/inspect_task_render.go` | message or display text | line, label or fragment of the rendered text (frozen human output) | 9 | 172, 177, 207, 211, 233, 349, 355, 364, 395 |
 | `internal/commands/inspect_task_render.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 3 | 88, 132, 293 |
 | `internal/commands/inspect_task_render.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 65 | 23, 25, 42, 44, 63, 82, 106, 111, 118, 119, 148, 161, 162, 163, 164, 165, 166, 170, 175, 180, 183, 186, 189, 192, 200, 201, 202, 203, 213, 215, 218, 221, 224, 227, 230, 236, 239, 264, 266, 286, 312, 317, 323, 339, 340, 341, 342, 343, 347, 353, 358, 359, 362, 368, 372, 376, 380, 384, 388, 392, 399, 403, 407, 411, 417 |
 | `internal/commands/inspect_task_render.go` | message or display text | separator of a rendered list (display text) | 11 | 180, 189, 195, 208, 230, 236, 239, 244, 247, 362, 392 |
 | `internal/commands/inspect_task_render.go` | message or display text | table column header or row label (frozen human output) | 26 | 91, 91, 91, 91, 91, 91, 91, 91, 91, 135, 135, 135, 135, 135, 135, 135, 296, 296, 296, 296, 296, 296, 296, 296, 296, 296 |
 | `internal/commands/inspect_task_render.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 24 | 11, 23, 25, 30, 42, 44, 49, 63, 68, 82, 214, 217, 220, 223, 226, 241, 252, 264, 266, 272, 286, 387, 398, 402 |
 | `internal/commands/inspect_task_render.go` | number | length, count or arity comparison against a small number of arguments or elements | 19 | 87, 105, 110, 131, 138, 179, 188, 191, 206, 229, 235, 238, 292, 311, 361, 371, 375, 391, 410 |
-| `internal/commands/inspect_task_render.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 10 | 172, 177, 207, 211, 233, 244, 349, 355, 364, 395 |
+| `internal/commands/inspect_task_render.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 244 |
 | `internal/commands/inspect_tasks.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 2 | 161, 192 |
 | `internal/commands/inspect_tasks.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 6 | 158, 184, 207, 210, 237, 245 |
 | `internal/commands/inspect_tasks.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 46 |
@@ -1510,11 +1606,12 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/provider_activation.go` | number | length, count or arity comparison against a small number of arguments or elements | 2 | 334, 352 |
 | `internal/commands/provider_activation.go` | number | position in a fixed-layout slice or arguments list | 1 | 355 |
 | `internal/commands/provider_activation.go` | external argv | external command argument: cmux, wezterm or Git vocabulary (not a Liza set; C4 Git literals are preserved) | 2 | 101, 101 |
+| `internal/commands/provider_activation.go` | path | file name of the Claude ignore file offered as a candidate (layout of a directory the command reads) | 1 | 397 |
 | `internal/commands/provider_activation.go` | path | path segment or file name (layout of a directory the command reads or writes) | 12 | 116, 385, 385, 388, 388, 391, 391, 394, 394, 400, 400, 400 |
 | `internal/commands/provider_activation.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 1 | 159 |
-| `internal/commands/provider_activation.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 3 | 155, 161, 161 |
-| `internal/commands/provider_activation.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 2 | 186, 397 |
-| `internal/commands/provider_activation.go` | other literal | path element: current or parent directory | 2 | 186, 186 |
+| `internal/commands/provider_activation.go` | other literal | dot prefix and tmp pattern of the temporary file written beside the target | 2 | 161, 161 |
+| `internal/commands/provider_activation.go` | other literal | path element: current or parent directory | 3 | 186, 186, 186 |
+| `internal/commands/provider_activation.go` | other literal | two-space indent of the written JSON file | 1 | 155 |
 | `internal/commands/providers.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 1 | 51 |
 | `internal/commands/providers.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 9 | 28, 88, 92, 93, 94, 97, 102, 105, 105 |
 | `internal/commands/providers.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 40 |
@@ -1522,7 +1619,6 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/providers.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 7 | 57, 57, 120, 122, 124, 126, 126 |
 | `internal/commands/recover_agent.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 11 | 32, 43, 45, 47, 50, 53, 56, 59, 80, 82, 87 |
 | `internal/commands/recover_agent.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 4 | 36, 46, 63, 79 |
-| `internal/commands/recover_agent.go` | flag or CLI spelling | flag name, flag spelling or environment suffix of a flag table (frozen CLI surface) | 2 | 18, 19 |
 | `internal/commands/recover_agent.go` | external argv | subcommand word of the relaunch argv that follows the branded binary name | 1 | 17 |
 | `internal/commands/recover_task.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 15 | 24, 33, 37, 41, 43, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72 |
 | `internal/commands/recover_task.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 47 |
@@ -1535,14 +1631,13 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/repair_acceptance_commits.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 62, 73 |
 | `internal/commands/repair_acceptance_commits.go` | number | length, count or arity comparison against a small number of arguments or elements | 3 | 55, 55, 72 |
 | `internal/commands/repair_agent_pool.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 120 |
-| `internal/commands/repair_agent_pool.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 10 | 82, 116, 124, 126, 128, 130, 208, 232, 237, 242 |
-| `internal/commands/repair_agent_pool.go` | message or display text | separator of a rendered list (display text) | 2 | 116, 242 |
-| `internal/commands/repair_agent_pool.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 13 | 117, 195, 198, 199, 202, 206, 241, 298, 308, 321, 339, 339, 340 |
-| `internal/commands/repair_agent_pool.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 355, 368 |
-| `internal/commands/repair_agent_pool.go` | number | length, count or arity comparison against a small number of arguments or elements | 6 | 81, 127, 274, 312, 348, 365 |
+| `internal/commands/repair_agent_pool.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 10 | 82, 116, 124, 126, 128, 130, 212, 236, 241, 246 |
+| `internal/commands/repair_agent_pool.go` | message or display text | separator of a rendered list (display text) | 2 | 116, 246 |
+| `internal/commands/repair_agent_pool.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 13 | 117, 199, 202, 203, 206, 210, 245, 302, 312, 325, 343, 343, 344 |
+| `internal/commands/repair_agent_pool.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 2 | 359, 372 |
+| `internal/commands/repair_agent_pool.go` | number | length, count or arity comparison against a small number of arguments or elements | 6 | 81, 127, 278, 316, 352, 369 |
 | `internal/commands/repair_agent_pool.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 3 | 126, 126, 126 |
 | `internal/commands/repair_agent_pool.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 1 | 186 |
-| `internal/commands/repair_agent_pool.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 1 | 201 |
 | `internal/commands/repair_agent_pool.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 84 |
 | `internal/commands/repair_agent_pool_capacity.go` | message or display text | message or hint text of a classified error, diagnostic or prompt (jsonout classifies untyped errors by substring) | 3 | 228, 607, 607 |
 | `internal/commands/repair_agent_pool_capacity.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 233 |
@@ -1600,7 +1695,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/setup.go` | dynamic identity | name of a retired deployed skill that setup removes on upgrade (data list, not a vocabulary) | 1 | 34 |
 | `internal/commands/setup.go` | dynamic identity | provider or CLI identity from the provider catalog (dynamic, ADR-0045) | 2 | 229, 391 |
 | `internal/commands/setup.go` | other literal | ANSI 256 color code (style data) | 1 | 412 |
-| `internal/commands/setup.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 1 | 662 |
+| `internal/commands/setup.go` | other literal | path separator trimmed from the target directory | 1 | 662 |
 | `internal/commands/setup.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 497 |
 | `internal/commands/sprint_checkpoint.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 9 | 18, 21, 22, 23, 25, 28, 29, 31, 33 |
 | `internal/commands/sprint_checkpoint.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 16 |
@@ -1610,12 +1705,12 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/start.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 4 | 20, 20, 21, 21 |
 | `internal/commands/start.go` | branded composition | environment variable suffix composed through brand.EnvName (the brand supplies the prefix) | 2 | 20, 21 |
 | `internal/commands/status.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 19 |
+| `internal/commands/status_orchestrator.go` | message or display text | line, label or fragment of the rendered text (frozen human output) | 5 | 105, 108, 111, 114, 117 |
 | `internal/commands/status_orchestrator.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 7 | 46, 50, 68, 73, 75, 101, 103 |
 | `internal/commands/status_orchestrator.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 8 | 48, 53, 55, 57, 59, 61, 63, 70 |
 | `internal/commands/status_orchestrator.go` | message or display text | separator of a rendered list (display text) | 4 | 108, 111, 114, 119 |
 | `internal/commands/status_orchestrator.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 3 | 40, 104, 116 |
 | `internal/commands/status_orchestrator.go` | number | length, count or arity comparison against a small number of arguments or elements | 3 | 107, 110, 113 |
-| `internal/commands/status_orchestrator.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 5 | 105, 108, 111, 114, 117 |
 | `internal/commands/status_phase_handoff.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 7 | 130, 146, 149, 153, 157, 161, 166 |
 | `internal/commands/status_phase_handoff.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 184 |
 | `internal/commands/status_phase_handoff.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 121 |
@@ -1628,7 +1723,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/status_render.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 6 | 32, 71, 123, 129, 237, 251 |
 | `internal/commands/status_render.go` | number | length, count or arity comparison against a small number of arguments or elements | 16 | 30, 48, 51, 58, 70, 88, 96, 119, 151, 157, 163, 169, 179, 187, 219, 295 |
 | `internal/commands/status_render.go` | branded composition | branded command word composed through brand.Command (G1.3: the brand supplies the binary name) | 1 | 299 |
-| `internal/commands/status_render.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 315 |
+| `internal/commands/status_render.go` | other literal | name of a text/template registered by the render package (template identity, not a branch selector) | 1 | 315 |
 | `internal/commands/status_sections.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 4 | 87, 107, 120, 122 |
 | `internal/commands/status_sections.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 3 | 99, 117, 172 |
 | `internal/commands/status_sections.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 3 | 164, 244, 250 |
@@ -1637,18 +1732,16 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/status_snapshot.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 2 | 25, 30 |
 | `internal/commands/stop.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 3 | 14, 17, 18 |
 | `internal/commands/stop_guard.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 3 | 53, 101, 106 |
-| `internal/commands/stop_guard.go` | message or display text | separator of a rendered list (display text) | 2 | 106, 181 |
-| `internal/commands/stop_guard.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 48, 74, 94, 104, 114 |
-| `internal/commands/stop_guard.go` | number | length, count or arity comparison against a small number of arguments or elements | 4 | 103, 118, 151, 171 |
-| `internal/commands/stop_guard.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 1 | 125 |
-| `internal/commands/stop_guard.go` | number | position in a fixed-layout slice or arguments list | 1 | 121 |
-| `internal/commands/stop_guard.go` | number | zero: emptiness, count or sign test, initial value or default | 1 | 153 |
-| `internal/commands/stop_guard.go` | flag or CLI spelling | flag spelling or JSON null parsed from a recorded command line | 5 | 73, 128, 128, 131, 131 |
+| `internal/commands/stop_guard.go` | message or display text | separator of a rendered list (display text) | 2 | 106, 195 |
+| `internal/commands/stop_guard.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 5 | 48, 74, 94, 104, 128 |
+| `internal/commands/stop_guard.go` | number | length, count or arity comparison against a small number of arguments or elements | 4 | 103, 132, 165, 185 |
+| `internal/commands/stop_guard.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 1 | 139 |
+| `internal/commands/stop_guard.go` | number | position in a fixed-layout slice or arguments list | 1 | 135 |
+| `internal/commands/stop_guard.go` | number | zero: emptiness, count or sign test, initial value or default | 1 | 167 |
 | `internal/commands/stop_guard.go` | branded composition | environment variable suffix looked up through brand.LookupEnv (the brand supplies the prefix) | 1 | 48 |
 | `internal/commands/stop_guard.go` | dynamic identity | CLI subcommand name of a session-holding wait (operation names stay dynamic, ADR-0045) | 2 | 20, 21 |
-| `internal/commands/stop_guard.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 4 | 157, 157, 160, 160 |
-| `internal/commands/stop_guard.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 4 | 114, 121, 130, 130 |
-| `internal/commands/stop_guard.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 186 |
+| `internal/commands/stop_guard.go` | character | single character of a scanned syntax (shell word, identifier, key=value or timestamp bracket) | 4 | 171, 171, 174, 174 |
+| `internal/commands/stop_guard.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 200 |
 | `internal/commands/submit_review.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 10 | 16, 23, 24, 25, 27, 40, 47, 48, 49, 51 |
 | `internal/commands/submit_verdict.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 12 | 16, 31, 47, 48, 50, 51, 52, 54, 56, 59, 60, 61 |
 | `internal/commands/submit_verdict.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 55 |
@@ -1668,7 +1761,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/usage_report.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 6 | 51, 63, 63, 133, 133, 176 |
 | `internal/commands/usage_report.go` | number | length, count or arity comparison against a small number of arguments or elements | 1 | 195 |
 | `internal/commands/usage_report.go` | flag or CLI spelling | flag name, flag spelling or environment suffix of a flag table (frozen CLI surface) | 5 | 44, 45, 46, 47, 48 |
-| `internal/commands/usage_report.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 5 | 60, 60, 64, 64, 83 |
+| `internal/commands/usage_report.go` | other literal | flag spelling quoted in the window-order error text (display text) | 4 | 60, 60, 64, 64 |
+| `internal/commands/usage_report.go` | other literal | time layout of the parsed --since/--until date | 1 | 83 |
 | `internal/commands/validate.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 230 |
 | `internal/commands/validate.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 14 | 63, 68, 70, 76, 79, 142, 151, 156, 168, 172, 187, 189, 232, 235 |
 | `internal/commands/validate.go` | message or display text | separator of a rendered list (display text) | 2 | 189, 235 |
@@ -1681,7 +1775,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/validate.go` | data | task reference field name shown in the unresolved-fragment warning | 4 | 123, 123, 123, 123 |
 | `internal/commands/validate.go` | dynamic identity | operation label recorded in a classified error (pass-through) | 1 | 85 |
 | `internal/commands/validate.go` | dynamic identity | operation label recorded in the lifecycle error or audit entry (operations stay dynamic, ADR-0045) | 2 | 61, 74 |
-| `internal/commands/validate.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 2 | 132, 132 |
+| `internal/commands/validate.go` | other literal | label prefix of the unresolved-fragment warning (display text) | 2 | 132, 132 |
 | `internal/commands/validate_payload.go` | message or display text | message or hint text of a classified error, diagnostic or prompt (jsonout classifies untyped errors by substring) | 1 | 55 |
 | `internal/commands/validate_payload.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 1 | 37 |
 | `internal/commands/validate_payload.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 10 | 65, 79, 87, 89, 91, 96, 97, 108, 114, 118 |
@@ -1691,7 +1785,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/commands/watch.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 6 | 92, 100, 109, 126, 143, 145 |
 | `internal/commands/watch.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 1 | 82 |
 | `internal/commands/watch.go` | number | length, count or arity comparison against a small number of arguments or elements | 1 | 78 |
-| `internal/commands/watch.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 93 |
+| `internal/commands/watch.go` | other literal | time layout of the displayed timestamp | 1 | 93 |
 | `internal/commands/watch_checks_agents.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 4 | 85, 87, 141, 143 |
 | `internal/commands/watch_checks_agents.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 20 | 37, 40, 60, 93, 122, 133, 150, 167, 172, 176, 179, 230, 238, 243, 248, 253, 266, 343, 345, 350 |
 | `internal/commands/watch_checks_agents.go` | message or display text | placeholder shown in usage or dry-run text (display text) | 1 | 272 |
@@ -1766,9 +1860,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/interactive/post_init.go` | other literal | ANSI 256 color code (style data) | 1 | 38 |
 | `internal/jsonout/classify.go` | message or display text | message or hint text of a classified error, diagnostic or prompt (jsonout classifies untyped errors by substring) | 3 | 23, 28, 38 |
 | `internal/jsonout/classify.go` | message or display text | message substring that jsonout classifies an untyped error by (frozen error text) | 1 | 35 |
-| `internal/jsonout/classify.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 24 | 21, 21, 26, 26, 26, 26, 32, 32, 32, 33, 33, 33, 34, 34, 34, 34, 35, 35, 65, 67, 69, 71, 73, 101 |
+| `internal/jsonout/classify.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 24 | 21, 21, 26, 26, 26, 26, 32, 32, 32, 33, 33, 33, 34, 34, 34, 34, 35, 35, 65, 67, 69, 71, 73, 108 |
 | `internal/jsonout/classify.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 4 | 61, 61, 75, 75 |
-| `internal/jsonout/classify.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 3 | 99, 100, 100 |
 | `internal/jsonout/classify_slots.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 2 | 95, 175 |
 | `internal/jsonout/classify_slots.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 1 | 183 |
 | `internal/jsonout/classify_slots.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 31 | 69, 69, 85, 85, 93, 93, 101, 101, 109, 109, 117, 117, 125, 125, 133, 133, 141, 141, 149, 149, 157, 157, 165, 165, 173, 173, 181, 181, 192, 192, 194 |
@@ -1793,13 +1886,12 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/tui/model.go` | number | initial length or capacity of a slice or map (zero length, or a size derived from the source) | 1 | 361 |
 | `internal/tui/model.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 1 | 201 |
 | `internal/tui/model.go` | number | zero width: the initial value before the first window-size message | 1 | 363 |
-| `internal/tui/styles.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 2 | 128, 141 |
-| `internal/tui/styles.go` | number | lipgloss padding or border cell count (style data) | 8 | 215, 215, 250, 250, 263, 263, 269, 269 |
-| `internal/tui/styles.go` | number | lower bound clamp of a computed width, height or count | 3 | 228, 232, 236 |
-| `internal/tui/styles.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 3 | 228, 232, 236 |
-| `internal/tui/styles.go` | other literal | ANSI 256 color code (style data) | 25 | 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 212, 213, 220, 230, 234, 238, 243, 248, 249, 255, 260, 261, 285 |
-| `internal/tui/styles.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 9 | 115, 117, 119, 121, 123, 125, 134, 136, 138 |
-| `internal/tui/styles.go` | other literal | separator, whitespace or glyph of composed output text | 2 | 154, 156 |
+| `internal/tui/styles.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 2 | 141, 154 |
+| `internal/tui/styles.go` | number | lipgloss padding or border cell count (style data) | 8 | 228, 228, 263, 263, 276, 276, 282, 282 |
+| `internal/tui/styles.go` | number | lower bound clamp of a computed width, height or count | 3 | 241, 245, 249 |
+| `internal/tui/styles.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 3 | 241, 245, 249 |
+| `internal/tui/styles.go` | other literal | ANSI 256 color code (style data) | 25 | 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 225, 226, 233, 243, 247, 251, 256, 261, 262, 268, 273, 274, 298 |
+| `internal/tui/styles.go` | other literal | separator, whitespace or glyph of composed output text | 2 | 167, 169 |
 | `internal/tui/update.go` | number | length, count or arity comparison against a small number of arguments or elements | 1 | 178 |
 | `internal/tui/update_inline.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 6 | 45, 51, 86, 105, 120, 124 |
 | `internal/tui/update_inline.go` | empty | empty string: absence of an optional value (test, reset, default or return) | 7 | 56, 74, 96, 98, 103, 116, 130 |
@@ -1823,8 +1915,8 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/tui/view_activity.go` | number | lower bound clamp of a computed width, height or count | 5 | 15, 18, 22, 25, 34 |
 | `internal/tui/view_activity.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 2 | 18, 34 |
 | `internal/tui/view_activity.go` | number | small count, ordinal or initial value local to its expression | 1 | 22 |
-| `internal/tui/view_activity.go` | other literal | argument of a helper: flag or file label, external-tool key, template name or time layout (data of its call, see the use site) | 1 | 46 |
 | `internal/tui/view_activity.go` | other literal | separator, whitespace or glyph of composed output text | 1 | 33 |
+| `internal/tui/view_activity.go` | other literal | time layout of the displayed timestamp | 1 | 46 |
 | `internal/tui/view_agents.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 3 | 50, 211, 303 |
 | `internal/tui/view_agents.go` | message or display text | message, prompt or display text written to the user (frozen human output) | 6 | 46, 167, 177, 200, 268, 305 |
 | `internal/tui/view_agents.go` | message or display text | separator of a rendered list (display text) | 2 | 66, 311 |
@@ -1836,8 +1928,9 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/tui/view_agents.go` | number | one or two: ordinal, arity or minimum-gap arithmetic | 6 | 173, 202, 237, 279, 287, 294 |
 | `internal/tui/view_agents.go` | number | zero: emptiness, count or sign test, initial value or default | 2 | 285, 292 |
 | `internal/tui/view_agents.go` | other literal | ANSI 256 color code (style data) | 1 | 176 |
-| `internal/tui/view_agents.go` | other literal | delimiter, prefix, suffix or probe string of a text operation | 4 | 189, 233, 234, 294 |
-| `internal/tui/view_agents.go` | other literal | separator, whitespace or glyph of composed output text | 7 | 52, 66, 66, 68, 145, 213, 307 |
+| `internal/tui/view_agents.go` | other literal | brackets that delimit the status prefix of a health reason (parsed display text) | 2 | 233, 234 |
+| `internal/tui/view_agents.go` | other literal | line break counted to size rendered text | 1 | 294 |
+| `internal/tui/view_agents.go` | other literal | separator, whitespace or glyph of composed output text | 8 | 52, 66, 66, 68, 145, 189, 213, 307 |
 | `internal/tui/view_footer.go` | message or display text | display word or placeholder printed to the user (frozen human output) | 5 | 55, 55, 57, 57, 57 |
 | `internal/tui/view_footer.go` | message or display text | key hint text shown in the footer (frozen TUI output) | 1 | 55 |
 | `internal/tui/view_footer.go` | message or display text | message, label or hint text of the output (frozen human output; jsonout classifies untyped errors by substring) | 4 | 55, 57, 57, 57 |
@@ -1865,7 +1958,7 @@ Rows are grouped by file and reason; the line numbers are the tree's, one per oc
 | `internal/tui/view_tasks.go` | other literal | ANSI 256 color code (style data) | 2 | 89, 232 |
 | `internal/tui/view_tasks.go` | other literal | separator, whitespace or glyph of composed output text | 5 | 66, 66, 74, 173, 244 |
 
-Totals by kind: message or display text 2288, empty 784, number 841, flag or CLI spelling 776, cobra definition 120, branded composition 203, external argv 104, path 31, wire key 31, data 37, dynamic identity 84, character 27, other literal 234, platform identifier 1 = 5561.
+Totals by kind: message or display text 2300, empty 784, number 841, flag or CLI spelling 768, cobra definition 120, branded composition 203, external argv 101, path 32, wire key 31, data 37, dynamic identity 83, character 29, other literal 163 = 5492.
 
 ### 3b. Pre-existing named constants and variables in A7 files
 
@@ -1882,12 +1975,12 @@ Constants and variables that existed before this task (Tasks 2–10 and earlier)
 | `cmd/liza/cmd_tool_result_store.go:20` | `toolResultMaxThresholdBytes` |  | `65536` |
 | `cmd/liza/launch_exec.go:17` | `weztermExecutable` |  | `string(launchBackendWezterm)` |
 | `cmd/liza/launch_exec.go:18` | `cmuxExecutable` |  | `string(launchBackendCmux)` |
-| `cmd/liza/launch_exec.go:24` | `cmuxInteractiveReadyTimeout` |  | `60 * time.Second` |
-| `cmd/liza/launch_exec.go:26` | `cmuxInteractiveSettleDelay` |  | `2 * time.Second` |
-| `cmd/liza/launch_exec.go:28` | `cmuxPromptSubmitDelay` |  | `2 * time.Second` |
-| `cmd/liza/launch_exec.go:30` | `cmuxScreenPollInterval` |  | `500 * time.Millisecond` |
-| `cmd/liza/launch_exec.go:32` | `cmuxPromptSubmitAttempts` |  | `5` |
-| `cmd/liza/launch_exec.go:34` | `cmuxScreenReadLines` |  | `"80"` |
+| `cmd/liza/launch_exec.go:53` | `cmuxInteractiveReadyTimeout` |  | `60 * time.Second` |
+| `cmd/liza/launch_exec.go:55` | `cmuxInteractiveSettleDelay` |  | `2 * time.Second` |
+| `cmd/liza/launch_exec.go:57` | `cmuxPromptSubmitDelay` |  | `2 * time.Second` |
+| `cmd/liza/launch_exec.go:59` | `cmuxScreenPollInterval` |  | `500 * time.Millisecond` |
+| `cmd/liza/launch_exec.go:61` | `cmuxPromptSubmitAttempts` |  | `5` |
+| `cmd/liza/launch_exec.go:63` | `cmuxScreenReadLines` |  | `"80"` |
 | `cmd/liza/launch_resolve.go:24` | `launchBackendWezterm` | `launchBackend` | `"wezterm"` |
 | `cmd/liza/launch_resolve.go:25` | `launchBackendCmux` | `launchBackend` | `"cmux"` |
 | `cmd/liza/launch_resolve.go:32` | `masPresetTechnicalSpec` | `masLaunchPreset` | `"technical-spec"` |
@@ -2120,10 +2213,10 @@ White-box tests added by this task (one new file per package; each pins the spel
 
 | Test file | Tests |
 |---|---|
-| `cmd/liza/k7_a7_vocabulary_test.go` | TestA7CompletionValuesKeepAcceptedSpellings, TestA7MASLaunchPresetsKeepRoleNames, TestA7ValidateRoleTypeNamesAllowedTypes, TestA7PairingLaunchVocabularyKeepsSpellings, TestA7NamedMagicValuesKeepTheirValues |
-| `internal/commands/k7_a7_vocabulary_test.go` | TestA7InspectVocabularyKeepsAcceptedSpellings, TestA7StatusVocabularyKeepsAcceptedSpellings, TestA7KernelVocabularyKeepsWireSpellings, TestA7HistoryExtraKeysKeepTheirSpellings, TestA7WatchVocabularyKeepsKeyShapes, TestA7IntegrationFailureFallbackKeepsDiagnosticShape, TestA7DashboardSectionFormatsKeepRendering, TestA7ScipPlanSyntaxKeepsLanguageSpellings |
-| `internal/jsonout/k7_a7_vocabulary_test.go` | TestA7ErrorCodesKeepTheirSpellings |
-| `internal/tui/k7_a7_vocabulary_test.go` | TestA7ColumnTiersKeepTheirBoundaries, TestA7TaskFilterLabelsKeepTheirSpellings, TestA7StatusMapKeysKeepModelSpellings, TestA7LayoutAndAnswerConstantsKeepTheirValues |
+| `cmd/liza/k7_a7_vocabulary_test.go` | TestA7CompletionValuesKeepAcceptedSpellings, TestA7MASLaunchPresetsKeepRoleNames, TestA7ValidateRoleTypeNamesAllowedTypes, TestA7PairingLaunchVocabularyKeepsSpellings, TestA7NamedMagicValuesKeepTheirValues, TestA7LaunchProbesKeepProviderScreenText, TestA7ToolCompletionOffersAll |
+| `internal/commands/k7_a7_vocabulary_test.go` | TestA7InspectVocabularyKeepsAcceptedSpellings, TestA7StatusVocabularyKeepsAcceptedSpellings, TestA7KernelVocabularyKeepsWireSpellings, TestA7HistoryExtraKeysKeepTheirSpellings, TestA7WatchVocabularyKeepsKeyShapes, TestA7IntegrationFailureFallbackKeepsDiagnosticShape, TestA7DashboardSectionFormatsKeepRendering, TestA7ScipPlanSyntaxKeepsLanguageSpellings, TestA7AutoRepairEnvAcceptsNoAsFalse, TestA7StopGuardAwaitSyntaxKeepsItsTokens, TestA7SpawnAndSembleSyntaxKeepSpellings |
+| `internal/jsonout/k7_a7_vocabulary_test.go` | TestA7ErrorCodesKeepTheirSpellings, TestA7LockTimeoutFragmentsKeepTheirSpellings |
+| `internal/tui/k7_a7_vocabulary_test.go` | TestA7ColumnTiersKeepTheirBoundaries, TestA7TaskFilterLabelsKeepTheirSpellings, TestA7StatusMapKeysKeepModelSpellings, TestA7LayoutAndAnswerConstantsKeepTheirValues, TestA7StatusAffixesKeepSpellingsAndBranchOrder |
 
 ## 4. False friends: same spelling, different meaning
 
@@ -2134,7 +2227,7 @@ Each group below was matched by the value scan (a constant of this task, or a li
 | `"none"` | `contractKeyNone` (cmd/liza/cmd_agent.go:33: the provider catalog's key for a CLI without a contract file); `ops.LifecycleEffectsNone` (internal/ops/lifecycle_result.go:35: an effects class); `models.InheritModeNone`, `models.RestoreModeNone`, `ops.postWorktreeDetectionNone` (other sets); display placeholders (cmd/liza/cmd_plan_check.go:208, internal/commands/analyze.go:85) | Only `contractKeyNone` is named in A7. The effects class is adopted as `ops.LifecycleEffectsNone` at `lifecycle.go` and the three `WrapLifecycleError` sites (table 2); the placeholders are display text (table 3) |
 | `"unknown"` | `unknownRoleLabel` (internal/commands/inspect_vocabulary.go:113: the label of an empty role in the metrics and validation rows), `diagnosticUnknown` and `worktreeStateUnknown` (internal/commands/integration_failure_diagnostics.go:13: an absent diagnostic field and a failed worktree probe), the link-time build metadata defaults (cmd/liza/main.go:26, cmd/liza/main.go:27), `procscan.AgentProcessUnknown`, `models.RejectionCauseUnknown`, `ops.LifecycleEffectsUnknown` | The role label and the diagnostic fallback are two names (different views, different fallbacks); the fallback operation and the unknown worktree state deliberately share `diagnosticUnknown` (same file, same meaning). Build metadata stays a link-time variable (table 3b); the owner constants are other sets |
 | `"operator"` | `OperatorActor` (internal/commands/agent_health.go:22: the actor recorded for an operation the human operator runs), `ops.actorOperator` (internal/ops/helpers.go:20, unexported), `models.AcceptanceDeferralOperator` (internal/models/acceptance.go:109: the origin of an acceptance deferral) | `OperatorActor` named in `commands` (R3, table 5) and adopted by `tui/commands.go`; the models constant names a different attribute and is not adopted |
-| `"human"` | `defaultChangedBy` (cmd/liza/main.go:282: the audit actor of a command without `--changed-by`), `ops.actorHuman` (internal/ops/helpers.go:21, unexported), the `human` oracle kind of the test helpers (outside A7) | Named once in `cmd/liza` (R3, table 5); the test-helper kind is a different set in a different package |
+| `"human"` | `defaultChangedBy` (cmd/liza/main.go:290: the audit actor of a command without `--changed-by`), `ops.actorHuman` (internal/ops/helpers.go:21, unexported), the `human` oracle kind of the test helpers (outside A7) | Named once in `cmd/liza` (R3, table 5); the test-helper kind is a different set in a different package |
 | `"system"` | `autoRepairLogActor` (internal/commands/watch_repair_spawn.go:16: the agent field of the log entry auto-repair appends), `ops.actorSystem` (internal/ops/helpers.go:22, unexported), the handoff-event agent of `internal/agent/claiming.go` (A9) | Named once in `commands` (R3, table 5); the other two sites belong to their owners (table 7) |
 | `"APPROVED"` | `verdictApproved` (internal/commands/submit_verdict.go:40: the stored verdict an approval carries), `ops.VerdictApproved` (internal/ops/await_verdict_outcome.go:20: an `AwaitVerdictOutcome`, exported), `ops.submittedVerdictApproved` (internal/ops/verdict_transition.go:19: the stored verdict, unexported) | `verdictApproved` is the stored verdict (R3, table 5). `ops.VerdictApproved` names an await outcome, not the stored verdict, so it is not adopted for `printVerdictResult` |
 | `"task"`, `"agent"` | `inspectRootTask`, `inspectRootAgent` (internal/commands/inspect_vocabulary.go:72: roots of an inspect query path), `ops.notFoundEntityTask`, `ops.notFoundEntityAgent` (internal/ops/helpers.go:14, unexported), the `agent` subcommand word of the relaunch argv (internal/commands/recover_agent.go:17) | The inspect roots are typed and converted to the `NotFoundError.Entity` text at 13 inspect sites (table 2); the ops entity names are the owner's and stay unadopted (table 5); the subcommand word is argv (table 3) |
@@ -2159,7 +2252,7 @@ Each A7 name below decides control flow or crosses a boundary on a spelling whos
 | Value | A7 name | Gap | Disposition |
 |---|---|---|---|
 | `"operator"` | `OperatorActor` (internal/commands/agent_health.go:22) | `ops.actorOperator` (internal/ops/helpers.go:20) is unexported; `models` names no actor | Named and exported in `commands` because the TUI (`tui/commands.go`, three sites) imports `commands`; `ops` is not edited |
-| `"human"` | `defaultChangedBy` (cmd/liza/main.go:282) | `ops.actorHuman` (internal/ops/helpers.go:21) is unexported | Named beside `resolveChangedBy` |
+| `"human"` | `defaultChangedBy` (cmd/liza/main.go:290) | `ops.actorHuman` (internal/ops/helpers.go:21) is unexported | Named beside `resolveChangedBy` |
 | `"system"`, `"auto_repair_agent_spawned"` | `autoRepairLogActor`, `autoRepairLogActionSpawned` (internal/commands/watch_repair_spawn.go:16) | `ops.actorSystem` (internal/ops/helpers.go:22) is unexported; the log action word has no owner | Named beside the one log entry auto-repair appends; the action word is pinned by the A7 oracle golden (`auto-repair-pool/backoff.txt`) |
 | `"OK"`, `"TRIGGERED"` | `circuitBreakerStatusOK`, `circuitBreakerStatusTriggered` (internal/commands/status_vocabulary.go:44) | `ops.circuitBreakerStatus*` (internal/ops/mode_change.go:45) is unexported; `models.CircuitBreaker.IsValidStatus` compares literals | Named in `commands`; `initCircuitBreakerStatus` derives from the same constant |
 | `"APPROVED"` (stored verdict) | `verdictApproved` (internal/commands/submit_verdict.go:40) | `ops.submittedVerdictApproved` (internal/ops/verdict_transition.go:19) is unexported; the exported `ops.VerdictApproved` is an await outcome (table 4) | Named beside `printVerdictResult` |
@@ -2174,13 +2267,13 @@ Each A7 name below decides control flow or crosses a boundary on a spelling whos
 | `"running"` (process display status) | `processStatusRunning` (internal/commands/status_vocabulary.go:52; named by Task 7) | `procscan.AgentProcessStatus.DisplayStatus` returns the literal (procscan/process_status.go:63) | Already named in A7; recorded here as the owner gap |
 | `NotFoundError.Entity` `"task"`, `"agent"` | `inspectRootTask`, `inspectRootAgent` | `ops.notFoundEntityTask`, `ops.notFoundEntityAgent` (internal/ops/helpers.go:14) are unexported | The inspect sites convert A7's own query roots; the ops entity names are not adopted (table 4) |
 | `"accepted"`, `"refuted"`, `"superseded"`, `"escalated"` | classified data (completion candidates of `reconcile-verdict`) | `ops.reconcileDisposition*` (internal/ops/quarantined_verdict.go:36) is unexported | Classified (table 3): the list is a completion candidate set and decides no A7 control flow |
-| `"windows"` (`runtime.GOOS`) | literal at one site | Go names no platform constant (cmd/liza/launch_exec.go:389); `ops` repeats the literal (ops/admit.go:58; ops/deferred_validation.go:182; ops/post_worktree_setup.go:247) | Classified as a platform identifier (table 3), not named locally, to avoid a second copy of a shared literal |
+| `"windows"` (`runtime.GOOS`) | `goosWindows` (cmd/liza/launch_exec.go:22) | Go names no platform constant (cmd/liza/launch_exec.go:21, cmd/liza/launch_exec.go:418); `ops` repeats the literal (ops/admit.go:58; ops/deferred_validation.go:182; ops/post_worktree_setup.go:247) | Named beside `launchShell`, the one A7 branch on the platform (same value; D-6 permits the local name); the `ops` sites are table 7 owner-side sites and are not edited |
 
 Prospective A1/A3/A6 symbols: none was undelivered. The A1 vocabulary (`models.TaskEventName`, `AnomalyType`, `InheritMode`, `roles.RoleType`), the A3 lifecycle vocabulary (`ops.LifecycleSafeAction`, `LifecycleEffects`, `models.LifecycleOutcome`) and the A6 `ops.IntegrationReason` are present at the coding HEAD (the generator fails with BLOCKED otherwise), so there is no BLOCKED finding against any area's closure.
 
 ## 6. Conformance sites edited outside A7 files
 
-None. No production file outside the five A7 packages changes: `git diff --name-only f71ac787f d36ca99a3 -- cmd internal` names only files of `cmd/liza`, `internal/commands`, `internal/interactive`, `internal/jsonout` and `internal/tui` (the generator asserts this), `internal/oracle/**` is untouched, and no `ops`, `models`, `roles`, `prompts`, `agent`, `alerts` or `errors` file is edited, so no X2 caller edit exists. The adoption-only packages are read, not written: A7 uses `alerts.Category*` (`internal/alerts/categories.go`) and the `internal/errors` types as they are. Scanned for adoption sites and unchanged: `internal/alerts/alerts.go`, `internal/alerts/categories.go`, `internal/errors/classification.go`, `internal/errors/doc.go`, `internal/errors/errors.go`.
+None. No production file outside the five A7 packages changes: `git diff --name-only f71ac787f bd43a89e5 -- cmd internal` names only files of `cmd/liza`, `internal/commands`, `internal/interactive`, `internal/jsonout` and `internal/tui` (the generator asserts this), `internal/oracle/**` is untouched, and no `ops`, `models`, `roles`, `prompts`, `agent`, `alerts` or `errors` file is edited, so no X2 caller edit exists. The adoption-only packages are read, not written: A7 uses `alerts.Category*` (`internal/alerts/categories.go`) and the `internal/errors` types as they are. Scanned for adoption sites and unchanged: `internal/alerts/alerts.go`, `internal/alerts/categories.go`, `internal/errors/classification.go`, `internal/errors/doc.go`, `internal/errors/errors.go`.
 
 No white-box test is edited: the only test changes are the four new files of table 3c (all `A`, asserted by the generator against `git diff --name-status`), because every substitution keeps the compared value and no test expression names a constant that changed.
 
@@ -2188,6 +2281,7 @@ No white-box test is edited: the only test changes are the four new files of tab
 
 | Owner-side site | Spelling | A7 name | Area |
 |---|---|---|---|
+| ops/admit.go:58; ops/deferred_validation.go:182; ops/post_worktree_setup.go:247 | `"windows"` platform identifier | `goosWindows` | A3–A6 `ops`: share one platform name if they want one, then A7 adopts |
 | models/history.go:484 | `"OK"`, `"TRIGGERED"` | `circuitBreakerStatus*` | A1 (`models`) |
 | models/diagnostics.go:123, models/diagnostics.go:280; models/task_claimability.go:35; statevalidate/task_assignments.go:24; statevalidate/validate_agent.go:68 | `"$"` sentinel prefix | `sentinelAssigneePrefix` | A1 (`models`, `statevalidate`) |
 | agent/claiming.go:680 | `"system"` log actor | `autoRepairLogActor` | A9 (`agent`) |
@@ -2208,7 +2302,7 @@ Reconciliation of the eleven rows of the plan section "K7 Vocabulary" (`a7-k7`) 
 
 | Plan row | Reconciliation at the coding HEAD |
 |---|---|
-| `--json` error codes (`not_found`, `validation`, `permission_denied`, `stale_caller`, …) | Delivered by Task 2: `jsonout.errorCode` (internal/jsonout/classify_slots.go, 14 constants) with `ErrorDetail.Code` staying `string`; codes from `OperationalError.Code` pass through. Residual: 3 remain, all classified (flag or CLI spelling 3; table 3). This task pins the 14 spellings by name (`TestA7ErrorCodesKeepTheirSpellings`). Sites: 0 |
+| `--json` error codes (`not_found`, `validation`, `permission_denied`, `stale_caller`, …) | Delivered by Task 2: `jsonout.errorCode` (internal/jsonout/classify_slots.go, 14 constants) with `ErrorDetail.Code` staying `string`; codes from `OperationalError.Code` pass through. Residual: 3 remain, all classified (flag or CLI spelling 3; table 3). This task pins the 14 spellings by name (`TestA7ErrorCodesKeepTheirSpellings`). Sites: 2 |
 | Lifecycle outcome names read by classification (`INVALID_INPUT`, `FORBIDDEN`) | Adopted: `jsonout` references `models.Lifecycle*` 2 times in 1 files; no second type exists. Residual: none remains. Sites: 0 |
 | Alert categories emitted and matched by watch and the TUI | Delivered by Task 9: `alerts.Category` (internal/alerts/categories.go, 26 constants), `Alert.Category` stays `string`; A7 references the constants 52 times in 12 files. This task adopts the last two spellings that Task 9 left: `CIRCUIT BREAKER` in `tui/view_agents.go` and `INVALID STATE` in `watch_reconcile.go`. Residual: 2 remain, all classified (message or display text 2; table 3). Literals emitted in A3–A6 `ops` and A9 stay with their owners (table 7). Sites: 1 |
 | Role types in watch and pool switches, history events, anomaly types | Adopted: `roles.RoleType*` 22 references in 12 files (this task adds `validateRoleType`'s typed parameter and its 10 call sites in 8 files, the MAS launch presets, the pairing prompts and the `defaults:` keys of the generated `models.yaml`), `models.TaskEvent*` / `models.Anomaly*` 14 references in 5 files. Residual role-type spellings: 6 remain, all classified (flag or CLI spelling 6; table 3); residual event and anomaly spellings: 1 remain, all classified (data 1; table 3). Sites: 56 |
@@ -2216,11 +2310,11 @@ Reconciliation of the eleven rows of the plan section "K7 Vocabulary" (`a7-k7`) 
 | Integration reasons switched on by `commands/wt_merge.go` | Adopted by conversion since Task 5/2: `ops.IntegrationReason*` 4 references in 1 files (`wt_merge.go`, `jsonout/classify.go`). Residual: none remains. Sites: 0 |
 | Inspect output formats and inspect targets | Delivered by Task 7 (`inspectFormat`, `inspectTarget`, `statusFormat`, `phaseHandoffState`); this task adds `inspectQueryRoot`, `computedField` and `dashboardSectionFormat`, exports the spellings `cmd/liza` needs (`InspectFormatNames`, `StatusFormatNames`, `InspectTarget*`, `InspectFormatJSON`) so the completion and routing code stops repeating them, and replaces `usage_report.go`'s private format list with `inspectFormats`. CLI values are unchanged (pinned by `TestA7InspectVocabularyKeepsAcceptedSpellings`, `TestA7StatusVocabularyKeepsAcceptedSpellings`). Residual: 40 remain, all classified (external argv 3, branded composition 16, cobra definition 2, flag or CLI spelling 17, wire key 2; table 3). Sites: 58 |
 | TUI activity-entry kinds, inline actions, modes | Delivered: `ActivityKind`, `InlineAction`, `InputMode`, `TaskFilter`, `ColumnTier` (internal/tui/activity.go, internal/tui/model.go, internal/tui/model.go, internal/tui/model.go, internal/tui/model.go). This task names the status-color keys by `models` constants, the column-tier boundaries, the filter labels, the panel and overlay chrome and the agent column widths. Residual: 2 remain, all classified (flag or CLI spelling 2; table 3). Sites: 5 |
-| Launch backends, presets | Delivered by Task 4 (`launchBackend`, `masLaunchPreset`, cmd/liza/launch_resolve.go); this task builds the MAS role presets from `roles.RoleType*`/role constants, names the cmux and wezterm split directions and the reviewer ID prefix. The cmux/wezterm argv words are external CLI vocabulary (table 3, `external argv`). Residual: 6 remain, all classified (dynamic identity 6; table 3). Sites: 18 |
-| Thresholds, flash and prompt delays, poll intervals, retry counts | Named in their concern, values unchanged (24 constants added by this task: `autoAssignAgentIDAttempts`, `autoRepairPendingEntryFields`, `columnTierFullMinWidth`, `columnTierStandardMinWidth`, `columnTierWideMinWidth`, `compactAgentIDWidth`, `compactAgentRoleWidth`, `defaultTaskPriority`, `deleteAgentTerminateWait`, `expandedAgentIDWidth`, `expandedAgentRoleWidth`, `finalTaskAttempt`, `headerFooterHeight`, `hypothesisExhaustionFailures`, `maxBlockedQuestions`, `overlayChromeWidth`, `panelChromeWidth`, `percentScale`, `provisionInstanceIDWidth`, `shortCommitWidth`, `shortObjectIDWidth`, `supervisorBootstrapFileMode`, `supervisorLogFileMode`, `taskPanelTitleMinGap`); the watch thresholds were already named, and test-replaceable timing variables stay variables (table 3b). Sites: 34 |
+| Launch backends, presets | Delivered by Task 4 (`launchBackend`, `masLaunchPreset`, cmd/liza/launch_resolve.go); this task builds the MAS role presets from `roles.RoleType*`/role constants, names the cmux and wezterm split directions and the reviewer ID prefix. The cmux/wezterm argv words are external CLI vocabulary (table 3, `external argv`). Residual: 6 remain, all classified (dynamic identity 6; table 3). Sites: 37 |
+| Thresholds, flash and prompt delays, poll intervals, retry counts | Named in their concern, values unchanged (25 constants added by this task: `autoAssignAgentIDAttempts`, `autoRepairPendingEntryFields`, `columnTierFullMinWidth`, `columnTierStandardMinWidth`, `columnTierWideMinWidth`, `compactAgentIDWidth`, `compactAgentRoleWidth`, `defaultTaskPriority`, `deleteAgentTerminateWait`, `expandedAgentIDWidth`, `expandedAgentRoleWidth`, `finalTaskAttempt`, `headerFooterHeight`, `hypothesisExhaustionFailures`, `maxBlockedQuestions`, `overlayChromeWidth`, `panelChromeWidth`, `percentScale`, `provisionInstanceIDWidth`, `shellMetacharacters`, `shortCommitWidth`, `shortObjectIDWidth`, `supervisorBootstrapFileMode`, `supervisorLogFileMode`, `taskPanelTitleMinGap`); the watch thresholds were already named, and test-replaceable timing variables stay variables (table 3b). Sites: 35 |
 | Role names, tool names, configured commands, catalog identities | Stay dynamic (ADR-0045, K7): table 9 |
 
-Beyond the plan's initial inventory (RP11 was a starting list), the scan found A7-local finite vocabularies that decide control flow or cross a boundary; they are named in A7 and counted as family V12: 123 sites (`OperatorActor`, `alertIdentitySeparator`, `autoRepairLogActionSpawned`, `autoRepairLogActor`, `autoRepairPendingEntryFormat`, `autoRepairPendingEntrySeparator`, `backgroundJobStatusRunning`, `boolArgFalse`, `boolArgTrue`, `circuitBreakerStatusOK`, `circuitBreakerStatusTriggered`, `confirmAnswerY`, `confirmAnswerYes`, `contractKeyNone`, `defaultChangedBy`, `diagnosticKeyFailedBy`, `diagnosticKeyOperation`, `diagnosticKeyReason`, `diagnosticKeyRecoveryHint`, `diagnosticKeyStatus`, `diagnosticKeyWorktree`, `diagnosticKeyWorktreeCheckError`, `diagnosticKeyWorktreeMissing`, `diagnosticKeyWorktreeRecorded`, `diagnosticKeyWorktreeState`, `diagnosticUnknown`, `emptyCell`, `headRef`, `historyExtraAffectedTaskIDs`, `historyExtraDiagnostic`, `historyExtraOperation`, `historyExtraPRURL`, `historyExtraRepairRequestCleared`, `historyExtraRepairSourceTask`, `historyExtraRepairValidation`, `integrationStatusComplete`, `narrowChildActionNarrowed`, `narrowChildActionSkipped`, `pendingEntryAgentID`, `pendingEntryModelsItem`, `pendingEntryPID`, `pendingEntryRole`, `queryPathSeparator`, `registeredProcessKeyFormat`, `retargetRejectedAction`, `retargetRejectedDetailKey`, `sentinelAssigneePrefix`, `sprintTimelinePath`, `stdinFileArg`, `stopGuardDecisionBlock`, `stopGuardKeyBackgroundJobs`, `tagOmitted`, `taskFieldGenerationDigest`, `unknownRoleLabel`, `verdictApproved`, `worktreeStateMissing`, `worktreeStateNotRecorded`, `worktreeStatePresent`, `worktreeStateRecordedUnchecked`, `worktreeStateUnknown`, `yamlTagKey`, `zeroDurationText`).
+Beyond the plan's initial inventory (RP11 was a starting list), the scan found A7-local finite vocabularies that decide control flow or cross a boundary; they are named in A7 and counted as family V12: 163 sites (`OperatorActor`, `alertIdentitySeparator`, `autoRepairLogActionSpawned`, `autoRepairLogActor`, `autoRepairPendingEntryFormat`, `autoRepairPendingEntrySeparator`, `backgroundJobStatusRunning`, `boolArgFalse`, `boolArgTrue`, `circuitBreakerStatusOK`, `circuitBreakerStatusTriggered`, `cliFlag`, `codexExecutable`, `confirmAnswerY`, `confirmAnswerYes`, `contractKeyNone`, `defaultChangedBy`, `diagnosticKeyFailedBy`, `diagnosticKeyOperation`, `diagnosticKeyReason`, `diagnosticKeyRecoveryHint`, `diagnosticKeyStatus`, `diagnosticKeyWorktree`, `diagnosticKeyWorktreeCheckError`, `diagnosticKeyWorktreeMissing`, `diagnosticKeyWorktreeRecorded`, `diagnosticKeyWorktreeState`, `diagnosticUnknown`, `emptyCell`, `envBooleanNo`, `flagProjectRoot`, `flagProjectRootShort`, `flagValueDelimiter`, `flagValueSeparator`, `flagVerbose`, `flagVerboseShort`, `goosWindows`, `headRef`, `historyExtraAffectedTaskIDs`, `historyExtraDiagnostic`, `historyExtraOperation`, `historyExtraPRURL`, `historyExtraRepairRequestCleared`, `historyExtraRepairSourceTask`, `historyExtraRepairValidation`, `integrationStatusComplete`, `jsonFlagToken`, `jsonNullLiteral`, `longFlagPrefix`, `narrowChildActionNarrowed`, `narrowChildActionSkipped`, `pendingEntryAgentID`, `pendingEntryModelsItem`, `pendingEntryPID`, `pendingEntryRole`, `posixShellPath`, `queryPathSeparator`, `registeredProcessKeyFormat`, `retargetRejectedAction`, `retargetRejectedDetailKey`, `sembleMessageLead`, `sembleMessagePrefix`, `sentinelAssigneePrefix`, `shortFlagPrefix`, `sprintTimelinePath`, `statusPrefixDraft`, `statusPrefixImplementing`, `statusPrefixReviewing`, `statusSuffixApproved`, `statusSuffixPartiallyApproved`, `statusSuffixPlanning`, `statusSuffixReadyForReview`, `statusSuffixRejected`, `statusSuffixToReview`, `stdinFileArg`, `stopGuardDecisionBlock`, `stopGuardKeyBackgroundJobs`, `tagOmitted`, `taskFieldGenerationDigest`, `toolSelectorAll`, `unknownRoleLabel`, `verdictApproved`, `windowsExecutableSuffix`, `worktreeStateMissing`, `worktreeStateNotRecorded`, `worktreeStatePresent`, `worktreeStateRecordedUnchecked`, `worktreeStateUnknown`, `yamlTagKey`, `zeroDurationText`).
 
 Proof of "no behaviour change": `git diff --stat` of `internal/oracle` is empty (no golden, fixture or oracle file is edited); the changed lines that mention `exec` or the Git helpers number 0 added and 0 removed (a naming change does not add a subprocess, a Git call or a `Modify` closure, so K1 and the Preserved Sites C1, C4 and C6 are untouched); the exported surface grows only by `InspectFormatJSON`, `InspectFormatNames`, `InspectFormatTable`, `InspectFormatValue`, `InspectTargetAgents`, `InspectTargetAnomalies`, `InspectTargetMetrics`, `InspectTargetTasks`, `OperatorActor`, `StatusFormatNames` (strings, a function and a constant for `cmd/liza` and the TUI to share), and no existing exported name changes its signature or value; every named value is pinned against the literal it replaced by the `TestA7*` tests of table 3c.
 
@@ -2229,14 +2323,15 @@ Proof of "no behaviour change": `git diff --stat` of `internal/oracle` is empty 
 | Identity | Where | Why it stays dynamic |
 |---|---|---|
 | CLI subcommand name of a session-holding wait (operation names stay dynamic, ADR-0045) | internal/commands/stop_guard.go:20, internal/commands/stop_guard.go:21 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
-| default reviewer launch spec: provider identity pair (dynamic, ADR-0045) | cmd/liza/cmd_launch.go:111, cmd/liza/cmd_launch.go:218 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
+| default reviewer launch spec: provider identity pair (dynamic, ADR-0045) | cmd/liza/cmd_launch.go:114, cmd/liza/cmd_launch.go:221 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | entry-point name of the default pipeline (pipeline configuration, ADR-0045; masLaunchPreset names the three launch presets in cmd/liza) | cmd/liza/cmd_init.go:727, cmd/liza/cmd_init.go:727, cmd/liza/cmd_init.go:727, cmd/liza/cmd_init.go:727, internal/interactive/init_wizard.go:103, internal/interactive/init_wizard.go:104, internal/interactive/init_wizard.go:105 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | legacy provider catalog schema v1 fallback path (removed with schema v1 support) | internal/commands/providers.go:121, internal/commands/providers.go:123, internal/commands/providers.go:123, internal/commands/providers.go:125, internal/commands/providers.go:127 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | name of a retired deployed skill that setup removes on upgrade (data list, not a vocabulary) | internal/commands/setup.go:34 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | operation label recorded in a classified error (pass-through) | cmd/liza/rbac.go:29, cmd/liza/rbac.go:40, internal/commands/validate.go:85 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | operation label recorded in the lifecycle error or audit entry (operations stay dynamic, ADR-0045) | cmd/liza/cmd_archive_acceptance_receipts.go:39, cmd/liza/cmd_archive_terminal_tasks.go:44, cmd/liza/cmd_recover_integration.go:33, cmd/liza/cmd_replace_task.go:103, internal/commands/rejection_rca.go:30, internal/commands/rejection_rca.go:39, internal/commands/validate.go:61, internal/commands/validate.go:74 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | operation name checked against the caller role permissions (RBAC key; ADR-0045 keeps operations dynamic) | cmd/liza/cmd_config.go:137, cmd/liza/cmd_reaffirm_proof.go:65, cmd/liza/cmd_reconcile_verdict.go:56, cmd/liza/cmd_replace_task.go:71, cmd/liza/cmd_reserve_provider.go:64, cmd/liza/cmd_review.go:99, cmd/liza/cmd_review.go:170, cmd/liza/cmd_review.go:271, cmd/liza/cmd_review.go:462, cmd/liza/cmd_review.go:531, cmd/liza/cmd_task.go:377, cmd/liza/cmd_task_blocked.go:89, cmd/liza/cmd_task_blocked.go:219, cmd/liza/cmd_task_dependencies.go:93, cmd/liza/cmd_task_dependencies.go:181, cmd/liza/cmd_task_dependencies.go:303, cmd/liza/cmd_task_dependencies.go:379, cmd/liza/cmd_task_dependencies.go:454, cmd/liza/cmd_task_records.go:62, cmd/liza/cmd_task_records.go:205, cmd/liza/cmd_task_retire.go:89, cmd/liza/cmd_task_retire.go:146 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
-| provider or CLI identity from the provider catalog (dynamic, ADR-0045) | cmd/liza/cmd_agent.go:322, cmd/liza/cmd_agent.go:324, cmd/liza/cmd_agent.go:326, cmd/liza/cmd_agent.go:328, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_launch.go:111, cmd/liza/cmd_launch.go:218, cmd/liza/launch_exec.go:369, cmd/liza/launch_exec.go:371, internal/commands/init.go:169, internal/commands/init.go:186, internal/commands/init_mas_state.go:243, internal/commands/providers.go:57, internal/commands/providers.go:57, internal/commands/providers.go:120, internal/commands/providers.go:122, internal/commands/providers.go:124, internal/commands/providers.go:126, internal/commands/providers.go:126, internal/commands/setup.go:229, internal/commands/setup.go:391 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
+| provider or CLI identity from the provider catalog (dynamic, ADR-0045) | cmd/liza/cmd_agent.go:322, cmd/liza/cmd_agent.go:324, cmd/liza/cmd_agent.go:326, cmd/liza/cmd_agent.go:328, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_agent.go:330, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_init.go:497, cmd/liza/cmd_launch.go:114, cmd/liza/cmd_launch.go:221, internal/commands/init.go:176, internal/commands/init.go:193, internal/commands/init_mas_state.go:243, internal/commands/providers.go:57, internal/commands/providers.go:57, internal/commands/providers.go:120, internal/commands/providers.go:122, internal/commands/providers.go:124, internal/commands/providers.go:126, internal/commands/providers.go:126, internal/commands/setup.go:229, internal/commands/setup.go:391 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
+| separator after the role of an agent id prefix query (role names stay dynamic, ADR-0045) | internal/commands/inspect.go:149 | Catalog, configuration and operation identities are open sets (ADR-0045); a constant would close them |
 | agent IDs, task IDs, plan IDs, worktree paths, commits, process IDs | all files | Runtime identities, not vocabulary |
 | role names, role pairs | `cmd/liza`, `commands`, `tui` (read from the pipeline and `models.yaml`) | Roles and role pairs are configured through the pipeline (ADR-0045); only the three role types are a closed set and are adopted (table 8) |
 | configured commands (`post_worktree_cmd`, validation commands, provider CLI commands) | `commands/init*.go`, `cmd/liza/cmd_init.go` | User-configured values (G1.1); never constants |
