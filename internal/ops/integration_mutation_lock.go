@@ -15,6 +15,14 @@ import (
 // variable only so tests can observe a timeout without waiting it out.
 var integrationMutationLockTimeout = 30 * time.Second
 
+// Lock-operation labels of the merge's ref mutations; the task ID follows each
+// one. The forward label also names the completion linearization it nests in.
+const (
+	integrationLockForward  = "forward "
+	integrationLockRollback = "rollback "
+	integrationLockRestore  = "restore "
+)
+
 func withIntegrationMutationLock(projectRoot, operation string, fn func() error) error {
 	return withIntegrationMutationLockTimeout(projectRoot, operation, integrationMutationLockTimeout, fn)
 }

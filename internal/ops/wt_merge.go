@@ -27,9 +27,6 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
-// maxMergeRetries is the maximum number of CAS retry attempts for the merge loop.
-const maxMergeRetries = 3
-
 // maxIntegrationDiagnosticOutputExcerptBytes bounds test output persisted into
 // task history. Full output remains transient on IntegrationFailedError.
 const maxIntegrationDiagnosticOutputExcerptBytes = 4096
@@ -46,11 +43,6 @@ const integrationTestCommand = "scripts/integration-test.sh"
 // (each creates a temp git repo), so this is safe in practice.
 var DefaultIntegrationTestTimeout = 10 * time.Minute
 
-// mergeCASRetryTestHook is a test-only hook invoked after reading integration HEAD
-// in each CAS attempt and before merge/ref-update logic runs.
-// Production code leaves this nil.
-var mergeCASRetryTestHook func(attempt int, integrationRef, preMergeHEAD string) error
-
 // statIntegrationScript is a seam for the branch that distinguishes a missing
 // integration script from a stat that failed for another reason. A fixture can
 // produce that on POSIX by putting a regular file where scripts/ belongs
@@ -59,15 +51,6 @@ var mergeCASRetryTestHook func(attempt int, integrationRef, preMergeHEAD string)
 // to a path it owns. Same seam as statWorktreePath in submit_verdict.go.
 var statIntegrationScript = os.Stat
 
-// artifactGuardPostUpdateTestHook is a test-only hook invoked after a successful
-// CAS merge and before the retained post-merge artifact validation backstop.
-// Production code leaves this nil.
-var artifactGuardPostUpdateTestHook func() error
-
-// Test seams restore their previous values with t.Cleanup. Production keeps
-// the hook nil and uses the shared transition validator directly.
-var integrationMutationReceiptPersistTestHook func(models.IntegrationMutationReceipt)
-var validateIntegrationLifecycleTransition = statevalidate.ValidateIntegrationLifecycleTransition
 var mergeFinalStateTestHook func()
 
 // mergePreparedTestHook is a test-only hook invoked right after a merge's
@@ -327,94 +310,6 @@ func integrationFailureRecoveryHint(reason string) string {
 	}
 }
 
-type integrationRefMutation struct {
-	taskID       string
-	beforeCommit string
-	afterCommit  string
-}
-
-func (mutation *integrationRefMutation) receipt() models.IntegrationMutationReceipt {
-	return models.IntegrationMutationReceipt{
-		TaskID:       mutation.taskID,
-		BeforeCommit: mutation.beforeCommit,
-		AfterCommit:  mutation.afterCommit,
-	}
-}
-
-func persistIntegrationMutationReceipt(bb *db.Blackboard, mutation *integrationRefMutation, authority *models.AgentAuthority) error {
-	if mutation == nil || mutation.beforeCommit == mutation.afterCommit {
-		return nil
-	}
-	receipt := mutation.receipt()
-	if integrationMutationReceiptPersistTestHook != nil {
-		integrationMutationReceiptPersistTestHook(receipt)
-	}
-	return modifyLifecycleState(bb, authority, func(state *models.State) error {
-		previous := *state
-		previous.Goal = state.Goal
-		if lifecycle := state.Goal.Integration; lifecycle != nil {
-			previousLifecycle := *lifecycle
-			previousLifecycle.MutationReceipts = slices.Clone(lifecycle.MutationReceipts)
-			previous.Goal.Integration = &previousLifecycle
-		} else {
-			state.Goal.Integration = &models.IntegrationLifecycle{}
-		}
-
-		state.Goal.Integration.MutationReceipts = append(state.Goal.Integration.MutationReceipts, receipt)
-		if err := invalidateGoalCompleteStopForMutation(state, receipt); err != nil {
-			return err
-		}
-		return validateIntegrationLifecycleTransition(&previous, state)
-	})
-}
-
-// provenMergeEffect returns the integration-ref movement this task already
-// made, or nil when no live proof of it exists.
-//
-// Between the CAS merge and the MERGED write the integration ref has moved and
-// persistIntegrationMutationReceipt has durably recorded that this task moved
-// it. Two independent conditions make that record proof rather than a hint: the
-// recorded commit must contain the approved review commit, which excludes the
-// reverse receipt written by a rollback, and it must still be an ancestor of the
-// integration ref, which excludes a merge that was later rolled back or lost.
-func provenMergeEffect(state *models.State, gw *git.Git, integrationRef, taskID, expectedCommit string) (*integrationRefMutation, error) {
-	if state.Goal.Integration == nil {
-		return nil, nil
-	}
-	var candidate *models.IntegrationMutationReceipt
-	for i := range state.Goal.Integration.MutationReceipts {
-		if state.Goal.Integration.MutationReceipts[i].TaskID == taskID {
-			candidate = &state.Goal.Integration.MutationReceipts[i]
-		}
-	}
-	if candidate == nil || candidate.AfterCommit == "" {
-		return nil, nil
-	}
-	carriesApproved, err := gw.IsAncestor(expectedCommit, candidate.AfterCommit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check recorded merge ancestry: %w", err)
-	}
-	if !carriesApproved {
-		return nil, nil
-	}
-	head, err := gw.GetCommitSHA(integrationRef)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
-	}
-	stillLive, err := gw.IsAncestor(candidate.AfterCommit, head)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check recorded merge liveness: %w", err)
-	}
-	if !stillLive {
-		return nil, nil
-	}
-	return &integrationRefMutation{
-		taskID:       taskID,
-		beforeCommit: candidate.BeforeCommit,
-		afterCommit:  candidate.AfterCommit,
-	}, nil
-}
-
 // interruptedMergePreparation reports whether the refusal in the caller's way is
 // an unresolved wt-merge preparation at this exact boundary, left by any actor.
 // mergeWorktreeLifecycle is the only creator of wt-merge preparations and holds
@@ -478,7 +373,7 @@ func resumeInterruptedMerge(bb *db.Blackboard, projectRoot string, state *models
 	if integrationBranch == "" {
 		integrationBranch = "main"
 	}
-	integrationRef := "refs/heads/" + integrationBranch
+	integrationRef := integrationBranchRefPrefix + integrationBranch
 	proven, err := provenMergeEffect(state, gitWrapper, integrationRef, task.ID, expectedCommit)
 	if err != nil {
 		return false, err
@@ -509,288 +404,16 @@ func resumeInterruptedMerge(bb *db.Blackboard, projectRoot string, state *models
 	return true, nil
 }
 
-func rollbackMergedCommit(projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string) (*integrationRefMutation, error) {
-	var mutation *integrationRefMutation
-	err := withIntegrationMutationLock(projectRoot, "rollback "+taskID, func() error {
-		if err := gitWrapper.UpdateRef(integrationRef, preMergeHEAD, mergeCommit); err != nil {
-			var casErr *git.RefConflictError
-			if errors.As(err, &casErr) {
-				log.Printf("wt-merge %s: skipping rollback — another merge landed on top of %s", taskID, shortSHA(mergeCommit))
-				return nil
-			}
-			return err
-		}
-		mutation = &integrationRefMutation{taskID: taskID, beforeCommit: mergeCommit, afterCommit: preMergeHEAD}
+// shortSHAWidth is how many leading characters of a SHA log and diagnostic
+// messages show.
+const shortSHAWidth = 7
 
-		// Ref rolled back — sync working tree to match pre-merge state. This
-		// reverse sync undoes the forward SyncMergedFiles step.
-		if syncErr := gitWrapper.SyncMergedFiles(mergeCommit, preMergeHEAD); syncErr != nil {
-			log.Printf("wt-merge %s: WARNING — failed to sync working tree after rollback: %v", taskID, syncErr)
-		}
-		if restoreRef != "" {
-			if restoreErr := gitWrapper.RestoreSyncedFiles(preMergeHEAD, mergeCommit, restoreRef); restoreErr != nil {
-				return fmt.Errorf("failed to restore working tree after rollback: %w", restoreErr)
-			}
-		}
-		return nil
-	})
-	return mutation, err
-}
-
-// rollbackMergedCommitAndPersist reports whether the integration ref actually
-// moved back. It does not when another merge landed on top, and it cannot when
-// the baseline equals the merge commit — a resumed merge whose own pre-merge
-// HEAD is no longer known from this invocation. Callers must not describe those
-// outcomes as a rollback: the task's commit is still in the integration branch.
-func rollbackMergedCommitAndPersist(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID string, authority *models.AgentAuthority) (bool, error) {
-	rewound := false
-	err := withEffectiveIntegrationCompletionLinearization(projectRoot, "rollback "+taskID, func() error {
-		if preMergeHEAD == "" || preMergeHEAD == mergeCommit {
-			return nil
-		}
-		mutation, rollbackErr := rollbackMergedCommit(projectRoot, gitWrapper, integrationRef, preMergeHEAD, mergeCommit, restoreRef, taskID)
-		rewound = mutation != nil
-		if receiptErr := persistIntegrationMutationReceipt(bb, mutation, authority); receiptErr != nil {
-			receiptErr = fmt.Errorf("failed to persist rollback integration mutation receipt: %w", receiptErr)
-			if rollbackErr != nil {
-				return errors.Join(rollbackErr, receiptErr)
-			}
-			return receiptErr
-		}
-		return rollbackErr
-	})
-	return rewound, err
-}
-
-// integrationRetentionDetail names the state Git is actually left in when a
-// failed merge was not rolled back, so the recorded diagnostic cannot imply a
-// rewind that never happened.
-func integrationRetentionDetail(rewound bool, rollbackErr error, mergeCommit string) string {
-	if rewound || rollbackErr != nil {
-		return ""
-	}
-	return fmt.Sprintf("integration branch retains %s: it was not rolled back", shortSHA(mergeCommit))
-}
-
-// artifactGuardReadState is how the candidate artifact guard reads state. The
-// read takes no state lock: a saturated lock must not turn an approved merge
-// into a failure (D78). A locked read would add no guarantee here, because its
-// lock is released before update-ref either way; the post-update backstop takes
-// a fresh locked read for its validation and conditionally rolls back. Tests
-// replace it to observe or fail the guard's reads.
-var artifactGuardReadState = (*db.Blackboard).ReadSnapshot
-
-func buildArtifactGuardHook(bb *db.Blackboard, projectRoot string, gitWrapper *git.Git, taskID string) func(candidateTreeish string) error {
-	readState := func() (*models.State, error) { return artifactGuardReadState(bb) }
-	return func(candidateTreeish string) error {
-		err := validateCandidateArtifactRefsWithFreshState(readState, projectRoot, gitWrapper, candidateTreeish, taskID)
-		var unavailable *candidateArtifactGuardUnavailableError
-		if err == nil || errors.As(err, &unavailable) {
-			return err
-		}
-		return &candidateArtifactGuardError{err: err}
-	}
-}
-
-// candidateArtifactGuardError is a confirmed verdict: the candidate tree lacks
-// an artifact that state references.
-type candidateArtifactGuardError struct {
-	err error
-}
-
-func (e *candidateArtifactGuardError) Error() string {
-	return e.err.Error()
-}
-
-func (e *candidateArtifactGuardError) Unwrap() error {
-	return e.err
-}
-
-// candidateArtifactGuardUnavailableError means the guard could not read the
-// state it needed to reach a verdict. It says nothing about the candidate, and
-// the guard runs before update-ref, so the merge published nothing.
-type candidateArtifactGuardUnavailableError struct {
-	err error
-}
-
-func (e *candidateArtifactGuardUnavailableError) Error() string {
-	return e.err.Error()
-}
-
-func (e *candidateArtifactGuardUnavailableError) Unwrap() error {
-	return e.err
-}
-
-func validateCandidateArtifactRefsWithFreshState(
-	readState func() (*models.State, error),
-	projectRoot string,
-	lookup statevalidate.CandidateTreeLookup,
-	candidateTreeish string,
-	taskID string,
-) error {
-	state, err := readState()
-	if err != nil {
-		return &candidateArtifactGuardUnavailableError{err: fmt.Errorf("candidate artifact guard failed to read state: %w", err)}
-	}
-
-	firstErr := statevalidate.ValidateCandidateMergeArtifactRefs(candidateTreeish, state, projectRoot, taskID, lookup)
-	if firstErr == nil {
-		return nil
-	}
-
-	confirmationState, confirmationReadErr := readState()
-	if confirmationReadErr != nil {
-		// An unconfirmed finding may come from stale state, so it is not a verdict.
-		freshnessErr := fmt.Errorf("failed to re-read state for candidate artifact guard freshness: %w", confirmationReadErr)
-		return &candidateArtifactGuardUnavailableError{err: fmt.Errorf("candidate artifact guard failed and state freshness could not be verified: %w", errors.Join(firstErr, freshnessErr))}
-	}
-
-	if confirmationErr := statevalidate.ValidateCandidateMergeArtifactRefs(candidateTreeish, confirmationState, projectRoot, taskID, lookup); confirmationErr != nil {
-		return confirmationErr
-	}
-	return nil
-}
-
-// shortSHA truncates a SHA to 7 characters for log messages.
+// shortSHA truncates a SHA to shortSHAWidth characters for log messages.
 func shortSHA(s string) string {
-	if len(s) > 7 {
-		return s[:7]
+	if len(s) > shortSHAWidth {
+		return s[:shortSHAWidth]
 	}
 	return s
-}
-
-// casMergeOutcome holds the result of a compare-and-swap merge into an integration ref.
-type casMergeOutcome struct {
-	mergeCommit  string // SHA of the resulting commit (merge commit or fast-forwarded task commit)
-	preMergeHEAD string // integration HEAD before the merge (needed for working tree sync and rollback)
-	fastForward  bool   // true when the merge was a fast-forward or the commit was already merged
-	conflict     bool   // true when merge-tree found conflicts; caller handles state transition
-}
-
-// performCASMerge merges expectedCommit into integrationRef using a compare-and-swap
-// retry loop to handle concurrent merges. Returns conflict=true when merge-tree
-// detects conflicts (caller is responsible for the INTEGRATION_FAILED transition).
-func performCASMerge(gw *git.Git, integrationRef, expectedCommit, taskID string, preUpdateHook func(candidateTreeish string) error) (*casMergeOutcome, error) {
-	var mergeCommit, preMergeHEAD string
-	var fastForward bool
-
-	var attempt int
-	for attempt = 0; attempt < maxMergeRetries; attempt++ {
-		if attempt > 0 {
-			log.Printf("wt-merge %s: CAS retry attempt %d/%d", taskID, attempt+1, maxMergeRetries)
-		}
-
-		var err error
-		preMergeHEAD, err = gw.GetCommitSHA(integrationRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get integration HEAD: %w", err)
-		}
-		if mergeCASRetryTestHook != nil {
-			if hookErr := mergeCASRetryTestHook(attempt, integrationRef, preMergeHEAD); hookErr != nil {
-				return nil, fmt.Errorf("merge CAS retry hook failed: %w", hookErr)
-			}
-		}
-
-		// Already merged — expectedCommit is ancestor of integration HEAD.
-		isAncestor, err := gw.IsAncestor(expectedCommit, preMergeHEAD)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check ancestry: %w", err)
-		}
-		if isAncestor {
-			return &casMergeOutcome{
-				mergeCommit:  preMergeHEAD,
-				preMergeHEAD: preMergeHEAD,
-				fastForward:  true,
-			}, nil
-		}
-
-		// Fast-forward: integration HEAD is ancestor of expected commit.
-		isFF, err := gw.IsAncestor(preMergeHEAD, expectedCommit)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check fast-forward: %w", err)
-		}
-		if isFF {
-			if preUpdateHook != nil {
-				if err := preUpdateHook(expectedCommit); err != nil {
-					retry, hookErr := handlePreUpdateHookFailure(gw, integrationRef, preMergeHEAD, err)
-					if retry {
-						continue
-					}
-					return nil, hookErr
-				}
-			}
-			if err := gw.UpdateRef(integrationRef, expectedCommit, preMergeHEAD); err != nil {
-				var casErr *git.RefConflictError
-				if errors.As(err, &casErr) {
-					continue
-				}
-				return nil, fmt.Errorf("failed to fast-forward integration branch: %w", err)
-			}
-			return &casMergeOutcome{
-				mergeCommit:  expectedCommit,
-				preMergeHEAD: preMergeHEAD,
-				fastForward:  true,
-			}, nil
-		}
-
-		// True merge — use merge-tree (no working tree modification).
-		treeSHA, clean, err := gw.MergeTree(preMergeHEAD, expectedCommit)
-		if err != nil {
-			return nil, fmt.Errorf("merge-tree computation failed: %w", err)
-		}
-		if !clean {
-			return &casMergeOutcome{
-				preMergeHEAD: preMergeHEAD,
-				conflict:     true,
-			}, nil
-		}
-
-		mergeMsg := "Merge " + taskID + " (task/" + taskID + ")"
-		mergeCommit, err = gw.CreateCommitFromTree(treeSHA, []string{preMergeHEAD, expectedCommit}, mergeMsg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create merge commit: %w", err)
-		}
-		fastForward = false
-
-		if preUpdateHook != nil {
-			if err := preUpdateHook(mergeCommit); err != nil {
-				retry, hookErr := handlePreUpdateHookFailure(gw, integrationRef, preMergeHEAD, err)
-				if retry {
-					continue
-				}
-				return nil, hookErr
-			}
-		}
-		if err := gw.UpdateRef(integrationRef, mergeCommit, preMergeHEAD); err != nil {
-			var casErr *git.RefConflictError
-			if errors.As(err, &casErr) {
-				continue
-			}
-			return nil, fmt.Errorf("failed to update integration branch: %w", err)
-		}
-		break
-	}
-	if attempt == maxMergeRetries {
-		return nil, fmt.Errorf("merge CAS failed after %d attempts — high contention on %s", maxMergeRetries, integrationRef)
-	}
-
-	return &casMergeOutcome{
-		mergeCommit:  mergeCommit,
-		preMergeHEAD: preMergeHEAD,
-		fastForward:  fastForward,
-	}, nil
-}
-
-func handlePreUpdateHookFailure(gw *git.Git, integrationRef, preMergeHEAD string, hookErr error) (bool, error) {
-	currentHEAD, err := gw.GetCommitSHA(integrationRef)
-	if err != nil {
-		stalenessErr := fmt.Errorf("failed to re-read integration HEAD: %w", err)
-		return false, fmt.Errorf("pre-update hook failed and staleness could not be verified: %w", errors.Join(hookErr, stalenessErr))
-	}
-	if currentHEAD != preMergeHEAD {
-		return true, nil
-	}
-	return false, hookErr
 }
 
 // startIndexRefresh launches the post-merge repo-root index refresh. Tests
@@ -974,7 +597,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 		integrationBranch = "main"
 	}
 
-	integrationRef := "refs/heads/" + integrationBranch
+	integrationRef := integrationBranchRefPrefix + integrationBranch
 	// Persist the request before touching the integration ref. A concurrent or
 	// restarted invocation must requery while this preparation is unresolved.
 	var preparation models.LifecyclePreparation
@@ -1022,8 +645,8 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 	artifactGuardHook := buildArtifactGuardHook(bb, projectRoot, gitWrapper, taskID)
 	var outcome *casMergeOutcome
 	var forwardMutation *integrationRefMutation
-	err = withEffectiveIntegrationCompletionLinearization(projectRoot, "forward "+taskID, func() error {
-		mutationErr := withIntegrationMutationLock(projectRoot, "forward "+taskID, func() error {
+	err = withEffectiveIntegrationCompletionLinearization(projectRoot, integrationLockForward+taskID, func() error {
+		mutationErr := withIntegrationMutationLock(projectRoot, integrationLockForward+taskID, func() error {
 			var mergeErr error
 			casStarted = true
 			outcome, mergeErr = performCASMerge(gitWrapper, integrationRef, expectedCommit, taskID, artifactGuardHook)
@@ -1236,7 +859,7 @@ func mergeWorktree(projectRoot, taskID, agentID string, authority *models.AgentA
 
 	// Restore working tree when checked-out branch differs from integration.
 	if branchErr == nil && currentBranch != integrationBranch {
-		syncErr := withIntegrationMutationLock(projectRoot, "restore "+taskID, func() error {
+		syncErr := withIntegrationMutationLock(projectRoot, integrationLockRestore+taskID, func() error {
 			return gitWrapper.RestoreSyncedFiles(preMergeHEAD, mergeCommit, "HEAD")
 		})
 		if syncErr != nil {

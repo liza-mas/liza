@@ -9,9 +9,8 @@ var areaA6 = Area{
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/ops/reconcile_merged.go", Func: "reconcileMergedWithOptionalAuthority"}, Ceiling: 119},
 		{Key: Key{File: "internal/ops/wt_create.go", Func: "createWorktree"}, Ceiling: 120},
-		{Key: Key{File: "internal/ops/wt_merge.go"}, Ceiling: 1403},
+		{Key: Key{File: "internal/ops/wt_merge.go"}, Ceiling: 1026},
 		{Key: Key{File: "internal/ops/wt_merge.go", Func: "mergeWorktree"}, Ceiling: 554},
-		{Key: Key{File: "internal/ops/wt_merge.go", Func: "performCASMerge"}, Ceiling: 110},
 	},
 	S2: []S2Entry{},
 }
