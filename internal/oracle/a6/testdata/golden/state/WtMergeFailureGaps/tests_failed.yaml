@@ -1,0 +1,268 @@
+# before
+agents:
+    code-reviewer-1:
+        context_percent: 0
+        generation: oracle-reviewer
+        heartbeat: <TIME:Z>
+        iterations_total: 0
+        lease_expires: <TIME:Z>
+        pid: <PID>
+        provider: codex
+        role: code-reviewer
+        status: IDLE
+        terminal: terminal-1
+    coder-1:
+        context_percent: 0
+        generation: oracle-coder
+        heartbeat: <TIME:Z>
+        iterations_total: 0
+        pid: <PID>
+        provider: codex
+        role: coder
+        status: IDLE
+        terminal: terminal-1
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned: []
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - approved_by: code-reviewer-1
+      assigned_to: coder-1
+      base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: A6 approved merge task
+      done_when: Approved change merged
+      handoff_events:
+        - agent: coder-1
+          timestamp: <TIME:Z>
+          trigger: submission
+      history:
+        - agent: coder-1
+          commit: '<SHA:REVIEW>'
+          event: submitted
+          time: <TIME:Z>
+        - agent: code-reviewer-1
+          commit: '<SHA:REVIEW>'
+          event: approved
+          time: <TIME:Z>
+      id: task-1
+      iteration: 1
+      lease_expires: <TIME:Z>
+      priority: 1
+      review_commit: '<SHA:REVIEW>'
+      role_pair: coding-pair
+      scope: A6 merge fixture
+      spec_ref: README.md
+      status: CODE_APPROVED
+      type: coding
+      worktree: .worktrees/task-1
+version: 1
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 4
+goal:
+    id: oracle
+    description: Oracle fixture
+    spec_ref: README.md
+    integration:
+        mutation_receipts:
+            - task_id: task-1
+              before_commit: <SHA:BASE>
+              after_commit: <SHA:REVIEW>
+            - task_id: task-1
+              before_commit: <SHA:REVIEW>
+              after_commit: <SHA:BASE>
+    created: <TIME:Z>
+    status: IN_PROGRESS
+    alignment_history:
+        - timestamp: <TIME:Z>
+          event: initialization
+          summary: Oracle fixture
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: A6 approved merge task
+      status: INTEGRATION_FAILED
+      priority: 1
+      assigned_to: coder-1
+      worktree: .worktrees/task-1
+      base_commit: <SHA:BASE>
+      iteration: 1
+      review_commit: <SHA:REVIEW>
+      approved_by: code-reviewer-1
+      merge_commit: <SHA:REVIEW>
+      lease_expires: <TIME:Z>
+      spec_ref: README.md
+      done_when: Approved change merged
+      scope: A6 merge fixture
+      failed_by:
+        - code-reviewer-1
+      integration_failure:
+        failing_command: scripts/integration-test.sh
+        merge_commit: <SHA:REVIEW>
+        operation: wt-merge
+        output_bytes: 26
+        output_truncated: false
+        reason: integration tests failed
+        recovery_hint: inspect the integration test output, fix the task branch, resubmit, and retry merge
+        test_output_excerpt: |
+            oracle-integration-output
+      lifecycle:
+        revision: 1
+        completion_sequence: 0
+      handoff_events:
+        - timestamp: <TIME:Z>
+          agent: coder-1
+          trigger: submission
+        - timestamp: <TIME:Z>
+          agent: code-reviewer-1
+          trigger: submission
+          failed:
+            - integration tests failed
+          next_step: inspect the integration test output, fix the task branch, resubmit, and retry merge
+      created: <TIME:Z>
+      history:
+        - time: <TIME:Z>
+          event: submitted
+          agent: coder-1
+          commit: <SHA:REVIEW>
+        - time: <TIME:Z>
+          event: approved
+          agent: code-reviewer-1
+          commit: <SHA:REVIEW>
+        - time: <TIME:Z>
+          event: integration_failed
+          agent: code-reviewer-1
+          reason: integration tests failed
+          commit: <SHA:REVIEW>
+          diagnostic:
+            failing_command: scripts/integration-test.sh
+            merge_commit: <SHA:REVIEW>
+            operation: wt-merge
+            output_bytes: 26
+            output_truncated: false
+            reason: integration tests failed
+            recovery_hint: inspect the integration test output, fix the task branch, resubmit, and retry merge
+            test_output_excerpt: |
+                oracle-integration-output
+agents:
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        generation: oracle-reviewer
+        lease_expires: <TIME:Z>
+        heartbeat: <TIME:Z>
+        terminal: terminal-1
+        provider: codex
+        iterations_total: 0
+        context_percent: 0
+        pid: <PID>
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: oracle-coder
+        lease_expires: <TIME:Z>
+        heartbeat: <TIME:Z>
+        terminal: terminal-1
+        provider: codex
+        iterations_total: 0
+        context_percent: 0
+        pid: <PID>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME:Z>
+        deadline: <TIME:Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME:Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    agent_progress_timeout: 600
+    integration_branch: integration
+    mode: RUNNING

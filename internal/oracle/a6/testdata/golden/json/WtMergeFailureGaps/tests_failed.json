@@ -1,0 +1,30 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "unknown",
+        "operation": "wt-merge",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "task-1",
+        "task_status": "INTEGRATION_FAILED",
+        "transition_id": "<ID>"
+      },
+      "message": "wt-merge: STATE_CHANGED (safe_action=requery): integration failed: integration tests failed"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "unknown",
+      "operation": "wt-merge",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "task-1",
+      "task_status": "INTEGRATION_FAILED",
+      "transition_id": "<ID>"
+    }
+  }
+}

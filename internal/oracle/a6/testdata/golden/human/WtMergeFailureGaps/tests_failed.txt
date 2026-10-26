@@ -1,0 +1,15 @@
+exit_code: 1
+stdout:
+stderr:
+⚠️ Integration tests failed
+Task task-1 marked as INTEGRATION_FAILED
+Test output:
+oracle-integration-output
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: INTEGRATION_FAILED
+effects: unknown
+task_id: task-1
+transition_id: <ID>
+current_assignee: coder-1
+Error: wt-merge: STATE_CHANGED (safe_action=requery): integration failed: integration tests failed
