@@ -36,8 +36,6 @@ var areaA9 = Area{
 		},
 	},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/agent/supervisor_restart.go", Func: "exit42RestartTracker.Handle"}, Ceiling: 111},
-		{Key: Key{File: "internal/agent/waitforwork.go", Func: "waitForWorkEventDriven"}, Ceiling: 132},
 		{Key: Key{File: "internal/agent/worktree_check.go", Func: "ensureReviewerWorktreeLocked"}, Ceiling: 139},
 	},
 	S2: []S2Entry{},
