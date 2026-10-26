@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-lifetime",
+      "file": "internal/agent/a9_supervisor_pb_test.go",
+      "assertion": "PB-1 TestRunSupervisorWithholdsAgentEnvDenyBeforeRegistration and TestValidateIdentity (identity and environment withholding before registration), PB-2 TestRunSupervisorPassesResolverDerivedRoleTypeToPauseWait (frozen pipeline resolver and strategy), PB-3 TestA9SupervisorPB3ReplayPrecedesRegistration (pending-verdict replay before registration, new, green on the unchanged tree), PB-4 TestRegisterAgent, TestUnregisterAgent, TestRunSupervisor_HeartbeatMissingAgentStopsSupervisor, TestStartSupervisorHeartbeat_StopWaitsForWorker and TestReleaseIfSurplusRetiresSubmittedDoerWithoutClaiming (registration, lifetime heartbeat, independent cleanup context, retired skip); TestOracleA9Registration, TestOracleA9Heartbeat and TestOracleA9SurplusRetire run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-turn",
+      "file": "internal/agent/supervisor_initial_task_test.go",
+      "assertion": "PB-5 TestRunSupervisor_HaltedDoerLaunchResumesSameIteration and TestRunSupervisorWaitAdmission (heartbeat across idle waits), PB-6 TestRunSupervisorInitialTaskSpentByClaim, PB-7 TestRunSupervisorRetiresAtTaskBoundaryUnderBacklog and TestRunSupervisorParkedSurplusRetiresInsteadOfClaiming, PB-8 TestRunSupervisorPassesResolverDerivedRoleTypeToPauseWait, TestWaitWhilePausedHardModesBlockTransitionCheckpointRoleException and TestProviderLaunchGate_RefusesStartWhilePaused (the two role gates), PB-9 TestRunSupervisor_HeartbeatMissingAgentStopsSupervisor (heartbeat-error precedence), PB-10 TestSupervisor_BuildPromptFailure_BlocksTask and TestSupervisorClaimFailureQuarantinesBrokenBoundary (claimed versus effective task IDs), PB-11 TestSupervisor_BuildPromptFailure_BlocksTask and TestSupervisor_BuildPromptFailure_NonPrecommit_DoesNotBlock (prompt-failure block targets), PB-12 TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution, TestRunSupervisorCrashBackoffSpansTasks, TestAbandonedBackgroundTaskRetry_BlocksReleasedTaskOverThreshold and the supervisor_block_preserves_work tests (verdict replay, quota WIP before release, provider audit, background-job preservation, exit-specific tracker resets); all green on the unchanged tree and after; TestOracleA9DoerClaim, TestOracleA9SurplusRetire and TestOracleA9OrchestratorTurn run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-session",
+      "file": "internal/agent/inflight_submit_deadline_test.go",
+      "assertion": "PB-13 TestProviderLaunchGenerationLinearization, TestProviderLaunchGate_PauseWaitsForAdmittedStart and TestReviewLaunchRequiresCurrentOwnership (lifecycle then admission lock nesting and the current-generation, review and validation checks before start), PB-14 TestProviderLaunchFenceFailureSemantics and the errLaunchContended cases of state_lock_retry_test.go (start-attempted marker; only pre-start contention retryable), PB-15 TestRunSupervisor_HaltedReviewerLaunchReleasesReview and TestRunSupervisor_HaltedDoerLaunchResumesSameIteration (gate failure distinct from backend failure), PB-16 TestExecuteAgentInteractiveUsageCapture, TestExecuteAgentBlocksTaskAfterProgressTimeout, TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks and TestExecuteAgentProgressWatchdogStillBlocksDuringHandback (interactive path, watchdog lifetime, execution deadline, in-flight submit deferral); TestOracleA9InteractiveLaunch and TestOracleA9AuthorityLost run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-verify",
+      "file": "internal/agent/a9_supervisor_pb_test.go",
+      "assertion": "PB-17 TestA9VerifyOrchestratorWakeTriggers (every trigger's expectation and its warning-versus-refusal outcome; written and green on the unchanged tree, commit d1a0cdc85, before verifyOrchestratorWakeChanges was touched) plus the existing TestVerifyOrchestratorStateChanges_*, TestSelfHealCheckpoint_*, TestEffectiveIntegrationCompletionConsumers and planning-complete tests; TestOracleA9OrchestratorTurn runs at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-authority",
+      "file": "internal/agent/generation_fence_test.go",
+      "assertion": "TestSupervisorDispatchGenerationFence, TestSupervisorOwnedMutationGenerationFence, TestSupervisorGenerationCancellation and TestRunSupervisorReviewOwnershipLossContinues keep generation fencing and review ownership in the extracted lifetime, turn and session files; TestOracleA9AuthorityLost and TestOracleA9Registration run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-supervisor-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard passes with the RunSupervisor, executeAgent, verifyOrchestratorWakeChanges and systemctl.go file ratchet keys removed, each in the commit that brings it within the threshold (systemctl.go 861 to 57 lines, verifyOrchestratorWakeChanges 124 to 40, executeAgent 207 to 15, RunSupervisor 521 to 29), and no new offender in the new supervisor, session, pause-gate, usage-sink and verification files",
+      "command_index": 5
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a9/lifecycle_test.go",
+      "assertion": "the A9 and A8 oracle suites (indexes 1 and 3) pass and regen check (indexes 2 and 4) reproduces every golden from the starting tree; no oracle file, golden or PROVENANCE record is edited by this unit",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "internal/agent/a9_supervisor_pb_test.go",
+      "assertion": "go test -race over agent, process, agentlaunch and providersignal passes, including the supervisor loop, launch gate and watchdog concurrency the existing tests exercise",
+      "command_index": 9
+    },
+    {
+      "obligation_id": "AC-vocab",
+      "approved_reference_id": "structure"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "tests"
+    },
+    {
+      "obligation_id": "AC-sites",
+      "approved_reference_id": "d33"
+    },
+    {
+      "obligation_id": "AC-shims",
+      "approved_reference_id": "moves"
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "docs"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "proof"
+    }
+  ]
+}
