@@ -20,6 +20,8 @@ const (
 	parentDescriptionLimit = 500
 	// priorAttemptNumber is the only attempt that surfaces the previous attempt's outcome.
 	priorAttemptNumber = 2
+	// firstReworkIteration is the first iteration that answers a rejection.
+	firstReworkIteration = 2
 	// nullRejectionReason is the placeholder a cleared rejection reason can
 	// carry; it is not feedback.
 	nullRejectionReason = "null"
@@ -96,7 +98,7 @@ func populateRepositoryIntelligence(data *prompts.RoleContextData, task *models.
 
 // populatePriorRejection carries the rejection text a reworked task answers.
 func populatePriorRejection(data *prompts.RoleContextData, task *models.Task) {
-	if task.Iteration > 1 && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != nullRejectionReason {
+	if task.Iteration >= firstReworkIteration && task.RejectionReason != nil && *task.RejectionReason != "" && *task.RejectionReason != nullRejectionReason {
 		data.PriorRejection = *task.RejectionReason
 	}
 }

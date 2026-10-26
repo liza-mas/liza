@@ -470,7 +470,7 @@ func plannerMergedAt(task *models.Task) time.Time {
 var plannerCitationPattern = regexp.MustCompile("(?m)(?:`([^`\\n]+\\.[mM][dD]):([0-9]+)(?:[-–][0-9]+)?`|([A-Za-z0-9_./+@-]+\\.[mM][dD]):([0-9]+))")
 
 func populatePlannerRework(task *models.Task, repo *git.Git, data *prompts.RoleContextData) error {
-	if task.Iteration < 2 || data.PriorRejection == "" {
+	if task.Iteration < firstReworkIteration || data.PriorRejection == "" {
 		return nil
 	}
 	var rejection *models.TaskHistoryEntry

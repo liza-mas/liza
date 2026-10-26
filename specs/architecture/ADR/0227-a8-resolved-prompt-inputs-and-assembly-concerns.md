@@ -132,14 +132,62 @@ rg -n -e '(==|!=)\s*"[^"]+"' -e '"[^"]+"\s*(==|!=)' -e '^\s*case\s+.*"[^"]+"' \
    -e 'strings\.(HasPrefix|HasSuffix|Contains|Cut|Trim[A-Za-z]*|Split[A-Za-z]*|Index[A-Za-z]*)\([^)]*"[^"]+"' \
    -e 'append\([A-Za-z.]+, "[^"]+"\)' -e 'append\(\[\]string\{"[^"]+"' <files>   # string literals
 rg -n -e 'TruncateText\([^)]*,\s*[0-9]+' -e '^\s+[A-Za-z]+\s+(=|[A-Za-z.]+ =)\s+[0-9]+' \
-   -e '^const [A-Za-z]+ = [0-9]+' -e ':= -?[1-9][0-9]*$' <files>                  # numbers
+   -e '^const [A-Za-z]+ = [0-9]+' -e ':= -?[1-9][0-9]*$' <files>                  # numbers declared
+rg -n -e '(<=|>=|==|!=|<|>)\s*-?[0-9]+\b' -e '\b[0-9]+\s*(<=|>=|==|!=|<|>)\s' <files>  # numbers compared
+rg -n -e '(^|[^A-Za-z0-9_."%/-])[1-9][0-9]*([^A-Za-z0-9_."%]|$)' <files>          # any other integer >= 1
 ```
+
+The third search is the comparison search the first review round showed missing;
+the fourth is the catch-all that proves nothing else is left (comment lines and
+constant declarations excluded).
 
 Classes: **T** typed constant in its owning package; **N** named constant;
 **O** open string by rule (YAML-defined identity, ADR-0045); **S** structural
 (delimiter, empty-string or zero-length test, regular-expression group), not
 vocabulary; **M** message or template text, not control flow. Every row is a
 `file:line` at the closure HEAD of this unit.
+
+Policy thresholds (third search): each selects a branch by a value of the
+domain, so each is a named constant; the value and the comparison are unchanged
+(`> 1` became `>= firstReworkIteration`, `<= 0` became `< firstGlobalGeneration`,
+equivalent for integers).
+
+| Location | Constant | Value | Meaning |
+|---|---|---|---|
+| `agent/prompt_planner_context.go:473` | `firstReworkIteration` (`agent/prompt_task_context.go:24`) | 2 | planner rework is assembled from the first iteration that answers a rejection |
+| `agent/prompt_task_context.go:101` | `firstReworkIteration` | 2 | the prior rejection is carried from that iteration |
+| `agent/prompt_integration.go:69` | `sliceAnalysisGeneration` (`:22`) | 0 | a slice analysis carries no generation |
+| `agent/prompt_integration.go:157` | `firstGlobalGeneration` (`:24`) | 1 | lowest valid generation of a global analysis |
+| `agent/prompt_integration.go:198` | `multiPlanScopeCount` (`:27`) | 2 | contributing sets of this size or more must have coverage for every plan |
+
+`priorAttemptNumber` (2) is a distinct concept (the one attempt that shows the
+previous attempt) and is not reused for these.
+
+Structural numbers (third and fourth searches), classified **S** and not named:
+`len(x) == 0`, `> 0`, `!= 0`, `== 1` and `> 1` presence and cardinality tests on
+collections (one owner versus several), reverse-iteration bounds
+(`len(x) - 1`, `>= 0`), not-found sentinels and zero guards, the `kind.pair`
+split, regular-expression group indices, first-element and `+1` capacity
+arithmetic, the adjacent-duplicate scan and position descriptions in comments.
+Every occurrence, by file and line at the closure HEAD:
+
+| File | Lines |
+|---|---|
+| `agent/orchestrator_dashboard.go` | 73, 187, 188, 191 |
+| `agent/prompt.go` | 57, 106, 233, 236 |
+| `agent/prompt_corrective_context.go` | 33, 47, 76 |
+| `agent/prompt_integration.go` | 92, 160, 279, 291, 323 |
+| `agent/prompt_intelligence.go` | 21, 32, 43, 57, 71, 84 |
+| `agent/prompt_planner_context.go` | 102, 104, 109, 172, 182, 221, 223, 272, 285, 307, 310, 315, 323, 349, 356, 371, 381, 419, 422, 436, 452, 477, 499, 501, 508, 529, 531 |
+| `agent/prompt_task_context.go` | 112, 130, 152 |
+| `agent/prompt_task_graph.go` | 22, 46, 68, 173, 290, 406, 407, 447 |
+| `agent/reference_context.go` | 182, 205, 212, 249, 262, 300 |
+| `prompts/builder.go` | 267, 270, 285, 310, 325, 386, 436 |
+| `prompts/orchestrator_input.go` | 168 |
+| `prompts/role_context.go` | 315, 316, 330 (comments) |
+| `prompts/rolebudget/rolebudget.go` | 231, 299 |
+| `prompts/text.go` | 5 |
+| `prompts/wake.go` | 101, 128, 140, 157, 160, 163, 177, 242, 244, 246, 248, 250, 252, 254 |
 
 Control-flow string literals (the first search, after the sweep):
 
@@ -164,7 +212,7 @@ Vocabulary adopted or named by this unit (each replaced a literal of the same va
 
 | Location | Constant | Class | Owner |
 |---|---|---|---|
-| `agent/prompt.go:158`, `:264`, `:283`; `agent/reference_context.go:91`, `:275`; `agent/prompt_planner_context.go:43`; `agent/prompt_task_context.go:124`, `:160`; `prompts/builder.go:381`, `:403`; `prompts/rolebudget/rolebudget.go:90` | `roles.RoleTypeDoer`, `RoleTypeReviewer`, `RoleTypeOrchestrator` | T | A1 `roles/roles.go`; `RoleContextData.RoleType` stays `string`, converted at that field (AC3) |
+| `agent/prompt.go:158`, `:264`, `:283`; `agent/reference_context.go:91`, `:275`; `agent/prompt_planner_context.go:43`; `agent/prompt_task_context.go:126`, `:162`; `prompts/builder.go:381`, `:403`; `prompts/rolebudget/rolebudget.go:90` | `roles.RoleTypeDoer`, `RoleTypeReviewer`, `RoleTypeOrchestrator` | T | A1 `roles/roles.go`; `RoleContextData.RoleType` stays `string`, converted at that field (AC3) |
 | `prompts/builder.go:171`–`:175`, `:184`, `:193`, `:202` | `scipsearch.LanguageGo`, `LanguageTypeScript`, `LanguagePython` | T | `scipsearch/languages.go`; `ScipSearchIndex.Language` stays `string` |
 | `prompts/builder.go:163`–`:166` | `scipRankGo`, `scipRankTypeScript`, `scipRankPython`, `scipRankOther` | N | `prompts`; index display order |
 | `agent/prompt_planner_context.go:27`, `:28` | `plannerArtifactArchitecture`, `plannerArtifactPlan` (`plannerArtifactKind`) | T | `agent`; converted to `string` in `PlannerArtifactPointer.Kind` |
@@ -173,7 +221,7 @@ Vocabulary adopted or named by this unit (each replaced a literal of the same va
 | `agent/prompt_task_graph.go:99`, `:100` | `taskGraphDescriptionLimit` 96, `taskGraphBlockedReasonLimit` 120 | N | `agent` |
 | `agent/prompt_task_graph.go:119`–`:124` | `taskGraphWeightDependency` 100, `Blocked` 90, `FileOverlap` 80, `Sibling` 50, `Default` 30, `ArtifactOnly` 10 | N | `agent`; digest bounding order |
 | `agent/prompt_integration.go:17` | `integrationDescriptionLimit` 200 | N | `agent` |
-| `agent/prompt_task_context.go:20`, `:22`, `:25` | `parentDescriptionLimit` 500, `priorAttemptNumber` 2, `nullRejectionReason` | N | `agent` |
+| `agent/prompt_task_context.go:20`, `:22`, `:27` | `parentDescriptionLimit` 500, `priorAttemptNumber` 2, `nullRejectionReason` | N | `agent` |
 | `agent/reference_context.go:37`–`:40` | `referenceRankSpec` 0, `Epic` 1, `Arch` 2, `Plan` 3 | N | `agent`; scalar ref specificity |
 | `agent/prompt_corrective_context.go:24`–`:26` | `humanNoteTargetAll`, `humanNoteSourceOperatorCLI`, `humanNoteOperationAddNote` | N | owner gap: `ops` keeps these unexported (`humanNoteForAll`, `humanNoteSourceOperatorCLI`, `addHumanNoteOperation`); exporting them edits a closed area, so `agent` mirrors the values and `TestA8NamedVocabularyKeepsValues` pins them |
 | `agent/orchestrator_dashboard.go:184` | `entryPointValueSeparator` | N | `agent` |

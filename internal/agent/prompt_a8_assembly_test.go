@@ -219,6 +219,10 @@ func TestA8NamedVocabularyKeepsValues(t *testing.T) {
 	ints := map[string][2]int{
 		"parent description": {parentDescriptionLimit, 500},
 		"prior attempt":      {priorAttemptNumber, 2},
+		"first rework":       {firstReworkIteration, 2},
+		"slice generation":   {sliceAnalysisGeneration, 0},
+		"first global":       {firstGlobalGeneration, 1},
+		"multi plan scopes":  {multiPlanScopeCount, 2},
 		"task description":   {taskGraphDescriptionLimit, 96},
 		"blocked reason":     {taskGraphBlockedReasonLimit, 120},
 		"integration":        {integrationDescriptionLimit, 200},

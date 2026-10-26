@@ -16,6 +16,17 @@ import (
 // the integration context.
 const integrationDescriptionLimit = 200
 
+const (
+	// sliceAnalysisGeneration is the generation a slice analysis carries; only
+	// a global analysis has a positive generation.
+	sliceAnalysisGeneration = 0
+	// firstGlobalGeneration is the lowest valid generation of a global analysis.
+	firstGlobalGeneration = 1
+	// multiPlanScopeCount is the contributing-set size from which every plan
+	// must have coverage; a single-plan set may omit it.
+	multiPlanScopeCount = 2
+)
+
 func populateIntegrationContext(task *models.Task, state *models.State, resolver *pipeline.Resolver, projectRoot string, data *prompts.RoleContextData) error {
 	metadata := task.IntegrationAnalysis
 	if metadata == nil {
@@ -55,7 +66,7 @@ func populateSliceIntegrationContext(task *models.Task, state *models.State, res
 	if !capability.Available {
 		return fmt.Errorf("slice integration context unavailable (%s): %s", capability.Code, capability.Guidance)
 	}
-	if metadata.Generation != 0 {
+	if metadata.Generation != sliceAnalysisGeneration {
 		return fmt.Errorf("slice integration context for task %s has generation %d", task.ID, metadata.Generation)
 	}
 	if metadata.OriginatingPlanTaskID == "" {
@@ -143,7 +154,7 @@ func populateSliceIntegrationContext(task *models.Task, state *models.State, res
 
 func populateGlobalIntegrationContext(task *models.Task, state *models.State, projectRoot string, data *prompts.RoleContextData) error {
 	metadata := task.IntegrationAnalysis
-	if metadata.Generation <= 0 {
+	if metadata.Generation < firstGlobalGeneration {
 		return fmt.Errorf("global integration context for task %s has invalid generation %d", task.ID, metadata.Generation)
 	}
 	if metadata.OriginatingPlanTaskID != "" || len(metadata.RootTaskIDs) != 0 || len(metadata.DescendantChanges) != 0 || len(metadata.AffectedPaths) != 0 || len(metadata.SourceSnapshotPaths) != 0 {
@@ -184,7 +195,7 @@ func populateGlobalIntegrationContext(task *models.Task, state *models.State, pr
 		}
 		record, ok := coverageByPlan[scope.PlanTaskID]
 		if !ok {
-			if len(scopes) >= 2 {
+			if len(scopes) >= multiPlanScopeCount {
 				return fmt.Errorf("global integration context for task %s lacks coverage for plan %q", task.ID, scope.PlanTaskID)
 			}
 			continue
