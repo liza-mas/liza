@@ -554,6 +554,17 @@ func pbFileTransportConfig(t *testing.T, name string, transport providers.Prompt
 	}}
 }
 
+// pbTempDir points os.TempDir at a fixture directory on every platform: Unix
+// reads TMPDIR, Windows reads TMP, TEMP and USERPROFILE.
+func pbTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, dir)
+	}
+	return dir
+}
+
 func pbPromptFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(dir, brand.RuntimeValues().BinaryName+"-agent-prompt-*.md"))
@@ -565,8 +576,7 @@ func pbPromptFiles(t *testing.T, dir string) []string {
 
 func TestA9BackendPB5CommandPreparation(t *testing.T) {
 	t.Run("file_transport_writes_and_removes_prompt_file", func(t *testing.T) {
-		tmp := t.TempDir()
-		t.Setenv("TMPDIR", tmp)
+		tmp := pbTempDir(t)
 		req := pbCLIRequest(t, nil)
 		req.BackendName = "pb-file-cli"
 		req.RuntimeConfig = pbFileTransportConfig(t, "pb-file-cli", providers.PromptTransportFile, "--prompt-file", "{{promptFile}}")
@@ -591,8 +601,7 @@ func TestA9BackendPB5CommandPreparation(t *testing.T) {
 	})
 
 	t.Run("stdin_transport_writes_no_file", func(t *testing.T) {
-		tmp := t.TempDir()
-		t.Setenv("TMPDIR", tmp)
+		tmp := pbTempDir(t)
 		req := pbCLIRequest(t, nil)
 		req.BackendName = "pb-stdin-cli"
 		req.RuntimeConfig = pbFileTransportConfig(t, "pb-stdin-cli", providers.PromptTransportStdin, "--run")
@@ -613,8 +622,7 @@ func TestA9BackendPB5CommandPreparation(t *testing.T) {
 	})
 
 	t.Run("supplied_prompt_file_is_used_and_kept", func(t *testing.T) {
-		tmp := t.TempDir()
-		t.Setenv("TMPDIR", tmp)
+		tmp := pbTempDir(t)
 		supplied := filepath.Join(t.TempDir(), "supplied.md")
 		if err := os.WriteFile(supplied, []byte("saved prompt"), 0o600); err != nil {
 			t.Fatal(err)
@@ -659,8 +667,7 @@ func TestA9BackendPB6CleanupOwnership(t *testing.T) {
 	t.Run("prompt_file_removed_after_run_and_after_refused_gate", func(t *testing.T) {
 		for _, refuse := range []bool{false, true} {
 			t.Run(fmt.Sprintf("refused=%v", refuse), func(t *testing.T) {
-				tmp := t.TempDir()
-				t.Setenv("TMPDIR", tmp)
+				tmp := pbTempDir(t)
 				sink := &recordingLLMAgentEventSink{}
 				req := pbCLIRequest(t, sink)
 				req.BackendName = "pb-file-cli"
