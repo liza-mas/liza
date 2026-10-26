@@ -325,16 +325,49 @@ No registry edit is made: `architectural-issues.md` is untouched by this task, s
 This file holds the commands or source reads, the integration SHA R1 `9ce883e8a9af3f59fc3b6547aa63c9fc144e0bfe`,
 the UTC observations, exits and excerpts for G1–G6 and K1, the G5 dispositions, the G6 reasons and the G8 section
 below. The acceptance manifest
-(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-15-cp-0-boundary.json`) is written once
-G8 is green (it maps G1–G8 and the four boundary obligations; it records no result itself).
+(`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-15-cp-0-boundary.json`) was written once
+G8 was green (it maps G1–G8 and the four boundary obligations; it records no result itself).
 
-## G8 — dispatched CI result (D52, D59, D60): pending
+## G8 — dispatched CI result (D52, D59, D60): green
 
-Status: **pending the maintainer.** Under D52 (replacing the per-boundary pull request) the operator dispatches
+Status: **green, first attempt.** Under D52 (replacing the per-boundary pull request) the operator dispatched
 `.github/workflows/ci.yml` (`workflow_dispatch`) on a pinned ref under D59, with `git rev-parse global-refactoring`
-as the tested SHA; D52 runs Linux, Windows and macOS in the same run, so no separate `main`-push macOS follow-up
-is owed. G8 is green only when every job passes in one run on the SHA recorded above, or on the documented
-refresh SHA if `global-refactoring` has moved by then (G1–G7 are then re-run at that SHA and both are kept). No
-agent pushes, opens a pull request or runs a remote command; this task claims no CI result. This section is
-completed on resume with the run URL, event and ref, tested SHA, per-job results, the UTC observation and the
-ruling.
+as the tested SHA. D52 runs Linux, Windows and macOS in the same run, so no separate `main`-push macOS follow-up
+is owed. No agent pushed, opened a pull request or ran a remote write; the result below is the maintainer's,
+supplied by the operator note of 2026-10-26T01:38Z (D52 + D59, standing auto-approve delegation).
+
+- Run: <https://github.com/liza-mas/liza/actions/runs/40254021568>, event `workflow_dispatch`, workflow `CI`,
+  ref `g8/a5-9ce883e`, attempt 1 (no D60 rerun), run created 2026-10-26T01:24:01Z, completed 2026-10-26T01:37:32Z,
+  conclusion `success`.
+- **Proven SHA (R1):** `9ce883e8a9af3f59fc3b6547aa63c9fc144e0bfe`. The run's `headSha` equals R1, the revision at
+  which G1–G6 and K1 were observed, and `git rev-parse global-refactoring` still printed R1 at the observation
+  below, so no refresh SHA arises and G1–G7 are not re-run.
+- **Submission base**, kept separate from the proven SHA: this record was committed on top of R1 as `2959cc54d`
+  (G1–G7, G8 pending); the G8 completion and the manifest are committed on top of that. The submission rebases onto
+  `global-refactoring` and runs the canonical commands on the resulting commit. Those two commits change only this
+  record and the manifest, so the code CI tested at R1 is the code that is submitted.
+- Per-job conclusions (`completedAt` UTC, 2026-10-26; read back with `gh run view 40254021568 --json jobs`):
+
+| Job | Conclusion | Completed |
+|---|---|---|
+| Shared CI / Linux tests | success | 01:37:32Z |
+| Shared CI / Linux lint and build | success | 01:26:24Z |
+| Shared CI / macOS compatibility | success | 01:36:33Z |
+| Test (windows) | success | 01:30:59Z |
+| Test (windows, ops-1) | success | 01:27:55Z |
+| Test (windows, ops-2) | success | 01:27:24Z |
+| Test (windows, ops-3) | success | 01:28:01Z |
+| Test (windows, ops-4) | success | 01:30:09Z |
+| Test (windows, rest-1) | success | 01:30:37Z |
+| Test (windows, rest-2) | success | 01:27:45Z |
+| Test (windows, rest-3) | success | 01:29:42Z |
+| Release verified tag | skipped (tag-only job) | 01:37:32Z |
+
+- **macOS follow-up:** none owed. The macOS compatibility job ran in this same dispatched run and passed, so the
+  follow-up the contract allowed for the `main` push is satisfied by it; no separate push job exists and none is
+  claimed. Owner: the maintainer; status: closed by this run.
+- **Earlier red runs, for the record (not G8 for A5):** the A2, A3 and A4 dispatches had failures that were
+  corrected or ruled intermittent under D53, D57 and D60 (operator notes of 2026-10-25); this run needed no rerun.
+- UTC observation of the run read-back: 2026-10-26T01:40Z.
+- **Ruling:** G8 passes. Every job of the dispatched run concluded `success` (the tag-only release job skipped) in a
+  single attempt on the proven SHA R1. A6 coding is not held by CI.
