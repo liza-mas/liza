@@ -52,9 +52,10 @@ config:
   integration_branch: integration
   mode: RUNNING
 # after
+## state.yaml
 version: 1
 pipeline_version: 3
-mutation_sequence: 4
+mutation_sequence: 3
 goal:
     id: goal-1
     description: A9 oracle fixture
@@ -68,17 +69,18 @@ tasks:
       type: coding
       role_pair: coding-pair
       description: A9 lifecycle fixture
-      status: DRAFT_CODE
+      status: IMPLEMENTING_CODE
       priority: 1
+      assigned_to: coder-1
       worktree: .worktrees/task-1
       base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
       iteration: 1
-      continuation: true
+      lease_expires: <T3:fZ>
       spec_ref: specs/vision.md
       done_when: A9 oracle records supervisor behavior
       scope: ""
       lifecycle:
-        revision: 2
+        revision: 1
         completion_sequence: 1
         receipts:
             - operation: claim-task
@@ -100,11 +102,20 @@ tasks:
         - time: <T4:fZ>
           event: claimed
           agent: coder-1
-        - time: <T5:fZ>
-          event: claim_released
-          agent: coder-1
-          reason: agent interrupted
-agents: {}
+agents:
+    coder-1:
+        role: coder
+        status: WORKING
+        generation: <V5>
+        current_task: task-1
+        lease_expires: <T3:fZ>
+        heartbeat: <T4:fZ>
+        registered_at: <T5:fZ>
+        terminal: terminal-1
+        provider: opencode-acp
+        iterations_total: 0
+        context_percent: 0
+        pid: <V6>
 discovered: []
 human_notes: []
 spec_changes: []

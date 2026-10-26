@@ -1,6 +1,7 @@
 {
   "executables": {
-    "acpx": []
+    "acpx": [],
+    "codex": []
   },
   "calls": [
     {
@@ -9,6 +10,9 @@
           "stop"
         ]
       ],
+      "exit_code": 0
+    },
+    {
       "exit_code": 0
     },
     {

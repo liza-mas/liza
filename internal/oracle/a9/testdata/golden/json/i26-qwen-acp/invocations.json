@@ -1,4 +1,10 @@
 {
-  "invocations": [],
+  "invocations": [
+    {
+      "arguments": [],
+      "directory": "<PROJECT>",
+      "executable": "qwen"
+    }
+  ],
   "tool": "qwen-acp"
 }

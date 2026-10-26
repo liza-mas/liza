@@ -14,9 +14,8 @@ import (
 // Interactive launch (closes the gap disclosed in doc_test.go: the --interactive
 // launch line was unreachable from a plain fixture). One coder run per catalog
 // tool with stdin not a terminal: the stub ends the run with `stop` when the
-// supervisor reaches it. The run is recorded whatever its outcome, so a tool
-// whose interactive route is refused (an ACP tool whose prerequisites the
-// fixture does not provide) pins the refusal text and exit code instead.
+// supervisor reaches it. Each ACP tool's fixture provides acpx and the provider
+// executable the interactive route starts, so every tool reaches the stub.
 
 type interactiveInvocation struct {
 	Executable string   `json:"executable"`

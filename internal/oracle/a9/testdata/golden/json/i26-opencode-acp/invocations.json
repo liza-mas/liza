@@ -1,4 +1,10 @@
 {
-  "invocations": [],
+  "invocations": [
+    {
+      "arguments": [],
+      "directory": "<PROJECT>",
+      "executable": "opencode"
+    }
+  ],
   "tool": "opencode-acp"
 }

@@ -54,7 +54,7 @@ config:
 # after
 version: 1
 pipeline_version: 3
-mutation_sequence: 4
+mutation_sequence: 6
 goal:
     id: goal-1
     description: A9 oracle fixture
@@ -154,4 +154,6 @@ config:
     reviewer_poll_interval: 0
     reviewer_max_wait: 0
     integration_branch: integration
-    mode: RUNNING
+    mode: STOPPED
+    mode_changed_at: <T6:fO>
+    mode_changed_by: coder-1
