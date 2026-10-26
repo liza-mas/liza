@@ -316,12 +316,48 @@ acceptance manifest
 (`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-19-cp-0-boundary.json`) is written once G8 is
 green (it maps G1–G8 and the boundary obligations; it records no result itself).
 
-## G8 — maintainer CI result (D52, D59, D60): pending
+## G8 — dispatched CI result (D52, D59, D60): green
 
-Status: **pending.** Under D52 the maintainer dispatches `.github/workflows/ci.yml` (`workflow_dispatch`) on a pinned ref
-carrying exactly R1 `4cd8d7d7811ea85b5de90484256ab162301f7169` (the A6 precedent used `g8/a6-7677139`) and records
-the Linux, Windows and macOS results. This unit marks itself BLOCKED with `--human-action` for that dispatch and does
-not submit until the result is recorded here: the PR number or run URL, the tested SHA, every job name and conclusion,
-the UTC observation, the ruling and the macOS follow-up's owner and status. A red result keeps A8 coding held and the
-maintainer opens the fix task; if CI tests different code, the affected checks are re-run at that revision and both are
-kept. No job is claimed as passed before it has run.
+Status: **green on the first attempt.** Under D52 the maintainer dispatched `.github/workflows/ci.yml`
+(`workflow_dispatch`) on the pinned ref `g8/a7-4cd8d7d` under D59. No agent pushed, opened a pull request or ran a
+remote write; the maintainer's operator note of 2026-10-26T16:16Z (result, maintainer confirmation under the standing
+auto-approve delegation) is the authority, and the run was read back independently with the read-only
+`gh run view 40355309126 --repo liza-mas/liza --json conclusion,event,headSha,headBranch,attempt,createdAt,updatedAt,jobs`
+at 2026-10-26T16:18Z.
+
+- Run: https://github.com/liza-mas/liza/actions/runs/40355309126
+- Event `workflow_dispatch`; ref `g8/a7-4cd8d7d`; created 2026-10-26T16:02:56Z; updated 2026-10-26T16:15:45Z;
+  attempt 1; conclusion `success`.
+- **Proven SHA (tested SHA, equal to R1):** `4cd8d7d7811ea85b5de90484256ab162301f7169`. D52/D59 conditions hold: a
+  dispatch of `ci.yml` on the pinned ref, tested SHA equal to this record's integration SHA, every job green in one
+  attempt. No D60 rerun was needed or counted. Per the operator note, `global-refactoring` and
+  `origin/global-refactoring` both pointed at this SHA at 16:16Z; the task worktree's `global-refactoring` printed the
+  same SHA at the read-back.
+- Jobs (conclusion, completedAt UTC 2026-10-26):
+
+| Job | Conclusion | Completed |
+|---|---|---|
+| Shared CI / Linux tests | success | 16:15:44Z |
+| Shared CI / Linux lint and build | success | 16:05:12Z |
+| Shared CI / macOS compatibility | success | 16:15:44Z |
+| Test (windows) | success | 16:10:07Z |
+| Test (windows, ops-1) | success | 16:07:54Z |
+| Test (windows, ops-2) | success | 16:05:51Z |
+| Test (windows, ops-3) | success | 16:07:51Z |
+| Test (windows, ops-4) | success | 16:08:39Z |
+| Test (windows, rest-1) | success | 16:09:38Z |
+| Test (windows, rest-2) | success | 16:06:47Z |
+| Test (windows, rest-3) | success | 16:09:39Z |
+| Release verified tag | skipped (tag-only job; not run, not claimed as passed) | 16:15:45Z |
+
+- **macOS follow-up:** satisfied inside the same run, not by a later `main` push. D52 runs Linux, Windows and macOS
+  in one dispatch, and `Shared CI / macOS compatibility` concluded `success` (16:15:44Z). Owner: the maintainer
+  (dispatched the run). Status: closed, green. No separate `main`-push job is awaited and none is claimed as run.
+- **Ruling:** G8 passes. The tested code is R1, the code every other check of this record observed, so no check is
+  re-run at another revision and no second revision is recorded. A7 with C4 closes; A8 coding is not held.
+- **Submission base (kept separate from the proven SHA):** this record is committed on the task branch
+  `task/arm-1-ar-19-cp-0-code-0`. At the read-back above, `git rev-parse global-refactoring` printed
+  `4cd8d7d7811ea85b5de90484256ab162301f7169`, equal to R1, so no rebase onto a different integration head was
+  pending. The submission commits and their post-rebase review commit differ from R1 only by this record, the
+  registry closures and the acceptance manifest (documentation and JSON; no Go file). The proof of A7 and C4 is R1 and
+  the run above; the submission's post-rebase validation is separate evidence recorded by the lifecycle.
