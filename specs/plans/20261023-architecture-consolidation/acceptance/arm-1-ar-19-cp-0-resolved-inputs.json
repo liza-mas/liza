@@ -4,13 +4,13 @@
     {
       "obligation_id": "AC-input",
       "file": "internal/agent/prompt_a8_characterization_test.go",
-      "assertion": "TestA8DashboardEntryPointErrorWrapped asserts the entry-point error wraps as 'building wake template data' after the integration outcome is evaluated, and TestA8SelectedWakeMatchesStandaloneBytes asserts the dashboard and wake instruction bytes of the runtime-resolved input across twelve scenarios",
+      "assertion": "TestA8DashboardEntryPointErrorWrapped asserts that an unresolvable entry-point set returns a nil record and an error prefixed 'building wake template data:' in both the standalone and the selected mode; it does not exercise the order of integration evaluation against route resolution",
       "command_index": 0
     },
     {
       "obligation_id": "AC-select",
       "file": "internal/agent/prompt_a8_characterization_test.go",
-      "assertion": "TestA8SelectedWakeMatchesStandaloneBytes asserts the selected wake keeps the supplied trigger and projection and equals the standalone render; prompts.TestSelectOrchestratorWake asserts the standalone precedence, the planning-complete exception and the UNKNOWN to NONE rule when the sprint is not open",
+      "assertion": "TestA8SelectedWakeMatchesStandaloneBytes asserts, across eight scenarios (INITIAL_PLANNING, BLOCKED_TASKS, HYPOTHESIS_EXHAUSTED, IMMEDIATE_DISCOVERY, HUMAN_NOTE, PLANNING_COMPLETE, MANY_TO_ONE_READY, INTEGRATION_UNAVAILABLE), that the standalone render yields the expected trigger and that a selected wake given that trigger and projection renders the same dashboard and wake instruction bytes. The standalone precedence, the planning-complete exception and the UNKNOWN to NONE rule are asserted by prompts.TestSelectOrchestratorWake, which runs in make test at index 7, not at index 0",
       "command_index": 0
     },
     {
