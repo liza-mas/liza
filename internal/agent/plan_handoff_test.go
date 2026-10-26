@@ -11,7 +11,6 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
-	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -213,7 +212,7 @@ func TestPassedPlanWithoutCheckpointRecoversAfterRestart(t *testing.T) {
 	if result := DetectOrchestratorWakeTriggers(persisted, detCtx.SprintTerminals, detCtx.PlanningPairs, detCtx.ManyToOneTransitions); result.Trigger != WakeTriggerPlanningComplete {
 		t.Fatalf("wake = %s, want PLANNING_COMPLETE for the passed plan", result.Trigger)
 	}
-	_, instruction, err := prompts.RenderOrchestratorDashboard(persisted, root, "orchestrator-1")
+	_, instruction, err := RenderOrchestratorDashboard(persisted, root, "orchestrator-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +337,7 @@ func TestReconciliationAndHeldPlansRouting(t *testing.T) {
 		withDisposition(handoffPlanTask("b", "a"), models.PlanCheckPassed, ""),
 		withDisposition(handoffPlanTask("h"), models.PlanCheckHeld, "inject credentials"),
 	)
-	_, instruction, err := prompts.RenderOrchestratorDashboard(state, root, "orchestrator-1")
+	_, instruction, err := RenderOrchestratorDashboard(state, root, "orchestrator-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -488,7 +487,7 @@ func TestStaleProviderRefusalWakesPlanningCompleteForReplan(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := DetectOrchestratorWakeTriggersForProject(root, state, detCtx.SprintTerminals, detCtx.PlanningPairs, detCtx.ManyToOneTransitions)
-			_, instruction, err := prompts.RenderOrchestratorDashboard(state, root, "orchestrator-1")
+			_, instruction, err := RenderOrchestratorDashboard(state, root, "orchestrator-1")
 			if err != nil {
 				t.Fatal(err)
 			}

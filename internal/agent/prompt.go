@@ -154,11 +154,9 @@ func buildOrchestratorRoleContextDataForWake(state *models.State, config Supervi
 	var dashboard, wakeInstruction string
 	var err error
 	if wake == nil {
-		dashboard, wakeInstruction, err = prompts.RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
+		dashboard, wakeInstruction, err = RenderOrchestratorDashboard(state, config.ProjectRoot, config.AgentID)
 	} else {
-		dashboard, wakeInstruction, err = prompts.RenderOrchestratorDashboardForWake(state, config.ProjectRoot, config.AgentID, prompts.OrchestratorWakeDecision{
-			Trigger: string(wake.Trigger), Integration: wake.Integration,
-		})
+		dashboard, wakeInstruction, err = renderOrchestratorDashboardForWake(state, config.ProjectRoot, config.AgentID, *wake)
 	}
 	if err != nil {
 		return nil, err
@@ -188,6 +186,7 @@ func buildOrchestratorRoleContextDataForWake(state *models.State, config Supervi
 		GoalDesc:           state.Goal.Description,
 		Skills:             skills,
 		MandatoryDocs:      mandatoryDocs,
+		TestFilePatterns:   SubmissionTestPatternsText(),
 	}, nil
 }
 
@@ -395,13 +394,13 @@ func buildTaskRoleContextData(task *models.Task, state *models.State, config Sup
 		TaskGraph:            buildRelevantTaskGraph(state, task),
 
 		// Config/state
-		ProjectRoot: config.ProjectRoot,
-		StatePath:   config.StatePath,
-		SpecsDir:    config.SpecsDir,
-		GoalDesc:    state.Goal.Description,
-		GoalSlug:    paths.GoalSlug(state.Goal.SpecRef),
-
+		ProjectRoot:       config.ProjectRoot,
+		StatePath:         config.StatePath,
+		SpecsDir:          config.SpecsDir,
+		GoalDesc:          state.Goal.Description,
+		GoalSlug:          paths.GoalSlug(state.Goal.SpecRef),
 		IntegrationBranch: state.Config.IntegrationBranch,
+		TestFilePatterns:  SubmissionTestPatternsText(),
 	}
 
 	data.ScipIndexes = availablePromptScipIndexRefs(state, data.Worktree, scipAvailableIndexes)

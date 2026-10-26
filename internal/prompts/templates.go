@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"strings"
 	"text/template"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/ops"
 )
 
 //go:embed templates/*.tmpl
@@ -32,9 +30,6 @@ var funcMap = template.FuncMap{
 	"projectDirName": promptProjectDirName,
 	"sub": func(a, b int) int {
 		return a - b
-	},
-	"testFilePatterns": func() string {
-		return strings.Join(ops.TestFileMatcherPatterns(), ", ")
 	},
 }
 

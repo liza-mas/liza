@@ -1,0 +1,54 @@
+{{- define "orchestrator_commands" -}}
+- {{binaryName}} add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
+  {{binaryName}} add-tasks --tasks-file <path.json> --agent-id "{{.AgentID}}" --json
+- {{binaryName}} supersede-task — Supersede task (replacement_ids optional; no-replacement cleanup also requires --recoverability-command)
+  {{binaryName}} supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "{{.AgentID}}" --json
+  {{binaryName}} supersede-task <task-id> --reason "Work completed externally" --recoverability-command "{{binaryName}} recover-task <task-id>" --agent-id "{{.AgentID}}" --json
+- {{binaryName}} assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
+  {{binaryName}} assess-blocked <task-id> --note "..." --agent-id "{{.AgentID}}" --json
+- {{binaryName}} get human_notes --json — Read operator input before recording another assessment.
+  Match notes by for=task-id or all and compare their timestamps with the last assessment.
+  Inspect newly referenced recovery tasks even if they are still in an initial status; a claim failure may occur before BLOCKED.
+  Apply current evidence through supported operations within existing scope and authority. A note grants no approval or permission to bypass review.
+- {{binaryName}} unblock-task — Restore a repaired BLOCKED task, continuing its iteration; --new-iteration starts one, --assign-to direct-resumes
+  {{binaryName}} unblock-task <task-id> --reason "..." --agent-id "{{.AgentID}}" --json
+  {{binaryName}} unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "{{.AgentID}}" --json
+- {{binaryName}} wt-delete — Delete worktree for abandoned/superseded/blocked tasks
+  {{binaryName}} wt-delete <task-id> --json
+- {{binaryName}} sprint-checkpoint — Create sprint checkpoint for human review (hard checkpoints pause agents; transition checkpoints gate downstream task creation)
+  {{binaryName}} sprint-checkpoint --json
+- {{binaryName}} update-sprint-metrics — Recompute sprint metrics from current state
+  {{binaryName}} update-sprint-metrics --json
+
+ANOMALY LOGGING:
+| Event | Type | Required Fields |
+|-------|------|-----------------|
+| Two coders failed same task | hypothesis_exhaustion | — |
+| Spec gap discovered | spec_gap | — |
+| Review stuck in cycles | review_deadlock | — |
+| Multiple reviewers failed | review_exhaustion | reviewers_failed, common_blocker |
+| Protocol ambiguity | system_ambiguity | protocol_section, question |
+Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
+
+SELF-VALIDATION GATES (verify before adding each task):
+| Gate | Requirement |
+|------|-------------|
+| Spec reference | Each task must cite spec |
+| Success criteria | Each task must have falsifiable done |
+| Scope boundary | IN scope stated (functional area, not file names) |
+| Dependency check | Dependencies stated if any |
+| TDD inclusion | Code tasks include tests |
+
+FIELD FORMAT GUIDELINES:
+- done: observable behavior, specific, falsifiable. Bad: "works correctly". Good: "GET /users returns 200"
+- spec: path to spec optionally with #anchor
+
+TASK CREATION ORDER:
+When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. {{binaryName}} add-tasks validates that all `depends` IDs already exist; creating a task that references a not-yet-created dependency will fail.
+
+ERROR RECOVERY:
+On CLI command errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
+
+MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
+Work unit = all planned state changes executed. Do NOT exit until all commands have been run.{{"\n\t"}}
+{{- end -}}

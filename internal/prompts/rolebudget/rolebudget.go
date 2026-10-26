@@ -91,12 +91,12 @@ func Measure(repoRoot string) (Report, error) {
 			// selected by trigger; each is a variant. The dashboard is run
 			// data and is not rendered here.
 			for _, trigger := range prompts.WakeTriggers {
-				rendered, err := prompts.RenderWakeInstructions(trigger, role+"-1")
+				rendered, err := prompts.RenderWakeInstructions(trigger, role+"-1", agent.SubmissionTestPatternsText())
 				if err != nil {
 					return Report{}, fmt.Errorf("render %s wake %s: %w", role, trigger, err)
 				}
 				report.Variants = append(report.Variants, RoleVariant{
-					Variant:            role + " (wake " + trigger + ")",
+					Variant:            role + " (wake " + string(trigger) + ")",
 					Role:               role,
 					RenderedBytes:      len(base) + len(rendered),
 					BasePromptBytes:    len(base),

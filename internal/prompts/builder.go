@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/ops"
 )
 
 // BasePromptConfig contains configuration for building the base prompt
@@ -213,112 +212,46 @@ func shellQuote(value string) string {
 
 // RenderOrchestratorDashboard pre-renders the orchestrator dashboard and wake instruction
 // strings for use as RoleContextData.DashboardOutput and RoleContextData.WakeInstruction.
-func RenderOrchestratorDashboard(state *models.State, projectRoot, agentID string) (dashboard, wakeInstruction string, err error) {
-	return renderOrchestratorDashboard(state, projectRoot, agentID, nil)
+// The runtime resolves in and selects decision; this renders them and reads nothing else.
+func RenderOrchestratorDashboard(in *OrchestratorDashboardInput, decision OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
+	return renderOrchestratorDashboard(in, decision)
 }
 
-// OrchestratorWakeDecision carries the supervisor's revalidated invocation.
-// Both the dashboard and instructions must describe this same decision.
-type OrchestratorWakeDecision struct {
-	Trigger     string
-	Integration EffectiveIntegrationCompletion
+func renderOrchestratorDashboard(in *OrchestratorDashboardInput, decision OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
+	wakeData := in.wakeTemplateData(decision.Integration)
+	if decision.Trigger == WakeBlockedTasks {
+		wakeData.BlockedScope = &blockedScopeData{TaskIDs: in.ActionableBlockedIDs}
+	}
+	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(decision.Trigger, in.AgentID, wakeData, in.PlanningTasks, in.UnseenNotes)
+	if instrErr != nil {
+		return "", "", fmt.Errorf("building wake instructions: %w", instrErr)
+	}
+	commands, cmdErr := executeTemplate("orchestrator_commands", struct{ AgentID string }{in.AgentID})
+	if cmdErr != nil {
+		return "", "", fmt.Errorf("building orchestrator commands: %w", cmdErr)
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n=== ORCHESTRATOR CONTEXT ===\n")
+	b.WriteString(fmt.Sprintf("WAKE TRIGGER: %s\n", decision.Trigger))
+	writeSprintState(&b, in)
+	writeActiveTaskDigest(&b, in.State.Tasks)
+	writeIntegrationProgressDiagnostic(&b, decision.Integration)
+	b.WriteString("\nORCHESTRATOR COMMANDS:\n")
+	b.WriteString(commands)
+
+	// Wake instruction is rendered separately by the wake-instructions block
+	return b.String(), fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions), nil
 }
 
-// RenderOrchestratorDashboardForWake renders an already selected invocation.
-func RenderOrchestratorDashboardForWake(state *models.State, projectRoot, agentID string, wake OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
-	return renderOrchestratorDashboard(state, projectRoot, agentID, &wake)
-}
-
-func renderOrchestratorDashboard(state *models.State, projectRoot, agentID string, selected *OrchestratorWakeDecision) (dashboard, wakeInstruction string, err error) {
-	totalTasks := len(state.Tasks)
-	merged := countTasksByStatus(state.Tasks, models.TaskStatusMerged)
-	blocked := countTasksByStatus(state.Tasks, models.TaskStatusBlocked)
-	integrationFailed := countTasksByStatus(state.Tasks, models.TaskStatusIntegrationFailed)
-	unclaimed := countTasksByStatus(state.Tasks, models.TaskStatusReady)
-
+// writeSprintState writes the SPRINT STATE section: raw counts over the
+// snapshot, never the actionable subsets that select a wake.
+func writeSprintState(b *strings.Builder, in *OrchestratorDashboardInput) {
+	state := in.State
 	inProgress := countTasksByStatus(state.Tasks, models.TaskStatusImplementing) +
 		countTasksByStatus(state.Tasks, models.TaskStatusReadyForReview) +
 		countTasksByStatus(state.Tasks, models.TaskStatusApproved)
 
-	hypothesisExhausted := countHypothesisExhausted(state.Tasks)
-	immediateDiscoveries := countImmediateDiscoveries(state.Discovered)
-
-	detCtx, detErr := ops.LoadDetectionContext(projectRoot)
-	var sprintTerminals []models.TaskStatus
-	var planningPairs map[string]bool
-	var m2oTransitions []ops.ManyToOneTransitionInfo
-	if detErr == nil {
-		sprintTerminals = detCtx.SprintTerminals
-		planningPairs = detCtx.PlanningPairs
-		m2oTransitions = detCtx.ManyToOneTransitions
-	}
-
-	cycleBlocked := countCycleBlockedPlanning(state.Tasks, planningPairs)
-
-	sprintComplete := state.AllPlannedTasksTerminalWith(sprintTerminals)
-	wakeOpen := state.Sprint.Status != models.SprintStatusCheckpoint &&
-		state.Sprint.Status != models.SprintStatusCompleted
-	// Same rule as wake detection: a held plan keeps the sprint open.
-	sprintCompleteForWake := sprintComplete && wakeOpen && !ops.HasHeldPlan(state)
-
-	// Without a pipeline nothing is gated here; the transition executor
-	// loads its own domain and still gates.
-	domain := ops.PlanningPairsOnly(planningPairs)
-	if detErr == nil {
-		domain = detCtx.PlanHandoff
-	}
-	var planningTasks []planningTaskData
-	if wakeOpen {
-		planningTasks = collectMergedPlanningTasks(state, domain)
-	}
-
-	codingComplete := state.Goal.BaseCommit != nil && !hasIntegrationTaskInSprint(state)
-
-	var m2oReadyCount int
-	if wakeOpen {
-		m2oReadyCount = countReadyM2OCohorts(state, m2oTransitions)
-	}
-
-	unseenNotes := ops.UnseenHumanNotes(state)
-	var wakeTrigger string
-	var integrationProjection EffectiveIntegrationCompletion
-	if selected != nil {
-		wakeTrigger, integrationProjection = selected.Trigger, selected.Integration
-	} else {
-		if len(planningTasks) > 0 && ops.BlockedTasksAwaitPlanningHandoff(state, domain) {
-			// Same exception as the live selector: it takes BLOCKED_TASKS' rank.
-			wakeTrigger = "PLANNING_COMPLETE"
-		} else {
-			wakeTrigger = determineWakeTrigger(totalTasks, ops.CountActionableBlockedTasks(state), ops.CountActionableHypothesisExhaustedTasks(state), immediateDiscoveries, len(unseenNotes), sprintCompleteForWake, codingComplete, planningTasks, m2oReadyCount)
-		}
-		if wakeTrigger == "CODING_COMPLETE" || wakeTrigger == "SPRINT_COMPLETE" {
-			decision, evaluationErr := ops.EvaluateLiveIntegrationProgress(state, projectRoot)
-			integrationProjection = ProjectEffectiveIntegrationCompletion(decision, nil, evaluationErr)
-			wakeTrigger = integrationProjection.WakeTrigger
-		}
-		if !wakeOpen && wakeTrigger == "UNKNOWN" {
-			wakeTrigger = "NONE"
-		}
-	}
-
-	wakeData, wakeErr := buildWakeTemplateData(state.Goal.SpecRef, state.Goal.EntryPoint, projectRoot)
-	if wakeErr != nil {
-		return "", "", fmt.Errorf("building wake template data: %w", wakeErr)
-	}
-	wakeData.Integration = integrationProjection
-	if wakeTrigger == "BLOCKED_TASKS" {
-		wakeData.BlockedScope = &blockedScopeData{TaskIDs: ops.ActionableBlockedTaskIDs(state)}
-	}
-
-	wakeInstructions, instrErr := buildInstructionsForWakeTrigger(wakeTrigger, agentID, wakeData, planningTasks, unseenNotes)
-	if instrErr != nil {
-		return "", "", fmt.Errorf("building wake instructions: %w", instrErr)
-	}
-
-	// Build the dashboard string (replaces orchestrator_context.tmpl rendering)
-	var b strings.Builder
-	b.WriteString("\n\n=== ORCHESTRATOR CONTEXT ===\n")
-	b.WriteString(fmt.Sprintf("WAKE TRIGGER: %s\n", wakeTrigger))
 	b.WriteString("\nSPRINT STATE:\n")
 	if state.Sprint.Number > 0 {
 		b.WriteString(fmt.Sprintf("- Sprint number: %d\n", state.Sprint.Number))
@@ -329,81 +262,18 @@ func renderOrchestratorDashboard(state *models.State, projectRoot, agentID strin
 			b.WriteString(fmt.Sprintf("  - %s: %s (%d tasks done)\n", sh.ID, sh.Status, sh.TasksDone))
 		}
 	}
-	b.WriteString(fmt.Sprintf("- Total tasks: %d\n", totalTasks))
-	b.WriteString(fmt.Sprintf("- Merged: %d\n", merged))
+	b.WriteString(fmt.Sprintf("- Total tasks: %d\n", len(state.Tasks)))
+	b.WriteString(fmt.Sprintf("- Merged: %d\n", countTasksByStatus(state.Tasks, models.TaskStatusMerged)))
 	b.WriteString(fmt.Sprintf("- In progress: %d\n", inProgress))
-	b.WriteString(fmt.Sprintf("- Unclaimed: %d\n", unclaimed))
-	b.WriteString(fmt.Sprintf("- Blocked: %d\n", blocked))
-	b.WriteString(fmt.Sprintf("- Integration failed: %d\n", integrationFailed))
-	b.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", hypothesisExhausted))
-	b.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n", immediateDiscoveries))
-	b.WriteString(fmt.Sprintf("- Unseen operator notes: %d\n", len(unseenNotes)))
-	if cycleBlocked > 0 {
-		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", cycleBlocked))
+	b.WriteString(fmt.Sprintf("- Unclaimed: %d\n", countTasksByStatus(state.Tasks, models.TaskStatusReady)))
+	b.WriteString(fmt.Sprintf("- Blocked: %d\n", countTasksByStatus(state.Tasks, models.TaskStatusBlocked)))
+	b.WriteString(fmt.Sprintf("- Integration failed: %d\n", countTasksByStatus(state.Tasks, models.TaskStatusIntegrationFailed)))
+	b.WriteString(fmt.Sprintf("- Hypothesis exhausted: %d\n", countHypothesisExhausted(state.Tasks)))
+	b.WriteString(fmt.Sprintf("- Immediate discoveries: %d\n", countImmediateDiscoveries(state.Discovered)))
+	b.WriteString(fmt.Sprintf("- Unseen operator notes: %d\n", len(in.UnseenNotes)))
+	if in.CycleBlocked > 0 {
+		b.WriteString(fmt.Sprintf("- Cycle-blocked planning: %d\n", in.CycleBlocked))
 	}
-	writeActiveTaskDigest(&b, state.Tasks)
-	writeIntegrationProgressDiagnostic(&b, integrationProjection)
-
-	binaryName := promptBinaryName()
-	b.WriteString("\nORCHESTRATOR COMMANDS:\n")
-	b.WriteString(fmt.Sprintf(`- %[1]s add-tasks — Add one or more tasks to blackboard (atomic per task, with validation)
-  %[1]s add-tasks --tasks-file <path.json> --agent-id "%[2]s" --json
-- %[1]s supersede-task — Supersede task (replacement_ids optional; no-replacement cleanup also requires --recoverability-command)
-  %[1]s supersede-task <task-id> [replacement-task-ids] --reason "..." --agent-id "%[2]s" --json
-  %[1]s supersede-task <task-id> --reason "Work completed externally" --recoverability-command "%[1]s recover-task <task-id>" --agent-id "%[2]s" --json
-- %[1]s assess-blocked — Record orchestrator assessment of a BLOCKED task (prevents re-wake loops)
-  %[1]s assess-blocked <task-id> --note "..." --agent-id "%[2]s" --json
-- %[1]s get human_notes --json — Read operator input before recording another assessment.
-  Match notes by for=task-id or all and compare their timestamps with the last assessment.
-  Inspect newly referenced recovery tasks even if they are still in an initial status; a claim failure may occur before BLOCKED.
-  Apply current evidence through supported operations within existing scope and authority. A note grants no approval or permission to bypass review.
-- %[1]s unblock-task — Restore a repaired BLOCKED task, continuing its iteration; --new-iteration starts one, --assign-to direct-resumes
-  %[1]s unblock-task <task-id> --reason "..." --agent-id "%[2]s" --json
-  %[1]s unblock-task <task-id> --rebase-on <branch> --reason "..." --agent-id "%[2]s" --json
-- %[1]s wt-delete — Delete worktree for abandoned/superseded/blocked tasks
-  %[1]s wt-delete <task-id> --json
-- %[1]s sprint-checkpoint — Create sprint checkpoint for human review (hard checkpoints pause agents; transition checkpoints gate downstream task creation)
-  %[1]s sprint-checkpoint --json
-- %[1]s update-sprint-metrics — Recompute sprint metrics from current state
-  %[1]s update-sprint-metrics --json
-
-ANOMALY LOGGING:
-| Event | Type | Required Fields |
-|-------|------|-----------------|
-| Two coders failed same task | hypothesis_exhaustion | — |
-| Spec gap discovered | spec_gap | — |
-| Review stuck in cycles | review_deadlock | — |
-| Multiple reviewers failed | review_exhaustion | reviewers_failed, common_blocker |
-| Protocol ambiguity | system_ambiguity | protocol_section, question |
-Format: anomalies: [{id, type, task, reporter, timestamp (ISO 8601), details: {<fields>}}]
-
-SELF-VALIDATION GATES (verify before adding each task):
-| Gate | Requirement |
-|------|-------------|
-| Spec reference | Each task must cite spec |
-| Success criteria | Each task must have falsifiable done |
-| Scope boundary | IN scope stated (functional area, not file names) |
-| Dependency check | Dependencies stated if any |
-| TDD inclusion | Code tasks include tests |
-
-FIELD FORMAT GUIDELINES:
-- done: observable behavior, specific, falsifiable. Bad: "works correctly". Good: "GET /users returns 200"
-- spec: path to spec optionally with #anchor
-
-TASK CREATION ORDER:
-When adding multiple tasks with dependencies, create them in topological order — dependency-free tasks first, then tasks that depend on them. %[1]s add-tasks validates that all `+"`depends`"+` IDs already exist; creating a task that references a not-yet-created dependency will fail.
-
-ERROR RECOVERY:
-On CLI command errors, diagnose the root cause before retrying. Read the error message, investigate the constraint that failed (e.g. missing dependency, invalid state), and fix the underlying issue. Do NOT retry the same call blindly.
-
-MULTIPLE BLOCKED TASKS: Process sequentially by priority (lowest number first), then by timestamp.
-Work unit = all planned state changes executed. Do NOT exit until all commands have been run.
-	`, binaryName, agentID))
-
-	// Wake instruction is rendered separately by the wake-instructions block
-	wakeInstr := fmt.Sprintf("INSTRUCTIONS:\n%s", wakeInstructions)
-
-	return b.String(), wakeInstr, nil
 }
 
 func writeActiveTaskDigest(b *strings.Builder, tasks []models.Task) {
@@ -415,7 +285,7 @@ func writeActiveTaskDigest(b *strings.Builder, tasks []models.Task) {
 			continue
 		}
 		count++
-		if count > 12 {
+		if count > activeTaskDigestLimit {
 			b.WriteString(fmt.Sprintf("- ... additional active tasks omitted; use `%s get tasks --active --summary --json` if orchestration needs a fresh active-task scan.\n", promptBinaryName()))
 			break
 		}
@@ -431,7 +301,7 @@ func writeActiveTaskDigest(b *strings.Builder, tasks []models.Task) {
 		}
 		b.WriteString("\n")
 		if task.BlockedReason != nil && *task.BlockedReason != "" {
-			b.WriteString(fmt.Sprintf("  blocker: %s\n", TruncateText(*task.BlockedReason, 220)))
+			b.WriteString(fmt.Sprintf("  blocker: %s\n", TruncateText(*task.BlockedReason, blockerDigestLimit)))
 		}
 		if task.RepairRequest != nil && task.RepairRequest.Operation != "" {
 			b.WriteString(fmt.Sprintf("  repair: %s", task.RepairRequest.Operation))
@@ -460,7 +330,7 @@ func countTasksByStatus(tasks []models.Task, status models.TaskStatus) int {
 func countHypothesisExhausted(tasks []models.Task) int {
 	count := 0
 	for _, task := range tasks {
-		if len(task.FailedBy) >= 2 && !task.Status.IsTerminal() {
+		if len(task.FailedBy) >= hypothesisExhaustionFailures && !task.Status.IsTerminal() {
 			count++
 		}
 	}
@@ -471,36 +341,18 @@ func countHypothesisExhausted(tasks []models.Task) int {
 func countImmediateDiscoveries(discovered []models.Discovery) int {
 	count := 0
 	for _, disc := range discovered {
-		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
+		if disc.Urgency == models.DiscoveryUrgencyImmediate && disc.ConvertedToTask == nil {
 			count++
 		}
 	}
 	return count
-}
-
-// countCycleBlockedPlanning counts MERGED planning tasks with a transition_cycle_blocked history event.
-func countCycleBlockedPlanning(tasks []models.Task, planningPairs map[string]bool) int {
-	count := 0
-	for i := range tasks {
-		if tasks[i].Status == models.TaskStatusMerged &&
-			ops.IsPlanningPair(tasks[i].RolePair, planningPairs) &&
-			ops.IsTransitionCycleBlocked(&tasks[i]) {
-			count++
-		}
-	}
-	return count
-}
-
-// countReadyM2OCohorts delegates to ops.CountReadyManyToOneCohorts.
-func countReadyM2OCohorts(state *models.State, m2oTransitions []ops.ManyToOneTransitionInfo) int {
-	return ops.CountReadyManyToOneCohorts(state, m2oTransitions)
 }
 
 // hasIntegrationTaskInSprint checks if any planned task uses the integration-pair role-pair.
 func hasIntegrationTaskInSprint(state *models.State) bool {
 	for _, taskID := range state.Sprint.Scope.Planned {
 		task := state.FindTask(taskID)
-		if task != nil && task.RolePair == "integration-pair" {
+		if task != nil && task.RolePair == integrationRolePair {
 			return true
 		}
 	}

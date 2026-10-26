@@ -36,7 +36,7 @@ func TestOrchestratorWaitForWorkRetriesPendingDeferredValidation(t *testing.T) {
 			t.Cleanup(func() { orchestratorWaitForWorkDetector, orchestratorStartDeferredValidation = prevDetector, prevStart })
 			orchestratorWaitForWorkDetector = func(string, *models.State, []models.TaskStatus, map[string]bool, []ops.ManyToOneTransitionInfo) OrchestratorWakeResult {
 				return OrchestratorWakeResult{Trigger: WakeTriggerIntegrationWaiting, Count: 1,
-					Integration: prompts.EffectiveIntegrationCompletion{WakeTrigger: string(WakeTriggerIntegrationWaiting), Status: "waiting", ReasonCode: tc.reason, DeferredValidationRequested: tc.requested}}
+					Integration: prompts.EffectiveIntegrationCompletion{WakeTrigger: prompts.WakeTrigger(WakeTriggerIntegrationWaiting), Status: "waiting", ReasonCode: tc.reason, DeferredValidationRequested: tc.requested}}
 			}
 			var starts atomic.Int32
 			orchestratorStartDeferredValidation = func(projectRoot string) (bool, error) {

@@ -201,7 +201,7 @@ func TestA8DisplayedCountsStayRaw(t *testing.T) {
 	if !strings.Contains(computedEmpty.WakeInstruction, "Record no assessment") || strings.Contains(computedEmpty.WakeInstruction, "held-blocked") {
 		t.Errorf("computed empty scope must mean no assessment:\n%s", computedEmpty.WakeInstruction)
 	}
-	stateless, err := prompts.RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1")
+	stateless, err := prompts.RenderWakeInstructions(prompts.WakeBlockedTasks, "orchestrator-1", strings.Join(ops.TestFileMatcherPatterns(), ", "))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestA8TestFilePatternsReachEveryRender(t *testing.T) {
 	// names the patterns is unreachable: its bytes must carry no matcher text,
 	// before and after the text becomes an input.
 	t.Run("stateless planning complete wake", func(t *testing.T) {
-		rendered, err := prompts.RenderWakeInstructions("PLANNING_COMPLETE", "orchestrator-1")
+		rendered, err := prompts.RenderWakeInstructions(prompts.WakePlanningComplete, "orchestrator-1", patterns)
 		if err != nil {
 			t.Fatal(err)
 		}

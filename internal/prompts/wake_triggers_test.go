@@ -22,14 +22,14 @@ func TestWakeTriggersCoverEveryWakeTemplate(t *testing.T) {
 		}
 	}
 	for _, trigger := range WakeTriggers {
-		rendered, err := RenderWakeInstructions(trigger, "orchestrator-1")
+		rendered, err := RenderWakeInstructions(trigger, "orchestrator-1", testMatcherText())
 		if err != nil {
 			t.Fatalf("%s: %v", trigger, err)
 		}
 		if strings.TrimSpace(rendered) == "" {
 			t.Errorf("%s rendered nothing", trigger)
 		}
-		name := "wake_" + strings.ToLower(trigger)
+		name := "wake_" + strings.ToLower(string(trigger))
 		if _, ok := templates[name]; !ok {
 			t.Errorf("trigger %s has no template %s.tmpl", trigger, name)
 		}

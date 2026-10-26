@@ -87,7 +87,7 @@ func buildIntegrationGateStatus(state *models.State, projectRoot string) *integr
 
 func integrationStatusFromProjection(projection prompts.EffectiveIntegrationCompletion) *integrationLifecycleStatus {
 	return &integrationLifecycleStatus{
-		Status:         projection.Status,
+		Status:         string(projection.Status),
 		ReasonCode:     projection.ReasonCode,
 		TaskIDs:        append([]string(nil), projection.TaskIDs...),
 		RequestKeys:    append([]string(nil), projection.RequestKeys...),

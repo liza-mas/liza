@@ -8,19 +8,11 @@ var areaA8 = Area{
 		{Package: "internal/prompts", Layer: layerPrompts},
 		{Package: "internal/prompts/rolebudget", Layer: layerTestSupport},
 	},
-	Allowlist: []AllowEntry{
-		{
-			Importer:  "internal/prompts",
-			Imported:  "internal/ops",
-			Owner:     "Scope 19",
-			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 19 per SI-5",
-		},
-	},
+	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/agent/prompt.go"}, Ceiling: 1401},
 		{Key: Key{File: "internal/agent/prompt.go", Func: "buildTaskRoleContextData"}, Ceiling: 179},
 		{Key: Key{File: "internal/agent/reference_context.go", Func: "buildReferenceContextWithRepository"}, Ceiling: 223},
-		{Key: Key{File: "internal/prompts/builder.go", Func: "renderOrchestratorDashboard"}, Ceiling: 176},
 	},
 	S2: []S2Entry{},
 }

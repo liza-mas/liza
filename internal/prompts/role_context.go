@@ -292,6 +292,9 @@ type RoleContextData struct {
 	// DeclareRuntimeInputs: the project configures a runtime-input registry,
 	// so planners declare live validation inputs and reviewers check them.
 	DeclareRuntimeInputs bool
+	// TestFilePatterns is the submission test-file matcher display text the
+	// runtime resolves for the templates that name it.
+	TestFilePatterns string
 	// DirectCodingAllocationAvailable is supplied by the frozen pipeline route,
 	// so legacy architecture prompts cannot opt into an unavailable handoff.
 	DirectCodingAllocationAvailable bool

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -48,7 +49,8 @@ func FixtureRoleContext(shape Shape, role, agentID, roleType string) *prompts.Ro
 		TaskID: "fixture-cp-1", Description: "generated task", DoneWhen: "generated",
 		SpecRef: "specs/generated/goal.md", GoalSpecRef: "specs/generated/goal.md",
 		Worktree: "/generated/worktree", IntegrationBranch: "integration",
-		BaseCommit: strings.Repeat("a", 40), ReviewCommit: strings.Repeat("b", 40),
+		TestFilePatterns: agent.SubmissionTestPatternsText(),
+		BaseCommit:       strings.Repeat("a", 40), ReviewCommit: strings.Repeat("b", 40),
 
 		ResolvedReferenceContext: GenerateResolvedReferenceContext(shape),
 

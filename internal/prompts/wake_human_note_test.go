@@ -10,7 +10,7 @@ import (
 
 func TestDetermineWakeTrigger_HumanNoteRanksAfterDiscoveriesBeforePlanning(t *testing.T) {
 	t.Parallel()
-	if got := determineWakeTrigger(5, 0, 0, 0, 1, false, false, []planningTaskData{{TaskID: "plan-1"}}, 0); got != "HUMAN_NOTE" {
+	if got := determineWakeTrigger(5, 0, 0, 0, 1, false, false, []PlanningTask{{TaskID: "plan-1"}}, 0); got != "HUMAN_NOTE" {
 		t.Fatalf("with an unseen note and planning complete, trigger = %q, want HUMAN_NOTE", got)
 	}
 	if got := determineWakeTrigger(5, 0, 0, 1, 1, false, false, nil, 0); got != "IMMEDIATE_DISCOVERY" {

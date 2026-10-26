@@ -17,7 +17,6 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -194,7 +193,7 @@ func TestAmendPlanCLI_D88PreservesStartedProviderAndUnchangedAllocation(t *testi
 	if wake.Trigger != agent.WakeTriggerPlanningComplete {
 		t.Fatalf("merged correction did not wake its adoption: %+v", wake)
 	}
-	_, instructions, err := prompts.RenderOrchestratorDashboard(mergedState, root, "orchestrator-1")
+	_, instructions, err := agent.RenderOrchestratorDashboard(mergedState, root, "orchestrator-1")
 	if err != nil {
 		t.Fatal(err)
 	}
