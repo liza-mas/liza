@@ -29,9 +29,9 @@ type RoleTyper interface {
 // reviewer list contributes every item's CLI, since pool repair starts each
 // item for its review slot. Explicit agent-start flags bypass this; only
 // claim/launch preflight can check those.
-func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, roleModels rolemodels.File) ([]RoleCLI, error) {
-	out := make([]RoleCLI, 0, len(roles))
-	for _, role := range roles {
+func DefaultRoleCLIs(roleNames []string, types RoleTyper, config models.Config, roleModels rolemodels.File) ([]RoleCLI, error) {
+	out := make([]RoleCLI, 0, len(roleNames))
+	for _, role := range roleNames {
 		roleType, err := types.RoleType(role)
 		if err != nil {
 			return nil, fmt.Errorf("role %s: %w", role, err)
@@ -44,7 +44,7 @@ func DefaultRoleCLIs(roles []string, types RoleTyper, config models.Config, role
 			return nil, fmt.Errorf("role %s: no CLI resolved", role)
 		}
 		out = append(out, RoleCLI{Role: role, CLI: sel.CLI})
-		if slots, bound := roleModels.ReviewSlots(role); bound && roleType == "reviewer" {
+		if slots, bound := roleModels.ReviewSlots(role); bound && roleType == roles.RoleTypeReviewer {
 			for _, item := range slots.Items[1:] {
 				out = append(out, RoleCLI{Role: role, CLI: item.CLI})
 			}

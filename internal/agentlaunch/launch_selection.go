@@ -9,12 +9,16 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
-// Launch selection sources, reported by --explain-launch.
+// SelectionSource names the rule a launch selection came from, reported by
+// --explain-launch.
+type SelectionSource string
+
+// Launch selection sources.
 const (
-	SelectionSourceFlag       = "flag"
-	SelectionSourceProfile    = "profile"
-	SelectionSourceModelsFile = "models-file"
-	SelectionSourceDefault    = "default"
+	SelectionSourceFlag       SelectionSource = "flag"
+	SelectionSourceProfile    SelectionSource = "profile"
+	SelectionSourceModelsFile SelectionSource = "models-file"
+	SelectionSourceDefault    SelectionSource = "default"
 )
 
 // LaunchSelectionRequest holds the explicit flags and configuration an agent
@@ -39,7 +43,7 @@ type LaunchSelection struct {
 	CLI     string
 	Model   string
 	Profile ResolvedProfile
-	Source  string
+	Source  SelectionSource
 }
 
 // ResolveLaunchSelection applies the first matching rule:

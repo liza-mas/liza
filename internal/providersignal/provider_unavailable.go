@@ -102,12 +102,10 @@ func ProviderFromUnavailableSignalFile(path string) string {
 // for this provider to stop until the provider environment is repaired.
 func WriteProviderUnavailableSignal(projectRoot, provider, message string) error {
 	signalPath := ProviderUnavailableSignalPath(projectRoot, provider)
-	content := fmt.Sprintf("provider: %s\ndetected: %s\nmessage: %s\n",
-		provider,
-		time.Now().UTC().Format(time.RFC3339),
-		message,
-	)
-	return os.WriteFile(signalPath, []byte(content), 0644)
+	content := recordLine(recordKeyProvider, provider) +
+		recordLine(recordKeyDetected, time.Now().UTC().Format(time.RFC3339)) +
+		recordLine(recordKeyMessage, message)
+	return os.WriteFile(signalPath, []byte(content), signalFileMode)
 }
 
 // CheckProviderUnavailableSignal returns true if a provider-unavailable signal exists.
@@ -127,11 +125,11 @@ func ClearProviderUnavailableSignal(projectRoot, provider string) error {
 
 // LogProviderUnavailableAlert appends a provider-unavailable alert to alerts.log.
 func LogProviderUnavailableAlert(projectRoot string, pu *ProviderUnavailable) error {
-	return LogAlert(projectRoot, "🚨", "PROVIDER UNAVAILABLE", pu.Provider+": "+pu.Message)
+	return LogAlert(projectRoot, alertLevel, alertCategoryUnavailable, pu.Provider+": "+pu.Message)
 }
 
 // LogProviderUnavailableSpawnBlockedAlert appends an alert when a provider-unavailable signal blocks spawn.
 func LogProviderUnavailableSpawnBlockedAlert(projectRoot, provider, role string) error {
 	message := fmt.Sprintf("%s: refused to spawn %s while provider-unavailable signal is set; repair the provider, then delete the flag file or run %s then %s before spawning again", provider, role, brand.Command("pause"), brand.Command("resume"))
-	return LogAlert(projectRoot, "🚨", "PROVIDER UNAVAILABLE SPAWN BLOCKED", message)
+	return LogAlert(projectRoot, alertLevel, alertCategoryUnavailableSpawnBlocked, message)
 }

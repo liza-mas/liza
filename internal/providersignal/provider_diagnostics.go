@@ -38,14 +38,14 @@ func DiagnosticLines(output string) []string {
 		}
 		var message string
 		switch event.Type {
-		case "error":
+		case eventTypeError:
 			message = event.Message
 			if message == "" {
 				message = event.Error.Message
 			}
-		case "turn.failed":
+		case eventTypeTurnFailed:
 			message = event.Error.Message
-		case "result":
+		case eventTypeResult:
 			if event.IsError {
 				message = event.Result
 			}

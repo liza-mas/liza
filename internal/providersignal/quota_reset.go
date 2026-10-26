@@ -84,10 +84,10 @@ func claudeRejectedResetAt(output string) time.Time {
 				ResetsAt int64  `json:"resetsAt"`
 			} `json:"rate_limit_info"`
 		}
-		if json.Unmarshal([]byte(line), &event) != nil || event.Type != "rate_limit_event" {
+		if json.Unmarshal([]byte(line), &event) != nil || event.Type != eventTypeRateLimit {
 			continue
 		}
-		if event.Info.Status == "rejected" && event.Info.ResetsAt > 0 {
+		if event.Info.Status == rateLimitStatusRejected && event.Info.ResetsAt > 0 {
 			resetsAt = time.Unix(event.Info.ResetsAt, 0).UTC()
 		}
 	}
@@ -123,10 +123,10 @@ func claudeRateLimitedResult(output string) (string, bool) {
 			APIErrorStatus int    `json:"api_error_status"`
 			Result         string `json:"result"`
 		}
-		if json.Unmarshal([]byte(line), &event) != nil || event.Type != "result" {
+		if json.Unmarshal([]byte(line), &event) != nil || event.Type != eventTypeResult {
 			continue
 		}
-		if event.IsError && event.APIErrorStatus == 429 {
+		if event.IsError && event.APIErrorStatus == rateLimitedAPIStatus {
 			message, found = event.Result, true
 		}
 	}
@@ -191,16 +191,16 @@ func readQuotaSignalState(path string, now time.Time) (expires time.Time, ok, re
 	}
 	fields := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
-		if key, value, found := strings.Cut(line, ": "); found {
+		if key, value, found := strings.Cut(line, recordSeparator); found {
 			if _, seen := fields[key]; !seen {
 				fields[key] = strings.TrimSpace(value)
 			}
 		}
 	}
-	if expires, err := time.Parse(time.RFC3339, fields["expires"]); err == nil {
+	if expires, err := time.Parse(time.RFC3339, fields[recordKeyExpires]); err == nil {
 		return expires, true, true
 	}
-	if detected, err := time.Parse(time.RFC3339, fields["detected"]); err == nil {
+	if detected, err := time.Parse(time.RFC3339, fields[recordKeyDetected]); err == nil {
 		return quotaSignalExpiry(time.Time{}, detected), true, true
 	}
 	return quotaSignalExpiry(time.Time{}, info.ModTime()), true, true

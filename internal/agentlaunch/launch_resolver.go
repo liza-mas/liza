@@ -19,6 +19,27 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/roles"
+)
+
+// Template variable names the launch templates may reference as {{name}}. The
+// names below are the ones the resolver itself reads or writes.
+const (
+	templateVarAgentID     = "agentID"
+	templateVarTaskID      = "taskID"
+	templateVarGlobalDir   = "globalDir"
+	templateVarModel       = "model"
+	templateVarACPXAgent   = "acpxAgent"
+	templateVarSessionName = "sessionName"
+)
+
+// Claude CLI argument literals of the subagent denial: it is inserted before the
+// first of the logging flags.
+const (
+	claudeDisallowedToolsFlag = "--disallowedTools"
+	claudeDeniedTaskTool      = "Task"
+	claudeVerboseFlag         = "--verbose"
+	claudeOutputFormatFlag    = "--output-format"
 )
 
 const (
@@ -288,10 +309,10 @@ func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.Age
 	}
 	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
 	if sessionTemplate == "" && backend == ToolBackendACPX {
-		sessionTemplate = ACPXSessionName("{{agentID}}")
+		sessionTemplate = ACPXSessionName("{{" + templateVarAgentID + "}}")
 	}
 
-	vars["acpxAgent"] = acpxAgent
+	vars[templateVarACPXAgent] = acpxAgent
 	if sessionTemplate == "" {
 		return acpxAgent, "", nil
 	}
@@ -307,7 +328,7 @@ func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.Age
 	templateIncludesTaskID := false
 	for _, match := range templateExprRE.FindAllString(sessionTemplate, -1) {
 		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
-		if name == "taskID" {
+		if name == templateVarTaskID {
 			templateIncludesTaskID = true
 			break
 		}
@@ -318,7 +339,7 @@ func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.Age
 	if req.SessionScope != "" {
 		sessionName += "-" + req.SessionScope
 	}
-	vars["sessionName"] = sessionName
+	vars[templateVarSessionName] = sessionName
 	return acpxAgent, sessionName, nil
 }
 
@@ -344,7 +365,7 @@ func expandLaunchArgs(req LaunchPlanRequest, toolName string, tool models.AgentT
 	}
 	// Model flags lead the argv: the supported CLIs take them as
 	// top-level options, before any subcommand such as codex exec.
-	modelArgs, err := renderArgs(tool.ModelArgs, map[string]string{"model": model})
+	modelArgs, err := renderArgs(tool.ModelArgs, map[string]string{templateVarModel: model})
 	if err != nil {
 		return nil, fmt.Errorf("%s model args: %w", toolName, err)
 	}
@@ -460,10 +481,10 @@ func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) mo
 }
 
 func roleSpecificProfile(roleType string, config models.Config) string {
-	switch roleType {
-	case "doer", "orchestrator":
+	switch roles.RoleType(roleType) {
+	case roles.RoleTypeDoer, roles.RoleTypeOrchestrator:
 		return strings.TrimSpace(config.DefaultDoerProfile)
-	case "reviewer":
+	case roles.RoleTypeReviewer:
 		return strings.TrimSpace(config.DefaultReviewerProfile)
 	default:
 		return ""
@@ -491,22 +512,22 @@ func acpxSessionTaskScope(taskID string) string {
 
 func launchTemplateVars(req LaunchPlanRequest, toolName string) map[string]string {
 	vars := map[string]string{
-		"tool":        toolName,
-		"cli":         toolName,
-		"profile":     req.ProfileName,
-		"prompt":      req.Prompt,
-		"promptFile":  req.PromptFile,
-		"projectRoot": req.ProjectRoot,
-		"agentID":     req.AgentID,
-		"taskID":      req.TaskID,
-		"sessionID":   req.SessionID,
-		"outputsDir":  req.OutputsDir,
+		"tool":             toolName,
+		"cli":              toolName,
+		"profile":          req.ProfileName,
+		"prompt":           req.Prompt,
+		"promptFile":       req.PromptFile,
+		"projectRoot":      req.ProjectRoot,
+		templateVarAgentID: req.AgentID,
+		templateVarTaskID:  req.TaskID,
+		"sessionID":        req.SessionID,
+		"outputsDir":       req.OutputsDir,
 	}
 	// globalDir is left undefined when the home directory cannot be resolved,
 	// so a run_arg referencing it fails rendering with an explicit error
 	// instead of degrading to a relative path that does not exist.
 	if dir, err := paths.GlobalLizaDir(); err == nil && filepath.IsAbs(dir) {
-		vars["globalDir"] = dir
+		vars[templateVarGlobalDir] = dir
 	}
 	for key, value := range req.ProfileVars {
 		if key = strings.TrimSpace(key); key != "" {
@@ -541,8 +562,8 @@ func renderArg(arg string, vars map[string]string) (string, error) {
 	})
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		if slices.Contains(missing, "globalDir") {
-			return "", fmt.Errorf("unknown template variable(s): %s (globalDir requires a resolvable home directory)", strings.Join(missing, ", "))
+		if slices.Contains(missing, templateVarGlobalDir) {
+			return "", fmt.Errorf("unknown template variable(s): %s ("+templateVarGlobalDir+" requires a resolvable home directory)", strings.Join(missing, ", "))
 		}
 		return "", fmt.Errorf("unknown template variable(s): %s", strings.Join(missing, ", "))
 	}
@@ -554,7 +575,7 @@ func appendDisallowedTaskArg(args []string) []string {
 	out = append(out, args...)
 	insert := len(out)
 	for i, arg := range out {
-		if arg == "--verbose" || arg == "--output-format" {
+		if arg == claudeVerboseFlag || arg == claudeOutputFormatFlag {
 			insert = i
 			break
 		}
@@ -562,8 +583,8 @@ func appendDisallowedTaskArg(args []string) []string {
 	// Keep Claude's Task denial before logging flags such as --verbose/--output-format.
 	out = append(out, "", "")
 	copy(out[insert+2:], out[insert:])
-	out[insert] = "--disallowedTools"
-	out[insert+1] = "Task"
+	out[insert] = claudeDisallowedToolsFlag
+	out[insert+1] = claudeDeniedTaskTool
 	return out
 }
 

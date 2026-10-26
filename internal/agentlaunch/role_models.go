@@ -46,7 +46,7 @@ func LoadValidatedRoleModels(projectRoot string, roleTypes map[string]string, co
 // set for a CLI that cannot take one, and lists outside reviewer roles.
 func ValidateRoleModels(f rolemodels.File, roleTypes map[string]string, config models.Config) error {
 	check := func(where, roleType string, s rolemodels.Selection) error {
-		if s.List && roleType != "reviewer" {
+		if s.List && roles.RoleType(roleType) != roles.RoleTypeReviewer {
 			return fmt.Errorf("%s: only reviewer roles take an entry list", where)
 		}
 		for i, e := range s.Items {
@@ -67,12 +67,12 @@ func ValidateRoleModels(f rolemodels.File, roleTypes map[string]string, config m
 		return nil
 	}
 	if s := f.Defaults.Doer; s != nil {
-		if err := check("defaults.doer", "doer", *s); err != nil {
+		if err := check("defaults.doer", string(roles.RoleTypeDoer), *s); err != nil {
 			return err
 		}
 	}
 	if s := f.Defaults.Reviewer; s != nil {
-		if err := check("defaults.reviewer", "reviewer", *s); err != nil {
+		if err := check("defaults.reviewer", string(roles.RoleTypeReviewer), *s); err != nil {
 			return err
 		}
 	}

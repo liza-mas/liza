@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // ValidCLIs returns the supported CLI backends. Returns a fresh copy to prevent mutation.
@@ -49,11 +50,11 @@ func CheckCLIPrerequisitesWithConfig(cliName string, config models.Config) error
 	}
 	required := tool.RequiredExecutables
 	if len(required) == 0 && tool.Backend == ToolBackendACPX {
-		required = []string{"acpx"}
+		required = []string{acpxExecutable}
 	}
 	for _, executable := range required {
 		if _, err := exec.LookPath(executable); err != nil {
-			if executable == "acpx" && isACPXCLI(cliName) {
+			if executable == acpxExecutable && isACPXCLI(cliName) {
 				return fmt.Errorf("%s requires acpx on PATH; install with: npm install -g acpx: %w", cliName, err)
 			}
 			return fmt.Errorf("%s requires %s on PATH: %w", cliName, executable, err)
@@ -82,6 +83,17 @@ func ContractKeyForCLI(cliName string, config models.Config) string {
 // DefaultCLI is the CLI used when none is specified.
 const DefaultCLI = "claude"
 
+// Environment variable suffixes of the default-CLI chain, branded by
+// brand.LookupEnv.
+const (
+	envSuffixDefaultCLI         = "DEFAULT_CLI"
+	envSuffixDefaultDoerCLI     = "DEFAULT_DOER_CLI"
+	envSuffixDefaultReviewerCLI = "DEFAULT_REVIEWER_CLI"
+)
+
+// acpxExecutable is the runner every ACPX-backed tool requires on PATH.
+const acpxExecutable = "acpx"
+
 // CLIResolutionConfig holds configured CLI defaults from state.yaml.
 type CLIResolutionConfig struct {
 	DefaultCLI         string
@@ -96,7 +108,7 @@ func ResolveDefaultCLI(configValue string) string {
 	if configValue != "" {
 		return configValue
 	}
-	if v := brandedEnvValue("DEFAULT_CLI"); v != "" {
+	if v := brandedEnvValue(envSuffixDefaultCLI); v != "" {
 		return v
 	}
 	return DefaultCLI
@@ -142,10 +154,10 @@ func ResolveCLIFromStateForRole(flagChanged bool, flagValue, roleType string, co
 }
 
 func roleSpecificConfigCLI(roleType string, config CLIResolutionConfig) string {
-	switch roleType {
-	case "doer", "orchestrator":
+	switch roles.RoleType(roleType) {
+	case roles.RoleTypeDoer, roles.RoleTypeOrchestrator:
 		return config.DefaultDoerCLI
-	case "reviewer":
+	case roles.RoleTypeReviewer:
 		return config.DefaultReviewerCLI
 	default:
 		return ""
@@ -153,11 +165,11 @@ func roleSpecificConfigCLI(roleType string, config CLIResolutionConfig) string {
 }
 
 func roleSpecificEnvCLI(roleType string) string {
-	switch roleType {
-	case "doer", "orchestrator":
-		return brandedEnvValue("DEFAULT_DOER_CLI")
-	case "reviewer":
-		return brandedEnvValue("DEFAULT_REVIEWER_CLI")
+	switch roles.RoleType(roleType) {
+	case roles.RoleTypeDoer, roles.RoleTypeOrchestrator:
+		return brandedEnvValue(envSuffixDefaultDoerCLI)
+	case roles.RoleTypeReviewer:
+		return brandedEnvValue(envSuffixDefaultReviewerCLI)
 	default:
 		return ""
 	}
