@@ -18,7 +18,7 @@ section "K7 Families" and the A3/A4 inventory precedent (`a3-k7`, `a4-k7-invento
 3. Each literal's value was matched against every string and integer constant of `ops` and the constants of the A1 owner packages (`models`, `pipeline`, `roles`, `taskkind`, `paths`, `alerts`, `errors`, `payloadschema`, `referencecontract`, `statehygiene`, `statevalidate`, `analysis`, `git`, `gitenv`, `db`, `log`). A same-value, same-meaning owner constant is adopted (R1); a false friend (same spelling, other meaning) is recorded in table 4.
 4. A literal that is control-flow vocabulary or a repeated magic value without an owner is named (R4) or, when the owner is a closed package outside `ops` that names nothing, named in `ops` without editing the owner (R3, table 5). A finite set deciding control flow is typed; the A5 sets were typed by Tasks 2–7 (table 3c).
 5. Every remaining literal is classified (R5/F12) with a reason in table 3; the classifier fails on a literal it cannot place, so no literal is left unclassified or deferred.
-6. Cross-checks: a quoted-literal probe for the lifecycle safe actions and effects, the review impact levels, the claim and role types and the submitted verdicts finds only constant declarations in the 48 files; every `models.TaskEvent*` and `models.AnomalyType*` use in them is the constant, and the one raw `"submit_verdict_failed"` is an activity-log action label (table 4).
+6. Completeness check: the scan was run on the committed tree and every row of its output is either a row of table 3 (retained literal) or part of a constant declaration listed in table 2 or 3b; table 3 groups the 1198 rows by file, class and reason, so the line numbers listed there can be checked against the source one by one. Cross-checks: a quoted-literal probe for the lifecycle safe actions and effects, the review impact levels, the claim and role types and the submitted verdicts finds only constant declarations in the 48 files; every `models.TaskEvent*` and `models.AnomalyType*` use in them is the constant, and the one raw `"submit_verdict_failed"` is an activity-log action label (table 4).
 
 Outcome vocabulary: **adopted** (existing owner constant used), **named** (new constant, value unchanged), **typed** (defined type, one constant per value), **classified** (retained literal data or dynamic identity, with reason).
 
@@ -30,6 +30,7 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 | Constant declarations added by this task (table 2) | 22 |
 | Pre-existing named constants in A5 files (table 3b) | 120 |
 | Retained literals classified R5/F12 (table 3, grouped by file and reason) | 1198 |
+| Literals scanned at this tree | 1342 = 1198 retained (table 3) + 144 inside declarations of the 142 named constants (22 declared by this task in table 2, 120 pre-existing in table 3b) |
 | Unclassified / deferred | 0 |
 | New defined types | 0 (every finite control-flow set was typed by Tasks 2–7; table 3c) |
 | BLOCKED findings against A1 or A3 closure (prospective symbol not delivered) | 0 |
@@ -91,19 +92,308 @@ Outcome vocabulary: **adopted** (existing owner constant used), **named** (new c
 
 One row per changed line. A row marked "declaration of named" is the constant's declaration; every other row is a use site that replaced the literal shown. F is the plan's K7 family.
 
-
+| file:line | F | Rule | Outcome | Constant | Replaces | Owner |
+|---|---|---|---|---|---|---|
+| `acceptance_declaration.go:174` | F2 | R4 | named | `reaffirmProofOperation` | "reaffirm-proof" (rendered command) | A5 reaffirm_proof.go |
+| `acceptance_execution.go:42` | F9 | R4 | declaration of named | `acceptanceEnvSuffixURL` | "URL" | A5 acceptance_execution.go |
+| `acceptance_execution.go:43` | F9 | R4 | declaration of named | `acceptanceEnvSuffixDSN` | "DSN" | A5 acceptance_execution.go |
+| `acceptance_execution.go:230` | F9 | R4 | named | `acceptanceEnvSuffixURL, acceptanceEnvSuffixDSN` | "URL", "DSN" | A5 acceptance_execution.go |
+| `acceptance_execution.go:231` | F12 | R3 | named | `agentGenerationEnvSuffix (twice)` | "AGENT_GENERATION" (twice) | A5 submission_lifecycle.go; `brand` owner gap |
+| `archive_acceptance_receipts.go:23` | F9 | R4 | declaration of named | `archiveAcceptanceReceiptsLockOperation` | "archive-acceptance-receipts" | A5 archive_acceptance_receipts.go |
+| `archive_acceptance_receipts.go:58` | F9 | R4 | named | `archiveAcceptanceReceiptsLockOperation` | "archive-acceptance-receipts" | A5 archive_acceptance_receipts.go |
+| `await_resubmission.go:177` | F12 | R1 | adopted | `notFoundEntityAgent` | "agent" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `await_verdict.go:147` | F12 | R1 | adopted | `notFoundEntityAgent` | "agent" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `await_verdict.go:371` | F12 | R1 | adopted | `notFoundEntityAgent` | "agent" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `await_verdict_finish.go:18` | F3 | R4 | declaration of named | `awaitVerdictOperation` | "await-verdict" | A5 await_verdict_finish.go |
+| `await_verdict_finish.go:188` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `await_verdict_finish.go:203` | F3 | R4 | named | `awaitVerdictOperation` | "await-verdict" | A5 await_verdict_finish.go |
+| `await_verdict_outcome.go:336` | F11 | R1 | adopted | `oldReviewCommitExtraKey` | "old_review_commit" | update_review_commit.go (K-OWN) |
+| `await_verdict_outcome.go:337` | F11 | R1 | adopted | `newReviewCommitExtraKey` | "new_review_commit" | update_review_commit.go (K-OWN) |
+| `inflight_submit.go:28` | F9 | R4 | declaration of named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
+| `inflight_submit.go:67` | F9 | R4 | named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
+| `inflight_submit.go:132` | F9 | R4 | named | `inflightSubmitFileExt` | ".json" | A5 inflight_submit.go |
+| `orphaned_review_base.go:48` | F9 | R4 | declaration of named | `orphanedBaseHealCauseLimit` | 500 | A5 orphaned_review_base.go |
+| `orphaned_review_base.go:220` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `orphaned_review_base.go:530` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `orphaned_review_base.go:589` | F9 | R4 | named | `orphanedBaseHealCauseLimit` | 500 | A5 orphaned_review_base.go |
+| `orphaned_review_base.go:697` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `pending_verdict.go:36` | F9 | R4 | declaration of named | `pendingVerdictFileExt` | ".json" | A5 pending_verdict.go |
+| `pending_verdict.go:37` | F9 | R4 | declaration of named | `pendingVerdictFileNameFormat` | "%x.json" | A5 pending_verdict.go |
+| `pending_verdict.go:40` | F9 | R4 | declaration of named | `pendingVerdictRequestIDFormat` | "verdict-%x" | A5 pending_verdict.go |
+| `pending_verdict.go:42` | F9 | R4 | declaration of named | `publishPendingVerdictLockOperation` | "publish-pending-verdict" | A5 pending_verdict.go |
+| `pending_verdict.go:43` | F9 | R4 | declaration of named | `removePendingVerdictLockOperation` | "remove-pending-verdict" | A5 pending_verdict.go |
+| `pending_verdict.go:85` | F9 | R4 | named | `pendingVerdictRequestIDFormat` | "verdict-%x" | A5 pending_verdict.go |
+| `pending_verdict.go:153` | F9 | R4 | named | `pendingVerdictFileNameFormat` | "%x.json" | A5 pending_verdict.go |
+| `pending_verdict.go:155` | F9 | R4 | named | `publishPendingVerdictLockOperation` | "publish-pending-verdict" | A5 pending_verdict.go |
+| `pending_verdict.go:231` | F9 | R4 | named | `pendingVerdictFileExt` | ".json" | A5 pending_verdict.go |
+| `pending_verdict.go:290` | F9 | R4 | named | `removePendingVerdictLockOperation` | "remove-pending-verdict" | A5 pending_verdict.go |
+| `pending_verdict.go:309` | F9 | R4 | named | `pendingVerdictFileNameFormat` | "%x.json" | A5 pending_verdict.go |
+| `quarantined_verdict.go:29` | F2 | R4 | declaration of named | `reconcileVerdictOperation` | "reconcile-verdict" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:32` | F9 | R4 | declaration of named | `taskReviewLockKeyFormat` | "task-review-%x" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:33` | F9 | R4 | declaration of named | `quarantinedVerdictIDFormat` | "qv-%x" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:36` | F5 | R3 | declaration of named | `reconcileDispositionRefuted` | "refuted" | A5 quarantined_verdict.go; `models` owner gap |
+| `quarantined_verdict.go:37` | F5 | R3 | declaration of named | `reconcileDispositionSuperseded` | "superseded" | A5 quarantined_verdict.go; `models` owner gap |
+| `quarantined_verdict.go:50` | F9 | R4 | named | `taskReviewLockKeyFormat` | "task-review-%x" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:79` | F2 | R4 | named | `reconcileVerdictOperation` | "reconcile-verdict" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:136` | F9 | R1 | adopted | `acceptanceMaskedValue` | "***" | acceptance_execution.go (K-ACC) |
+| `quarantined_verdict.go:173` | F9 | R4 | named | `quarantinedVerdictIDFormat` | "qv-%x" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:216` | F11 | R1 | adopted | `oldReviewCommitExtraKey` | "old_review_commit" | update_review_commit.go (K-OWN) |
+| `quarantined_verdict.go:247` | F11 | R1 | adopted | `oldReviewCommitExtraKey` | "old_review_commit" | update_review_commit.go (K-OWN) |
+| `quarantined_verdict.go:248` | F11 | R1 | adopted | `newReviewCommitExtraKey` | "new_review_commit" | update_review_commit.go (K-OWN) |
+| `quarantined_verdict.go:295` | F5 | R3 | named | `reconcileDispositionRefuted, reconcileDispositionSuperseded` | "refuted", "superseded" | A5 quarantined_verdict.go; `models` owner gap |
+| `quarantined_verdict.go:314` | F2 | R4 | named | `reconcileVerdictOperation` | "reconcile-verdict" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:337` | F2 | R4 | named | `reconcileVerdictOperation` | "reconcile-verdict" | A5 quarantined_verdict.go |
+| `quarantined_verdict.go:347` | F2 | R4 | named | `reconcileVerdictOperation` | "reconcile-verdict" | A5 quarantined_verdict.go |
+| `reaffirm_proof.go:21` | F2 | R4 | declaration of named | `reaffirmProofOperation` | "reaffirm-proof" | A5 reaffirm_proof.go |
+| `reaffirm_proof.go:64` | F2 | R4 | named | `reaffirmProofOperation` | "reaffirm-proof" | A5 reaffirm_proof.go |
+| `reaffirm_proof.go:65` | F2 | R4 | named | `reaffirmProofOperation (twice)` | "reaffirm-proof" (twice) | A5 reaffirm_proof.go |
+| `rejection_rca.go:242` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `review_reclaim.go:112` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `review_reclaim.go:173` | F12 | R1 | adopted | `notFoundEntityAgent` | "agent" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `review_reservation.go:118` | F12 | R1 | adopted | `notFoundEntityAgent` | "agent" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `review_reservation.go:122` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `review_reservation.go:129` | F2 | R1 | adopted | `claimReviewerTaskOperation` | "claim-reviewer-task" | claim_reviewer_task.go (K-OWN) |
+| `reviewer_claim_selection.go:137` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `submission_finalize.go:142` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `submission_git_work.go:217` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `submission_git_work.go:386` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `submission_lifecycle.go:26` | F9 | R4 | declaration of named | `submitFinalizeLockOperation` | "submit-for-review-finalize" | A5 submission_lifecycle.go |
+| `submission_lifecycle.go:30` | F12 | R3 | declaration of named | `agentIDEnvSuffix` | "AGENT_ID" | A5 submission_lifecycle.go; `brand` owner gap |
+| `submission_lifecycle.go:31` | F12 | R3 | declaration of named | `agentGenerationEnvSuffix` | "AGENT_GENERATION" | A5 submission_lifecycle.go; `brand` owner gap |
+| `submission_lifecycle.go:95` | F12 | R3 | named | `agentIDEnvSuffix` | "AGENT_ID" | A5 submission_lifecycle.go; `brand` owner gap |
+| `submission_lifecycle.go:139` | F9 | R4 | named | `submitFinalizeLockOperation` | "submit-for-review-finalize" | A5 submission_lifecycle.go |
+| `submit_progress.go:12` | F9 | R4 | declaration of named | `defaultSubmitHeartbeatInterval` | 5 * time.Minute (initialiser of the test-mutable `submitHeartbeatInterval`) | A5 submit_progress.go |
+| `submit_progress.go:16` | F9 | R4 | named | `defaultSubmitHeartbeatInterval` | 5 * time.Minute | A5 submit_progress.go |
+| `submit_verdict.go:285` | F2 | R1 | adopted | `payloadschema.SubmitVerdictOperation` | "submit-verdict" | payloadschema (A1) |
+| `submit_verdict.go:305` | F12 | R3 | named | `agentIDEnvSuffix` | "AGENT_ID" | A5 submission_lifecycle.go; `brand` owner gap |
+| `update_review_commit.go:221` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `validation_preflight.go:329` | F12 | R3 | named | `agentIDEnvSuffix` | "AGENT_ID" | A5 submission_lifecycle.go; `brand` owner gap |
+| `validation_preflight.go:330` | F12 | R3 | named | `agentGenerationEnvSuffix` | "AGENT_GENERATION" | A5 submission_lifecycle.go; `brand` owner gap |
+| `validation_preflight.go:493` | F6 | R4 | named | `runtimeInputPreflightOperation` | "preflight" | A5 validation_readiness.go |
+| `validation_readiness.go:58` | F6 | R4 | declaration of named | `runtimeInputPreflightOperation` | "preflight" | A5 validation_readiness.go |
+| `verdict_failure_anomaly.go:112` | F12 | R1 | adopted | `actorSystem` | "system" | helpers.go (A3) |
+| `verdict_failure_anomaly.go:129` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
+| `verdict_transition.go:152` | F12 | R1 | adopted | `notFoundEntityTask` | "task" (errors.NotFoundError.Entity) | helpers.go (A3) |
 
 ## 3. Classified literals (R5 / F12)
 
 Each row lists every line of one file carrying literals of one class and reason. Classes: **J18** detail, history, payload or hash-material keys (field names; the persisted ones are written here and no A5 decision reads them back by spelling — the keys A5 does read back are named in table 2 or pre-exist in table 3b); **J20** message, format, report or label text, rendered command names, diagnostic field paths and activity-log labels; **J21** emptiness, arity, sign and unit identities and string-operation delimiters; **J22** the data table of test-file naming conventions of other ecosystems (G1.1: it is data about the user's project, not Liza vocabulary, and a configuration field is out of scope). Role names, role pairs, tool and provider names, IDs and user text never appear as literals (F12 below).
 
-
+| File | Class | Rule | Outcome | Reason | Lines |
+|---|---|---|---|---|---|
+| `acceptance_allocation_review.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 286,286,309 |
+| `acceptance_allocation_review.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 95,98,100,119,143,143,144,200,207,245,250,254,261,277,317,332,336,340 |
+| `acceptance_allocation_review.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 31,164,168,168,239 |
+| `acceptance_claim_block.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 142,144,149,208,214,219,220,249,265,271 |
+| `acceptance_claim_block.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 209,214,220,250 |
+| `acceptance_claim_block.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 213,245,261,263 |
+| `acceptance_claim_block.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 77,105,121,222,222,231 |
+| `acceptance_claim_block.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 262 |
+| `acceptance_creation.go` | J20 | R5 | classified | diagnostic field or source label named in a refusal (A3 I27: diagnostic fields stay dynamic) | 54,56,108,110 |
+| `acceptance_creation.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 123 |
+| `acceptance_creation.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 98,116,117,118 |
+| `acceptance_creation.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 119 |
+| `acceptance_creation.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 88 |
+| `acceptance_creation.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 55,89,101,149 |
+| `acceptance_declaration.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 38,124 |
+| `acceptance_declaration.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 68,78,83,89,92,117,133,168,174,176,198 |
+| `acceptance_declaration.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 72,131,131 |
+| `acceptance_declaration.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 48,66,83,135,137,162,173 |
+| `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field or source label named in a refusal (A3 I27: diagnostic fields stay dynamic) | 215 |
+| `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 174,256,262,266,273,281,291,295,338,365,378,385,400,411,419,429,448,454,458,469 |
+| `acceptance_evidence.go` | J20 | R5 | classified | diagnostic field path suffix named in an acceptance refusal (A3 I27) | 281 |
+| `acceptance_evidence.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 78,80,84,86,91,94,96,98,103,107,227,256,262,281,291,295,331,338,341,344,349,351,354,363,363,378,385,400,411,419,429,448,454,458,469 |
+| `acceptance_evidence.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 78,81,84,86,94,94,94,94,94,96,107 |
+| `acceptance_evidence.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 185,253,467 |
+| `acceptance_evidence.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 97,170,226,276,294,348,406,406 |
+| `acceptance_evidence.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 214,340,447,447,460,468 |
+| `acceptance_execution.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 89 |
+| `acceptance_execution.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 46,92,99,121,136,140,151,154,157,204 |
+| `acceptance_execution.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 115,205,225,246,255 |
+| `acceptance_execution.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 156,220,226,239,245 |
+| `acceptance_execution.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 57,91,92,105,198,243,244,259,259 |
+| `acceptance_ownership_fence.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 43 |
+| `acceptance_reference_reads.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 24,42,47,49,85,153,171,174,177,181,184,188 |
+| `acceptance_reference_reads.go` | J21 | R5 | classified | bytes per KiB: unit conversion in a size message | 184 |
+| `acceptance_reference_reads.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 19,19,42,47,102,102 |
+| `acceptance_reference_reads.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 21,24,52,72,99,104,114,153,153,171,171,174,174,176,177,177,181,181,184,184,188,188 |
+| `acceptance_reference_reads.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 128,128,128,128,180 |
+| `archive_acceptance_receipts.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 71,72,105 |
+| `await_policy.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 18 |
+| `await_policy.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 19,19 |
+| `await_policy.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 16,17,22,33,33,39 |
+| `await_resubmission.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 156,159,196,202,206,242,286,340,385,389,393,401,415,420,467 |
+| `await_resubmission.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 155,158,201,368 |
+| `await_resubmission.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 408,408,473,473 |
+| `await_verdict.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 125,128,180,184,257,323,327,341,355,360 |
+| `await_verdict.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 124,127,179,438 |
+| `await_verdict.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 348,348 |
+| `await_verdict_finish.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 79,181,203 |
+| `await_verdict_finish.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 79 |
+| `await_verdict_finish.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 163,169,177,190 |
+| `await_verdict_finish.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 109,110,143,147 |
+| `await_verdict_outcome.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 42,76,150,175,182,195,205,206,210,212,370,373,381,390,396,402 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 208 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 209,226,229,254,273,305,308,312,318,322,338,338,338,341,369,382,394 |
+| `await_verdict_outcome.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 219,219,246,246,293 |
+| `claim_reviewer_task.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 55,61,104,160,165,279,362,368 |
+| `claim_reviewer_task.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 54,60,60,103,135,145,278,291,362,368 |
+| `claim_reviewer_task.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 111,259,290 |
+| `clear_stale_review_claims.go` | J20 | R5 | classified | activity-log action label (log lines are a free surface, goal-frozen) | 136 |
+| `clear_stale_review_claims.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 40,65,91,93,109,110,141,151,154,160,163,167,170,175,180,183,191,229,243 |
+| `clear_stale_review_claims.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 86,102,148,188,193,217 |
+| `clear_stale_review_claims.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 40,43,65,162 |
+| `inflight_submit.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 82,87 |
+| `inflight_submit.go` | J21 | R5 | classified | directory entry names a marker agent ID must not be | 50,50,53 |
+| `inflight_submit.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 50,51 |
+| `inflight_submit.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 112 |
+| `orphaned_review_base.go` | J20 | R5 | classified | Git branch ref namespace: A2 names no constant; A6 repeats it (listed for A6) | 612 |
+| `orphaned_review_base.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 43,83,95,141,226,243,246,257,267,269,271,281,288,295,300,327,343,351,361,388,391,407,426,431,452,460,465,494,497,503,548,589,605,613,623,630,637,647,660,665,691,708 |
+| `orphaned_review_base.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 386 |
+| `orphaned_review_base.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 140,140,140,140,181,235,274,278,280,285,292,298,302,313,331,333,350,393,407,448,456,477,502,506,556,622 |
+| `orphaned_review_base.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 270,294,360,387,636 |
+| `pending_verdict.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 75,91,97,106,109,147,182,225,242,251,261,307,310,314,319 |
+| `pending_verdict.go` | J20 | R5 | classified | temporary-file name pattern, single use | 186 |
+| `pending_verdict.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 62,83,140,147,151,182,184,188,194,208,316,316 |
+| `pending_verdict.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 114,115,275,302 |
+| `quarantined_verdict.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 93,94,95 |
+| `quarantined_verdict.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 26,48,64,79,81,84,104,110,120,162,166,197,200,287,314,322,335,348,351,373 |
+| `quarantined_verdict.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 58 |
+| `quarantined_verdict.go` | J21 | R5 | classified | directory entry names a marker agent ID must not be | 58 |
+| `quarantined_verdict.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 47,135,158,233,255,321,333 |
+| `quarantined_verdict.go` | J21 | R5 | classified | truncation ellipsis | 141,145 |
+| `quarantined_verdict.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 268,269,270,293,294,362,363 |
+| `reaffirm_proof.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 48,51,65,65,69,78,82,122,136,140,150,155,159,164,167,184,188,199,204 |
+| `reaffirm_proof.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 47,50,76,121,121,184,184,188,188,198,199,199,203,204,204 |
+| `rejection_rca.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 115,120,121,170,172,173,174,175,176 |
+| `rejection_rca.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 44,101,211,214,217,281,297,315,317,319 |
+| `rejection_rca.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 210,213,318 |
+| `rejection_rca.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 163,295,298,298,327 |
+| `repair_acceptance_commits.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 71,77,82,133,143,160,226,239,249,253,260,263,333,334 |
+| `repair_acceptance_commits.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 160 |
+| `repair_acceptance_commits.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 330,333 |
+| `repair_acceptance_commits.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 70,210,214,241,262,276,281,374,375,385,386,389,390,396 |
+| `repair_acceptance_commits.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 89,106,110,191,203,309,322,327,356,358 |
+| `repair_review_ownership.go` | J20 | R5 | classified | activity-log action label (log lines are a free surface, goal-frozen) | 72 |
+| `repair_review_ownership.go` | J20 | R5 | classified | default audit reason text | 17 |
+| `repair_review_ownership.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 25,68,76,86,94,97,103,108,111,114,117,120,123 |
+| `repair_review_ownership.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 16,44,48,60,93,126 |
+| `repair_review_ownership.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 25,28,86,122 |
+| `review_boundary.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 91,92,93,94,95,124,125,126,139,140,141,195,196,197,198,209 |
+| `review_boundary.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 48,53,66,80,89,95,115,122,126,137,141,149,150,156,157,163,164,198 |
+| `review_reclaim.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 48,156,216 |
+| `review_reclaim.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 80 |
+| `review_reclaim.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 77,118 |
+| `review_reservation.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 98,103,129 |
+| `reviewed_range.go` | J20 | R5 | classified | diagnostic field or source label named in a refusal (A3 I27: diagnostic fields stay dynamic) | 182,186 |
+| `reviewed_range.go` | J20 | R5 | classified | diagnostic field path named in an acceptance refusal (A3 I27: diagnostic fields stay dynamic) | 193 |
+| `reviewed_range.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 53,56,64,149,164,168,173,217,226,230,235,287,296 |
+| `reviewed_range.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 55,95,154,181,198,287,287,292,292,292,293,293,295,295,295,296,296,303 |
+| `reviewed_range.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 26,66,80,96,104,106,232,233 |
+| `reviewer_claim_candidate.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 115 |
+| `reviewer_claim_candidate.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 116 |
+| `reviewer_claim_candidate.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 109,112 |
+| `reviewer_claim_selection.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 74,126,145,166,194,196,197,197,201 |
+| `reviewer_claim_selection.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 108,264,307,386,436 |
+| `reviewer_claim_selection.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 94,125,205,215,235,251,264,277,307,320,361,361,468 |
+| `submission_admission.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 107,142 |
+| `submission_admission.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 53,77,135,153 |
+| `submission_finalize.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 116,117,126,127 |
+| `submission_finalize.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 54,92,114,127,158,162,175 |
+| `submission_finalize.go` | J20 | R5 | classified | phase label of a classified operational error (diagnostic text; nothing branches on its spelling) | 113 |
+| `submission_finalize.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 174 |
+| `submission_git_work.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 45,46,47,74,75,76,135,136,137,162,163,164,165,182,183,184,283,284,285,303,304,305,346,347,348,349,350,351,352,357,358,402,403,404,412 |
+| `submission_git_work.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 33,43,47,56,58,72,76,84,87,133,137,144,160,165,180,184,220,256,267,281,285,301,305,325,337,351,404,425 |
+| `submission_git_work.go` | J20 | R5 | classified | phase label of a classified operational error (diagnostic text; nothing branches on its spelling) | 42,71,132,159,179,300 |
+| `submission_git_work.go` | J20 | R5 | classified | phase or operation label of a classified operational error (diagnostic text) | 266,280 |
+| `submission_git_work.go` | J20 | R5 | classified | query path prefix rendered in guidance text | 281 |
+| `submission_git_work.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 281 |
+| `submission_git_work.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 357 |
+| `submission_git_work.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 55,89,142,324,334 |
+| `submission_git_work.go` | J21 | R5 | classified | length of the three-dot ellipsis a truncation reserves | 368,371 |
+| `submission_git_work.go` | J21 | R5 | classified | truncation ellipsis | 371 |
+| `submission_git_work.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 142 |
+| `submission_lifecycle.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 235 |
+| `submission_lifecycle.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 89,92,95,105,113,170,177,178,179,193,241,262 |
+| `submission_lifecycle.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 88,91,94,169,192,239 |
+| `submission_preconditions.go` | J20 | R5 | classified | message text for an unassigned task; not LifecycleEffectsNone | 156 |
+| `submission_preconditions.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 71,107,111,115,129,141,146,160 |
+| `submission_preconditions.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 146 |
+| `submission_preconditions.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 106 |
+| `submit_hold.go` | J20 | R5 | classified | file-name suffix of the submit hold, single use | 24 |
+| `submit_hold.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 39 |
+| `submit_hold.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 23,23 |
+| `submit_hold.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 19 |
+| `submit_progress.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 78,80,82 |
+| `submit_progress.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 75 |
+| `submit_review.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 52 |
+| `submit_review.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 69,124,136,149,157 |
+| `submit_review.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 65,70,70,155 |
+| `submit_verdict.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 257,257,257,257 |
+| `submit_verdict.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 178,227,244,282,299,302,305,309,313,317,368,439,447,451,454,463,481 |
+| `submit_verdict.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 65,92,109,135,171,171,174,174,178,178,195,203,298,301,304,312,420 |
+| `submit_verdict.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 44,45,46,77,80,80,277,283,283 |
+| `test_detection.go` | J18 | R5 | classified | detail key of the test-detection evidence record: field name, written here and not read back by spelling | 52,53,54,55,56 |
+| `test_detection.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 140,162 |
+| `test_detection.go` | J22 | R5 | classified | test-file naming convention of other ecosystems: configurable-by-ecosystem data table, not Liza vocabulary (G1.1) | 11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,76,76,76,76,76,76 |
+| `test_detection.go` | J22 | R5 | classified | test-file naming convention of other ecosystems: matcher fragment of the data table (G1.1) | 66,71,71,71,77,77,82,82,89,90,91,91,97,97,102,102,103,103,108,108,109,109,114,114,119,122,124,124,158 |
+| `update_review_commit.go` | J20 | R5 | classified | display of an absent commit pointer in message text | 258,262 |
+| `update_review_commit.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 51,118,135,139,142,152,166,168,174,177,201,231,267,316 |
+| `update_review_commit.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 50,53,134,158,301 |
+| `validation_preflight.go` | J20 | R5 | classified | Git revision name passed to Git (git vocabulary; A2 names no constant) | 100,182,306 |
+| `validation_preflight.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 52,54,473 |
+| `validation_preflight.go` | J21 | R5 | classified | delimiter, cutset, replacement or hex-format selector of a string operation | 76,76,76,76,76,76,76,76,76,76,76,198,243,473 |
+| `validation_preflight.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 74,113,140,176,191,270,273,274,301,325,331,398,398,451,507 |
+| `validation_preflight.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 167,230,379,382,392,483,487 |
+| `validation_readiness.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 130,132,138,142 |
+| `validation_readiness.go` | J20 | R5 | classified | rendered operator command or flag name in guidance text (command identities are not closed into a type, A3 I22) | 139,139 |
+| `validation_readiness.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 131 |
+| `verdict_failure_anomaly.go` | J18 | R5 | classified | detail, history, payload or hash-material key: field name; no A5 decision reads it back by spelling from persisted state | 78,79,143,144,147,150,153 |
+| `verdict_failure_anomaly.go` | J20 | R5 | classified | activity-log action label (log lines are a free surface); not models.AnomalyTypeSubmitVerdictFailed | 60 |
+| `verdict_failure_anomaly.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 51,53,56,107 |
+| `verdict_failure_anomaly.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 48,48,52,55,93,111,118,146,149 |
+| `verdict_failure_anomaly.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 103 |
+| `verdict_integration_evidence.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 22,25,33,58,77,88,92 |
+| `verdict_integration_evidence.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 39,104,107,110 |
+| `verdict_transition.go` | J20 | R5 | classified | message, format or report text (single-use descriptive label, no control flow) | 61,68,71,76,81,84,104,117,131,138,213,235,248,253,491,497,498,511 |
+| `verdict_transition.go` | J21 | R5 | classified | empty-string test or return: absence of an optional value | 70,113,226,233,252,273,273,290,300,350,517 |
+| `verdict_transition.go` | J21 | R5 | classified | zero, one or two: sign, emptiness, arity, index or doubling identity | 57,133,300 |
 
 ### 3b. Pre-existing named constants in A5 files
 
 Named by earlier scopes, by the A5 concern tasks or by A3 inside the A5 files; retained, adopted nowhere twice, no parallel definition. Constants this task declared are in table 2.
 
-
+| File | Constants |
+|---|---|
+| `submit_review.go` | `integrationOperationSubmitForReview`, `operationalCodeStateWrite`, `submitReviewCauseLimit` |
+| `submission_lifecycle.go` | `submissionSHA1HexLength`, `submissionSHA256HexLength`, `submitTimeoutRequestIDLength` |
+| `submit_hold.go` | `submitHoldDigestBytes` |
+| `inflight_submit.go` | `submitGraceMargin`, `inflightSubmitNonceBytes`, `MaxInflightSubmitGrace` |
+| `submit_verdict.go` | `verdictImpactExtraKey` |
+| `pending_verdict.go` | `maxPendingVerdictBytes`, `pendingVerdictDirName`, `pendingVerdictDirMode`, `pendingVerdictRetryInitialDelay`, `pendingVerdictRetryMaxDelay` |
+| `pending_verdict_windows.go` | `pendingVerdictRetryBudget`, `pendingVerdictRetryInterval`, `errAccessDenied`, `errSharingViolation` |
+| `await_resubmission.go` | `ResubmissionResubmitted`, `ResubmissionTerminal`, `ResubmissionTimeout`, `ResubmissionAborted`, `ResubmissionPoll`, `ResubmissionPaused`, `awaitResubmissionOperation`, `awaitResubmissionReclaimOperation` |
+| `await_policy.go` | `AwaitPollIntervalConfigKey` |
+| `update_review_commit.go` | `updateReviewCommitOperation`, `oldReviewCommitExtraKey`, `newReviewCommitExtraKey`, `oldBaseCommitExtraKey`, `newBaseCommitExtraKey` |
+| `review_boundary.go` | `reviewBoundaryOperationAssignment`, `reviewBoundaryPhase` |
+| `orphaned_review_base.go` | `healOrphanedReviewBaseOperation`, `orphanedBaseHealExtraKey`, `preparedByExtraKey`, `OrphanedBaseHealNotApplicable`, `OrphanedBaseHealed`, `OrphanedBaseHealIntegrationFailed` |
+| `claim_reviewer_task.go` | `claimReviewerTaskOperation` |
+| `acceptance_evidence.go` | `AcceptanceFaultContent`, `AcceptanceFaultAllocation`, `AcceptanceFaultRuntimeInput`, `AcceptanceFaultAdmissionSlot`, `AcceptanceFaultBatchTimeout`, `acceptanceReceiptVersion` |
+| `acceptance_execution.go` | `acceptanceOutputLimit`, `acceptanceFailureExcerptLimit`, `defaultAcceptanceTimeoutSeconds`, `acceptanceCommandWaitDelay`, `acceptanceExitUnknown`, `acceptanceMaskedValue`, `acceptanceSecretEntryName` |
+| `acceptance_creation.go` | `acceptanceValidationMismatchReason`, `acceptanceDiagnosticSchemaVersion`, `acceptanceCreationCommitLength` |
+| `acceptance_claim_block.go` | `AcceptanceAllocationRefusalThreshold`, `acceptanceBlockedReasonLimit`, `acceptanceReasonContentInvalid`, `acceptanceReasonAllocationRepeated`, `claimRefusalExtraKey`, `claimRefusalAcceptanceValue`, `faultClassExtraKey`, `integrationCommitExtraKey`, `runtimeInputHumanAskLimit` |
+| `acceptance_ownership_fence.go` | `defaultAcceptanceOwnershipPollInterval` |
+| `archive_acceptance_receipts.go` | `defaultArchiveMaxTasks`, `defaultArchiveMaxBytes` |
+| `repair_acceptance_commits.go` | `remapReplacedExtraKey`, `remapIntegrationExtraKey`, `remapHistoryEntriesExtraKey` |
+| `validation_readiness.go` | `validationCodeRegistrationRequired`, `validationCodeWorktreeUnavailable`, `validationCodePipelineUnavailable`, `validationCodeIntegrationUnavailable`, `validationCodeConfigurationChanged`, `validationCodeCurrentSessionRequired`, `validationCodeRetryPending`, `validationCodeArtifactUnsupported`, `validationCodeExecutionPolicyRequired`, `validationCodeContextChanged`, `validationCodeOwnershipChanged`, `validationCodeCommitChanged`, `validationCodeIntegrationChanged`, `validationCodeCandidateChanged`, `validationCodeExecutableOwnershipRequired`, `validationResultPassed`, `validationResultFailed`, `validationMethodDirect`, `validationExecutionLocal`, `validationExecutionArtifactOnly`, `ValidationPreflightFailedCategory` |
+| `submission_git_work.go` | `submitRebaseDiagnosticLimit` |
+| `verdict_failure_anomaly.go` | `verdictFailureErrorLimit`, `verdictFailureStackLimit`, `verdictFailureAnomalyErrorLimit` |
+| `verdict_transition.go` | `submittedVerdictApproved`, `submittedVerdictRejected`, `rejectionRCAThresholdKey`, `rejectionRCARejectionCountKey` |
+| `await_verdict_finish.go` | `awaitBudgetExhaustedReason`, `awaitUnfencedSubmissionIndex`, `DefaultAwaitBudget` |
+| `await_verdict_outcome.go` | `VerdictApproved`, `VerdictRejected`, `VerdictNewAttempt`, `VerdictAlreadyTransitioned`, `VerdictTerminal`, `VerdictTimeout`, `VerdictAborted`, `VerdictPoll`, `VerdictPaused`, `SafeActionRevise`, `SafeActionStop` |
+| `review_reclaim.go` | `reclaimReviewLeaseDuration` |
+| `review_reservation.go` | `reviewOwnershipLeaseMargin` |
+| `reviewer_claim_selection.go` | `defaultReviewClaimCooldown` |
 
 ### 3c. A5-owned typed sets
 
