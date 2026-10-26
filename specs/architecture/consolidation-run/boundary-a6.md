@@ -329,12 +329,48 @@ section below. The acceptance manifest
 (`specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-17-cp-0-boundary.json`) is written once G8 is
 green (it maps G1–G8 and the boundary obligations; it records no result itself).
 
-## G8 — dispatched CI result (D52, D59, D60): pending
+## G8 — dispatched CI result (D52, D59, D60): green
 
-Status: **pending.** Under D52 (replacing the per-boundary pull request) the maintainer dispatches
-`.github/workflows/ci.yml` (`workflow_dispatch`) on a pinned ref under D59 at `git rev-parse global-refactoring`,
-which printed R1 `7677139f664a83d9356029c223c16c0c5e2b6d6c` at the end of G1–G6. D52 runs Linux, Windows and macOS in
-the same run, so the `main`-push macOS follow-up is satisfied by that run's macOS job if it passes. No agent
-pushes, opens a pull request or runs a remote write. This section is completed on authorised resume with the run
-URL, ref, tested SHA, per-job conclusions, the macOS follow-up owner and status, a UTC read-back time and the
-ruling. Red CI keeps A7 coding held and the maintainer opens the fix task.
+Status: **green on the first attempt.** Under D52 (replacing the per-boundary pull request) the maintainer dispatched
+`.github/workflows/ci.yml` (`workflow_dispatch`) on the pinned ref `g8/a6-7677139` under D59. No agent pushed,
+opened a pull request or ran a remote write; the maintainer's operator notes of 2026-10-26T07:00Z (run dispatched,
+result pending, task held BLOCKED) and 2026-10-26T07:11Z (result, maintainer confirmation under the standing
+auto-approve delegation) are the authority, and the run was read back independently with the read-only
+`gh run view 40283146712 --repo liza-mas/liza --json conclusion,event,headSha,headBranch,attempt,createdAt,jobs`
+at 2026-10-26T07:13Z.
+
+- Run: https://github.com/liza-mas/liza/actions/runs/40283146712
+- Event `workflow_dispatch`; ref `g8/a6-7677139`; created 2026-10-26T07:00:23Z; attempt 1; conclusion `success`.
+- **Proven SHA (tested SHA, equal to R1):** `7677139f664a83d9356029c223c16c0c5e2b6d6c`. D52/D59 conditions hold: a
+  dispatch of `ci.yml` on the pinned ref, tested SHA equal to this record's integration SHA, every job green in one
+  attempt. No D60 rerun was needed or counted.
+- Jobs (conclusion, completedAt UTC 2026-10-26):
+
+| Job | Conclusion | Completed |
+|---|---|---|
+| Shared CI / Linux tests | success | 07:10:47Z |
+| Shared CI / Linux lint and build | success | 07:02:50Z |
+| Shared CI / macOS compatibility | success | 07:10:32Z |
+| Test (windows) | success | 07:08:10Z |
+| Test (windows, ops-1) | success | 07:05:31Z |
+| Test (windows, ops-2) | success | 07:04:22Z |
+| Test (windows, ops-3) | success | 07:04:28Z |
+| Test (windows, ops-4) | success | 07:05:07Z |
+| Test (windows, rest-1) | success | 07:07:49Z |
+| Test (windows, rest-2) | success | 07:03:45Z |
+| Test (windows, rest-3) | success | 07:07:09Z |
+| Release verified tag | skipped (tag-only job; not run, not claimed as passed) | 07:10:47Z |
+
+- **macOS follow-up:** satisfied inside the same run, not by a later `main` push. D52 runs Linux, Windows and macOS
+  in one dispatch, and `Shared CI / macOS compatibility` concluded `success` (07:10:32Z). Owner: the maintainer
+  (dispatched the run). Status: closed, green. No separate `main`-push job is awaited and none is claimed as run.
+- C5 on all three platforms: the same run exercised the C5 persisted-zone proof on Windows (`7677139f6`, which made
+  that proof run instead of skip) as well as Linux and macOS, all green.
+- **Ruling:** G8 passes. The tested code is R1, the code every other check of this record observed, so no check is
+  re-run at another revision and no second revision is recorded. A6 closes; A7 coding is not held.
+- **Submission base (kept separate from the proven SHA):** this record is committed on the task branch
+  `task/arm-1-ar-17-cp-0-code-0`. At the read-back above, `git rev-parse global-refactoring` printed
+  `7677139f664a83d9356029c223c16c0c5e2b6d6c`, equal to R1, so no rebase onto a different integration head was
+  pending. The submission commit and its post-rebase review commit differ from R1 only by this record, the G8
+  update and the acceptance manifest (documentation and JSON; no Go file). The proof of A6 and C5 is R1 and the
+  run above; the submission's post-rebase validation is separate evidence recorded by the lifecycle.
