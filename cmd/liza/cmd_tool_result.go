@@ -4,12 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"strconv"
 
-	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/toolresult"
 	"github.com/spf13/cobra"
 )
@@ -21,46 +16,15 @@ func newToolResultCmd() *cobra.Command {
 	var config toolresult.Config
 	group := &cobra.Command{Use: "tool-result", Short: "Budget tool results and retrieve sanitized artifacts"}
 	group.PersistentFlags().StringVar(&root, "root", "", "Artifact directory (default: project state directory/tool-results)")
-	group.PersistentFlags().IntVar(&config.ThresholdBytes, "threshold-bytes", 32768, "Externalize results larger than this many bytes")
-	group.PersistentFlags().IntVar(&config.DigestBytes, "digest-bytes", 4096, "Maximum externalized result digest bytes")
-	store := func(cmd *cobra.Command) (*toolresult.Store, error) {
-		resolved := config
-		for _, option := range []struct {
-			flag, suffix string
-			value        *int
-		}{
-			{"threshold-bytes", "TOOL_RESULT_THRESHOLD_BYTES", &resolved.ThresholdBytes},
-			{"digest-bytes", "TOOL_RESULT_DIGEST_BYTES", &resolved.DigestBytes},
-		} {
-			if cmd.Flags().Changed(option.flag) {
-				continue
-			}
-			if raw := brand.LookupEnv(os.Getenv, option.suffix).Value; raw != "" {
-				number, err := strconv.Atoi(raw)
-				if err != nil {
-					return nil, fmt.Errorf("invalid %s budget setting", option.flag)
-				}
-				*option.value = number
-			}
-		}
-		// The OpenCode boundary has the same documented 64 KiB safety ceiling.
-		if resolved.ThresholdBytes < 1024 || resolved.ThresholdBytes > 65536 || resolved.DigestBytes < 1024 {
-			return nil, fmt.Errorf("budget settings require 1024 <= digest-bytes <= threshold-bytes <= 65536")
-		}
-		dir := root
-		if dir == "" {
-			project, _ := cmd.Flags().GetString("project-root")
-			if project == "" {
-				var err error
-				project, err = os.Getwd()
-				if err != nil {
-					return nil, err
-				}
-			}
-			dir = filepath.Join(project, paths.ProjectDirName(), "tool-results")
-		}
-		return toolresult.New(dir, resolved, nil)
-	}
+	group.PersistentFlags().IntVar(&config.ThresholdBytes, "threshold-bytes", toolResultDefaultThresholdBytes, "Externalize results larger than this many bytes")
+	group.PersistentFlags().IntVar(&config.DigestBytes, "digest-bytes", toolResultDefaultDigestBytes, "Maximum externalized result digest bytes")
+	store := toolResultStoreResolver(&root, &config)
+	group.AddCommand(newToolResultFilterCmd(store), newToolResultReadCmd(store), newToolResultStatsCmd(store), newToolResultRunCmd(store), newToolResultACPCmd(store), newToolResultCodexHookCmd(store))
+	group.AddCommand(newToolResultClaudeCmd(store))
+	return group
+}
+
+func newToolResultFilterCmd(store func(*cobra.Command) (*toolresult.Store, error)) *cobra.Command {
 	var input toolresult.Result
 	var jsonInput bool
 	var exitCode int
@@ -68,21 +32,11 @@ func newToolResultCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			result := input
 			if jsonInput {
-				decoder := json.NewDecoder(cmd.InOrStdin())
-				decoder.DisallowUnknownFields()
-				var decoded *toolresult.Result
-				if err := decoder.Decode(&decoded); err != nil {
-					// Decoder diagnostics can echo attacker-controlled object keys.
-					return fmt.Errorf("invalid tool result JSON object")
+				decoded, err := decodeToolResultJSON(cmd.InOrStdin())
+				if err != nil {
+					return err
 				}
-				if decoded == nil {
-					return fmt.Errorf("expected a tool result JSON object")
-				}
-				result = *decoded
-				var extra any
-				if err := decoder.Decode(&extra); err != io.EOF {
-					return fmt.Errorf("expected exactly one tool result JSON object")
-				}
+				result = decoded
 			} else {
 				content, err := io.ReadAll(cmd.InOrStdin())
 				if err != nil {
@@ -114,6 +68,29 @@ func newToolResultCmd() *cobra.Command {
 	filter.Flags().StringVar(&input.SessionID, "session-id", "", "Session identifier")
 	filter.Flags().IntVar(&exitCode, "exit-code", 0, "Original tool exit code (filter success still exits zero)")
 	filter.Flags().BoolVar(&input.Truncated, "truncated", false, "Source result was already truncated")
+	return filter
+}
+
+// decodeToolResultJSON reads exactly one result envelope. Decoder diagnostics
+// can echo attacker-controlled object keys, so failures use fixed messages.
+func decodeToolResultJSON(in io.Reader) (toolresult.Result, error) {
+	decoder := json.NewDecoder(in)
+	decoder.DisallowUnknownFields()
+	var decoded *toolresult.Result
+	if err := decoder.Decode(&decoded); err != nil {
+		return toolresult.Result{}, fmt.Errorf("invalid tool result JSON object")
+	}
+	if decoded == nil {
+		return toolresult.Result{}, fmt.Errorf("expected a tool result JSON object")
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return toolresult.Result{}, fmt.Errorf("expected exactly one tool result JSON object")
+	}
+	return *decoded, nil
+}
+
+func newToolResultReadCmd(store func(*cobra.Command) (*toolresult.Store, error)) *cobra.Command {
 	var offset, limit int64
 	read := &cobra.Command{Use: "read HASH", Short: "Read a bounded byte range from a sanitized artifact", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -134,7 +111,11 @@ func newToolResultCmd() *cobra.Command {
 		}}
 	read.Flags().Int64Var(&offset, "offset", 0, "Starting byte offset")
 	read.Flags().Int64Var(&limit, "limit", 0, "Maximum bytes to read (defaults to the active threshold; 1..65536)")
-	stats := &cobra.Command{Use: "stats", Short: "Report persisted tool-result budget telemetry as JSON", Args: cobra.NoArgs,
+	return read
+}
+
+func newToolResultStatsCmd(store func(*cobra.Command) (*toolresult.Store, error)) *cobra.Command {
+	return &cobra.Command{Use: "stats", Short: "Report persisted tool-result budget telemetry as JSON", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s, err := store(cmd)
 			if err != nil {
@@ -146,9 +127,6 @@ func newToolResultCmd() *cobra.Command {
 			}
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(value)
 		}}
-	group.AddCommand(filter, read, stats, newToolResultRunCmd(store), newToolResultACPCmd(store), newToolResultCodexHookCmd(store))
-	group.AddCommand(newToolResultClaudeCmd(store))
-	return group
 }
 
 func init() { rootCmd.AddCommand(newToolResultCmd()) }

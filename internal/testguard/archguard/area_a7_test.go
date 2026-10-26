@@ -14,10 +14,6 @@ var areaA7 = Area{
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "cmd/liza/cmd_launch.go"}, Ceiling: 1159},
-		{Key: Key{File: "cmd/liza/cmd_system.go"}, Ceiling: 827},
-		{Key: Key{File: "cmd/liza/cmd_task.go"}, Ceiling: 2005},
-		{Key: Key{File: "cmd/liza/cmd_task.go", Func: "init"}, Ceiling: 199},
-		{Key: Key{File: "cmd/liza/cmd_tool_result.go", Func: "newToolResultCmd"}, Ceiling: 134},
 		{Key: Key{File: "internal/commands/init.go"}, Ceiling: 1684},
 		{Key: Key{File: "internal/commands/init.go", Func: "InitCommandWithConfig"}, Ceiling: 471},
 		{Key: Key{File: "internal/commands/init.go", Func: "InitPairingCommand"}, Ceiling: 182},
