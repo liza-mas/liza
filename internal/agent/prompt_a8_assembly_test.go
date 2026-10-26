@@ -191,3 +191,51 @@ func TestA8ReferenceHeadCapturedOnce(t *testing.T) {
 		t.Fatalf("integration HEAD resolved %d times across scalar, parent and review stages, want once", got)
 	}
 }
+
+// TestA8NamedVocabularyKeepsValues pins the spellings and limits the K7 sweep
+// named: they reach rendered prompts, so a drifting constant changes bytes.
+func TestA8NamedVocabularyKeepsValues(t *testing.T) {
+	strs := map[string]string{
+		string(relationDependency):          "dependency",
+		string(relationBlocked):             "blocked",
+		string(relationSibling):             "sibling",
+		string(relationFileOverlap):         "file-overlap",
+		string(relationArtifactProducer):    "artifact-producer",
+		string(relationArtifactRef):         "artifact-ref",
+		string(plannerArtifactArchitecture): "architecture",
+		string(plannerArtifactPlan):         "plan",
+		foundationScopeHeading:              "Scope 0",
+		generatedFoundationSuffix:           "-0",
+		nullRejectionReason:                 "null",
+		humanNoteTargetAll:                  "all",
+		humanNoteSourceOperatorCLI:          "operator_cli",
+		humanNoteOperationAddNote:           "add-human-note",
+	}
+	for got, want := range strs {
+		if got != want {
+			t.Errorf("vocabulary spelling = %q, want %q", got, want)
+		}
+	}
+	ints := map[string][2]int{
+		"parent description": {parentDescriptionLimit, 500},
+		"prior attempt":      {priorAttemptNumber, 2},
+		"task description":   {taskGraphDescriptionLimit, 96},
+		"blocked reason":     {taskGraphBlockedReasonLimit, 120},
+		"integration":        {integrationDescriptionLimit, 200},
+		"weight dependency":  {taskGraphWeightDependency, 100},
+		"weight blocked":     {taskGraphWeightBlocked, 90},
+		"weight overlap":     {taskGraphWeightFileOverlap, 80},
+		"weight sibling":     {taskGraphWeightSibling, 50},
+		"weight default":     {taskGraphWeightDefault, 30},
+		"weight artifact":    {taskGraphWeightArtifactOnly, 10},
+		"rank spec":          {referenceRankSpec, 0},
+		"rank epic":          {referenceRankEpic, 1},
+		"rank arch":          {referenceRankArch, 2},
+		"rank plan":          {referenceRankPlan, 3},
+	}
+	for name, pair := range ints {
+		if pair[0] != pair[1] {
+			t.Errorf("%s = %d, want %d", name, pair[0], pair[1])
+		}
+	}
+}

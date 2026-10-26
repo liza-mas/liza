@@ -179,8 +179,12 @@ func resolveWakeRoutes(goalEntryPoint, projectRoot string) (prompts.WakeRoutes, 
 	return routes, nil
 }
 
+// entryPointValueSeparator splits a goal entry-point value into its kind and
+// the simple role pair it targets.
+const entryPointValueSeparator = "."
+
 func wakeEntryPointRolePair(entryPointValue string) (string, bool) {
-	parts := strings.SplitN(entryPointValue, ".", 2)
+	parts := strings.SplitN(entryPointValue, entryPointValueSeparator, 2)
 	if len(parts) != 2 {
 		return "", false
 	}
