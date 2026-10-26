@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	lizagit "github.com/liza-mas/liza/internal/git"
@@ -24,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -867,7 +867,7 @@ fi
 			AgentTools: map[string]models.AgentToolConfig{
 				"cursor": {
 					Executable:      "fake-agent",
-					PromptTransport: agentlaunch.PromptTransportFile,
+					PromptTransport: string(providers.PromptTransportFile),
 					RunArgs:         []string{"--prompt-file", "{{promptFile}}", "--cwd", "{{projectRoot}}"},
 				},
 			},

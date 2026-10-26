@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 // expectedPiGatePath mirrors the {{globalDir}} template resolution in
@@ -100,7 +101,7 @@ func TestDevinLaunchPlanSupportsModelOverride(t *testing.T) {
 			"devin": {
 				RunArgs:         []string{"--permission-mode", "dangerous", "--model", "swe-2-max", "-p", "{{prompt}}"},
 				LoggedRunArgs:   []string{"--permission-mode", "dangerous", "--model", "swe-2-max", "-p", "{{prompt}}"},
-				PromptTransport: agentlaunch.PromptTransportArg,
+				PromptTransport: string(providers.PromptTransportArg),
 			},
 		},
 	}

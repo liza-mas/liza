@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/agentlaunch"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/subprocess"
 )
@@ -187,7 +188,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != agentlaunch.ToolBackendACPX {
+	if plan.Backend != providers.BackendACPX {
 		return NewCLIAgent(a.outputsDir).RunInteractive(ctx, req)
 	}
 

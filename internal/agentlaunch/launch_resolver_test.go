@@ -36,7 +36,7 @@ func TestAgentToolRegistryMergesCustomTools(t *testing.T) {
 		AgentTools: map[string]models.AgentToolConfig{
 			"cursor": {
 				Executable:      "cursor-agent",
-				PromptTransport: PromptTransportFile,
+				PromptTransport: string(providers.PromptTransportFile),
 				RunArgs:         []string{"--cwd", "{{projectRoot}}", "--prompt-file", "{{promptFile}}", "--model", "{{profile.model}}"},
 				ContractKey:     "codex",
 			},
@@ -409,9 +409,9 @@ func TestAppendDisallowedTaskArgInsertsBeforeFirstLoggingFlag(t *testing.T) {
 
 func acpxTaskScopeTestTool() models.AgentToolConfig {
 	return models.AgentToolConfig{
-		Backend:         ToolBackendACPX,
+		Backend:         string(providers.BackendACPX),
 		Executable:      "acpx",
-		PromptTransport: PromptTransportStdin,
+		PromptTransport: string(providers.PromptTransportStdin),
 		ACPXAgent:       "qwen",
 		ACPXSessionName: "liza-qwen-{{agentID}}",
 		ACPXEnsureArgs:  []string{"--cwd", "{{projectRoot}}", "{{acpxAgent}}", "sessions", "ensure", "--name", "{{sessionName}}"},

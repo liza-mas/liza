@@ -24,7 +24,7 @@ func TestSupervisorSessionCatalogEnvFiles(t *testing.T) {
 	// A refreshed catalog can add an overlay unknown to the installed binary.
 	// Keep the embedded catalog unchanged to reproduce that version skew.
 	t.Cleanup(agentlaunch.UseRuntimeCatalog(providers.Catalog{Providers: []providers.Provider{{
-		ID: "codex", Backend: agentlaunch.ToolBackendCLI,
+		ID: "codex", Backend: providers.BackendCLI,
 		Runtime: providers.Runtime{EnvFiles: []string{"new-catalog.conf"}},
 	}}}))
 	t.Setenv("CATALOG_OVERLAY_TEST", "inherited")

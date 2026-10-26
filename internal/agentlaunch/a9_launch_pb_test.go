@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 // A9 preserved-behaviour (PB) tests for the launch capability, written on the
@@ -23,7 +24,7 @@ func TestA9EffectiveRegistryKeys(t *testing.T) {
 	}})
 
 	custom := registry["zz-custom"]
-	if custom.ProviderKey != "zz-custom" || custom.ContractKey != "" || custom.Backend != ToolBackendCLI || custom.Executable != "zz-bin" || custom.PromptTransport != PromptTransportStdin {
+	if custom.ProviderKey != "zz-custom" || custom.ContractKey != "" || providers.Backend(custom.Backend) != providers.BackendCLI || custom.Executable != "zz-bin" || providers.PromptTransport(custom.PromptTransport) != providers.PromptTransportStdin {
 		t.Fatalf("custom tool fell back to %+v, want tool-name provider key, cli backend and stdin transport", custom)
 	}
 	if keyed := registry["zz-keyed"]; keyed.ProviderKey != "shared" || keyed.ContractKey != "codex" || keyed.Executable != "zz-keyed" {

@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -199,9 +200,9 @@ func TestACPXAgentRunUsesConfiguredQwenTarget(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"qwen-acp": {
-				Backend:             agentlaunch.ToolBackendACPX,
+				Backend:             string(providers.BackendACPX),
 				Executable:          "acpx",
-				PromptTransport:     agentlaunch.PromptTransportStdin,
+				PromptTransport:     string(providers.PromptTransportStdin),
 				RequiredExecutables: []string{"acpx"},
 				ContractKey:         "qwen",
 				ACPXAgent:           "qwen",
@@ -251,9 +252,9 @@ func TestACPXAgentEnsureSessionFallbackUsesProjectRoot(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"custom-acp": {
-				Backend:         agentlaunch.ToolBackendACPX,
+				Backend:         string(providers.BackendACPX),
 				Executable:      "acpx",
-				PromptTransport: agentlaunch.PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 				ACPXAgent:       "custom",
 				ACPXSessionName: "liza-custom-{{agentID}}",
 				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
@@ -294,9 +295,9 @@ func TestACPXAgentEnsureSessionFailsFastWithoutProjectRootOrEnsureArgs(t *testin
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"custom-acp": {
-				Backend:         agentlaunch.ToolBackendACPX,
+				Backend:         string(providers.BackendACPX),
 				Executable:      "acpx",
-				PromptTransport: agentlaunch.PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 				ACPXAgent:       "custom",
 				ACPXSessionName: "liza-custom-{{agentID}}",
 				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
@@ -338,9 +339,9 @@ func TestACPXAgentRunUsesConfiguredDevinACPServerCommand(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"devin-acp": {
-				Backend:             agentlaunch.ToolBackendACPX,
+				Backend:             string(providers.BackendACPX),
 				Executable:          "acpx",
-				PromptTransport:     agentlaunch.PromptTransportStdin,
+				PromptTransport:     string(providers.PromptTransportStdin),
 				RequiredExecutables: []string{"acpx", "devin"},
 				ContractKey:         "devin",
 				ACPXAgent:           "devin acp",

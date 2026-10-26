@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -49,7 +50,7 @@ func CheckCLIPrerequisitesWithConfig(cliName string, config models.Config) error
 		return fmt.Errorf("unknown CLI: %s", cliName)
 	}
 	required := tool.RequiredExecutables
-	if len(required) == 0 && tool.Backend == ToolBackendACPX {
+	if len(required) == 0 && providers.Backend(tool.Backend) == providers.BackendACPX {
 		required = []string{acpxExecutable}
 	}
 	for _, executable := range required {
@@ -65,7 +66,7 @@ func CheckCLIPrerequisitesWithConfig(cliName string, config models.Config) error
 
 func isACPXCLI(cliName string) bool {
 	tool, ok := AgentToolRegistry(models.Config{})[cliName]
-	return ok && tool.Backend == ToolBackendACPX
+	return ok && providers.Backend(tool.Backend) == providers.BackendACPX
 }
 
 func IsValidCLI(cliName string, config models.Config) bool {

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -49,7 +49,7 @@ func TestCLIAgentEmitsUsageEvent(t *testing.T) {
 			"missing-usage-test-cli": {
 				Backend:         "cli",
 				Executable:      filepath.Join(binDir, "missing-executable"),
-				PromptTransport: agentlaunch.PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 			},
 		}}
 		_, err := NewCLIAgent("").Run(context.Background(), LLMAgentRunRequest{

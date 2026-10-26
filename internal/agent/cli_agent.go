@@ -14,6 +14,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/sessionvalidation"
 	"github.com/liza-mas/liza/internal/subprocess"
@@ -254,7 +255,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != agentlaunch.ToolBackendCLI {
+	if plan.Backend != providers.BackendCLI {
 		return 1, fmt.Errorf("interactive mode is not supported by %s", cliName)
 	}
 	cmdEnv, err := resolveLaunchEnvironment(plan, projectRoot, agentID, req.Generation, req.Environment)
@@ -450,7 +451,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 		cleanup()
 		return nil, nil, err
 	}
-	if plan.Backend != agentlaunch.ToolBackendCLI {
+	if plan.Backend != providers.BackendCLI {
 		cleanup()
 		return nil, nil, fmt.Errorf("%s is not a CLI backend", req.BackendName)
 	}

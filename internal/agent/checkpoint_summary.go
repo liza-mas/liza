@@ -16,6 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 const checkpointSummaryFileName = "checkpoint-summary.md"
@@ -438,9 +439,9 @@ func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models
 		cliName = "mistral"
 	}
 	registry := agentlaunch.AgentToolRegistry(cfg)
-	if tool, ok := registry[cliName]; ok && tool.Backend == agentlaunch.ToolBackendACPX {
+	if tool, ok := registry[cliName]; ok && providers.Backend(tool.Backend) == providers.BackendACPX {
 		counterpart := agentlaunch.ACPXAgentName(cliName)
-		if cliTool, ok := registry[counterpart]; !ok || cliTool.Backend == agentlaunch.ToolBackendACPX {
+		if cliTool, ok := registry[counterpart]; !ok || providers.Backend(cliTool.Backend) == providers.BackendACPX {
 			return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
 		}
 		cliName = counterpart

@@ -3,6 +3,7 @@ package agent
 import (
 	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 // NewLLMAgentForCLI creates the provider backend for a configured CLI name.
@@ -13,7 +14,7 @@ func NewLLMAgentForCLI(cliName string, outputsDir string) LLMAgent {
 // NewLLMAgentForCLIWithConfig creates the provider backend for a configured CLI name.
 func NewLLMAgentForCLIWithConfig(cliName string, outputsDir string, config models.Config) LLMAgent {
 	tool, ok := agentlaunch.AgentToolRegistry(config)[cliName]
-	if ok && tool.Backend == agentlaunch.ToolBackendACPX {
+	if ok && providers.Backend(tool.Backend) == providers.BackendACPX {
 		return NewACPXAgent(outputsDir)
 	}
 	return NewCLIAgent(outputsDir)

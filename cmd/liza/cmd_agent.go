@@ -22,6 +22,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -276,7 +277,7 @@ Example:
 func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelection, projectRoot, outputsDir string, runtimeConfig models.Config) error {
 	cliName, profile := selection.CLI, selection.Profile
 	promptFile := ""
-	if tool, ok := agentlaunch.AgentToolRegistry(runtimeConfig)[cliName]; ok && tool.PromptTransport == agentlaunch.PromptTransportFile {
+	if tool, ok := agentlaunch.AgentToolRegistry(runtimeConfig)[cliName]; ok && providers.PromptTransport(tool.PromptTransport) == providers.PromptTransportFile {
 		promptFile = "<prompt-file>"
 	}
 	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{

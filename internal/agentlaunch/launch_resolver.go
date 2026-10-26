@@ -42,15 +42,6 @@ const (
 	claudeOutputFormatFlag    = "--output-format"
 )
 
-const (
-	PromptTransportStdin = "stdin"
-	PromptTransportArg   = "arg"
-	PromptTransportFile  = "file"
-
-	ToolBackendCLI  = "cli"
-	ToolBackendACPX = "acpx"
-)
-
 var templateExprRE = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 
 var (
@@ -69,10 +60,10 @@ type LaunchPlan struct {
 	ToolName             string
 	ProfileName          string
 	Model                string
-	Backend              string
+	Backend              providers.Backend
 	Executable           string
 	Args                 []string
-	PromptTransport      string
+	PromptTransport      providers.PromptTransport
 	PromptFile           string
 	EnvFiles             []string
 	OptionalEnvFiles     bool
@@ -251,8 +242,8 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		ValidationExecution:  tool.ValidationExecution,
 		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
 		ContractKey:          strings.TrimSpace(tool.ContractKey),
-		UsesStdin:            base.transport == PromptTransportStdin,
-		UsesPromptFile:       base.transport == PromptTransportFile,
+		UsesStdin:            base.transport == providers.PromptTransportStdin,
+		UsesPromptFile:       base.transport == providers.PromptTransportFile,
 		RequiresCodexWrapper: toolName == "codex",
 		ProviderKey:          strings.TrimSpace(tool.ProviderKey),
 		ACPXAgent:            acpxAgent,
@@ -267,31 +258,33 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 
 // launchBase is a tool's validated launch identity with its defaults applied.
 type launchBase struct {
-	backend, executable, transport, model string
+	backend           providers.Backend
+	transport         providers.PromptTransport
+	executable, model string
 }
 
 // resolveLaunchBase applies the backend, executable and transport defaults and
 // refuses an unsupported transport, backend or model selection, in that order.
 func resolveLaunchBase(toolName string, tool models.AgentToolConfig, requestedModel string) (launchBase, error) {
 	base := launchBase{
-		backend:    strings.TrimSpace(tool.Backend),
+		backend:    providers.Backend(strings.TrimSpace(tool.Backend)),
 		executable: strings.TrimSpace(tool.Executable),
-		transport:  strings.TrimSpace(tool.PromptTransport),
+		transport:  providers.PromptTransport(strings.TrimSpace(tool.PromptTransport)),
 		model:      strings.TrimSpace(requestedModel),
 	}
 	if base.backend == "" {
-		base.backend = ToolBackendCLI
+		base.backend = providers.BackendCLI
 	}
 	if base.executable == "" {
 		base.executable = toolName
 	}
 	if base.transport == "" {
-		base.transport = PromptTransportStdin
+		base.transport = providers.PromptTransportStdin
 	}
 	if err := validatePromptTransport(base.transport); err != nil {
 		return launchBase{}, err
 	}
-	if base.backend != ToolBackendCLI && base.backend != ToolBackendACPX {
+	if base.backend != providers.BackendCLI && base.backend != providers.BackendACPX {
 		return launchBase{}, fmt.Errorf("unsupported backend for %s: %s", toolName, base.backend)
 	}
 	if base.model != "" && !SupportsModelSelection(tool) {
@@ -302,13 +295,13 @@ func resolveLaunchBase(toolName string, tool models.AgentToolConfig, requestedMo
 
 // expandLaunchSession resolves the ACPX agent name and renders the session
 // name, recording both as template variables for the argument expansion.
-func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.AgentToolConfig, backend string, vars map[string]string) (acpxAgent, sessionName string, err error) {
+func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.AgentToolConfig, backend providers.Backend, vars map[string]string) (acpxAgent, sessionName string, err error) {
 	acpxAgent = strings.TrimSpace(tool.ACPXAgent)
-	if acpxAgent == "" && backend == ToolBackendACPX {
+	if acpxAgent == "" && backend == providers.BackendACPX {
 		acpxAgent = ACPXAgentName(toolName)
 	}
 	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
-	if sessionTemplate == "" && backend == ToolBackendACPX {
+	if sessionTemplate == "" && backend == providers.BackendACPX {
 		sessionTemplate = ACPXSessionName("{{" + templateVarAgentID + "}}")
 	}
 
@@ -402,8 +395,8 @@ func expandACPXArgs(toolName string, tool models.AgentToolConfig, vars map[strin
 // it declares model_args and runs as a direct CLI. ACPX launches carry no
 // argv model, so a model there would be recorded without being used.
 func SupportsModelSelection(tool models.AgentToolConfig) bool {
-	backend := strings.TrimSpace(tool.Backend)
-	return len(tool.ModelArgs) > 0 && (backend == "" || backend == ToolBackendCLI)
+	backend := providers.Backend(strings.TrimSpace(tool.Backend))
+	return len(tool.ModelArgs) > 0 && (backend == "" || backend == providers.BackendCLI)
 }
 
 func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) models.AgentToolConfig {
@@ -466,13 +459,13 @@ func mergeAgentToolConfig(name string, base, override models.AgentToolConfig) mo
 		out.ACPXEventMode = override.ACPXEventMode
 	}
 	if out.Backend == "" {
-		out.Backend = ToolBackendCLI
+		out.Backend = string(providers.BackendCLI)
 	}
 	if out.Executable == "" {
 		out.Executable = name
 	}
 	if out.PromptTransport == "" {
-		out.PromptTransport = PromptTransportStdin
+		out.PromptTransport = string(providers.PromptTransportStdin)
 	}
 	if out.ProviderKey == "" {
 		out.ProviderKey = name
@@ -491,9 +484,9 @@ func roleSpecificProfile(roleType string, config models.Config) string {
 	}
 }
 
-func validatePromptTransport(value string) error {
+func validatePromptTransport(value providers.PromptTransport) error {
 	switch value {
-	case PromptTransportStdin, PromptTransportArg, PromptTransportFile:
+	case providers.PromptTransportStdin, providers.PromptTransportArg, providers.PromptTransportFile:
 		return nil
 	default:
 		return fmt.Errorf("unsupported prompt transport: %s", value)
