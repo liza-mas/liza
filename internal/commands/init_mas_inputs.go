@@ -37,6 +37,7 @@ type masInit struct {
 	pipelineCfg       *pipeline.PipelineConfig
 	pipelineData      []byte
 	lizaPaths         paths.LizaPaths
+	projectErr        error
 	specRepoRel       string
 	globalCoreFile    string
 	scipSearchConfig  scipsearch.InitResult
@@ -55,8 +56,20 @@ func newMASInit(params InitParams) (*masInit, error) {
 		return nil, fmt.Errorf("--scip-search-plan is only supported for pairing init without a description")
 	}
 
+	// Discover the project once, before the first Git call; a failure is reported
+	// by resolveProject, at its position. Git runs in the project root, or in the
+	// process directory when there is none.
+	lizaPaths, projectErr := paths.LizaPathsFromGit()
+	gitDir := ""
+	if projectErr == nil {
+		gitDir = lizaPaths.ProjectRoot()
+	}
+
 	// Validate branch name using git's own ref format rules
-	if err := validateBranchName(branch); err != nil {
+	if err := validateBranchName(gitDir, branch); err != nil {
+		if isGitTimeout(err) {
+			return nil, fmt.Errorf("failed to validate branch name %q: %w", branch, err)
+		}
 		return nil, fmt.Errorf("invalid branch name %q: %w", branch, err)
 	}
 	agentEnvDeny := initAgentEnvDeny(params.AgentEnvDeny)
@@ -75,6 +88,8 @@ func newMASInit(params InitParams) (*masInit, error) {
 	return &masInit{
 		params:       params,
 		branch:       branch,
+		lizaPaths:    lizaPaths,
+		projectErr:   projectErr,
 		agentEnvDeny: agentEnvDeny,
 		rawStdin:     rawStdin,
 		// Single shared buffered reader — avoids multiple bufio.NewReader instances
@@ -127,14 +142,14 @@ func (m *masInit) loadPipeline() error {
 	return nil
 }
 
-// resolveProject locates the project and checks the committed spec and
-// pre-commit config that init requires of it.
+// resolveProject reports a failed project discovery (newMASInit located the
+// project) and checks the committed spec and pre-commit config that init
+// requires of it.
 func (m *masInit) resolveProject() error {
-	lizaPaths, err := paths.LizaPathsFromGit()
-	if err != nil {
-		return fmt.Errorf("failed to setup paths: %w", err)
+	if m.projectErr != nil {
+		return fmt.Errorf("failed to setup paths: %w", m.projectErr)
 	}
-	m.lizaPaths = lizaPaths
+	lizaPaths := m.lizaPaths
 
 	warnLegacyProjectRoot(lizaPaths.ProjectRoot(), lizaPaths.LizaDir())
 

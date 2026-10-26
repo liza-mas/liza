@@ -199,14 +199,20 @@ func TestAwaitVerdict_RejectionFlow(t *testing.T) {
 func setupIsolatedAwaitProject(t *testing.T) awaitIntegrationFixture {
 	t.Helper()
 
+	db.ResetInstances()
+	t.Cleanup(db.ResetInstances)
+	testhelpers.SetupGlobalLiza(t)
+
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	testhelpers.CreateCommittedSpecFileOnIntegration(t, projectRoot, "feature.md", "# Feature")
-	if err := ops.InitProject(projectRoot, ops.InitProjectParams{
+	// InitCommandWithConfig resolves the project from the process directory.
+	t.Chdir(projectRoot)
+	if err := commands.InitCommandWithConfig(commands.InitParams{
 		Description: "Test goal",
 		SpecRef:     "specs/feature.md",
 	}); err != nil {
-		t.Fatalf("InitProject failed: %v", err)
+		t.Fatalf("InitCommandWithConfig failed: %v", err)
 	}
 
 	statePath := filepath.Join(projectRoot, paths.ProjectDirName(), "state.yaml")

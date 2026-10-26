@@ -14,27 +14,16 @@ var areaA7 = Area{
 		{Package: "internal/tui", Layer: layerPresentation},
 	},
 	Allowlist: []AllowEntry{},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/init_project.go", Func: "InitProject"}, Ceiling: 229},
-	},
-	S2: []S2Entry{},
+	Ratchet:   []RatchetEntry{},
+	S2:        []S2Entry{},
 }
 
-// TestAreaA7RatchetHoldsOnlyInitProject holds the A7 boundary condition: the one
-// ratchet entry left is ops.InitProject, kept for C4 which deletes it; the
-// allowlist (jsonout no longer imports ops) and S2 are empty.
-func TestAreaA7RatchetHoldsOnlyInitProject(t *testing.T) {
-	initProject := Key{File: "internal/ops/init_project.go", Func: "InitProject"}
-	found := false
+// TestAreaA7RatchetAllowlistAndS2AreEmpty holds the A7 closure condition: C4
+// deleted the last ratchet entry (the duplicate ops initialization function), and
+// the allowlist (jsonout no longer imports ops) and S2 are empty.
+func TestAreaA7RatchetAllowlistAndS2AreEmpty(t *testing.T) {
 	for _, r := range areaA7.Ratchet {
-		if r.Key == initProject {
-			found = true
-			continue
-		}
 		t.Errorf("A7 ratchet still holds %s (ceiling %d)", r.Key, r.Ceiling)
-	}
-	if !found {
-		t.Errorf("A7 ratchet no longer holds %s, which C4 removes with the function", initProject)
 	}
 	for _, a := range areaA7.Allowlist {
 		t.Errorf("A7 allowlist still holds %s -> %s", a.Importer, a.Imported)

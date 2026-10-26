@@ -525,7 +525,7 @@ func TestIntegrationBranchNeedsCreateNoCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = integrationBranchNeedsCreate("integration")
+	_, err = integrationBranchNeedsCreate(tmpDir, "integration")
 	if err == nil {
 		t.Fatal("integrationBranchNeedsCreate() succeeded in a no-commit repo")
 	}

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 // requireIntegrationBranchCreatable fails before anything is written when the
 // integration branch is absent and the repository has no commit to branch from.
 func (m *masInit) requireIntegrationBranchCreatable() error {
-	if _, err := integrationBranchNeedsCreate(m.branch); err != nil {
+	if _, err := integrationBranchNeedsCreate(m.lizaPaths.ProjectRoot(), m.branch); err != nil {
 		return fmt.Errorf("failed to create integration branch %q: %w", m.branch, err)
 	}
 	return nil
@@ -19,27 +20,37 @@ func (m *masInit) requireIntegrationBranchCreatable() error {
 // ensureIntegrationBranch creates the integration branch if it doesn't exist; a
 // failure removes the runtime directory.
 func (m *masInit) ensureIntegrationBranch() error {
-	if err := createIntegrationBranch(m.branch); err != nil {
+	if err := createIntegrationBranch(m.lizaPaths.ProjectRoot(), m.branch); err != nil {
 		m.cleanupInit()
 		return fmt.Errorf("failed to create integration branch %q: %w", m.branch, err)
 	}
 	return nil
 }
 
-// The three helpers below are the C4 sites (Scope 18): their Git subprocesses
-// keep the inherited environment and working directory and have no timeout.
+// The helpers below are the C4 sites (Scope 18): their Git subprocesses run
+// through gitenv's timed runners in dir. A timeout is an error, never an answer:
+// it is not read as an invalid name, an absent branch or an unborn HEAD.
 
-// validateBranchName checks that name is a valid git branch name.
-func validateBranchName(name string) error {
-	cmd := gitpkg.Command("check-ref-format", "--branch", name)
-	if output, err := cmd.CombinedOutput(); err != nil {
+// isGitTimeout reports whether err is a Git subprocess killed by its timeout.
+func isGitTimeout(err error) bool {
+	var timeout *gitpkg.TimeoutError
+	return errors.As(err, &timeout)
+}
+
+// validateBranchName checks in dir that name is a valid git branch name.
+func validateBranchName(dir, name string) error {
+	output, err := gitpkg.CombinedOutput(dir, "check-ref-format", "--branch", name)
+	if err != nil {
+		if isGitTimeout(err) {
+			return err
+		}
 		return fmt.Errorf("not a valid git branch name: %s", strings.TrimSpace(string(output)))
 	}
 	return nil
 }
 
-func createIntegrationBranch(name string) error {
-	needsCreate, err := integrationBranchNeedsCreate(name)
+func createIntegrationBranch(dir, name string) error {
+	needsCreate, err := integrationBranchNeedsCreate(dir, name)
 	if err != nil {
 		return err
 	}
@@ -47,8 +58,7 @@ func createIntegrationBranch(name string) error {
 		return nil
 	}
 
-	cmd := gitpkg.Command("branch", name, "HEAD")
-	output, err := cmd.CombinedOutput()
+	output, err := gitpkg.CombinedOutput(dir, "branch", name, "HEAD")
 	if err != nil {
 		return fmt.Errorf("git branch failed: %w: %s", err, string(output))
 	}
@@ -56,14 +66,19 @@ func createIntegrationBranch(name string) error {
 	return nil
 }
 
-func integrationBranchNeedsCreate(name string) (bool, error) {
-	cmd := gitpkg.Command("rev-parse", "--verify", name)
-	if err := cmd.Run(); err == nil {
+func integrationBranchNeedsCreate(dir, name string) (bool, error) {
+	_, err := gitpkg.Output(dir, "rev-parse", "--verify", name)
+	if err == nil {
 		return false, nil
 	}
+	if isGitTimeout(err) {
+		return false, err
+	}
 
-	cmd = gitpkg.Command("rev-parse", "--verify", "HEAD")
-	if err := cmd.Run(); err != nil {
+	if _, err := gitpkg.Output(dir, "rev-parse", "--verify", "HEAD"); err != nil {
+		if isGitTimeout(err) {
+			return false, err
+		}
 		return false, fmt.Errorf("repo has no commits (HEAD is unborn)")
 	}
 
