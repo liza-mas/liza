@@ -228,6 +228,35 @@ func TestLifecycleRuntimeIdentityMask(t *testing.T) {
 	}
 }
 
+// The CLI's YAML encoder double-quotes a scalar a YAML reader would take for a
+// number. The random 16-hex key_id is one in about a thousand such values (all
+// digits, or digits around one "e"), so two runs of the same case can write the
+// same field bare and quoted. The mask must erase that difference, not the id.
+func TestLifecycleKeyIDQuotingMask(t *testing.T) {
+	ledger := func(keyID string) string {
+		return "runtime_inputs:\n  " + strings.Repeat("a", 64) + ":\n    key_id: " + keyID + "\n    state: available\n"
+	}
+	want := "runtime_inputs:\n  <id-1>:\n    key_id: <id-2>\n    state: available\n"
+	for _, keyID := range []string{
+		"0123456789abcdef",
+		`"1234567890123456"`,
+		`"0e12345678901234"`,
+		`"1234567890123e45"`,
+	} {
+		m := newMask(time.Now(), nil, nil, 12345)
+		state := ledger(keyID)
+		m.discover(state)
+		if got := m.text(state); got != want {
+			t.Fatalf("key_id %s: masked state depends on the YAML quoting of the id", keyID)
+		}
+	}
+	// A quoted value that is not a key_id keeps its quotes.
+	m := newMask(time.Now(), nil, nil, 12345)
+	if got := m.text(`other: "1234567890123456"`); got != `other: "1234567890123456"` {
+		t.Fatal("quote removal reached a field other than key_id")
+	}
+}
+
 func TestLifecycleHarnessFixedPoint(t *testing.T) {
 	n := oracle.NewNormaliser()
 	for _, value := range []string{"<now+30m Z>", "<now-1m +02:00>", "<at 20200101T000000 Z>", "<at 20990101T000000.123 +02:00>", "<commit:base>", "<id-1>", "<hex:01234567.89abcdef.01234567.89abcdef.01234567>", "<live-pid>", "<PROJECT>", "<HOME>", "<TMP>"} {

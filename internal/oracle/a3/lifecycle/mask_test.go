@@ -25,6 +25,10 @@ var (
 	// The suppressed assessment entry is encoded with its nanosecond clock
 	// reading, whose trimmed digit count varies the size between runs.
 	entryBytesRE = regexp.MustCompile(`(?m)\bsuppressed_entry_bytes:[ \t]*\d+`)
+	// The YAML encoder double-quotes a 16-hex key_id that reads as a number
+	// (all digits, or digits around one "e"), so a random id can be quoted in
+	// one run and bare in the next. Only the id itself is run-varying.
+	quotedKeyIDRE = regexp.MustCompile(`(\bkey_id:[ \t]+)"([0-9a-fA-F]{16})"`)
 )
 
 type mask struct {
@@ -123,6 +127,7 @@ func (m *mask) text(s string) string {
 	for _, pair := range m.paths {
 		s = strings.ReplaceAll(s, pair[0], pair[1])
 	}
+	s = quotedKeyIDRE.ReplaceAllString(s, "${1}${2}")
 	s = instantRE.ReplaceAllStringFunc(s, func(value string) string {
 		instant, err := time.Parse(time.RFC3339Nano, value)
 		if err != nil {
