@@ -178,7 +178,7 @@ func formatUsageReport(report usage.Report, format string) (string, error) {
 		format = "table"
 	}
 	if format != "table" {
-		return formatOutput(report, format)
+		return formatOutput(report, inspectFormat(format))
 	}
 	headers := []string{"OUTCOME", "ROLE", "TASKS", "FRESH", "FRESH P50", "FRESH P95", "CACHE READ", "CACHE P50", "CACHE P95", "OUTPUT"}
 	var rows [][]string

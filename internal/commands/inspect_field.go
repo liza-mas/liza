@@ -179,7 +179,7 @@ func derefReflectValue(value reflect.Value) reflect.Value {
 // literal ID, including one that collides with a reserved state query.
 func handleTaskQuery(state *models.State, query string, opts InspectOptions) (string, error) {
 	if task := state.FindTask(query); task != nil {
-		return handleEntityQuery(state, "tasks", []string{query}, opts)
+		return handleEntityQuery(state, inspectTargetTasks, []string{query}, opts)
 	}
 	var selected *models.Task
 	for i := range state.Tasks {
@@ -202,7 +202,7 @@ func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) 
 	if err != nil {
 		return "", err
 	}
-	return formatOutput(value, opts.Format)
+	return formatOutput(value, opts.format())
 }
 
 // taskInspectionField is shared by dotted queries and projections. Sanitize

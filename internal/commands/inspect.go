@@ -31,17 +31,21 @@ type InspectOptions struct {
 	pipelineResolver models.PipelineResolver
 }
 
+// format is the requested output format as the inspect vocabulary type.
+func (opts InspectOptions) format() inspectFormat {
+	return inspectFormat(opts.Format)
+}
+
 // Validate checks if the inspect options are valid
 func (opts *InspectOptions) Validate() error {
-	validFormats := []string{"json", "yaml", "table", "value", ""}
-	if !slices.Contains(validFormats, opts.Format) {
+	if !slices.Contains(inspectFormats, opts.format()) {
 		return fmt.Errorf("invalid format: %s (must be json, yaml, table, or value)", opts.Format)
 	}
 	if opts.Summary && opts.OutputSummary {
 		return &errors.ValidationError{Message: "--summary and --output-summary are mutually exclusive"}
 	}
 	if len(opts.Fields) > 0 {
-		if opts.Summary || opts.OutputSummary || opts.Zombies || opts.Format == "table" {
+		if opts.Summary || opts.OutputSummary || opts.Zombies || opts.format() == inspectFormatTable {
 			return &errors.ValidationError{Message: "--field cannot be combined with --summary, --output-summary, --zombies, or table format"}
 		}
 		var fields []string
@@ -84,9 +88,9 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	query := args[0]
 
 	// Check if query is a known entity type
-	if isKnownEntityType(query) {
+	if isInspectTarget(query) {
 		// Entity query
-		return handleEntityQuery(state, query, args[1:], opts)
+		return handleEntityQuery(state, inspectTarget(query), args[1:], opts)
 	}
 	if len(args) != 1 {
 		return "", &errors.ValidationError{Message: "a field or ID query accepts exactly one argument; use tasks <task-id> for a literal task ID"}
@@ -111,7 +115,7 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 			return handleTaskQuery(state, strings.TrimPrefix(query, root+"."), opts)
 		}
 		_, stateFieldErr := getField(state, root)
-		if stateFieldErr == nil || isKnownEntityType(root) || root == "agent" || root == "version" {
+		if stateFieldErr == nil || isInspectTarget(root) || root == "agent" || root == "version" {
 			return handleFieldQuery(state, query, opts)
 		}
 		return handleTaskQuery(state, query, opts)
@@ -130,17 +134,11 @@ func InspectCommand(args []string, opts InspectOptions) (string, error) {
 	// Check if query looks like an agent ID pattern
 	if isAgentIDPattern(query, roleNames) {
 		// Route to agent handler with the ID
-		return handleEntityQuery(state, "agents", []string{query}, opts)
+		return handleEntityQuery(state, inspectTargetAgents, []string{query}, opts)
 	}
 
 	// Otherwise, assume it's a task ID and try to look it up
-	return handleEntityQuery(state, "tasks", []string{query}, opts)
-}
-
-// isKnownEntityType returns true if the query is a known entity type
-func isKnownEntityType(query string) bool {
-	knownTypes := []string{"config", "sprint", "tasks", "agents", "metrics", "anomalies", "quarantined_verdicts", "proof_reaffirmations", "human_notes"}
-	return slices.Contains(knownTypes, query)
+	return handleEntityQuery(state, inspectTargetTasks, []string{query}, opts)
 }
 
 // isAgentIDPattern returns true if the query looks like an agent ID.
@@ -162,7 +160,7 @@ func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions
 	// Try direct field access first
 	value, err := getField(state, fieldPath)
 	if err == nil {
-		return formatOutput(value, opts.Format)
+		return formatOutput(value, opts.format())
 	}
 
 	// If direct access failed with NotFoundError, try computed field
@@ -171,32 +169,32 @@ func handleFieldQuery(state *models.State, fieldPath string, opts InspectOptions
 		if err != nil {
 			return "", err
 		}
-		return formatOutput(value, opts.Format)
+		return formatOutput(value, opts.format())
 	}
 
 	return "", err
 }
 
 // handleEntityQuery handles queries for entities (tasks, agents, etc.)
-func handleEntityQuery(state *models.State, entity string, args []string, opts InspectOptions) (string, error) {
-	if len(args) > 1 || len(args) > 0 && entity != "tasks" && entity != "agents" {
+func handleEntityQuery(state *models.State, entity inspectTarget, args []string, opts InspectOptions) (string, error) {
+	if len(args) > 1 || len(args) > 0 && entity != inspectTargetTasks && entity != inspectTargetAgents {
 		return "", &errors.ValidationError{Message: "only tasks and agents accept one optional ID; surplus arguments are not supported"}
 	}
-	if entity != "tasks" && (opts.Summary || opts.OutputSummary || opts.Active || len(opts.Fields) > 0) {
+	if entity != inspectTargetTasks && (opts.Summary || opts.OutputSummary || opts.Active || len(opts.Fields) > 0) {
 		return "", fmt.Errorf("--field, --summary, --output-summary, and --active are only supported for tasks")
 	}
-	if entity != "agents" && opts.Zombies {
+	if entity != inspectTargetAgents && opts.Zombies {
 		return "", fmt.Errorf("--zombies is only supported for agents")
 	}
 
 	switch entity {
-	case "config":
-		return formatOutput(state.Config, opts.Format)
-	case "sprint":
-		return formatOutput(state.Sprint, opts.Format)
-	case "tasks":
+	case inspectTargetConfig:
+		return formatOutput(state.Config, opts.format())
+	case inspectTargetSprint:
+		return formatOutput(state.Sprint, opts.format())
+	case inspectTargetTasks:
 		taskOpts := inspectTasksOptions{
-			Format:           opts.Format,
+			Format:           opts.format(),
 			Summary:          opts.Summary,
 			OutputSummary:    opts.OutputSummary,
 			Active:           opts.Active,
@@ -208,9 +206,9 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 			return asString(inspectTask(state, args[0], taskOpts))
 		}
 		return asString(inspectTasks(state, taskOpts))
-	case "agents":
+	case inspectTargetAgents:
 		agentOpts := inspectAgentsOptions{
-			Format:      opts.Format,
+			Format:      opts.format(),
 			Zombies:     opts.Zombies,
 			ProjectRoot: opts.ProjectRoot,
 			WarnWriter:  opts.WarnWriter,
@@ -222,18 +220,18 @@ func handleEntityQuery(state *models.State, entity string, args []string, opts I
 			return asString(inspectAgent(state, args[0], agentOpts))
 		}
 		return asString(inspectAgents(state, agentOpts))
-	case "metrics":
-		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.Format, ProjectRoot: opts.ProjectRoot}))
-	case "anomalies":
-		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.Format}))
-	case "quarantined_verdicts":
-		return formatOutput(state.QuarantinedVerdicts, opts.Format)
-	case "proof_reaffirmations":
-		return formatOutput(state.ProofReaffirmations, opts.Format)
-	case "human_notes":
-		return formatOutput(humanNotesForInspect(state.HumanNotes), opts.Format)
+	case inspectTargetMetrics:
+		return asString(inspectMetrics(state, inspectMetricsOptions{Format: opts.format(), ProjectRoot: opts.ProjectRoot}))
+	case inspectTargetAnomalies:
+		return asString(inspectAnomalies(state, inspectAnomaliesOptions{Format: opts.format()}))
+	case inspectTargetQuarantinedVerdicts:
+		return formatOutput(state.QuarantinedVerdicts, opts.format())
+	case inspectTargetProofReaffirmations:
+		return formatOutput(state.ProofReaffirmations, opts.format())
+	case inspectTargetHumanNotes:
+		return formatOutput(humanNotesForInspect(state.HumanNotes), opts.format())
 	default:
-		return "", &errors.NotFoundError{Entity: entity}
+		return "", &errors.NotFoundError{Entity: string(entity)}
 	}
 }
 
@@ -267,15 +265,15 @@ func asString(result any, err error) (string, error) {
 }
 
 // formatOutput formats the output based on the requested format
-func formatOutput(data any, format string) (string, error) {
+func formatOutput(data any, format inspectFormat) (string, error) {
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(data)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(data)
-	case "value":
+	case inspectFormatValue:
 		return render.FormatValue(data)
-	case "table":
+	case inspectFormatTable:
 		// Table format requires specific structure
 		return "", fmt.Errorf("table format requires entity query (e.g., %q)", brand.Command("inspect", "tasks"))
 	default:

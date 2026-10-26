@@ -88,7 +88,7 @@ func TestLifecycleMetricsPresentation_AvailabilityWindowAndOutcomes(t *testing.T
 			}
 			if tc.metrics != nil {
 				for _, format := range []string{"json", "yaml"} {
-					output, err := formatMetricsOutput(info, format)
+					output, err := formatMetricsOutput(info, inspectFormat(format))
 					if err != nil || !strings.Contains(output, "lifecycle_outcomes") || !strings.Contains(output, "available") {
 						t.Errorf("metrics projection dropped availability: %s %v", output, err)
 					}

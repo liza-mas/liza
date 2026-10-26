@@ -57,7 +57,7 @@ func TestValidationReadinessInspectionRedactsAuthorityWithoutMutation(t *testing
 	} {
 		for _, format := range []string{"json", "yaml", "value"} {
 			t.Run(name+"/"+format, func(t *testing.T) {
-				output, err := formatOutput(value, format)
+				output, err := formatOutput(value, inspectFormat(format))
 				if err != nil {
 					t.Fatal(err)
 				}

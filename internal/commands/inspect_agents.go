@@ -16,12 +16,12 @@ import (
 
 // inspectAgentsOptions contains options for agent inspection
 type inspectAgentsOptions struct {
-	Format       string // Output format: json, yaml, table, value
-	RoleFilter   string // Filter by role
-	StatusFilter string // Filter by status
-	Internal     bool   // Return structured data for composition
-	Zombies      bool   // Return live liza agent processes missing from state
-	ProjectRoot  string // Project root for live process scope checks
+	Format       inspectFormat // Output format: json, yaml, table, value
+	RoleFilter   string        // Filter by role
+	StatusFilter string        // Filter by status
+	Internal     bool          // Return structured data for composition
+	Zombies      bool          // Return live liza agent processes missing from state
+	ProjectRoot  string        // Project root for live process scope checks
 	WarnWriter   io.Writer
 }
 
@@ -204,20 +204,20 @@ func buildAgentInfoWithHealth(agentID string, agent *models.Agent, currentTask *
 }
 
 // formatAgentsOutput formats a list of agents for output
-func formatAgentsOutput(agents []agentInfo, format string) (string, error) {
+func formatAgentsOutput(agents []agentInfo, format inspectFormat) (string, error) {
 	// Default to table format
 	if format == "" {
-		format = "table"
+		format = inspectFormatTable
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(agents)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(agents)
-	case "table":
+	case inspectFormatTable:
 		return formatAgentsTable(agents), nil
-	case "value":
+	case inspectFormatValue:
 		// Value format doesn't make sense for multiple agents
 		return "", fmt.Errorf("value format not supported for agent lists (use json, yaml, or table)")
 	default:
@@ -225,19 +225,19 @@ func formatAgentsOutput(agents []agentInfo, format string) (string, error) {
 	}
 }
 
-func formatZombieAgentsOutput(zombies []procscan.ZombieProcess, format string) (string, error) {
+func formatZombieAgentsOutput(zombies []procscan.ZombieProcess, format inspectFormat) (string, error) {
 	if format == "" {
-		format = "table"
+		format = inspectFormatTable
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(zombies)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(zombies)
-	case "table":
+	case inspectFormatTable:
 		return formatZombieAgentsTable(zombies), nil
-	case "value":
+	case inspectFormatValue:
 		return "", fmt.Errorf("value format not supported for zombie agent lists (use json, yaml, or table)")
 	default:
 		return "", fmt.Errorf("invalid format: %s", format)
@@ -273,20 +273,20 @@ func formatZombieCmdlines(zombies []procscan.ZombieProcess) string {
 }
 
 // formatAgentOutput formats a single agent for output
-func formatAgentOutput(agent agentInfo, format string) (string, error) {
+func formatAgentOutput(agent agentInfo, format inspectFormat) (string, error) {
 	// Default to value format for single agent
 	if format == "" {
-		format = "value"
+		format = inspectFormatValue
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(agent)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(agent)
-	case "value":
+	case inspectFormatValue:
 		return formatAgentValue(agent)
-	case "table":
+	case inspectFormatTable:
 		// Single agent in table format
 		return formatAgentsTable([]agentInfo{agent}), nil
 	default:
