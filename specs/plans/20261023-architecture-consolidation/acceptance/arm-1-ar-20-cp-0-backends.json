@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-backend",
+      "file": "internal/agent/a9_backend_pb_test.go",
+      "assertion": "PB-1 TestA9BackendPB1EventOrder (event kinds and order per backend and exit path), PB-2 TestA9BackendPB2GateBoundaries (CLI and ACPX start/setup inside the gate, waits outside, refusal starts nothing and emits no started event), PB-3 TestA9BackendPB3MaskBoundaries, PB-4 TestA9BackendPB4CompletionMapping, PB-5 TestA9BackendPB5CommandPreparation, PB-6 TestA9BackendPB6CleanupOwnership, written and green on the unchanged tree (commit 2739a4173, before any production edit) and green after; the existing CLIAgent, ACPX, CLIEvent, TaskIdentity and EnvFile tests run in the same command; TestOracleA9LaunchLines, TestOracleA9InteractiveLaunch and TestOracleA9LaunchRefused run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-backend-size",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard passes with the CLIAgent.Run, CLIAgent.buildRunCommand and ACPXAgent.Run ratchet keys removed, each in the commit that brings its function under 100 lines in its original file (buildRunCommand 148 to 43, CLIAgent.Run 178 to 28, ACPXAgent.Run 141 to 36), and no new offender in the new backend concern files",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a9/launch_test.go",
+      "assertion": "regen check reproduces every A9 golden, including the I-23 to I-25 launch rows and the interactive rows, from the starting tree; no oracle file, golden or PROVENANCE record is edited by this unit, and TestOracleA9LaunchLines, TestOracleA9ExplainLaunch, TestOracleA9LaunchRefused and TestOracleA9InteractiveLaunch pass unchanged at index 1",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "internal/agent/a9_backend_pb_test.go",
+      "assertion": "go test -race over agent, process, agentlaunch and providersignal passes, including the stream, gate and cancellation concurrency the PB tests exercise",
+      "command_index": 7
+    },
+    {
+      "obligation_id": "AC-vocab",
+      "approved_reference_id": "structure"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "tests"
+    },
+    {
+      "obligation_id": "AC-sites",
+      "approved_reference_id": "changes"
+    },
+    {
+      "obligation_id": "AC-shims",
+      "approved_reference_id": "moves"
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "docs"
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "proof"
+    }
+  ]
+}
