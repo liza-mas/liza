@@ -140,10 +140,20 @@ the placement rules.
 
 ### Shim and exported-API audit
 
-- **Shims.** `git grep` for `type X = Y` aliases over the A7 packages, `errors`
-  and `alerts` at the closure HEAD finds none (none at the start either). No
-  forwarder was added: the Shim Register is empty and no file the A7 tasks
-  created exists only to re-export another symbol.
+- **Shims.** `git grep -n -E '^type [[:alnum:]_]+ = '` over `cmd/liza`,
+  `commands`, `tui`, `interactive`, `jsonout`, `errors` and `alerts` (tests
+  excluded) finds the same four aliases at `96c9ad69a` and at the closure HEAD:
+  `commands.AwaitResubmissionOptions` (`await_resubmission.go:36`) and
+  `commands.AwaitVerdictOptions` (`await_verdict.go:42`), aliases of `ops` types,
+  and `commands.AlertLevel` and `commands.Alert` (`watch.go:74,81` at the start,
+  `watch.go:58,65` now), aliases of `alerts` types. They are baseline aliases
+  that predate the run, unchanged and not introduced or retained by an A7
+  refactoring step; they are not shims in the Shim Register sense (none was
+  added to bridge a move, and none is scheduled for removal by A7). The
+  diff-based conclusion is that A7 added no alias: the alias set is identical
+  in both trees. No exported forwarder was added either: the exported additions
+  listed below are vocabulary types, constants and two accessors for format name
+  lists. The Shim Register is empty.
 - **Exported surface**, compared by a `go/ast` listing of exported declarations
   (functions, methods, types, struct fields, constants, variables) of
   `commands`, `tui`, `interactive` and `jsonout` at `96c9ad69a` and at the
