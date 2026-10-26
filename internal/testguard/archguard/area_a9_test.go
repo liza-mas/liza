@@ -39,7 +39,6 @@ var areaA9 = Area{
 		{Key: Key{File: "internal/agent/acpx_agent.go", Func: "ACPXAgent.Run"}, Ceiling: 141},
 		{Key: Key{File: "internal/agent/claiming.go", Func: "claimDoerTaskWithOptionalAuthority"}, Ceiling: 126},
 		{Key: Key{File: "internal/agent/claiming.go", Func: "handleApprovedMergesWithOptionalAuthority"}, Ceiling: 107},
-		{Key: Key{File: "internal/agent/cli_agent.go", Func: "CLIAgent.Run"}, Ceiling: 178},
 		{Key: Key{File: "internal/agent/supervisor.go", Func: "RunSupervisor"}, Ceiling: 521},
 		{Key: Key{File: "internal/agent/supervisor_restart.go", Func: "exit42RestartTracker.Handle"}, Ceiling: 111},
 		{Key: Key{File: "internal/agent/systemctl.go"}, Ceiling: 861},

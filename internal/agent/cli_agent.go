@@ -46,194 +46,111 @@ func NewDefaultCLIExecutor(outputsDir string) *CLIAgent {
 	return NewCLIAgent(outputsDir)
 }
 
-// emitCLIAgentUsage publishes this run's provider usage. The CLI transport
-// reports no usage object, so the empty value is emitted explicitly on every
-// exit path: the supervisor sink then pins unknown provenance instead of
-// inferring zero tokens from a missing event.
-func emitCLIAgentUsage(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent) {
-	event := base
-	event.Kind = LLMAgentEventUsage
-	event.Payload = map[string]any{"usage": LLMAgentUsage{}}
-	emitLLMAgentEvent(ctx, sink, event)
-}
-
 func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
-	cliName := req.BackendName
-	agentID := req.AgentID
-	prompt := req.Prompt
-	projectRoot := req.ProjectRoot
-	runtimeConfig := req.RuntimeConfig
 	_ = req.AdditionalDirs // CLI execution does not use this; ACP implementations may.
 	eventBase := LLMAgentEvent{
-		BackendName: cliName,
-		AgentID:     agentID,
+		BackendName: req.BackendName,
+		AgentID:     req.AgentID,
 		TaskID:      req.TaskID,
 		SessionID:   req.SessionID,
 	}
-	cmd, cleanup, err := d.buildRunCommand(ctx, LLMAgentRunRequest{
-		BackendName:    cliName,
-		AgentID:        agentID,
-		Generation:     req.Generation,
-		TaskID:         req.TaskID,
-		SessionID:      req.SessionID,
-		ProfileName:    req.ProfileName,
-		ProfileVars:    req.ProfileVars,
-		Model:          req.Model,
-		Prompt:         prompt,
-		PromptFile:     req.PromptFile,
-		ProjectRoot:    projectRoot,
-		AdditionalDirs: req.AdditionalDirs,
-		RuntimeConfig:  runtimeConfig,
-		EventSink:      req.EventSink,
-		LaunchGate:     req.LaunchGate,
-		Environment:    req.Environment,
-		SessionScope:   req.SessionScope,
-	})
+	cmd, cleanup, err := d.buildRunCommand(ctx, req)
 	if err != nil {
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
+		return failCLIRun(ctx, req, eventBase, err)
 	}
 	defer cleanup()
 
-	var stdoutBuf, stderrBuf strings.Builder
-	var stdoutLog, stderrLog *streamingOutputFile
-	outputEventsReady := make(chan struct{})
-	progress := executionProgressCallback(ctx)
+	streams := d.attachRunStreams(ctx, cmd, req, eventBase)
+	defer closeAgentOutputLogs(streams.stdoutLog, streams.stderrLog, req.AgentID)
+
+	if err := req.LaunchGate.launch(ctx, cmd.Start); err != nil {
+		close(streams.ready)
+		return failCLIRun(ctx, req, eventBase, err)
+	}
+	started := eventBase
+	started.Kind = LLMAgentEventStarted
+	started.Payload = map[string]any{llmAgentPayloadMode: llmAgentModeRun}
+	emitLLMAgentEvent(ctx, req.EventSink, started)
+	close(streams.ready)
+	return d.completeRun(ctx, req, eventBase, streams, cmd.Wait())
+}
+
+// cliRunStreams holds the output sinks of one CLI run.
+type cliRunStreams struct {
+	stdout, stderr       strings.Builder
+	stdoutLog, stderrLog *streamingOutputFile
+	// ready releases output events once the run's Started event was emitted.
+	ready chan struct{}
+}
+
+// attachRunStreams wires the provider's stdout and stderr to the console, the
+// returned-output buffers, the persisted logs (when outputs are kept), the
+// event sink and the progress watchdog.
+func (d *CLIAgent) attachRunStreams(ctx context.Context, cmd *exec.Cmd, req LLMAgentRunRequest, base LLMAgentEvent) *cliRunStreams {
+	s := &cliRunStreams{ready: make(chan struct{})}
+	events := func(stream string) io.Writer {
+		return llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: base, stream: stream, ready: s.ready}
+	}
+	stdout := []io.Writer{os.Stdout, &s.stdout}
+	stderr := []io.Writer{os.Stderr, &s.stderr}
+	var progress []io.Writer
+	if mark := executionProgressCallback(ctx); mark != nil {
+		progress = []io.Writer{progressWriter{mark: mark}}
+	}
 	if d.outputsDir != "" {
-		timestamp := time.Now().UTC().Format("20060102-150405")
-		stdoutLog = newStreamingOutputFile(d.outputsDir, agentID, "txt", timestamp, d.masker)
-		stderrLog = newStreamingOutputFile(d.outputsDir, agentID, "err", timestamp, d.masker)
-		stdoutWriters := []io.Writer{os.Stdout, &stdoutBuf, stdoutLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}}
-		stderrWriters := []io.Writer{os.Stderr, &stderrBuf, stderrLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}}
-		if progress != nil {
-			pw := progressWriter{mark: progress}
-			stdoutWriters = append(stdoutWriters, pw)
-			stderrWriters = append(stderrWriters, pw)
-		}
-		cmd.Stdout = io.MultiWriter(stdoutWriters...)
-		cmd.Stderr = io.MultiWriter(stderrWriters...)
+		s.stdoutLog, s.stderrLog = newAgentOutputLogs(d.outputsDir, req.AgentID, d.masker)
+		stdout = append(stdout, s.stdoutLog, events(llmAgentStreamStdout))
+		stderr = append(stderr, s.stderrLog, events(llmAgentStreamStderr))
+		stdout, stderr = append(stdout, progress...), append(stderr, progress...)
 	} else {
-		stdoutEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}
-		stderrEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}
-		if progress != nil {
-			pw := progressWriter{mark: progress}
-			cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, pw, stdoutEventWriter)
-			cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf, pw, stderrEventWriter)
-		} else {
-			cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, stdoutEventWriter)
-			cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf, stderrEventWriter)
-		}
+		stdout, stderr = append(stdout, progress...), append(stderr, progress...)
+		stdout = append(stdout, events(llmAgentStreamStdout))
+		stderr = append(stderr, events(llmAgentStreamStderr))
 	}
+	cmd.Stdout = io.MultiWriter(stdout...)
+	cmd.Stderr = io.MultiWriter(stderr...)
+	return s
+}
 
-	defer closeAgentOutputLogs(stdoutLog, stderrLog, agentID)
+func cliRunResult(req LLMAgentRunRequest, exitCode int, output string) LLMAgentRunResult {
+	return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}
+}
 
-	err = req.LaunchGate.launch(ctx, cmd.Start)
-	if err != nil {
-		close(outputEventsReady)
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
-	}
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventStarted,
-		BackendName: cliName,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		SessionID:   req.SessionID,
-		Payload: map[string]any{
-			"mode": "run",
-		},
-	})
-	close(outputEventsReady)
-	err = cmd.Wait()
-	stdout := stdoutBuf.String()
-	stderr := stderrBuf.String()
-	output := stdout + "\n" + stderr
+// failCLIRun reports a run that never reached a provider outcome: its command
+// could not be built or the launch gate refused the start.
+func failCLIRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent, err error) (LLMAgentRunResult, error) {
+	emitLLMAgentUsage(ctx, req.EventSink, base, LLMAgentUsage{})
+	emitLLMAgentFailed(ctx, req.EventSink, base, err.Error())
+	return cliRunResult(req, 0, ""), err
+}
+
+// completeRun maps the provider's wait outcome to the run result and its
+// completed event. The CLI transport reports no usage object, so the empty
+// usage is emitted explicitly on every path: the supervisor sink then pins
+// unknown provenance instead of inferring zero tokens from a missing event.
+func (d *CLIAgent) completeRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent, streams *cliRunStreams, waitErr error) (LLMAgentRunResult, error) {
+	output := streams.stdout.String() + "\n" + streams.stderr.String()
 	if d.masker != nil {
 		output = d.masker.MaskText(output)
 	}
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+	emitLLMAgentUsage(ctx, req.EventSink, base, LLMAgentUsage{})
+	if waitErr != nil {
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			exitCode := exitErr.ExitCode()
-			emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-			emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-				Kind:        LLMAgentEventCompleted,
-				BackendName: cliName,
-				AgentID:     agentID,
-				TaskID:      req.TaskID,
-				SessionID:   req.SessionID,
-				Payload: map[string]any{
-					"exit_code": exitCode,
-				},
-			})
-			return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
+			emitLLMAgentExited(ctx, req.EventSink, base, exitCode)
+			return cliRunResult(req, exitCode, output), nil
 		}
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
+		emitLLMAgentFailed(ctx, req.EventSink, base, waitErr.Error())
+		return cliRunResult(req, 0, output), waitErr
 	}
-
-	emitCLIAgentUsage(ctx, req.EventSink, eventBase)
 	// A CLI may print its quota failure and still exit 0. Report it as a failed
 	// session, as the ACPX backend does, so the supervisor's quota path runs.
-	if qe := providersignal.DetectQuotaExhaustion(output, cliName); qe != nil {
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     qe.Message,
-			Payload: map[string]any{
-				"exit_code": 1,
-				"quota":     true,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
+	if qe := providersignal.DetectQuotaExhaustion(output, req.BackendName); qe != nil {
+		emitLLMAgentQuotaExhausted(ctx, req.EventSink, base, qe.Message)
+		return cliRunResult(req, 1, output), nil
 	}
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventCompleted,
-		BackendName: cliName,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		SessionID:   req.SessionID,
-		Payload: map[string]any{
-			"exit_code": 0,
-		},
-	})
-	return LLMAgentRunResult{ExitCode: 0, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
+	emitLLMAgentExited(ctx, req.EventSink, base, 0)
+	return cliRunResult(req, 0, output), nil
 }
 
 func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
@@ -686,6 +603,13 @@ func agentTaskEnv(base []string, taskID string) []string {
 		out = append(out, legacyName+"="+taskID)
 	}
 	return out
+}
+
+// newAgentOutputLogs opens the timestamped stdout and stderr logs of one run.
+func newAgentOutputLogs(dir, agentID string, masker *SecretMasker) (stdoutLog, stderrLog *streamingOutputFile) {
+	timestamp := time.Now().UTC().Format(agentOutputLogTimestampLayout)
+	return newStreamingOutputFile(dir, agentID, agentOutputLogStdoutExt, timestamp, masker),
+		newStreamingOutputFile(dir, agentID, agentOutputLogStderrExt, timestamp, masker)
 }
 
 func closeAgentOutputLogs(stdoutLog, stderrLog *streamingOutputFile, agentID string) {
