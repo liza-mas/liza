@@ -1,0 +1,23 @@
+{
+  "error": {
+    "code": "conflict",
+    "details": {
+      "effects": "none",
+      "operation": "fixture",
+      "outcome": "CONFLICT",
+      "safe_action": "stop",
+      "task_id": "task-executing",
+      "task_status": "IMPLEMENTING_CODE"
+    },
+    "message": "fixture: CONFLICT (safe_action=stop): fixture coded message"
+  },
+  "ok": false,
+  "result": {
+    "effects": "none",
+    "operation": "fixture",
+    "outcome": "CONFLICT",
+    "safe_action": "stop",
+    "task_id": "task-executing",
+    "task_status": "IMPLEMENTING_CODE"
+  }
+}

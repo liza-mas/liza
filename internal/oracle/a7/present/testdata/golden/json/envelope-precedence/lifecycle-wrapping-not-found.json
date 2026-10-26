@@ -1,0 +1,23 @@
+{
+  "error": {
+    "code": "validation",
+    "details": {
+      "effects": "none",
+      "operation": "fixture",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "stop",
+      "task_id": "task-executing",
+      "task_status": "IMPLEMENTING_CODE"
+    },
+    "message": "fixture: INVALID_INPUT (safe_action=stop): task not found: task-missing"
+  },
+  "ok": false,
+  "result": {
+    "effects": "none",
+    "operation": "fixture",
+    "outcome": "INVALID_INPUT",
+    "safe_action": "stop",
+    "task_id": "task-executing",
+    "task_status": "IMPLEMENTING_CODE"
+  }
+}

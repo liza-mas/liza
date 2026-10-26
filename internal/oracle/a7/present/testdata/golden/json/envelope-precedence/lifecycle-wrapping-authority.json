@@ -1,0 +1,24 @@
+{
+  "error": {
+    "code": "permission_denied",
+    "details": {
+      "agent_id": "coder-1",
+      "effects": "none",
+      "operation": "fixture",
+      "outcome": "FORBIDDEN",
+      "safe_action": "stop",
+      "task_id": "task-executing",
+      "task_status": "IMPLEMENTING_CODE"
+    },
+    "message": "fixture: FORBIDDEN (safe_action=stop): agent coder-1 authority rejected: registration changed; stop"
+  },
+  "ok": false,
+  "result": {
+    "effects": "none",
+    "operation": "fixture",
+    "outcome": "FORBIDDEN",
+    "safe_action": "stop",
+    "task_id": "task-executing",
+    "task_status": "IMPLEMENTING_CODE"
+  }
+}
