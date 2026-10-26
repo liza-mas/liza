@@ -1,5 +1,7 @@
 package archguard
 
+import "testing"
+
 // areaA9 is the guard data of area A9 (Agent runtime): written only by this area's
 // scopes (ADR-0218). Ratchet entries may only be removed or lowered.
 var areaA9 = Area{
@@ -37,4 +39,18 @@ var areaA9 = Area{
 	},
 	Ratchet: []RatchetEntry{},
 	S2:      []S2Entry{},
+}
+
+// TestAreaA9RatchetIsEmpty holds the A9 size closure condition: every S1
+// offender of the starting commit is under threshold (the ratchet is empty) and
+// no data-like exception is needed (S2 is empty). The allowlist is not part of
+// it: the two retained presentation queries and C6's agent-to-db edge keep
+// their rationale entries.
+func TestAreaA9RatchetIsEmpty(t *testing.T) {
+	for _, r := range areaA9.Ratchet {
+		t.Errorf("A9 ratchet still holds %s (ceiling %d)", r.Key, r.Ceiling)
+	}
+	for _, e := range areaA9.S2 {
+		t.Errorf("A9 S2 holds %s", e.Key)
+	}
 }
