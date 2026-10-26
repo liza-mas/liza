@@ -38,7 +38,6 @@ var areaA9 = Area{
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "internal/agent/claiming.go", Func: "claimDoerTaskWithOptionalAuthority"}, Ceiling: 126},
 		{Key: Key{File: "internal/agent/claiming.go", Func: "handleApprovedMergesWithOptionalAuthority"}, Ceiling: 107},
-		{Key: Key{File: "internal/agent/supervisor.go", Func: "RunSupervisor"}, Ceiling: 521},
 		{Key: Key{File: "internal/agent/supervisor_restart.go", Func: "exit42RestartTracker.Handle"}, Ceiling: 111},
 		{Key: Key{File: "internal/agent/waitforwork.go", Func: "waitForWorkEventDriven"}, Ceiling: 132},
 		{Key: Key{File: "internal/agent/worktree_check.go", Func: "ensureReviewerWorktreeLocked"}, Ceiling: 139},

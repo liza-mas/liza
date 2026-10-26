@@ -11,6 +11,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // errGoalComplete is a sentinel error returned by waitWhilePaused when
@@ -145,7 +146,7 @@ func waitWhilePaused(ctx context.Context, projectRoot string, roleType string) e
 					// orchestrator is idle is seen here even though no
 					// orchestrator turn follows it.
 					maybeEmitCheckpointSummary(ctx, bb, projectRoot, roleType, state)
-					if state.Config.AutoResume && (!models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) || roleType == "orchestrator") {
+					if state.Config.AutoResume && (!models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) || roleType == string(roles.RoleTypeOrchestrator)) {
 						logger.Info("Auto-resuming from CHECKPOINT")
 						if result, resumeErr := resumeCheckpoint(projectRoot, "auto-resume"); resumeErr != nil {
 							logger.Warn("Auto-resume failed, waiting for next poll", "error", resumeErr)
@@ -211,9 +212,9 @@ func checkpointBlocksRole(state *models.State, roleType string) (bool, string) {
 
 	if models.IsTransitionCheckpointTrigger(state.Sprint.CheckpointTrigger) {
 		switch roleType {
-		case "doer", "reviewer":
+		case string(roles.RoleTypeDoer), string(roles.RoleTypeReviewer):
 			return false, ""
-		case "orchestrator":
+		case string(roles.RoleTypeOrchestrator):
 			return true, fmt.Sprintf("[CHECKPOINT] Transition gate pending - run %q to create downstream tasks", brand.Command("resume"))
 		default:
 			return true, "[CHECKPOINT] Transition gate pending - unknown role type blocked"

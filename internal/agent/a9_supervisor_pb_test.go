@@ -1,12 +1,17 @@
 package agent
 
 import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -201,5 +206,38 @@ func TestA9VerifyOrchestratorWakeTriggers(t *testing.T) {
 				t.Fatalf("error %q does not contain %q", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// PB-3: pending verdicts are replayed before the supervisor registers, so a
+// replay that cannot proceed ends the run with the registration never written.
+func TestA9SupervisorPB3ReplayPrecedesRegistration(t *testing.T) {
+	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
+	statePath := writeAgentEnvDenyState(t, root, nil)
+	// A regular file where the private outbox directory belongs makes the
+	// outbox unreadable without being absent.
+	if err := os.WriteFile(filepath.Join(root, paths.ProjectDirName(), "pending-verdicts"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = RunSupervisor(context.Background(), SupervisorConfig{
+		AgentID: "coder-1", Role: models.RoleCoder, ProjectRoot: root,
+		StatePath: statePath, LogPath: filepath.Join(root, paths.ProjectDirName(), "log.yaml"),
+		SpecsDir: filepath.Join(root, "specs"), CLIName: "codex", LLMAgent: &MockLLMAgent{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "replay reached verdicts before registration") {
+		t.Fatalf("RunSupervisor() error = %v, want the replay refusal before registration", err)
+	}
+	after, readErr := os.ReadFile(statePath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("state changed, want no registration write before the replay")
 	}
 }
