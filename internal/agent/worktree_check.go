@@ -59,7 +59,6 @@ func ensureReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID string
 }
 
 func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID string, authority models.AgentAuthority) (recovered bool, err error) {
-	agentID := authority.ID
 	wtPath := filepath.Join(projectRoot, paths.WorktreesDirName, taskID)
 	if _, statErr := os.Stat(wtPath); statErr == nil {
 		// Raced: a concurrent claim created the worktree between the fast-path
@@ -67,26 +66,47 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 		return false, runReviewerWorktreeSetup(projectRoot, bb, taskID, wtPath, authority)
 	}
 
+	GetLogger().Warn("Worktree missing for reviewer task", "task_id", taskID)
+
+	state, branchName, err := attachReviewerWorktree(projectRoot, bb, taskID, authority)
+	if err != nil {
+		return false, err
+	}
+
+	if err := prepareRecoveredReviewerWorktree(projectRoot, taskID, wtPath, state.Config, authority); err != nil {
+		return false, err
+	}
+
+	recordReviewerWorktreeRecovery(bb, taskID, authority)
+
+	GetLogger().Info("Worktree recovered from branch", "task_id", taskID, "branch", branchName)
+	return true, nil
+}
+
+// attachReviewerWorktree decides whether the missing worktree is recoverable
+// and, when it is, recreates it from the task branch. A worktree already
+// recovered once, or a missing branch, blocks the task (errTaskBlocked). It
+// returns the state it read and the branch it attached.
+func attachReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID string, authority models.AgentAuthority) (*models.State, string, error) {
 	logger := GetLogger()
-	logger.Warn("Worktree missing for reviewer task", "task_id", taskID)
 
 	// Check if already recovered once.
 	state, err := bb.ReadSnapshot()
 	if err != nil {
-		return false, fmt.Errorf("read state: %w", err)
+		return nil, "", fmt.Errorf("read state: %w", err)
 	}
 	task := state.FindTask(taskID)
 	if task == nil {
-		return false, fmt.Errorf("task %s not found", taskID)
+		return nil, "", fmt.Errorf("task %s not found", taskID)
 	}
 
 	for _, h := range task.History {
 		if h.Event == models.TaskEventWorktreeRecovered {
 			logger.Error("Blocking task: worktree still missing after prior recovery", "task_id", taskID)
 			if blockErr := blockReviewerTask(bb, taskID, authority, "worktree missing after prior recovery attempt"); blockErr != nil {
-				return false, blockErr
+				return nil, "", blockErr
 			}
-			return false, fmt.Errorf("task %s: unrecoverable worktree: %w", taskID, errTaskBlocked)
+			return nil, "", fmt.Errorf("task %s: unrecoverable worktree: %w", taskID, errTaskBlocked)
 		}
 	}
 
@@ -95,23 +115,31 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	branchName := paths.TaskBranchPrefix + taskID
 	branchExists, branchErr := gitWrapper.BranchExists(branchName)
 	if branchErr != nil {
-		return false, fmt.Errorf("check branch: %w", branchErr)
+		return nil, "", fmt.Errorf("check branch: %w", branchErr)
 	}
 	if !branchExists {
 		logger.Error("Cannot recover: branch also missing", "task_id", taskID, "branch", branchName)
 		if blockErr := blockReviewerTask(bb, taskID, authority, "worktree and branch both missing — unrecoverable"); blockErr != nil {
-			return false, blockErr
+			return nil, "", blockErr
 		}
-		return false, fmt.Errorf("task %s: branch missing: %w", taskID, errTaskBlocked)
+		return nil, "", fmt.Errorf("task %s: branch missing: %w", taskID, errTaskBlocked)
 	}
 
 	// Recreate worktree from existing branch.
 	if attachErr := gitWrapper.AttachWorktree(taskID, branchName); attachErr != nil {
 		logger.Error("Failed to recreate worktree", "task_id", taskID, "error", attachErr)
-		return false, fmt.Errorf("worktree recreation failed: %w", attachErr)
+		return nil, "", fmt.Errorf("worktree recreation failed: %w", attachErr)
 	}
+	return state, branchName, nil
+}
 
-	if state.Config.CopyWorktreeEnvFiles {
+// prepareRecoveredReviewerWorktree makes a recovered worktree build-ready: env
+// files, the configured setup command (fail closed), the semble ignore file,
+// then the index refreshes (warnings only).
+func prepareRecoveredReviewerWorktree(projectRoot, taskID, wtPath string, cfg models.Config, authority models.AgentAuthority) error {
+	logger := GetLogger()
+
+	if cfg.CopyWorktreeEnvFiles {
 		for _, warning := range ops.ProvisionWorktreeEnvFiles(projectRoot, wtPath) {
 			logger.Warn("copy worktree env files warning after worktree recovery", "task_id", taskID, "warning", warning)
 		}
@@ -121,10 +149,10 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	// Fail closed: an unprepared worktree must not reach a provider session. The
 	// error is returned plain — the caller releases the reviewer claim back to
 	// reviewable and degrades this reviewer, preserving the doer's work.
-	if state.Config.PostWorktreeCmd != nil {
-		if postErr := ops.RunPostWorktreeCmd(projectRoot, *state.Config.PostWorktreeCmd, wtPath, models.EffectivePostWorktreeCmdTimeout(state.Config), &authority); postErr != nil {
+	if cfg.PostWorktreeCmd != nil {
+		if postErr := ops.RunPostWorktreeCmd(projectRoot, *cfg.PostWorktreeCmd, wtPath, models.EffectivePostWorktreeCmdTimeout(cfg), &authority); postErr != nil {
 			logger.Error("post-worktree-cmd failed after worktree recovery", "task_id", taskID, "error", postErr)
-			return false, postErr
+			return postErr
 		}
 	}
 
@@ -132,10 +160,20 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 		logger.Warn("semble .sembleignore preparation warning after worktree recovery", "task_id", taskID, "warning", warning)
 	}
 
+	refreshRecoveredReviewerIndexes(projectRoot, taskID, wtPath, cfg)
+	return nil
+}
+
+// refreshRecoveredReviewerIndexes refreshes the scip-search, stacklit and
+// functional-clusters indexes of a recovered worktree, in that order. A failure
+// is a warning: the reviewer can work without the indexes.
+func refreshRecoveredReviewerIndexes(projectRoot, taskID, wtPath string, cfg models.Config) {
+	logger := GetLogger()
+
 	refreshResult, refreshErr := reviewerWorktreeRefreshIndexes(scipsearch.RefreshOptions{
 		ProjectRoot:         projectRoot,
 		TargetRoot:          wtPath,
-		ConfiguredLanguages: state.Config.ScipSearch,
+		ConfiguredLanguages: cfg.ScipSearch,
 	})
 	if refreshErr != nil {
 		logger.Warn("scip-search refresh failed after worktree recovery", "task_id", taskID, "error", refreshErr)
@@ -165,7 +203,7 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 	functionalClustersResult, functionalClustersErr := reviewerWorktreeRefreshFunctionalClustersIndex(functionalclusters.RefreshOptions{
 		ProjectRoot:         projectRoot,
 		TargetRoot:          wtPath,
-		ConfiguredLanguages: state.Config.ScipSearch,
+		ConfiguredLanguages: cfg.ScipSearch,
 	})
 	if functionalClustersErr != nil {
 		logger.Warn("functional-clusters refresh failed after worktree recovery", "task_id", taskID, "error", functionalClustersErr)
@@ -177,8 +215,12 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 			"diagnostic", failure.Diagnostic,
 		)
 	}
+}
 
-	// Record recovery in history.
+// recordReviewerWorktreeRecovery records the recovery in the task history. A
+// failed write is a warning: the worktree is already back.
+func recordReviewerWorktreeRecovery(bb *db.Blackboard, taskID string, authority models.AgentAuthority) {
+	agentID := authority.ID
 	if modErr := ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t != nil {
@@ -191,11 +233,8 @@ func ensureReviewerWorktreeLocked(projectRoot string, bb *db.Blackboard, taskID 
 		}
 		return nil
 	}); modErr != nil {
-		logger.Warn("Failed to record worktree recovery in history", "task_id", taskID, "error", modErr)
+		GetLogger().Warn("Failed to record worktree recovery in history", "task_id", taskID, "error", modErr)
 	}
-
-	logger.Info("Worktree recovered from branch", "task_id", taskID, "branch", branchName)
-	return true, nil
 }
 
 // runReviewerWorktreeSetup runs the configured post_worktree_cmd against an

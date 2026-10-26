@@ -35,8 +35,6 @@ var areaA9 = Area{
 			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 21 per SI-5",
 		},
 	},
-	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/agent/worktree_check.go", Func: "ensureReviewerWorktreeLocked"}, Ceiling: 139},
-	},
-	S2: []S2Entry{},
+	Ratchet: []RatchetEntry{},
+	S2:      []S2Entry{},
 }
