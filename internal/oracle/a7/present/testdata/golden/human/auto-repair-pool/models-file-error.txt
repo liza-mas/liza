@@ -1,0 +1,78 @@
+=== tick 1: invalid models.yaml
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+[<TIME>] ⚠️ AUTO REPAIR FAILED: <PROJECT>/.liza/models.yaml: roles.typo: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+--- warnings
+WARNING: auto repair skipped: <PROJECT>/.liza/models.yaml: roles.typo: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+--- cache
+auto-repair-models-error:<PROJECT>/.liza/models.yaml: roles.typo: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+=== tick 2: same error: no repeat alert
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-models-error:<PROJECT>/.liza/models.yaml: roles.typo: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+=== tick 3: file fixed
+--- start requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=false models_item=0
+2: role=coder cli=codex agent_id= from_config=true models_item=0
+3: role=coder cli=codex agent_id= from_config=true models_item=0
+--- outcome
+attempted: [code-reviewer coder]
+suppressed: []
+blocked: []
+spawned: role=code-reviewer agent_id=code-reviewer-1 cli=claude models_item=0 pid=5100001 command=liza agent code-reviewer --cli claude --agent-id code-reviewer-1
+spawned: role=coder agent_id= cli=codex models_item=0 pid=5100002 command=liza agent coder
+spawned: role=coder agent_id= cli=codex models_item=0 pid=5100003 command=liza agent coder
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100001:code-reviewer-1:0
+auto-repair-agent-pool-pending:coder:5100002::0
+auto-repair-agent-pool-pending:coder:5100003::0
+auto-repair-agent-pool:code-reviewer
+auto-repair-agent-pool:coder
+orchestrator-missing:since
+=== tick 4: another error
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+[<TIME>] ⚠️ AUTO REPAIR FAILED: <PROJECT>/.liza/models.yaml: roles.reviewer: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+--- warnings
+WARNING: auto repair skipped: <PROJECT>/.liza/models.yaml: roles.reviewer: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100001:code-reviewer-1:0
+auto-repair-agent-pool-pending:coder:5100002::0
+auto-repair-agent-pool-pending:coder:5100003::0
+auto-repair-agent-pool:code-reviewer
+auto-repair-agent-pool:coder
+auto-repair-models-error:<PROJECT>/.liza/models.yaml: roles.reviewer: unknown role (valid: architect, architecture-reviewer, code-plan-reviewer, code-planner, code-reviewer, coder, epic-plan-reviewer, epic-planner, integration-analyst, integration-reviewer, orchestrator, us-reviewer, us-writer)
+orchestrator-missing:since
+=== spawn log
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --cli claude --agent-id code-reviewer-1 pid=5100001
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder pid=5100002
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder pid=5100003
