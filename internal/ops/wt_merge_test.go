@@ -2517,7 +2517,7 @@ func TestMergeWorktree_MergeConflict(t *testing.T) {
 		t.Fatalf("INTEGRATION_FAILED task missing submission handoff event; handoff_events = %+v", task.HandoffEvents)
 	}
 	diagnostic := latestIntegrationFailureDiagnostic(t, task)
-	if diagnostic["reason"] != IntegrationReasonMergeConflict {
+	if diagnostic["reason"] != string(IntegrationReasonMergeConflict) {
 		t.Errorf("diagnostic reason = %v, want %q", diagnostic["reason"], IntegrationReasonMergeConflict)
 	}
 	if diagnostic["operation"] != "wt-merge" {
@@ -2713,7 +2713,7 @@ func TestMergeWorktree_IntegrationFailurePersistsDiagnostic(t *testing.T) {
 	}
 
 	diagnostic := latestIntegrationFailureDiagnostic(t, task)
-	if diagnostic["reason"] != IntegrationReasonTestsFailed {
+	if diagnostic["reason"] != string(IntegrationReasonTestsFailed) {
 		t.Errorf("diagnostic reason = %v, want %q", diagnostic["reason"], IntegrationReasonTestsFailed)
 	}
 	if _, ok := diagnostic["test_output"]; ok {
@@ -2977,7 +2977,7 @@ func TestMergeWorktree_HEADMismatch(t *testing.T) {
 		t.Fatal("Task not found in state")
 	}
 	diagnostic := latestIntegrationFailureDiagnostic(t, task)
-	if diagnostic["reason"] != IntegrationReasonHEADMismatch {
+	if diagnostic["reason"] != string(IntegrationReasonHEADMismatch) {
 		t.Errorf("diagnostic reason = %v, want %q", diagnostic["reason"], IntegrationReasonHEADMismatch)
 	}
 	detail, _ := diagnostic["detail"].(string)

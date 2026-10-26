@@ -30,5 +30,5 @@ git checkout -- .
 
 ## References
 
-- `internal/ops/wt_merge.go:138` — `git.New(projectRoot)` binds merge to main checkout
+- `internal/ops/wt_merge.go` (`mergeWorktree`) — `git.New(projectRoot)` binds merge to main checkout
 - `internal/git/worktree.go:283` — `MergeBranch` uses porcelain `git merge`

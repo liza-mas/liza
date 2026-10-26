@@ -70,7 +70,6 @@ func reconcileMergedWithOptionalAuthority(projectRoot, taskID, mergeCommit, prUR
 		return nil, &PreconditionError{Reason: fmt.Sprintf("cannot reconcile task %s in status %s (must be INTEGRATION_FAILED)", taskID, originalStatus)}
 	}
 
-	now := time.Now().UTC()
 	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
 		currentTask := state.FindTask(taskID)
 		if currentTask == nil {
@@ -79,61 +78,13 @@ func reconcileMergedWithOptionalAuthority(projectRoot, taskID, mergeCommit, prUR
 		if currentTask.Status != originalStatus {
 			return &PreconditionError{Reason: fmt.Sprintf("cannot reconcile task %s: status changed from %s to %s", taskID, originalStatus, currentTask.Status)}
 		}
-		if err := currentTask.TransitionWith(models.TaskStatusMerged, pb.transitions); err != nil {
-			return err
-		}
-
-		releaseAgentsForTask(state, taskID)
-		currentTask.Worktree = nil
-		currentTask.AssignedTo = nil
-		currentTask.LeaseExpires = nil
-		currentTask.ReviewingBy = nil
-		currentTask.ReviewLeaseExpires = nil
-		currentTask.MergeCommit = &resolvedCommit
-		currentTask.IntegrationFailure = nil
-		models.AdvanceLifecycle(currentTask)
-
-		currentTask.HandoffEvents = append(currentTask.HandoffEvents, models.HandoffEvent{
-			Timestamp: now,
-			Agent:     agentID,
-			Trigger:   models.HandoffTriggerCompletion,
-			Succeeded: []string{"external merge reconciled"},
-			NextStep:  "task is complete",
-		})
-
-		extra := map[string]any{
-			"external_reconciliation": true,
-		}
-		if prURL != "" {
-			extra["pr_url"] = prURL
-		}
-		currentTask.History = append(currentTask.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventMerged,
-			Agent:  &agentID,
-			Reason: &reason,
-			Commit: &resolvedCommit,
-			Extra:  extra,
-		})
-		return nil
+		return applyExternalMerge(state, currentTask, pb.transitions, agentID, reason, prURL, resolvedCommit)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile task as MERGED: %w", err)
 	}
 
-	var warnings []string
-	if rmErr := gw.RemoveWorktreeDir(taskID); rmErr != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", rmErr))
-	}
-	taskBranch := paths.TaskBranchPrefix + taskID
-	if exists, err := gw.BranchExists(taskBranch); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", taskBranch, err))
-	} else if exists {
-		if err := gw.DeleteBranch(taskBranch); err != nil {
-			warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", taskBranch, err))
-		}
-	}
-	warnings = append(warnings, cleanupPredecessorBranches(bb, gw, taskID)...)
+	warnings := retireMergedTask(bb, gw, taskID)
 	var metricsErr error
 	if authority == nil {
 		_, metricsErr = UpdateSprintMetrics(projectRoot)
@@ -151,4 +102,48 @@ func reconcileMergedWithOptionalAuthority(projectRoot, taskID, mergeCommit, prUR
 		PRURL:          prURL,
 		Warnings:       warnings,
 	}, nil
+}
+
+// applyExternalMerge moves an INTEGRATION_FAILED task to MERGED at a commit an
+// operator verified landed outside this system. It runs inside the caller's
+// transaction, takes the state it edits, and opens no lock.
+func applyExternalMerge(state *models.State, task *models.Task, transitions map[models.TaskStatus][]models.TaskStatus, agentID, reason, prURL, mergeCommit string) error {
+	if err := task.TransitionWith(models.TaskStatusMerged, transitions); err != nil {
+		return err
+	}
+
+	releaseAgentsForTask(state, task.ID)
+	task.Worktree = nil
+	task.AssignedTo = nil
+	task.LeaseExpires = nil
+	task.ReviewingBy = nil
+	task.ReviewLeaseExpires = nil
+	task.MergeCommit = &mergeCommit
+	task.IntegrationFailure = nil
+	models.AdvanceLifecycle(task)
+
+	now := time.Now().UTC()
+	task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+		Timestamp: now,
+		Agent:     agentID,
+		Trigger:   models.HandoffTriggerCompletion,
+		Succeeded: []string{"external merge reconciled"},
+		NextStep:  "task is complete",
+	})
+
+	extra := map[string]any{
+		"external_reconciliation": true,
+	}
+	if prURL != "" {
+		extra["pr_url"] = prURL
+	}
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:   now,
+		Event:  models.TaskEventMerged,
+		Agent:  &agentID,
+		Reason: &reason,
+		Commit: &mergeCommit,
+		Extra:  extra,
+	})
+	return nil
 }

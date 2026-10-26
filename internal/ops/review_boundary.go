@@ -168,7 +168,7 @@ func validateReviewBoundaryCommit(projectRoot string, task *models.Task, reviewC
 }
 
 func markReviewBoundaryIntegrationFailed(state *models.State, task *models.Task, agentID string, transitions map[models.TaskStatus][]models.TaskStatus, cause error) error {
-	reason := IntegrationReasonReviewBoundaryMismatch
+	reason := string(IntegrationReasonReviewBoundaryMismatch)
 	if err := task.TransitionWith(models.TaskStatusIntegrationFailed, transitions); err != nil {
 		return err
 	}

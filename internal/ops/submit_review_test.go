@@ -437,7 +437,7 @@ func TestSubmitForReview_RebaseConflict_RecordsSubmissionHandoffForIntegrationFa
 	if diagnostic["operation"] != "submit-for-review" {
 		t.Errorf("diagnostic operation = %v, want submit-for-review", diagnostic["operation"])
 	}
-	if diagnostic["reason"] != IntegrationReasonMergeConflict {
+	if diagnostic["reason"] != string(IntegrationReasonMergeConflict) {
 		t.Errorf("diagnostic reason = %v, want %q", diagnostic["reason"], IntegrationReasonMergeConflict)
 	}
 	if diagnostic["recovery_hint"] == "" {

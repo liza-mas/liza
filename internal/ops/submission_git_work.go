@@ -379,7 +379,7 @@ func truncateForDiagnostics(s string, limit int) string {
 // Both share the pattern: transition → append FailedBy → write history entry.
 // They differ in pre-conditions (approved vs implementing) and post-actions (agent release).
 func markSubmitRebaseConflict(bb *db.Blackboard, taskID, agentID string, authority *models.AgentAuthority, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, request LifecycleRequest) error {
-	reason := IntegrationReasonMergeConflict
+	reason := string(IntegrationReasonMergeConflict)
 	return modifyLifecycleState(bb, authority, func(s *models.State) error {
 		t := s.FindTask(taskID)
 		if t == nil {
