@@ -1,0 +1,12 @@
+# before
+provider: codex
+detected: <T1:sZ>
+message: You've hit your usage limit
+resets_at: <T1+2493075600s:sZ>
+expires: <T1+2493075660s:sZ>
+# after
+provider: codex
+detected: <T1:sZ>
+message: You've hit your usage limit
+resets_at: <T1+2493075600s:sZ>
+expires: <T1+2493075660s:sZ>

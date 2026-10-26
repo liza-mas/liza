@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+=== INTERACTIVE MODE ===
+Paste the prompt from the file above into the CLI session.
+Launching: cursor
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: coder-1
+Agents will exit cleanly at their next check.
+[stderr]
+Warning: no Liza contract symlink found for cursor. Agents may not find the behavioral contract.
+Run 'liza init --cursor' to create one.

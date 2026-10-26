@@ -1,0 +1,8 @@
+# before
+provider: claude
+detected: <T1:sZ>
+message: You've hit your usage limit
+resets_at: unknown
+expires: <T1+3600s:sZ>
+# after
+

@@ -1,0 +1,4 @@
+# before
+
+# after
+{"schema_version":1,"record_id":"<V1>","task_id":"task-1","role":"coder","agent_id":"coder-1","supervisor_run_id":"<V2>","session_id":"task-1","provider":"qwen","started_at":"<T1:fZ>","ended_at":"<T2:fZ>","fresh_input_tokens":0,"cache_read_tokens":0,"cache_write_tokens":0,"output_tokens":0,"provenance":"unknown","exit_code":0,"warm_session":false}

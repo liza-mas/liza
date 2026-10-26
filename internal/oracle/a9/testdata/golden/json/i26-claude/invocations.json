@@ -1,0 +1,10 @@
+{
+  "invocations": [
+    {
+      "arguments": [],
+      "directory": "<PROJECT>",
+      "executable": "claude"
+    }
+  ],
+  "tool": "claude"
+}

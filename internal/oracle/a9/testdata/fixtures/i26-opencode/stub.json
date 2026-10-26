@@ -1,0 +1,15 @@
+{
+  "executables": {
+    "opencode": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}
