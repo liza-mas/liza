@@ -13,8 +13,6 @@ var areaA7 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/commands/watch.go"}, Ceiling: 2084},
-		{Key: Key{File: "internal/commands/watch.go", Func: "RunAutoRepairAgentPool"}, Ceiling: 133},
 		{Key: Key{File: "internal/ops/init_project.go", Func: "InitProject"}, Ceiling: 229},
 		{Key: Key{File: "internal/tui/update.go", Func: "Model.Update"}, Ceiling: 196},
 		{Key: Key{File: "internal/tui/update.go", Func: "Model.executeInlineAction"}, Ceiling: 108},
