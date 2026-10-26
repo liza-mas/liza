@@ -479,7 +479,7 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 			}
 		},
 		"unsettled runner": func(l *models.DeferredValidationLedger) {
-			l.Runner = &models.DeferredValidationRunner{Token: "t", Commit: head, Unsettled: deferredValidationReasonUnstoppable}
+			l.Runner = &models.DeferredValidationRunner{Token: "t", Commit: head, Unsettled: string(deferredValidationReasonUnstoppable)}
 		},
 		"covering pass": func(l *models.DeferredValidationLedger) {
 			l.Batches = []models.DeferredValidationBatch{{ID: 1, Commit: head, Status: models.DeferredValidationBatchPassed,

@@ -79,7 +79,7 @@ func TestAbortDeferredValidationRequiresALiveRunner(t *testing.T) {
 	}
 
 	unsettled := *record
-	unsettled.Unsettled = deferredValidationReasonUnstoppable
+	unsettled.Unsettled = string(deferredValidationReasonUnstoppable)
 	f.setRunner(&unsettled)
 	_, err = AbortDeferredValidation(f.root, "D-181 test")
 	requireAbortRefused(t, err)
@@ -115,7 +115,7 @@ func TestDeferredValidationOperatorAbortEndsTheLiveBatch(t *testing.T) {
 	if time.Since(started) > 120*time.Second {
 		t.Fatalf("the abort did not kill the running step: %s", time.Since(started))
 	}
-	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != deferredValidationReasonOperatorAbort {
+	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != string(deferredValidationReasonOperatorAbort) {
 		t.Fatalf("batch = %#v, want aborted %s", batch, deferredValidationReasonOperatorAbort)
 	}
 	requireResult(t, batch, 0, models.DeferredValidationResultPassed, "")
@@ -181,7 +181,7 @@ func TestDeferredValidationOperatorAbortDuringFinishingRead(t *testing.T) {
 		t.Fatal("the final finishing read was not reached")
 	}
 	requireResult(t, batch, 0, models.DeferredValidationResultPassed, "")
-	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != deferredValidationReasonOperatorAbort {
+	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != string(deferredValidationReasonOperatorAbort) {
 		t.Fatalf("batch = %s/%q, want aborted/%s", batch.Status, batch.Reason, deferredValidationReasonOperatorAbort)
 	}
 }
@@ -251,7 +251,7 @@ func TestDeferredValidationOperatorAbortEndsASlotWait(t *testing.T) {
 	}
 
 	batch := onlyBatch(t, awaitOutcome(t, done, 30*time.Second, "the queued probe did not observe the abort").result)
-	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != deferredValidationReasonOperatorAbort ||
+	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != string(deferredValidationReasonOperatorAbort) ||
 		batch.Results[0].Status != models.DeferredValidationResultNotRun {
 		t.Fatalf("batch = %#v, want aborted by the operator with the command not run", batch)
 	}

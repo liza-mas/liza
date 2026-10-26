@@ -159,7 +159,7 @@ func TestDeferredValidationCarryRequiresCertifiedLatestExecution(t *testing.T) {
 		f.modify(func(state *models.State) {
 			now := time.Now().UTC()
 			state.Goal.Integration.DeferredValidation.AppendBatch(models.DeferredValidationBatch{
-				Commit: pass, StartedAt: now, FinishedAt: now, Status: models.DeferredValidationBatchAborted, Reason: deferredValidationReasonUnstoppable,
+				Commit: pass, StartedAt: now, FinishedAt: now, Status: models.DeferredValidationBatchAborted, Reason: string(deferredValidationReasonUnstoppable),
 				Results: []models.DeferredValidationResult{{Command: check.Command, CommandSHA256: check.CommandSHA256, Status: models.DeferredValidationResultPassed}},
 			})
 		})

@@ -25,6 +25,29 @@ import (
 // batch. Each requires a ruling text
 // so the receipt and ledger name the authority they rest on.
 
+// deferredValidationRulingAction and deferredValidationRulingOutcome are the
+// operator writes and their results; DeferredValidationRulingResult keeps
+// string fields and takes them by conversion.
+type (
+	deferredValidationRulingAction  string
+	deferredValidationRulingOutcome string
+)
+
+const (
+	rulingActionRule   deferredValidationRulingAction = "rule"
+	rulingActionUnrule deferredValidationRulingAction = "unrule"
+	rulingActionRetire deferredValidationRulingAction = "retire"
+	rulingActionSettle deferredValidationRulingAction = "settle"
+	rulingActionAbort  deferredValidationRulingAction = "abort"
+
+	rulingOutcomeUnchanged deferredValidationRulingOutcome = "unchanged"
+	rulingOutcomeSet       deferredValidationRulingOutcome = "set"
+	rulingOutcomeRemoved   deferredValidationRulingOutcome = "removed"
+	rulingOutcomeRetired   deferredValidationRulingOutcome = "retired"
+	rulingOutcomeSettled   deferredValidationRulingOutcome = "settled"
+	rulingOutcomeRequested deferredValidationRulingOutcome = "requested"
+)
+
 // DeferredValidationRulingResult reports one operator write.
 type DeferredValidationRulingResult struct {
 	Action  string `json:"action"`
@@ -42,7 +65,7 @@ func validateRulingCommand(command, ruling string, needRuling bool) error {
 	return nil
 }
 
-func auditDeferredValidation(action, outcome, command, ruling string) {
+func auditDeferredValidation(action deferredValidationRulingAction, outcome, command, ruling string) {
 	mask := secretmask.New()
 	log.Printf("deferred_validation action=%s outcome=%s actor=%q command=%q ruling=%q",
 		action, outcome, "operator", mask.MaskText(command), boundPostWorktreeCmd(mask.MaskText(ruling)))
@@ -54,10 +77,10 @@ func RuleDeferredValidation(projectRoot, command, ruling string) (*DeferredValid
 	if err := validateRulingCommand(command, ruling, true); err != nil {
 		return nil, err
 	}
-	result := &DeferredValidationRulingResult{Action: "rule", Command: secretmask.New().MaskText(command)}
+	result := &DeferredValidationRulingResult{Action: string(rulingActionRule), Command: secretmask.New().MaskText(command)}
 	err := db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
 		if models.DeferredValidationRulingFor(state.Config, command) != nil {
-			result.Outcome = "unchanged"
+			result.Outcome = string(rulingOutcomeUnchanged)
 			return nil
 		}
 		if state.Config.DeferredValidation == nil {
@@ -66,10 +89,10 @@ func RuleDeferredValidation(projectRoot, command, ruling string) (*DeferredValid
 		state.Config.DeferredValidation.Rulings = append(state.Config.DeferredValidation.Rulings, models.DeferredValidationRuling{
 			Command: command, Ruling: strings.TrimSpace(ruling), RecordedAt: time.Now().UTC(),
 		})
-		result.Outcome = "set"
+		result.Outcome = string(rulingOutcomeSet)
 		return nil
 	})
-	auditDeferredValidation("rule", result.Outcome, command, ruling)
+	auditDeferredValidation(rulingActionRule, result.Outcome, command, ruling)
 	if err != nil {
 		return nil, fmt.Errorf("record deferred-validation ruling: %w", err)
 	}
@@ -83,9 +106,9 @@ func UnruleDeferredValidation(projectRoot, command string) (*DeferredValidationR
 	if err := validateRulingCommand(command, "", false); err != nil {
 		return nil, err
 	}
-	result := &DeferredValidationRulingResult{Action: "unrule", Command: secretmask.New().MaskText(command)}
+	result := &DeferredValidationRulingResult{Action: string(rulingActionUnrule), Command: secretmask.New().MaskText(command)}
 	err := db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
-		result.Outcome = "unchanged"
+		result.Outcome = string(rulingOutcomeUnchanged)
 		config := state.Config.DeferredValidation
 		if config == nil {
 			return nil
@@ -93,7 +116,7 @@ func UnruleDeferredValidation(projectRoot, command string) (*DeferredValidationR
 		kept := config.Rulings[:0]
 		for _, ruling := range config.Rulings {
 			if ruling.Command == command {
-				result.Outcome = "removed"
+				result.Outcome = string(rulingOutcomeRemoved)
 				continue
 			}
 			kept = append(kept, ruling)
@@ -101,7 +124,7 @@ func UnruleDeferredValidation(projectRoot, command string) (*DeferredValidationR
 		config.Rulings = kept
 		return nil
 	})
-	auditDeferredValidation("unrule", result.Outcome, command, "")
+	auditDeferredValidation(rulingActionUnrule, result.Outcome, command, "")
 	if err != nil {
 		return nil, fmt.Errorf("withdraw deferred-validation ruling: %w", err)
 	}
@@ -116,7 +139,7 @@ func RetireDeferredValidation(projectRoot, command, ruling string) (*DeferredVal
 		return nil, err
 	}
 	sha := fmt.Sprintf("%x", sha256.Sum256([]byte(command)))
-	result := &DeferredValidationRulingResult{Action: "retire", Command: secretmask.New().MaskText(command)}
+	result := &DeferredValidationRulingResult{Action: string(rulingActionRetire), Command: secretmask.New().MaskText(command)}
 	err := db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
 		previous := db.CloneState(state)
 		ledger := deferredValidationLedger(state)
@@ -131,10 +154,10 @@ func RetireDeferredValidation(projectRoot, command, ruling string) (*DeferredVal
 			Command: command, CommandSHA256: sha, Ruling: strings.TrimSpace(ruling),
 			RecordedAt: time.Now().UTC(), CoversDeferrals: len(ledger.Deferrals),
 		})
-		result.Outcome = "retired"
+		result.Outcome = string(rulingOutcomeRetired)
 		return validateIntegrationLifecycleTransition(previous, state)
 	})
-	auditDeferredValidation("retire", result.Outcome, command, ruling)
+	auditDeferredValidation(rulingActionRetire, result.Outcome, command, ruling)
 	if err != nil {
 		return nil, fmt.Errorf("retire deferred command: %w", err)
 	}
@@ -160,7 +183,7 @@ func SettleDeferredValidation(projectRoot, ruling string) (*DeferredValidationRu
 		return nil, &PreconditionError{Reason: "a deferred-validation runner holds the lock; it is live and cannot be settled"}
 	}
 	defer func() { _ = held.Release() }()
-	result := &DeferredValidationRulingResult{Action: "settle", Outcome: "unchanged"}
+	result := &DeferredValidationRulingResult{Action: string(rulingActionSettle), Outcome: string(rulingOutcomeUnchanged)}
 	err = db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
 		previous := db.CloneState(state)
 		ledger := deferredValidationLedger(state)
@@ -170,13 +193,13 @@ func SettleDeferredValidation(projectRoot, ruling string) (*DeferredValidationRu
 		now := time.Now().UTC()
 		ledger.AppendBatch(models.DeferredValidationBatch{
 			Commit: ledger.Runner.Commit, StartedAt: ledger.Runner.StartedAt, FinishedAt: now,
-			Status: models.DeferredValidationBatchAborted, Reason: "runner_settled_by_operator",
+			Status: models.DeferredValidationBatchAborted, Reason: string(deferredValidationReasonRunnerSettled),
 		})
 		ledger.Runner = nil
-		result.Outcome = "settled"
+		result.Outcome = string(rulingOutcomeSettled)
 		return validateIntegrationLifecycleTransition(previous, state)
 	})
-	auditDeferredValidation("settle", result.Outcome, "", ruling)
+	auditDeferredValidation(rulingActionSettle, result.Outcome, "", ruling)
 	if err != nil {
 		return nil, fmt.Errorf("settle deferred-validation runner: %w", err)
 	}
@@ -204,7 +227,7 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 		_ = held.Release()
 		return nil, &PreconditionError{Reason: fmt.Sprintf("no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by %s when unsettled", brand.Command(deferredValidationOperation, "settle"))}
 	}
-	result := &DeferredValidationRulingResult{Action: "abort"}
+	result := &DeferredValidationRulingResult{Action: string(rulingActionAbort)}
 	err = db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
 		previous := db.CloneState(state)
 		ledger := deferredValidationLedger(state)
@@ -215,14 +238,14 @@ func AbortDeferredValidation(projectRoot, ruling string) (*DeferredValidationRul
 			return &PreconditionError{Reason: fmt.Sprintf("the runner record is unsettled (%s); confirm none of its processes still runs, then run %s", ledger.Runner.Unsettled, brand.Command(deferredValidationOperation, "settle"))}
 		}
 		if ledger.Runner.Abort != nil {
-			result.Outcome = "unchanged"
+			result.Outcome = string(rulingOutcomeUnchanged)
 			return nil
 		}
 		ledger.Runner.Abort = &models.DeferredValidationAbort{Ruling: strings.TrimSpace(ruling), RequestedAt: time.Now().UTC()}
-		result.Outcome = "requested"
+		result.Outcome = string(rulingOutcomeRequested)
 		return validateIntegrationLifecycleTransition(previous, state)
 	})
-	auditDeferredValidation("abort", result.Outcome, "", ruling)
+	auditDeferredValidation(rulingActionAbort, result.Outcome, "", ruling)
 	if err != nil {
 		return nil, fmt.Errorf("abort deferred-validation batch: %w", err)
 	}

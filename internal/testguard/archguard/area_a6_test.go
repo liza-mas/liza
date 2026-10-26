@@ -7,8 +7,6 @@ var areaA6 = Area{
 	Layers:    []LayerEntry{},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/ops/deferred_validation.go"}, Ceiling: 1820},
-		{Key: Key{File: "internal/ops/deferred_validation.go", Func: "deferredValidationRunner.bisect"}, Ceiling: 111},
 		{Key: Key{File: "internal/ops/integration_progress.go"}, Ceiling: 1138},
 		{Key: Key{File: "internal/ops/integration_progress.go", Func: "integrationProgressEvaluator.evaluateCoverage"}, Ceiling: 112},
 		{Key: Key{File: "internal/ops/reconcile_merged.go", Func: "reconcileMergedWithOptionalAuthority"}, Ceiling: 119},

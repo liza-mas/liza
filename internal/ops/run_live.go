@@ -16,6 +16,14 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// RunLive timing: the default and maximum command timeout in seconds, and how
+// long the child's pipes may stay open after its process ended.
+const (
+	runLiveDefaultTimeoutSeconds = 600
+	runLiveMaxTimeoutSeconds     = 3600
+	runLiveWaitDelay             = 5 * time.Second
+)
+
 // RunLiveInput runs one local live command for a task (ADR-0169).
 type RunLiveInput struct {
 	TaskID         string
@@ -44,10 +52,10 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	}
 	timeout := input.TimeoutSeconds
 	if timeout == 0 {
-		timeout = 600
+		timeout = runLiveDefaultTimeoutSeconds
 	}
-	if timeout < 1 || timeout > 3600 {
-		return nil, &PreconditionError{Reason: "timeout must be between 1 and 3600 seconds"}
+	if timeout < 1 || timeout > runLiveMaxTimeoutSeconds {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("timeout must be between 1 and %d seconds", runLiveMaxTimeoutSeconds)}
 	}
 	bb := db.For(paths.New(projectRoot).StatePath())
 	state, task, err := readTaskState(bb, input.TaskID)
@@ -99,7 +107,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	cmd.Env = append(models.ScrubEnvironment(environ, grant.deny), overlay...)
 	cmd.Stdout, cmd.Stderr = output, output
 	configProcessGroupKill(cmd)
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = runLiveWaitDelay
 	runErr := cmd.Run()
 	if output.overflow {
 		// A truncated capture could split a secret and evade masking.
