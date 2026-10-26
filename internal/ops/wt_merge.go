@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pairingindex"
@@ -91,6 +92,12 @@ func (e *IntegrationFailedError) Error() string {
 func (e *IntegrationFailedError) Unwrap() error {
 	return e.Cause
 }
+
+// IntegrationFailureReason returns the failure reason for envelope
+// classification.
+func (e *IntegrationFailedError) IntegrationFailureReason() string { return string(e.Reason) }
+
+var _ lizaerrors.IntegrationFailure = (*IntegrationFailedError)(nil)
 
 // MergeResult contains the outcome of a successful worktree merge.
 type MergeResult struct {

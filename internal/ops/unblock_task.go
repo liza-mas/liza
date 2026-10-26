@@ -82,6 +82,12 @@ func (e *UnblockRebaseConflictError) Unwrap() error {
 	return e.Cause
 }
 
+// UnblockRebaseConflictMarker marks an unblock rebase conflict for envelope
+// classification.
+func (e *UnblockRebaseConflictError) UnblockRebaseConflictMarker() {}
+
+var _ errors.UnblockRebaseConflict = (*UnblockRebaseConflictError)(nil)
+
 func (e *UnblockRebaseConflictError) SafeDetails() map[string]any {
 	return map[string]any{
 		"task_id":        e.TaskID,

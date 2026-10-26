@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -85,6 +86,11 @@ func (e *LifecycleError) Error() string {
 func (e *LifecycleError) Unwrap() error { return e.Err }
 
 func (e *LifecycleError) LifecycleResult() any { return e.Outcome }
+
+// LifecycleOutcomeName names the outcome for envelope classification.
+func (e *LifecycleError) LifecycleOutcomeName() string { return e.Outcome.Outcome }
+
+var _ lizaerrors.LifecycleOutcomeError = (*LifecycleError)(nil)
 
 func (e *LifecycleError) SafeDetails() map[string]any {
 	o := e.Outcome

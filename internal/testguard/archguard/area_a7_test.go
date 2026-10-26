@@ -11,14 +11,7 @@ var areaA7 = Area{
 		{Package: "internal/jsonout", Layer: layerPresentation},
 		{Package: "internal/tui", Layer: layerPresentation},
 	},
-	Allowlist: []AllowEntry{
-		{
-			Importer:  "internal/jsonout",
-			Imported:  "internal/ops",
-			Owner:     "Scope 17",
-			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 17 per SI-5",
-		},
-	},
+	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
 		{Key: Key{File: "cmd/liza/cmd_launch.go"}, Ceiling: 1159},
 		{Key: Key{File: "cmd/liza/cmd_system.go"}, Ceiling: 827},
@@ -38,7 +31,6 @@ var areaA7 = Area{
 		{Key: Key{File: "internal/commands/status.go", Func: "buildPhaseHandoffStatus"}, Ceiling: 125},
 		{Key: Key{File: "internal/commands/watch.go"}, Ceiling: 2084},
 		{Key: Key{File: "internal/commands/watch.go", Func: "RunAutoRepairAgentPool"}, Ceiling: 133},
-		{Key: Key{File: "internal/jsonout/classify.go", Func: "ClassifyError"}, Ceiling: 104},
 		{Key: Key{File: "internal/ops/init_project.go", Func: "InitProject"}, Ceiling: 229},
 		{Key: Key{File: "internal/tui/update.go", Func: "Model.Update"}, Ceiling: 196},
 		{Key: Key{File: "internal/tui/update.go", Func: "Model.executeInlineAction"}, Ceiling: 108},
