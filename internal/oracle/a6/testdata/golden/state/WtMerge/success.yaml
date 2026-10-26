@@ -157,7 +157,7 @@ tasks:
         - timestamp: <TIME:Z>
           agent: coder-1
           trigger: submission
-        - timestamp: <TIME:+02:00>
+        - timestamp: <TIME:Z>
           agent: code-reviewer-1
           trigger: completion
       created: <TIME:Z>
@@ -170,7 +170,7 @@ tasks:
           event: approved
           agent: code-reviewer-1
           commit: <SHA:REVIEW>
-        - time: <TIME:+02:00>
+        - time: <TIME:Z>
           event: merged
           agent: code-reviewer-1
           commit: <SHA:REVIEW>
