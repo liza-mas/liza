@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: wezterm not found on PATH: exec: "wezterm": executable file not found in $PATH
+--- invocations
+none

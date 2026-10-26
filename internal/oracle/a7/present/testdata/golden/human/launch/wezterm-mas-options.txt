@@ -1,0 +1,13 @@
+exit 0
+--- stdout
+--- stderr
+'wezterm' 'start' '--class' 'oracle-class' '--workspace' 'oracle-workspace' '--cwd' '<PROJECT>' '--' '/bin/sh' '-lc' 'wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'architect'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'architecture-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-planner'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-plan-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'coder'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+exec '"'"'liza'"'"' '"'"'agent'"'"' '"'"'orchestrator'"'"' '"'"'--cli'"'"' '"'"'codex'"'"'
+'
+--- invocations
+none

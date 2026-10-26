@@ -1,0 +1,70 @@
+exit 0
+--- stdout
+wezterm-stub: started
+--- stderr
+Created adversarial-pairing blackboard: <PROJECT>/notes/new-board.md
+wezterm-stub: notice
+--- invocations
+== wezterm
+arg 1: start
+arg 2: --class
+arg 3: liza-adversarial
+arg 4: --workspace
+arg 5: liza-adversarial
+arg 6: --cwd
+arg 7: <PROJECT>
+arg 8: --
+arg 9: /bin/sh
+arg 10: -lc
+arg 11: set -e
+wezterm_liza_send_prompt() {
+pane_id="$1"
+prompt="$2"
+(
+sleep 2
+printf '%s' "$prompt" | wezterm cli --class 'liza-adversarial' send-text --no-paste --pane-id "$pane_id"
+printf '\r' | wezterm cli --class 'liza-adversarial' send-text --no-paste --pane-id "$pane_id"
+) &
+}
+pane_id_1=$(wezterm cli --class 'liza-adversarial' split-pane --right --cwd '<PROJECT>' -- 'claude')
+wezterm_liza_send_prompt "$pane_id_1" '$adversarial-pairing reviewer-claude <PROJECT>/notes/new-board.md'
+wezterm_liza_send_prompt "$WEZTERM_PANE" '$adversarial-pairing doer <PROJECT>/notes/new-board.md yolo'
+exec 'claude'
+--- blackboard notes/new-board.md
+---
+phase: DRAFT
+yolo: true
+work_type: feature
+rca_required: false
+red_test_required: false
+required_reviewers: []
+plan_revision: 0
+analysis_revision: 0
+red_test_round: 0
+code_review_round: 0
+phase_updated_at: "<TIME>"
+worktree: null
+agents:
+doer:
+role: doer
+status: DRAFT
+last_seen: null
+reviewed_analysis_revision: null
+analysis_verdict: null
+reviewed_plan_revision: null
+plan_verdict: null
+reviewed_red_test_round: null
+red_test_verdict: null
+reviewed_code_round: null
+code_verdict: null
+---
+# Adversarial Pairing Blackboard
+## Goal
+Oracle goal text
+## Evidence
+## Plan Revisions
+## Plan Reviews
+## Implementation Notes
+## Code Review Rounds
+## Validation
+## Decisions

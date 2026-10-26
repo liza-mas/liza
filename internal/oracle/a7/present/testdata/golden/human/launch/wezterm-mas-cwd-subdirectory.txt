@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: --cwd must be the Liza project root, got <PROJECT>/sub under git root <PROJECT>
+--- invocations
+none

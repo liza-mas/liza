@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: --reviewer values must not be empty
+--- invocations
+none

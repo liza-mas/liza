@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: invalid reviewer spec "reviewer-=codex"; use id=cli or cli
+--- invocations
+none

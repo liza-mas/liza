@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: --cwd <OTHER>/bare is not initialized as a Liza project
+--- invocations
+none

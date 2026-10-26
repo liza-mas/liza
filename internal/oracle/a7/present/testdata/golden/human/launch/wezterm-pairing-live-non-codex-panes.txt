@@ -1,0 +1,31 @@
+exit 0
+--- stdout
+wezterm-stub: started
+--- stderr
+wezterm-stub: notice
+--- invocations
+== wezterm
+arg 1: start
+arg 2: --class
+arg 3: liza-adversarial
+arg 4: --workspace
+arg 5: liza-adversarial
+arg 6: --cwd
+arg 7: <PROJECT>
+arg 8: --
+arg 9: /bin/sh
+arg 10: -lc
+arg 11: set -e
+wezterm_liza_send_prompt() {
+pane_id="$1"
+prompt="$2"
+(
+sleep 2
+printf '%s' "$prompt" | wezterm cli --class 'liza-adversarial' send-text --no-paste --pane-id "$pane_id"
+printf '\r' | wezterm cli --class 'liza-adversarial' send-text --no-paste --pane-id "$pane_id"
+) &
+}
+pane_id_1=$(wezterm cli --class 'liza-adversarial' split-pane --right --cwd '<PROJECT>' -- 'claude')
+wezterm_liza_send_prompt "$pane_id_1" '$adversarial-pairing reviewer-two <PROJECT>/board.md'
+wezterm_liza_send_prompt "$WEZTERM_PANE" '$adversarial-pairing doer <PROJECT>/board.md'
+exec 'claude'
