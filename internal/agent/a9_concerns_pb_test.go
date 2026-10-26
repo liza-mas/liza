@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,19 +21,21 @@ import (
 // waitForWorkEventDriven were reduced: they pin the paths the existing tests do
 // not reach, so each reduction keeps its value, order and control effect.
 
-// PB-3: a candidate whose approvals are below the effective quorum is skipped
-// with the task left APPROVED, and the batch goes on to the next candidate.
-func TestA9ClaimPB3MergeBatchSkipsBelowQuorumAndContinues(t *testing.T) {
+// PB-3: a candidate whose merge fails (here its worktree and branch are gone,
+// neither a halt nor an authority loss) is not merged and does not stop the
+// batch: the next candidate is still merged.
+func TestA9ClaimPB3MergeBatchContinuesPastFailedCandidate(t *testing.T) {
 	projectRoot, statePath, mergeID := setupAgentMergeRepo(t)
-	const lowQuorumID = "merge-below-quorum"
-	low := approvedAgentMergeTask(t, projectRoot, lowQuorumID)
-	low.Approvals = low.Approvals[:1]
+	const failedID = "merge-failing"
+	failing := approvedAgentMergeTask(t, projectRoot, failedID)
+	mustGitInDir(t, projectRoot, "worktree", "remove", "--force", filepath.Join(projectRoot, ".worktrees", failedID))
+	mustGitInDir(t, projectRoot, "branch", "-D", "task/"+failedID)
 
 	bb := db.New(statePath)
 	off := false
 	if err := bb.Modify(func(s *models.State) error {
 		s.Config.AutoCheckpointSummary = &off
-		s.Tasks = append([]models.Task{low}, s.Tasks...)
+		s.Tasks = append([]models.Task{failing}, s.Tasks...)
 		return nil
 	}); err != nil {
 		t.Fatalf("prepare tasks: %v", err)
@@ -43,18 +46,18 @@ func TestA9ClaimPB3MergeBatchSkipsBelowQuorumAndContinues(t *testing.T) {
 	}
 
 	if err := handleApprovedMerges(projectRoot, "code-reviewer-2", bb, pr); err != nil {
-		t.Fatalf("handleApprovedMerges: %v", err)
+		t.Fatalf("handleApprovedMerges: %v, want a failed candidate not to stop the batch", err)
 	}
 
 	after, err := bb.Read()
 	if err != nil {
 		t.Fatalf("read state: %v", err)
 	}
-	if got := after.FindTask(lowQuorumID); got == nil || got.Status != models.TaskStatusApproved {
-		t.Fatalf("below-quorum task = %+v, want left APPROVED", got)
+	if got := after.FindTask(failedID); got == nil || got.Status == models.TaskStatusMerged {
+		t.Fatalf("failing candidate = %+v, want it not merged", got)
 	}
 	if got := after.FindTask(mergeID); got == nil || got.Status != models.TaskStatusMerged {
-		t.Fatalf("later candidate = %+v, want MERGED after the skipped one", got)
+		t.Fatalf("later candidate = %+v, want MERGED after the failed one", got)
 	}
 }
 

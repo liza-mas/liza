@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"path/filepath"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -36,11 +34,28 @@ func claimDoerTaskEscalating(projectRoot string, authority models.AgentAuthority
 }
 
 func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, authority *models.AgentAuthority, refusals *acceptanceRefusalTracker, bb *db.Blackboard, sessions ...*ops.ValidationSession) (taskID, worktree string, err error) {
-	logger := GetLogger()
 	var session *ops.ValidationSession
 	if len(sessions) > 0 {
 		session = sessions[0]
 	}
+
+	taskID, worktree, resumed, err := resumeDoerTask(projectRoot, agentID, role, authority, session)
+	if err != nil || resumed {
+		return taskID, worktree, err
+	}
+
+	tier, err := claimableDoerTier(projectRoot, agentID, role, authority, session, bb)
+	if err != nil {
+		return "", "", err
+	}
+	return claimFirstDoerCandidate(projectRoot, agentID, role, authority, refusals, session, tier)
+}
+
+// resumeDoerTask resumes work the agent already holds: a handoff first, then an
+// owned executing task. It reports resumed=false when neither exists, so the
+// caller goes on to a fresh claim.
+func resumeDoerTask(projectRoot, agentID, role string, authority *models.AgentAuthority, session *ops.ValidationSession) (taskID, worktree string, resumed bool, err error) {
+	logger := GetLogger()
 
 	handoffResult, err := ops.ResumeHandoff(ops.ResumeHandoffInput{
 		ProjectRoot: projectRoot,
@@ -49,16 +64,11 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 		Session:     session,
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	if handoffResult.Found {
 		logger.Info("Resuming claimed task from handoff", "task_id", handoffResult.TaskID, "agent_id", agentID)
-		if setupErr := ensureDoerWorktreeSetup(
-			projectRoot, agentID, role, handoffResult.TaskID, handoffResult.Worktree, authority,
-		); setupErr != nil {
-			return "", "", setupErr
-		}
-		return handoffResult.TaskID, handoffResult.Worktree, nil
+		return resumedDoerTaskSetup(projectRoot, agentID, role, handoffResult.TaskID, handoffResult.Worktree, authority)
 	}
 
 	ownedResult, err := ops.ResumeOwnedTask(ops.ResumeOwnedTaskInput{
@@ -68,28 +78,36 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 		Session:     session,
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	if ownedResult.Found {
 		logger.Info("Resuming owned executing task", "task_id", ownedResult.TaskID, "agent_id", agentID)
-		if setupErr := ensureDoerWorktreeSetup(
-			projectRoot, agentID, role, ownedResult.TaskID, ownedResult.Worktree, authority,
-		); setupErr != nil {
-			return "", "", setupErr
-		}
-		return ownedResult.TaskID, ownedResult.Worktree, nil
+		return resumedDoerTaskSetup(projectRoot, agentID, role, ownedResult.TaskID, ownedResult.Worktree, authority)
 	}
 	if ownedResult.Blocked {
 		logger.Warn("Blocked owned executing task during resume", "task_id", ownedResult.BlockedTaskID, "agent_id", agentID, "reason", ownedResult.BlockReason)
 	}
+	return "", "", false, nil
+}
 
+// resumedDoerTaskSetup fails a resume closed on an unprepared worktree.
+func resumedDoerTaskSetup(projectRoot, agentID, role, taskID, worktree string, authority *models.AgentAuthority) (string, string, bool, error) {
+	if setupErr := ensureDoerWorktreeSetup(projectRoot, agentID, role, taskID, worktree, authority); setupErr != nil {
+		return "", "", false, setupErr
+	}
+	return taskID, worktree, true, nil
+}
+
+// claimableDoerTier returns the highest-priority tier of tasks this doer may
+// claim, in scheduling order. An empty tier is an error.
+func claimableDoerTier(projectRoot, agentID, role string, authority *models.AgentAuthority, session *ops.ValidationSession, bb *db.Blackboard) ([]*models.Task, error) {
 	state, err := bb.ReadSnapshot()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read state: %w", err)
+		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
 	if authority != nil {
 		if err := ops.RequireAgentAuthority(state, *authority); err != nil {
-			return "", "", err
+			return nil, err
 		}
 	}
 
@@ -106,60 +124,87 @@ func claimDoerTaskWithOptionalAuthority(projectRoot, agentID, role string, autho
 	tier := orderDoerCandidates(candidates, state, agentID, pr)
 
 	if len(tier) == 0 {
-		return "", "", fmt.Errorf("no claimable tasks found")
+		return nil, fmt.Errorf("no claimable tasks found")
 	}
+	return tier, nil
+}
 
-	// Try each candidate in scheduling order until one succeeds.
+// claimFirstDoerCandidate tries each candidate in scheduling order until one
+// succeeds. A halt or an authority loss ends the attempt; any other failure
+// moves on to the next candidate.
+func claimFirstDoerCandidate(projectRoot, agentID, role string, authority *models.AgentAuthority, refusals *acceptanceRefusalTracker, session *ops.ValidationSession, tier []*models.Task) (taskID, worktree string, err error) {
 	var lastErr error
 	candidateIDs := taskIDsFromCandidates(tier)
 	for _, task := range tier {
-		var result *ops.ClaimResult
-		var claimErr error
-		if authority == nil {
-			result, claimErr = ops.ClaimTask(projectRoot, task.ID, agentID)
-		} else {
-			result, claimErr = ops.ClaimTaskWithAuthority(projectRoot, task.ID, *authority, session)
+		result, claimErr, stopErr := claimDoerCandidate(projectRoot, agentID, role, authority, refusals, session, task, candidateIDs)
+		if stopErr != nil {
+			return "", "", stopErr
 		}
 		if claimErr != nil {
-			if errors.Is(claimErr, ops.ErrSystemHalted) {
-				return "", "", claimErr // Halted, not failed: no candidate is claimable.
-			}
-			logger.Warn("Claim attempt failed, trying next candidate",
-				"task_id", task.ID, "error", claimErr)
-			if classifyErr := markAgentDegradedForInfraClaim(projectRoot, agentID, role, task.ID, candidateIDs, claimErr, authority); classifyErr != nil {
-				return "", "", classifyErr
-			}
-			if refusals != nil && authority != nil {
-				if escalateErr := escalateAcceptanceRefusal(projectRoot, *authority, refusals, task.ID, claimErr); escalateErr != nil {
-					return "", "", escalateErr
-				}
-			}
 			lastErr = claimErr
 			continue
-		}
-		if refusals != nil {
-			refusals.forget(result.TaskID)
-		}
-		var clearErr error
-		if authority == nil {
-			clearErr = ops.ClearAgentDegraded(projectRoot, agentID)
-		} else {
-			clearErr = ops.ClearAgentDegradedWithAuthority(projectRoot, *authority)
-		}
-		if clearErr != nil {
-			if ops.IsAgentAuthorityError(clearErr) {
-				return "", "", clearErr
-			}
-			logger.Warn("Failed to clear degraded agent health after successful claim",
-				"agent_id", agentID, "error", clearErr)
-		}
-		for _, w := range result.Warnings {
-			logger.Warn("Claim warning", "task_id", result.TaskID, "warning", w)
 		}
 		return result.TaskID, result.WorktreeRel, nil
 	}
 
 	return "", "", fmt.Errorf("all %d candidates in top priority tier failed to claim: %w", len(tier), lastErr)
+}
+
+// claimDoerCandidate claims one candidate. claimErr is a failure the caller
+// survives by trying the next candidate; stopErr ends the whole attempt.
+func claimDoerCandidate(projectRoot, agentID, role string, authority *models.AgentAuthority, refusals *acceptanceRefusalTracker, session *ops.ValidationSession, task *models.Task, candidateIDs []string) (result *ops.ClaimResult, claimErr, stopErr error) {
+	logger := GetLogger()
+	if authority == nil {
+		result, claimErr = ops.ClaimTask(projectRoot, task.ID, agentID)
+	} else {
+		result, claimErr = ops.ClaimTaskWithAuthority(projectRoot, task.ID, *authority, session)
+	}
+	if claimErr != nil {
+		if errors.Is(claimErr, ops.ErrSystemHalted) {
+			return nil, nil, claimErr // Halted, not failed: no candidate is claimable.
+		}
+		logger.Warn("Claim attempt failed, trying next candidate",
+			"task_id", task.ID, "error", claimErr)
+		if classifyErr := markAgentDegradedForInfraClaim(projectRoot, agentID, role, task.ID, candidateIDs, claimErr, authority); classifyErr != nil {
+			return nil, nil, classifyErr
+		}
+		if refusals != nil && authority != nil {
+			if escalateErr := escalateAcceptanceRefusal(projectRoot, *authority, refusals, task.ID, claimErr); escalateErr != nil {
+				return nil, nil, escalateErr
+			}
+		}
+		return nil, claimErr, nil
+	}
+	if refusals != nil {
+		refusals.forget(result.TaskID)
+	}
+	if clearErr := clearDegradedAfterClaim(projectRoot, agentID, authority); clearErr != nil {
+		return nil, nil, clearErr
+	}
+	for _, w := range result.Warnings {
+		logger.Warn("Claim warning", "task_id", result.TaskID, "warning", w)
+	}
+	return result, nil, nil
+}
+
+// clearDegradedAfterClaim clears the agent's degraded health after a successful
+// claim. Only a lost authority is returned; any other failure is logged.
+func clearDegradedAfterClaim(projectRoot, agentID string, authority *models.AgentAuthority) error {
+	var clearErr error
+	if authority == nil {
+		clearErr = ops.ClearAgentDegraded(projectRoot, agentID)
+	} else {
+		clearErr = ops.ClearAgentDegradedWithAuthority(projectRoot, *authority)
+	}
+	if clearErr == nil {
+		return nil
+	}
+	if ops.IsAgentAuthorityError(clearErr) {
+		return clearErr
+	}
+	GetLogger().Warn("Failed to clear degraded agent health after successful claim",
+		"agent_id", agentID, "error", clearErr)
+	return nil
 }
 
 // ensureDoerWorktreeSetup runs the configured post_worktree_cmd for a resumed
@@ -334,232 +379,6 @@ func releaseReviewerClaimQuietly(projectRoot, taskID string, authority models.Ag
 		}
 	}
 	return nil
-}
-
-// mergeGateInput holds the inputs for the merge gate evaluation.
-type mergeGateInput struct {
-	task              *models.Task
-	agents            map[string]models.Agent
-	effectiveQuorum   int
-	providerDiversity string // "preferred" or ""
-	reviewerRole      string // workflow role name for reviewers in this role-pair
-}
-
-// mergeGateResult holds the outcome of the merge gate evaluation.
-type mergeGateResult struct {
-	proceed    bool
-	extra      map[string]any // diversity fields for merge history
-	skipReason string         // non-empty when proceed is false
-}
-
-// evaluateMergeGate checks quorum defense-in-depth and evaluates provider diversity.
-// Pure function — all inputs are passed explicitly for testability.
-func evaluateMergeGate(input mergeGateInput) *mergeGateResult {
-	result := &mergeGateResult{proceed: true}
-
-	// Defense-in-depth: quorum check
-	if input.task.ApprovalCount() < input.effectiveQuorum {
-		result.proceed = false
-		result.skipReason = fmt.Sprintf("approval count %d < effective quorum %d",
-			input.task.ApprovalCount(), input.effectiveQuorum)
-		return result
-	}
-
-	// No diversity evaluation when not configured
-	if input.providerDiversity != "preferred" {
-		return result
-	}
-
-	// Diversity achieved — approvals come from different providers
-	if input.task.HasProviderDiversity() {
-		result.extra = map[string]any{"diversity_achieved": true}
-		return result
-	}
-
-	// Diversity not achieved — check if it's achievable in the reviewer pool
-	providers := make(map[string]bool)
-	for _, agent := range input.agents {
-		if agent.Role == input.reviewerRole {
-			providers[agent.Provider] = true
-		}
-	}
-
-	if len(providers) <= 1 {
-		// All reviewers share one provider (or no reviewers registered)
-		reason := "no reviewer agents registered"
-		for p := range providers {
-			reason = fmt.Sprintf("all reviewers use provider %s", p)
-		}
-		result.extra = map[string]any{
-			"diversity_not_achievable": true,
-			"diversity_reason":         reason,
-		}
-	} else {
-		// Different providers exist but diversity wasn't achieved in approvals
-		result.extra = map[string]any{"diversity_not_met": true}
-	}
-
-	return result
-}
-
-func handleApprovedMerges(projectRoot, agentID string, bb *db.Blackboard, pr models.PipelineResolver) error {
-	return handleApprovedMergesWithOptionalAuthority(projectRoot, agentID, nil, bb, pr)
-}
-
-func handleApprovedMergesWithAuthority(projectRoot string, authority models.AgentAuthority, bb *db.Blackboard, pr models.PipelineResolver) error {
-	return handleApprovedMergesWithOptionalAuthority(projectRoot, authority.ID, &authority, bb, pr)
-}
-
-func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, authority *models.AgentAuthority, bb *db.Blackboard, pr models.PipelineResolver) error {
-	logger := GetLogger()
-	state, err := bb.ReadSnapshot()
-	if err != nil {
-		return err
-	}
-	if authority != nil {
-		if err := ops.RequireAgentAuthority(state, *authority); err != nil {
-			return err
-		}
-	}
-
-	// Load the concrete resolver once for quorum and diversity lookups.
-	cfg, cfgErr := pipeline.LoadFrozen(projectRoot)
-	if cfgErr != nil {
-		return fmt.Errorf("failed to load pipeline config: %w", cfgErr)
-	}
-	resolver := pipeline.NewResolver(cfg)
-
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if approvedMergePending(task, state, agentID, pr) {
-
-			// Resolve effective impact and quorum for merge gate
-			effectiveImpact := ops.ResolveEffectiveImpact(task.History)
-			effectiveQuorum, qErr := resolver.EffectiveQuorum(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
-			if qErr != nil {
-				logger.Warn("Failed to resolve quorum, skipping merge",
-					"task_id", task.ID, "error", qErr)
-				continue
-			}
-
-			// Get provider diversity config for this impact level
-			diversity, dErr := resolver.ProviderDiversity(task.RolePair, pipeline.ReviewImpact(effectiveImpact))
-			if dErr != nil {
-				logger.Warn("Failed to resolve diversity policy, skipping merge",
-					"task_id", task.ID, "error", dErr)
-				continue
-			}
-
-			// Get reviewer role for this role-pair
-			reviewerRole, rErr := pr.ReviewerRole(task.RolePair)
-			if rErr != nil {
-				logger.Warn("Failed to resolve reviewer role, skipping merge",
-					"task_id", task.ID, "error", rErr)
-				continue
-			}
-
-			// Evaluate merge gate: quorum defense-in-depth + provider diversity
-			gate := evaluateMergeGate(mergeGateInput{
-				task:              task,
-				agents:            state.Agents,
-				effectiveQuorum:   effectiveQuorum,
-				providerDiversity: string(diversity),
-				reviewerRole:      reviewerRole,
-			})
-
-			if !gate.proceed {
-				logger.Warn("Merge gate: quorum defense-in-depth failed, skipping merge",
-					"task_id", task.ID, "reason", gate.skipReason)
-				continue
-			}
-
-			logger.Info("Merging approved task", "task_id", task.ID)
-
-			var result *ops.MergeResult
-			if authority == nil {
-				result, err = ops.MergeWorktree(projectRoot, task.ID, agentID, gate.extra)
-			} else {
-				result, err = ops.MergeWorktreeWithAuthority(projectRoot, task.ID, *authority, gate.extra)
-			}
-			if err != nil {
-				// Halted: stop the batch; no later merge would be admitted.
-				if ops.IsAgentAuthorityError(err) || errors.Is(err, ops.ErrSystemHalted) {
-					return err
-				}
-				var integrationErr *ops.IntegrationFailedError
-				if errors.As(err, &integrationErr) {
-					logArgs := []any{
-						"task_id", task.ID,
-						"reason", integrationErr.Reason,
-					}
-					if integrationErr.TestOutput != "" {
-						logArgs = append(logArgs, "test_output", integrationErr.TestOutput)
-					}
-					if integrationErr.RollbackError != nil {
-						logArgs = append(logArgs, "rollback_error", integrationErr.RollbackError)
-					}
-					logger.Warn("Integration failed", logArgs...)
-					continue
-				}
-				logger.Warn("Failed to merge task, will retry",
-					"task_id", task.ID,
-					"error", err)
-				continue
-			}
-
-			for _, w := range result.Warnings {
-				logger.Warn("Merge cleanup warning", "task_id", task.ID, "warning", w)
-			}
-
-			logger.Info("Successfully merged task", "task_id", task.ID)
-		}
-	}
-
-	return nil
-}
-
-func hasPendingMerges(bb *db.Blackboard, agentID string, pr models.PipelineResolver) bool {
-	state, err := bb.ReadCached()
-	if err != nil {
-		return false // Safe default: proceed to normal wait
-	}
-	return hasPendingMergesInState(state, agentID, pr)
-}
-
-// hasPendingMergesInState answers the same question against a state the caller
-// already holds — wait predicates run on every watcher event and must not read.
-func hasPendingMergesInState(state *models.State, agentID string, pr models.PipelineResolver) bool {
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if approvedMergePending(task, state, agentID, pr) {
-			return true
-		}
-	}
-	return false
-}
-
-// ownedPendingMergeFingerprint identifies the approved merges this agent owns,
-// each at its current task boundary. Empty means it owns none. A reviewer can
-// become the owner without any reviewable work appearing — its approver left
-// the registry — so a change in this value is itself work for merge handling.
-func ownedPendingMergeFingerprint(state *models.State, agentID string, pr models.PipelineResolver) string {
-	if pr == nil {
-		return ""
-	}
-	var owned []string
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if approvedMergePending(task, state, agentID, pr) {
-			owned = append(owned, task.ID+"@"+models.TaskTransitionID(task))
-		}
-	}
-	sort.Strings(owned)
-	return strings.Join(owned, ",")
-}
-
-func approvedMergePending(task *models.Task, state *models.State, agentID string, pr models.PipelineResolver) bool {
-	return models.ApprovedMergeOutstanding(task, pr) &&
-		models.ApprovedMergeOwner(state, task, pr, time.Now().UTC()) == agentID
 }
 
 // handleAvailableTransitions creates child tasks from pipeline transitions
