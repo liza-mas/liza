@@ -179,30 +179,135 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if !ok {
 		return LaunchPlan{}, fmt.Errorf("unknown CLI: %s", toolName)
 	}
-
-	backend := strings.TrimSpace(tool.Backend)
-	if backend == "" {
-		backend = ToolBackendCLI
-	}
-	executable := strings.TrimSpace(tool.Executable)
-	if executable == "" {
-		executable = toolName
-	}
-	transport := strings.TrimSpace(tool.PromptTransport)
-	if transport == "" {
-		transport = PromptTransportStdin
-	}
-	if err := validatePromptTransport(transport); err != nil {
+	base, err := resolveLaunchBase(toolName, tool, req.Model)
+	if err != nil {
 		return LaunchPlan{}, err
 	}
-	if backend != ToolBackendCLI && backend != ToolBackendACPX {
-		return LaunchPlan{}, fmt.Errorf("unsupported backend for %s: %s", toolName, backend)
+
+	vars := launchTemplateVars(req, toolName)
+	acpxAgent, sessionName, err := expandLaunchSession(req, toolName, tool, base.backend, vars)
+	if err != nil {
+		return LaunchPlan{}, err
 	}
-	model := strings.TrimSpace(req.Model)
-	if model != "" && !SupportsModelSelection(tool) {
-		return LaunchPlan{}, fmt.Errorf("%s does not support model selection", toolName)
+	args, err := expandLaunchArgs(req, toolName, tool, base.model, vars)
+	if err != nil {
+		return LaunchPlan{}, err
+	}
+	acpx, err := expandACPXArgs(toolName, tool, vars)
+	if err != nil {
+		return LaunchPlan{}, err
 	}
 
+	return LaunchPlan{
+		ToolName:             toolName,
+		Directory:            req.ProjectRoot,
+		ProfileName:          req.ProfileName,
+		Model:                base.model,
+		Backend:              base.backend,
+		Executable:           base.executable,
+		Args:                 args,
+		PromptTransport:      base.transport,
+		PromptFile:           req.PromptFile,
+		EnvFiles:             append([]string(nil), tool.EnvFiles...),
+		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0,
+		ValidationExecution:  tool.ValidationExecution,
+		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
+		ContractKey:          strings.TrimSpace(tool.ContractKey),
+		UsesStdin:            base.transport == PromptTransportStdin,
+		UsesPromptFile:       base.transport == PromptTransportFile,
+		RequiresCodexWrapper: toolName == "codex",
+		ProviderKey:          strings.TrimSpace(tool.ProviderKey),
+		ACPXAgent:            acpxAgent,
+		ACPXSessionName:      sessionName,
+		ACPXShowArgs:         acpx.show,
+		ACPXEnsureArgs:       acpx.ensure,
+		ACPXSetModeArgs:      acpx.setMode,
+		ACPXPromptArgs:       acpx.prompt,
+		ACPXEventMode:        strings.TrimSpace(tool.ACPXEventMode),
+	}, nil
+}
+
+// launchBase is a tool's validated launch identity with its defaults applied.
+type launchBase struct {
+	backend, executable, transport, model string
+}
+
+// resolveLaunchBase applies the backend, executable and transport defaults and
+// refuses an unsupported transport, backend or model selection, in that order.
+func resolveLaunchBase(toolName string, tool models.AgentToolConfig, requestedModel string) (launchBase, error) {
+	base := launchBase{
+		backend:    strings.TrimSpace(tool.Backend),
+		executable: strings.TrimSpace(tool.Executable),
+		transport:  strings.TrimSpace(tool.PromptTransport),
+		model:      strings.TrimSpace(requestedModel),
+	}
+	if base.backend == "" {
+		base.backend = ToolBackendCLI
+	}
+	if base.executable == "" {
+		base.executable = toolName
+	}
+	if base.transport == "" {
+		base.transport = PromptTransportStdin
+	}
+	if err := validatePromptTransport(base.transport); err != nil {
+		return launchBase{}, err
+	}
+	if base.backend != ToolBackendCLI && base.backend != ToolBackendACPX {
+		return launchBase{}, fmt.Errorf("unsupported backend for %s: %s", toolName, base.backend)
+	}
+	if base.model != "" && !SupportsModelSelection(tool) {
+		return launchBase{}, fmt.Errorf("%s does not support model selection", toolName)
+	}
+	return base, nil
+}
+
+// expandLaunchSession resolves the ACPX agent name and renders the session
+// name, recording both as template variables for the argument expansion.
+func expandLaunchSession(req LaunchPlanRequest, toolName string, tool models.AgentToolConfig, backend string, vars map[string]string) (acpxAgent, sessionName string, err error) {
+	acpxAgent = strings.TrimSpace(tool.ACPXAgent)
+	if acpxAgent == "" && backend == ToolBackendACPX {
+		acpxAgent = acpxAgentNameFromTool(toolName)
+	}
+	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
+	if sessionTemplate == "" && backend == ToolBackendACPX {
+		sessionTemplate = acpxSessionName("{{agentID}}")
+	}
+
+	vars["acpxAgent"] = acpxAgent
+	if sessionTemplate == "" {
+		return acpxAgent, "", nil
+	}
+	sessionName, err = renderArg(sessionTemplate, vars)
+	if err != nil {
+		return "", "", fmt.Errorf("%s acpx session name: %w", toolName, err)
+	}
+	// Scope the session to the task so context cannot accumulate across
+	// tasks: a session that spans tasks grows until the provider rejects
+	// every prompt, and auto-repair then respawns into the same poisoned
+	// session (DEV-667). Templates that already place {{taskID}} keep
+	// full control.
+	templateIncludesTaskID := false
+	for _, match := range templateExprRE.FindAllString(sessionTemplate, -1) {
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
+		if name == "taskID" {
+			templateIncludesTaskID = true
+			break
+		}
+	}
+	if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !templateIncludesTaskID {
+		sessionName = sessionName + "-" + scope
+	}
+	if req.SessionScope != "" {
+		sessionName += "-" + req.SessionScope
+	}
+	vars["sessionName"] = sessionName
+	return acpxAgent, sessionName, nil
+}
+
+// expandLaunchArgs selects the tool's argument template for the launch mode,
+// renders it and leads with the model arguments when a model is selected.
+func expandLaunchArgs(req LaunchPlanRequest, toolName string, tool models.AgentToolConfig, model string, vars map[string]string) ([]string, error) {
 	args := tool.RunArgs
 	if req.Interactive {
 		args = tool.InteractiveArgs
@@ -213,105 +318,46 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if toolName == "claude" && req.DisableSubagents {
 		args = appendDisallowedTaskArg(args)
 	}
-
-	acpxAgent := strings.TrimSpace(tool.ACPXAgent)
-	if acpxAgent == "" && backend == ToolBackendACPX {
-		acpxAgent = acpxAgentNameFromTool(toolName)
+	rendered, err := renderArgs(args, vars)
+	if err != nil {
+		return nil, fmt.Errorf("%s args: %w", toolName, err)
 	}
-	sessionTemplate := strings.TrimSpace(tool.ACPXSessionName)
-	if sessionTemplate == "" && backend == ToolBackendACPX {
-		sessionTemplate = acpxSessionName("{{agentID}}")
+	if model == "" {
+		return rendered, nil
 	}
+	// Model flags lead the argv: the supported CLIs take them as
+	// top-level options, before any subcommand such as codex exec.
+	modelArgs, err := renderArgs(tool.ModelArgs, map[string]string{"model": model})
+	if err != nil {
+		return nil, fmt.Errorf("%s model args: %w", toolName, err)
+	}
+	return append(modelArgs, rendered...), nil
+}
 
-	vars := launchTemplateVars(req, toolName)
-	vars["acpxAgent"] = acpxAgent
-	renderedSessionName := ""
-	if sessionTemplate != "" {
-		var err error
-		renderedSessionName, err = renderArg(sessionTemplate, vars)
+// acpxArgs are the rendered ACPX subcommand argument lists of a launch.
+type acpxArgs struct {
+	show, ensure, setMode, prompt []string
+}
+
+func expandACPXArgs(toolName string, tool models.AgentToolConfig, vars map[string]string) (acpxArgs, error) {
+	var out acpxArgs
+	for _, list := range []struct {
+		label string
+		args  []string
+		into  *[]string
+	}{
+		{"show", tool.ACPXShowArgs, &out.show},
+		{"ensure", tool.ACPXEnsureArgs, &out.ensure},
+		{"set-mode", tool.ACPXSetModeArgs, &out.setMode},
+		{"prompt", tool.ACPXPromptArgs, &out.prompt},
+	} {
+		rendered, err := renderArgs(list.args, vars)
 		if err != nil {
-			return LaunchPlan{}, fmt.Errorf("%s acpx session name: %w", toolName, err)
+			return acpxArgs{}, fmt.Errorf("%s acpx %s args: %w", toolName, list.label, err)
 		}
-		// Scope the session to the task so context cannot accumulate across
-		// tasks: a session that spans tasks grows until the provider rejects
-		// every prompt, and auto-repair then respawns into the same poisoned
-		// session (DEV-667). Templates that already place {{taskID}} keep
-		// full control.
-		templateIncludesTaskID := false
-		for _, match := range templateExprRE.FindAllString(sessionTemplate, -1) {
-			name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
-			if name == "taskID" {
-				templateIncludesTaskID = true
-				break
-			}
-		}
-		if scope := acpxSessionTaskScope(req.TaskID); scope != "" && !templateIncludesTaskID {
-			renderedSessionName = renderedSessionName + "-" + scope
-		}
-		if req.SessionScope != "" {
-			renderedSessionName += "-" + req.SessionScope
-		}
-		vars["sessionName"] = renderedSessionName
+		*list.into = rendered
 	}
-
-	renderedArgs, err := renderArgs(args, vars)
-	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("%s args: %w", toolName, err)
-	}
-	if model != "" {
-		// Model flags lead the argv: the supported CLIs take them as
-		// top-level options, before any subcommand such as codex exec.
-		modelVars := map[string]string{"model": model}
-		modelArgs, err := renderArgs(tool.ModelArgs, modelVars)
-		if err != nil {
-			return LaunchPlan{}, fmt.Errorf("%s model args: %w", toolName, err)
-		}
-		renderedArgs = append(modelArgs, renderedArgs...)
-	}
-	acpxShowArgs, err := renderArgs(tool.ACPXShowArgs, vars)
-	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("%s acpx show args: %w", toolName, err)
-	}
-	acpxEnsureArgs, err := renderArgs(tool.ACPXEnsureArgs, vars)
-	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("%s acpx ensure args: %w", toolName, err)
-	}
-	acpxSetModeArgs, err := renderArgs(tool.ACPXSetModeArgs, vars)
-	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("%s acpx set-mode args: %w", toolName, err)
-	}
-	acpxPromptArgs, err := renderArgs(tool.ACPXPromptArgs, vars)
-	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("%s acpx prompt args: %w", toolName, err)
-	}
-
-	return LaunchPlan{
-		ToolName:             toolName,
-		Directory:            req.ProjectRoot,
-		ProfileName:          req.ProfileName,
-		Model:                model,
-		Backend:              backend,
-		Executable:           executable,
-		Args:                 renderedArgs,
-		PromptTransport:      transport,
-		PromptFile:           req.PromptFile,
-		EnvFiles:             append([]string(nil), tool.EnvFiles...),
-		OptionalEnvFiles:     len(req.RuntimeConfig.AgentTools[toolName].EnvFiles) == 0,
-		ValidationExecution:  tool.ValidationExecution,
-		RequiredExecutables:  append([]string(nil), tool.RequiredExecutables...),
-		ContractKey:          strings.TrimSpace(tool.ContractKey),
-		UsesStdin:            transport == PromptTransportStdin,
-		UsesPromptFile:       transport == PromptTransportFile,
-		RequiresCodexWrapper: toolName == "codex",
-		ProviderKey:          strings.TrimSpace(tool.ProviderKey),
-		ACPXAgent:            acpxAgent,
-		ACPXSessionName:      renderedSessionName,
-		ACPXShowArgs:         acpxShowArgs,
-		ACPXEnsureArgs:       acpxEnsureArgs,
-		ACPXSetModeArgs:      acpxSetModeArgs,
-		ACPXPromptArgs:       acpxPromptArgs,
-		ACPXEventMode:        strings.TrimSpace(tool.ACPXEventMode),
-	}, nil
+	return out, nil
 }
 
 // SupportsModelSelection reports whether a tool passes a first-class model:
