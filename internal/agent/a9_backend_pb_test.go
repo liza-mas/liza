@@ -328,7 +328,7 @@ func TestA9BackendPB2GateBoundaries(t *testing.T) {
 				if strings.Contains(string(data), " prompt ") {
 					break
 				}
-				time.Sleep(20 * time.Millisecond)
+				<-time.After(20 * time.Millisecond)
 			}
 			data, _ := os.ReadFile(logPath)
 			insideGate = string(data)
