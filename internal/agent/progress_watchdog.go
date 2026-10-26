@@ -151,7 +151,7 @@ func runExecutionProgressWatchdog(
 
 			reason := fmt.Sprintf("agent execution progress timeout: task %s had no observable state, worktree, or provider-output progress for %s", taskID, timeout)
 			GetLogger().Error("Execution progress timeout, blocking task", "task_id", taskID, "agent_id", agentID, "timeout", timeout)
-			if alertErr := providersignal.LogAlert(projectRoot, "🚨", "EXECUTION PROGRESS TIMEOUT", reason); alertErr != nil {
+			if alertErr := providersignal.LogAlert(projectRoot, alertLevelCritical, alertCategoryProgressTimeout, reason); alertErr != nil {
 				GetLogger().Warn("Failed to write execution progress alert", "error", alertErr)
 			}
 			cancelExec()

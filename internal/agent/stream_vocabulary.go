@@ -19,3 +19,7 @@ const (
 	submitVerdictFailedCode = "submit_verdict_failed"
 	submitVerdictCommand    = "submit-verdict"
 )
+
+// humanNoteForAll is the target of an operator note addressed to every task. The
+// operations that write and read notes keep their own, unexported, copy.
+const humanNoteForAll = "all"

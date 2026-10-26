@@ -301,7 +301,7 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 			if trigger != WakeTriggerHumanNote {
 				assessed := ops.TasksAssessedBetween(stateBefore, state)
 				consumed = func(note *models.HumanNote) bool {
-					return assessed[note.For] || (note.For == "all" && len(assessed) > 0)
+					return assessed[note.For] || (note.For == humanNoteForAll && len(assessed) > 0)
 				}
 			}
 			if stamped := ops.MarkHumanNotesSeen(state, time.Now().UTC(), rendered, consumed); stamped > 0 {
@@ -387,7 +387,7 @@ func (s *orchestratorStrategy) observeBlockedTurn(bb *db.Blackboard, projectRoot
 	if identity == s.unresolvedBlocked && identity != s.alertedBlocked {
 		message := fmt.Sprintf("consecutive BLOCKED_TASKS turns ended with unchanged blocker state for %s; the wake carried no new blocker input — blocks may require human intervention",
 			strings.Join(blocked, ", "))
-		if err := providersignal.LogAlert(projectRoot, "⚠️", "BLOCKED_TASKS UNRESOLVED", message); err != nil {
+		if err := providersignal.LogAlert(projectRoot, alertLevelWarning, alertCategoryBlockedTasksUnresolved, message); err != nil {
 			GetLogger().Warn("Failed to write blocked-turn alert", "error", err)
 		} else {
 			s.alertedBlocked = identity

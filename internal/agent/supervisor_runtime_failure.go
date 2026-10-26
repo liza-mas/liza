@@ -183,7 +183,7 @@ func handleObservedRuntimeFailureRetry(
 		"command", failure.Command,
 		"code", failure.Code,
 		"count", count)
-	if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "TOOL FAILURE RETRY LOOP", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryToolFailureRetryLoop, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write tool failure retry alert", "error", alertErr)
 	}
 	if err := blockTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, reason); err != nil {

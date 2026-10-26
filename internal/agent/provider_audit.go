@@ -63,7 +63,7 @@ func DetectProviderAuditDegraded(output, cliName string) *ProviderAuditDegraded 
 
 // LogProviderAuditDegradedAlert appends a provider audit degradation alert.
 func LogProviderAuditDegradedAlert(projectRoot string, pad *ProviderAuditDegraded) error {
-	return providersignal.LogAlert(projectRoot, "⚠️", "PROVIDER AUDIT DEGRADED", pad.Provider+": "+pad.Message)
+	return providersignal.LogAlert(projectRoot, alertLevelWarning, alertCategoryProviderAuditDegraded, pad.Provider+": "+pad.Message)
 }
 
 func handleProviderAuditDegraded(bb *db.Blackboard, config SupervisorConfig, taskID, output string) (bool, error) {

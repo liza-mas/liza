@@ -154,7 +154,7 @@ func handleAbandonedBackgroundTaskRetry(
 			"threshold", threshold)
 		message := fmt.Sprintf("%s's session on %s ended while background job %s (%s) was still running; the provider killed it. Claim preserved for a re-run (%d/%d). Check what the job consumed or left half-applied.",
 			config.AgentID, taskID, abandoned.TaskID, abandoned.Summary, count, threshold)
-		if alertErr := providersignal.LogAlert(config.ProjectRoot, "⚠️", "ABANDONED BACKGROUND JOB", message); alertErr != nil {
+		if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelWarning, alertCategoryAbandonedBackgroundJob, message); alertErr != nil {
 			GetLogger().Warn("Failed to write abandoned background job alert", "error", alertErr)
 		}
 		return false
@@ -167,7 +167,7 @@ func handleAbandonedBackgroundTaskRetry(
 		"agent_id", config.AgentID,
 		"background_task_id", abandoned.TaskID,
 		"count", count)
-	if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "ABANDONED BACKGROUND JOB LOOP", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryAbandonedBackgroundLoop, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write abandoned background job alert", "error", alertErr)
 	}
 	if err := blockReleasedTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, released, reason); err != nil {

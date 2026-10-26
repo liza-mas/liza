@@ -316,7 +316,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			}
 
 			// Use richer diagnostics for code-reviewer role
-			if s.role == "code-reviewer" {
+			if s.role == models.RoleCodeReviewer {
 				return false, models.GetReviewerWorkDiagnostics(state, pr)
 			}
 			return false, fmt.Sprintf("No %s-reviewable tasks", s.role)

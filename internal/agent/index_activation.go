@@ -72,7 +72,7 @@ func alertIndexActivationFailure(projectRoot string, err error) {
 	if alertErr := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
 		Timestamp: time.Now().UTC(),
 		Level:     alerts.AlertLevelWarning,
-		Category:  "INDEX HOOKS UNAVAILABLE",
+		Category:  alertCategoryIndexHooksUnavailable,
 		Message:   fmt.Sprintf("project-root indexes will not refresh: %v", err),
 	}); alertErr != nil {
 		logger.Warn("Failed to alert on index hook failure", "error", alertErr)

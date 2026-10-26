@@ -223,7 +223,7 @@ func (lt *supervisorLifetime) crashLoopBlocked(turn *supervisorTurn) bool {
 		"agent_id", config.AgentID,
 		"crash_count", crashCount,
 		"exit_code", turn.exitCode)
-	if alertErr := providersignal.LogAlert(config.ProjectRoot, "🚨", "CRASH RESTART LOOP", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryCrashRestartLoop, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write crash alert", "error", alertErr)
 	}
 	if blockErr := blockReleasedTaskFromSupervisor(lt.bb, config.ProjectRoot, taskID, config.Authority, turn.released, reason); blockErr != nil {

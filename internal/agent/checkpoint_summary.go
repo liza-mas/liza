@@ -247,7 +247,7 @@ func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger stri
 		if alertErr := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
 			Timestamp: time.Now().UTC(),
 			Level:     alerts.AlertLevelWarning,
-			Category:  "CHECKPOINT SUMMARY FAILED",
+			Category:  alertCategoryCheckpointSummaryFailed,
 			Message:   fmt.Sprintf("%s not written (cli %s): %v; run the checkpoint-summary skill manually", checkpointSummaryRelPath(), cliName, err),
 		}); alertErr != nil {
 			logger.Warn("Failed to alert on checkpoint-summary failure", "error", alertErr)

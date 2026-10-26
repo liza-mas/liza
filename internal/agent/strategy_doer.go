@@ -77,7 +77,7 @@ func (s *doerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, confi
 			logMsg := fmt.Sprintf("%s: %d claimable, %d resumable handoffs, %d resumable owned", s.role, claimable, resumableHandoffs, resumableOwned)
 
 			// Use richer diagnostics for coder role
-			if s.role == "coder" {
+			if s.role == models.RoleCoder {
 				logMsg = models.GetCoderWorkDiagnosticsForAgent(state, config.AgentID, pr)
 				if resumableHandoffs > 0 {
 					handoffMsg := fmt.Sprintf("Found %d resumable handoff task(s) for %s", resumableHandoffs, config.AgentID)
