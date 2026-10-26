@@ -30,7 +30,6 @@ Persistent record of issues identified by architectural analysis skills.
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
   - [Merge Execution Authority Split](#merge-execution-authority-split)
   - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
-  - [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic)
   - [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
   - [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
   - [Status Vocabulary Partition Between Go Constants and Declarative Pipeline](#status-vocabulary-partition-between-go-constants-and-declarative-pipeline)
@@ -159,7 +158,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [Operation Vocabulary Spans Five Registers](#operation-vocabulary-spans-five-registers) |
 | **low** | TRAJECTORY | [Spec Corpus Lacks Lifecycle Management](#spec-corpus-lacks-lifecycle-management) |
 | **low** | TRAJECTORY | [Metrics Collection Without Query Interface](#metrics-collection-without-query-interface) — mitigated, open |
-| **low** | TENSION | [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) |
 | **low** | TENSION | [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime) |
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
@@ -171,7 +169,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 30 medium, 16 low — 63 open issues total. *(2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 30 medium, 15 low — 62 open issues total. *(2026-10-26: the A8 boundary checkpoint closed the prompts-to-ops dependency. 2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -249,23 +247,6 @@ Design contradictions that create structural friction.
 **Future options:**
 - Add an alternate completion criterion based on all active (planned + replacement) tasks
 - Separate cadence checkpoint status from true work-closure status
-
-### Prompts Layer Imports Business Logic
-
-**Skill:** software-architecture-review
-**Category:** TENSION
-**Coupled with:** [No Query Layer](#no-query-layer)
-
-**Issue:** `internal/prompts` imports `internal/ops` for pipeline and lifecycle queries used during prompt assembly: `LoadDetectionContext`, `ManyToOneTransitionInfo`, `IsPlanningPair`, `IsTransitionCycleBlocked`, `CountReadyManyToOneCohorts`, and `IsPlanningCompleteEligible`. This creates a `prompts → ops` dependency — the prompt-building layer reaches into the business-logic layer to derive context instead of receiving already-resolved data from its caller.
-
-**Implication:** Prompt assembly is coupled to ops implementation details. Changes to planning eligibility, transition-cycle detection, or cohort readiness can require coordinated changes in both packages, and `prompts` is harder to test in isolation.
-
-**Current mitigation:** These dependencies are read-only queries, so they create no mutation-path risk.
-
-**Future options:**
-- Have the caller (agent) resolve these values and pass them into prompt builder as parameters
-- Extract the query functions to a shared query package that both `ops` and `prompts` can import
-- Accept the coupling and document `prompts → ops` as an intentional read-path shortcut
 
 ### Commands Layer Imports Agent Runtime
 
@@ -1283,6 +1264,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-09-20:** [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) — help alignment and regression coverage (`43dacebcfd2e61d37456f5104690999202388c95`).
 - **2026-10-25:** [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) — concern-file split with an unchanged exported API (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`).
 - **2026-10-25:** [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) — responsibility-cluster split within the S1 limits and an unchanged exported A4 surface (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`).
+- **2026-10-26:** [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) — A8 resolves the orchestrator inputs in the agent runtime and moves the shared integration records to `models`, so `internal/prompts` imports no `internal/ops` (`492ddace740ce3745a1167724dadc99c2f14c272`, `fd9598786e45ec8f9b762097d7e01a95c76f4541`, `bf33dc001055b73acfa5b627c42cf5f9fa2a46b5`).
 - **2026-10-26:** [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) — MAS and pairing init phases split into concern files within the S1 limits (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`).
 - **2026-10-26:** [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) — watch checks, diagnosis, auto-repair policy and alert output split into concern files within the S1 limits (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`).
 - **2026-10-26:** [Duplicate Initialization Implementations](#duplicate-initialization-implementations) — C4 deleted `ops.InitProject`; the CLI init path is the only implementation and runs its Git through `gitenv` (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`).
@@ -1314,6 +1296,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [SetTaskOutput spec_ref Validation Gap](#settaskoutput-spec_ref-validation-gap) | FRAGILITY | 2026-09-20 — CLI help requires `spec_ref`; `TestMutationCommandWiring` pins required and optional fields (`43dacebcfd2e61d37456f5104690999202388c95`) |
 | [Split embedded.go by Artifact Family (1,530 LOC)](#split-embeddedgo-by-artifact-family-1530-loc) | STRUCTURAL DEBT | 2026-10-25 — `embedded.go` split into artifact-family files with the 38 exported declarations unchanged (`20d654f7bdbe151fa3e3674c2f034048e9a01ed1`); A2 boundary record `specs/architecture/consolidation-run/boundary-a2.md` |
 | [Decompose proceed.go (1,500 LOC)](#decompose-proceedgo-1500-loc) | STRUCTURAL DEBT | 2026-10-25 — `proceed.go` split into transition entry plus child, cohort, inherited-dependency, pass and recovery concern files, 638 lines against 2,052 at the starting commit, longest function 53 lines (`1faa264af5075eae64863726949b1568a20c8008`, `5ebceec54b284cf1b1e677d963df48f315bae485`); A4 boundary record `specs/architecture/consolidation-run/boundary-a4.md` |
+| [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic) | TENSION | 2026-10-26 — `git grep -n 'internal/ops' -- internal/prompts ':!*_test.go'` prints nothing and `go list -deps ./internal/prompts` names no `internal/ops`; the A8 allowlist, ratchet and S2 are empty (`TestAreaA8DataIsEmpty`) (`492ddace740ce3745a1167724dadc99c2f14c272`, `fd9598786e45ec8f9b762097d7e01a95c76f4541`, `bf33dc001055b73acfa5b627c42cf5f9fa2a46b5`); A8 boundary record `specs/architecture/consolidation-run/boundary-a8.md` |
 | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) | STRUCTURAL DEBT | 2026-10-26 — `init.go` 516 lines against 1,684 at the starting commit, `InitCommandWithConfig` 60 lines against 471, init and setup concerns in ten files with the longest function 70 lines (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) | STRUCTURAL DEBT | 2026-10-26 — `internal/ops/init_project.go` and its tests deleted, no `InitProject` or `InitProjectParams` reference left in `cmd` or `internal` outside the immutable start snapshot; init Git runs through `gitenv` timed runners in the project root (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) | STRUCTURAL DEBT | 2026-10-26 — `watch.go` 151 lines against 2,084 at the starting commit, `RunAutoRepairAgentPool` 35 lines against 133, watch concerns in eleven files with the longest function 76 lines (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
@@ -1321,6 +1304,14 @@ File sizes in issue titles retain the original assessment values to preserve exi
 ---
 
 ## Fix Details
+
+### Prompts Layer Imports Business Logic
+
+**Resolution:** The caller-resolution option of the entry's Future options was chosen. `492ddace740ce3745a1167724dadc99c2f14c272` (`refactor(models): move the integration progress records and PlanHandoffClass out of ops`) moved the integration-progress records and `PlanHandoffClass` to `internal/models`; `fd9598786e45ec8f9b762097d7e01a95c76f4541` (`refactor(prompts): render the orchestrator from runtime-resolved inputs`) made `internal/agent` resolve the dashboard inputs (`internal/agent/orchestrator_dashboard.go`) and pass them to `internal/prompts` as the `OrchestratorDashboardInput` record, replaced the `ops`-calling template function with resolved matcher text, and removed the last `internal/ops` imports and the A8 allowlist entry; `bf33dc001055b73acfa5b627c42cf5f9fa2a46b5` (`refactor(agent): separate task and reference assembly by concern and empty the A8 guard data`) emptied the A8 guard data. The queries named in the entry (`LoadDetectionContext`, `ManyToOneTransitionInfo`, `IsPlanningPair`, `IsTransitionCycleBlocked`, `CountReadyManyToOneCohorts`, `IsPlanningCompleteEligible`) stay in `ops` and are called from `internal/agent` (`IsPlanningCompleteEligible` through its `ops.PlanHandoffDomain` form, `collectMergedPlanningTasks`); no query package was extracted.
+
+**Evidence:** At integration `73d9f9ac82491471c45b99b835d57921d89903f5`, `git grep -n 'internal/ops' -- internal/prompts ':!*_test.go'` prints nothing and `go list -deps ./internal/prompts` lists no `internal/ops`; `TestAreaA8DataIsEmpty` and the import-direction guard pass with an empty A8 allowlist. The A8 prompt oracle goldens reproduce unchanged and `TestRoleBudget` passes. See [A8 boundary record](consolidation-run/boundary-a8.md#g6--architectural-issues-resolved-by-a8).
+
+**Related:** [No Query Layer](#no-query-layer) stays open: the read paths of `commands` and `agent` are unchanged and no query package exists. [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks) and [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) stay open.
 
 ### Decompose init.go (1,268 LOC)
 
