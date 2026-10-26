@@ -13,8 +13,7 @@ var areaA7 = Area{
 	},
 	Allowlist: []AllowEntry{},
 	Ratchet: []RatchetEntry{
-		{Key: Key{File: "internal/commands/init.go"}, Ceiling: 1684},
-		{Key: Key{File: "internal/commands/init.go", Func: "InitCommandWithConfig"}, Ceiling: 471},
+		{Key: Key{File: "internal/commands/init.go"}, Ceiling: 1233},
 		{Key: Key{File: "internal/commands/init.go", Func: "InitPairingCommand"}, Ceiling: 182},
 		{Key: Key{File: "internal/commands/init.go", Func: "createContractSymlinksForProviders"}, Ceiling: 192},
 		{Key: Key{File: "internal/commands/inspect_tasks.go"}, Ceiling: 1018},

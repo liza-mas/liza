@@ -2,7 +2,6 @@ package commands
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,12 +14,9 @@ import (
 	"github.com/liza-mas/liza/internal/agent"
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/functionalclusters"
-	gitpkg "github.com/liza-mas/liza/internal/gitenv"
-	"github.com/liza-mas/liza/internal/initcheck"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
@@ -963,517 +959,70 @@ func runBashPolicyInit(projectRoot, provider string, stdin io.Reader, autoConfir
 }
 
 // InitCommandWithConfig initializes a workspace with optional pipeline config.
+//
+// It runs the MAS init phases in order: input resolution and validation, project
+// layout, provider, contract and hook installation, configuration and state
+// composition, state write, log, integration branch. Each phase is a step of
+// masInit (init_mas_*.go).
 func InitCommandWithConfig(params InitParams) error {
-	description := params.Description
-	specRef := params.SpecRef
-	rawStdin := params.Stdin
-	configPath := params.ConfigPath
-	entryPoint := params.EntryPoint
-	branch := params.Branch
-	if branch == "" {
-		branch = "integration"
-	}
-	if len(params.ScipSearchPlans) > 0 {
-		return fmt.Errorf("--scip-search-plan is only supported for pairing init without a description")
-	}
-
-	// Validate branch name using git's own ref format rules
-	if err := validateBranchName(branch); err != nil {
-		return fmt.Errorf("invalid branch name %q: %w", branch, err)
-	}
-	agentEnvDeny := initAgentEnvDeny(params.AgentEnvDeny)
-	if err := models.ValidateAgentEnvDeny(agentEnvDeny); err != nil {
-		return fmt.Errorf("invalid agent_env_deny: %w", err)
-	}
-	if rawStdin == nil {
-		rawStdin = os.Stdin
-	}
-	// Single shared buffered reader — avoids multiple bufio.NewReader instances
-	// consuming from the same underlying reader (which causes EOF for later readers).
-	stdin := bufio.NewReader(rawStdin)
-	confirmOptions := embedded.ConfirmOptions{AutoConfirm: params.AutoConfirm}
-	catalog := loadProviderCatalog("")
-	selectedProviders, err := resolveCatalogProviders(catalog, canonicalInitProviderIDs(params.Agents))
+	m, err := newMASInit(params)
 	if err != nil {
 		return err
 	}
-
-	// Validate and load pipeline config early (before creating the project runtime directory).
-	var pipelineCfg *pipeline.PipelineConfig
-	var pipelineData []byte
-	if configPath != "" {
-		absConfigPath, err := filepath.Abs(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to resolve config path: %w", err)
-		}
-		pipelineCfg, err = pipeline.Load(absConfigPath)
-		if err != nil {
-			return fmt.Errorf("invalid pipeline config: %w", err)
-		}
-		pipelineData, err = os.ReadFile(absConfigPath)
-		if err != nil {
-			return fmt.Errorf("failed to read config file: %w", err)
-		}
-	} else {
-		// Auto-freeze embedded pipeline config when --config is not provided
-		pipelineData = embedded.PipelineConfigContent()
-		var err error
-		pipelineCfg, err = pipeline.LoadFromBytes(pipelineData)
-		if err != nil {
-			return fmt.Errorf("invalid embedded pipeline config: %w", err)
-		}
-	}
-
-	// Validate entry-point if provided
-	if entryPoint != "" {
-		if _, ok := pipelineCfg.Pipeline.EntryPoints[entryPoint]; !ok {
-			return fmt.Errorf("entry-point %q not found in pipeline config (available: %s)",
-				entryPoint, entryPointNames(pipelineCfg))
-		}
-	}
-
-	if params.ValidationExecution != "" && params.ValidationExecution != agent.ValidationExecutionLocal {
-		return fmt.Errorf("--validation-execution must be %q, got %q", agent.ValidationExecutionLocal, params.ValidationExecution)
-	}
-
-	// Get project paths
-	lizaPaths, err := paths.LizaPathsFromGit()
-	if err != nil {
-		return fmt.Errorf("failed to setup paths: %w", err)
-	}
-
-	warnLegacyProjectRoot(lizaPaths.ProjectRoot(), lizaPaths.LizaDir())
-
-	// Resolve spec file relative to cwd (where user ran the command), not project root
-	specPath, err := filepath.Abs(specRef)
-	if err != nil {
-		return fmt.Errorf("failed to resolve spec path: %w", err)
-	}
-	if _, err := os.Stat(specPath); os.IsNotExist(err) {
-		return fmt.Errorf("spec file does not exist: %s\nCreate spec document first. See templates/vision-template.md", specRef)
-	}
-	specRepoRel, err := initcheck.EnsureSpecCommittedClean(lizaPaths.ProjectRoot(), specPath)
-	if err != nil {
+	if err := m.loadPipeline(); err != nil {
 		return err
 	}
-	if _, err := initcheck.EnsurePreCommitConfigCommittedClean(lizaPaths.ProjectRoot(), branch); err != nil {
+	if err := m.resolveProject(); err != nil {
 		return err
 	}
-	// The committed config is useless to agents without the tool that runs it:
-	// they would discover the gap only when a hook-driven validation fails.
-	if _, err := initPreCommitLookPath("pre-commit"); err != nil {
-		return fmt.Errorf("pre-commit is not on PATH; agents need it to run the committed .pre-commit-config.yaml. Install it (%s) or add it to PATH, then re-run %s", brand.Command("toolchain", "install", "--include", "pre-commit"), brand.Command("init"))
-	}
-
-	// Validate global config exists (setup must have been run).
-	globalDir, err := paths.GlobalLizaDir()
-	if err != nil {
-		return fmt.Errorf("failed to determine global config path: %w", err)
-	}
-	globalCoreFile := filepath.Join(globalDir, "CORE.md")
-	if _, err := os.Stat(globalCoreFile); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("global config not found at %s\nRun '%s setup' first to install contracts, skills, and support docs", globalDir, brand.BinaryName)
-		}
-		return fmt.Errorf("cannot access global config at %s: %w\nCheck permissions on %s", globalCoreFile, err, globalDir)
-	}
-
-	if _, err := integrationBranchNeedsCreate(branch); err != nil {
-		return fmt.Errorf("failed to create integration branch %q: %w", branch, err)
-	}
-
-	scipSearchConfig, err := scipsearch.ResolveInitConfig(scipsearch.InitOptions{
-		ProjectRoot:       lizaPaths.ProjectRoot(),
-		ExplicitLanguages: params.ScipSearch,
-		EnvValue:          envgate.Value(scipsearch.EnvEnableScipSearch),
-	})
-	if err != nil {
+	if err := m.requireGlobalConfig(); err != nil {
 		return err
 	}
-	for _, diagnostic := range scipSearchConfig.Diagnostics {
-		fmt.Fprintf(os.Stderr, "scip-search: %s\n", diagnostic)
+	if err := m.requireIntegrationBranchCreatable(); err != nil {
+		return err
 	}
-	for _, warning := range scipSearchConfig.Warnings {
-		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+	if err := m.resolveScipSearch(); err != nil {
+		return err
 	}
-
-	if err := confirmMissingPostWorktreeCmd(params, lizaPaths.ProjectRoot(), stdin, rawStdin); err != nil {
+	if err := m.confirmPostWorktreeCmd(); err != nil {
+		return err
+	}
+	if err := m.activateContracts(); err != nil {
 		return err
 	}
 
-	// Activate every explicitly selected contract before deploying init hooks or
-	// creating the runtime workspace. Failure leaves previous metadata intact.
-	var contractProviders []providers.Provider
-	for _, provider := range selectedProviders {
-		if provider.Setup.Contract.RepoFile != "" {
-			contractProviders = append(contractProviders, provider)
-		}
-	}
-	if len(contractProviders) > 0 {
-		if err := activateProviderContracts(lizaPaths.ProjectRoot(), globalCoreFile, contractProviders, catalog, contractSymlinkOptions{
-			ProviderActions: params.ContractActions,
-		}); err != nil {
-			return fmt.Errorf("activate provider contracts: %w", err)
-		}
-	}
-
-	if _, err := CleanupProjectCommand(CleanupParams{
-		ProjectRoot: lizaPaths.ProjectRoot(),
-		Stdin:       stdin,
-		Stderr:      os.Stderr,
-		AutoConfirm: params.AutoConfirm,
-	}); err != nil {
-		if errors.Is(err, ErrProjectCleanupDeclined) {
-			return fmt.Errorf("initialization cancelled by user")
-		}
+	if err := m.cleanPriorProject(); err != nil {
 		return err
 	}
-	runSembleInitPrewarm(lizaPaths.ProjectRoot())
-
-	// Create directory structure
-	if err := os.MkdirAll(lizaPaths.LizaDir(), 0755); err != nil {
-		return fmt.Errorf("failed to create %s directory: %w", paths.ProjectDirName(), err)
+	if err := m.createLayout(); err != nil {
+		return err
 	}
-	// Keep runtime writes out of git status (best effort: a missing exclude only
-	// adds noise and risks accidental staging).
-	if err := worktreeexclude.EnsureRepoExclude(lizaPaths.ProjectRoot(), "/"+paths.ProjectDirName()+"/"); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to exclude %s/ from git status: %v\n", paths.ProjectDirName(), err)
+	if err := m.writeRuntimeFiles(); err != nil {
+		return err
 	}
+	m.installProviderAssets()
 
-	archiveDir := lizaPaths.ArchiveDir()
-	if err := os.Mkdir(archiveDir, 0755); err != nil {
-		return fmt.Errorf("failed to create archive directory: %w", err)
+	m.resolvePostWorktreeCmd()
+	m.warnMissingNodeDependencies()
+	if err := m.resolveValidationTools(); err != nil {
+		return err
 	}
-
-	cleanupInit := func() {
-		os.RemoveAll(lizaPaths.LizaDir())
-	}
-
-	// Write support doc to the project runtime directory (non-fatal).
-	if err := embedded.WriteSupportDoc(lizaPaths.LizaDir()); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write SUPPORT.md: %v\n", err)
-	}
-
-	// Freeze pipeline config into the project runtime directory.
-	frozenPath := filepath.Join(lizaPaths.LizaDir(), "pipeline.yaml")
-	if err := os.WriteFile(frozenPath, pipelineData, 0644); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to freeze pipeline config: %w", err)
-	}
-
-	if err := os.WriteFile(lizaPaths.ModelsPath(), initModelsFile(params), 0644); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to write %s: %w", paths.ModelsFileName, err)
-	}
-
-	// Write/merge Claude Code settings and deploy hooks to .claude/
-	// This is non-fatal - if it fails, just warn
-	// Note: This may prompt user for input if settings file exists
-	if err := embedded.WriteClaudeSettingsWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
-	}
-
-	hasCursor := providerHas(selectedProviders, providerNeedsCursorHooks)
-	hasCodex := providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool {
-		return a.CodexConfig || a.CodexHooks
-	})
-	if hasCodex {
-		if err := embedded.WriteCodexProjectPermissionsWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
-		}
-		if err := embedded.WriteCodexProjectHooksWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write codex hooks: %v\n", err)
-		}
-	}
-
-	bashPolicyProviderNames := bashPolicyProviders(true, hasCodex, hasCursor)
-	if lizaPaths.ProjectRoot() != "" && len(bashPolicyProviderNames) > 0 && bashpolicycli.RuntimeEnabled() {
-		if err := embedded.WriteBashPolicyConfigWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write .bash-policy.yaml: %v\n", err)
-		}
-	}
-
-	bashPolicyStdin := bashPolicySubprocessStdin(rawStdin, stdin)
-	runBashPolicyInits(lizaPaths.ProjectRoot(), bashPolicyProviderNames, bashPolicyStdin, params.AutoConfirm)
-
-	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.OpenCodeExecTool }) {
-		if err := embedded.WriteOpenCodeExecTool(lizaPaths.ProjectRoot()); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
-		}
-	}
-
-	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.CopilotHooks }) {
-		if err := embedded.WriteCopilotProjectHooksWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write copilot hooks: %v\n", err)
-		}
-	}
-
-	if providerHasAsset(selectedProviders, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
-		if err := embedded.WritePiInitGate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
-		}
-	}
-
-	// Remove stale liza MCP server entry from .mcp.json (written by older Liza versions)
-	if err := embedded.CleanStaleMCPEntry(lizaPaths.ProjectRoot()); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to clean stale .mcp.json entry: %v\n", err)
-	}
-
-	// Write GUARDRAILS.md template to project root (non-fatal, like claude-settings)
-	if err := embedded.WriteGuardrails(lizaPaths.ProjectRoot()); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write GUARDRAILS.md: %v\n", err)
-	}
-
-	// Write .claudeignore template (non-fatal, prompts if exists)
-	if err := embedded.WriteClaudeIgnoreWithOptions(lizaPaths.ProjectRoot(), stdin, confirmOptions); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to write .claudeignore: %v\n", err)
-	}
-
-	// Auto-suggest post_worktree_cmd if not explicitly set and stdin is a terminal
-	postWorktreeCmd := params.PostWorktreeCmd
-	if postWorktreeCmd == "" && (params.ForceInteractive || params.AutoConfirm || isInteractive(rawStdin)) {
-		root := lizaPaths.ProjectRoot()
-		if suggested := detectPostWorktreeCmd(root); suggested != "" {
-			fmt.Fprintf(os.Stderr, "Detected %s — set post_worktree_cmd to %q?\n", detectPkgManagerContext(root), suggested)
-			fmt.Fprintf(os.Stderr, "This runs after every worktree creation so agents have dependencies. (y/n): ")
-			if params.AutoConfirm {
-				fmt.Fprintln(os.Stderr, "yes")
-				postWorktreeCmd = suggested
-			} else {
-				response, err := termutil.ReadSingleKey(stdin)
-				if err == nil && response == "y" {
-					postWorktreeCmd = suggested
-				}
-			}
-		} else if subdirs := detectNodeSubdirs(root); len(subdirs) > 1 {
-			fmt.Fprintf(os.Stderr, "Detected Node projects in: %s. Configure --post-worktree-cmd manually.\n", strings.Join(subdirs, ", "))
-		}
-	}
-
-	// Warn if Node.js project lacks installed dependencies.
-	// post_worktree_cmd runs npm/yarn/pnpm install in worktrees, but it can
-	// fail silently if the main repo's deps aren't installed (no cache, missing
-	// native modules, etc.). Catching it here prevents agents from discovering
-	// the problem 17 turns into a review session.
-	root := lizaPaths.ProjectRoot()
-	if _, err := os.Stat(filepath.Join(root, "package.json")); err == nil {
-		if _, err := os.Stat(filepath.Join(root, "node_modules")); os.IsNotExist(err) {
-			installCmd := detectInstallCmdInDir(root)
-			fmt.Fprintf(os.Stderr, "⚠️  package.json found but node_modules/ is missing. Run %q before starting agents.\n", installCmd)
-		}
-	}
-	for _, dir := range detectNodeSubdirs(root) {
-		dirPath := filepath.Join(root, dir)
-		if _, err := os.Stat(filepath.Join(dirPath, "node_modules")); os.IsNotExist(err) {
-			installCmd := detectInstallCmdInDir(dirPath)
-			fmt.Fprintf(os.Stderr, "⚠️  %s/package.json found but %s/node_modules/ is missing. Run %q in %s/ before starting agents.\n", dir, dir, installCmd, dir)
-		}
-	}
-
-	validationTools, err := resolveValidationExecutionTools(params, lizaPaths.ProjectRoot(), pipelineCfg, stdin, rawStdin)
-	if err != nil {
-		cleanupInit()
+	if err := m.activateIndexing(); err != nil {
 		return err
 	}
 
-	// No agent refreshes project-root indexes: the lifecycle hooks do. Install
-	// them after the last prompt, so a cancelled init leaves Git hooks alone,
-	// and before writing state, so an unmanaged hook collision fails init
-	// rather than leaving a project whose indexes silently never refresh.
-	if err := activateProjectRootIndexing(pairingindex.MASActivationOptions(root, scipSearchConfig.LanguageNames())); err != nil {
-		return err
-	}
-
-	// Generate IDs and timestamps
 	timestamp := time.Now().UTC()
-	goalID := fmt.Sprintf("goal-%d", timestamp.Unix())
-
-	// Pipeline version (always v3 — pipeline is mandatory)
-	pipelineVersion := 3
-
-	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles)
-
-	// Create initial state
-	state := &models.State{
-		Version:         1,
-		PipelineVersion: pipelineVersion,
-		Goal: models.Goal{
-			ID:          goalID,
-			Description: description,
-			SpecRef:     specRepoRel,
-			EntryPoint:  entryPoint,
-			Created:     timestamp,
-			Status:      models.GoalStatusInProgress,
-			AlignmentHistory: []models.AlignmentHistory{
-				{
-					Timestamp: timestamp,
-					Event:     string(models.TaskEventInitialization),
-					Summary:   "Initial goal. No tasks defined yet.",
-				},
-			},
-		},
-		Tasks:       []models.Task{},
-		Agents:      make(map[string]models.Agent),
-		Discovered:  []models.Discovery{},
-		HumanNotes:  []models.HumanNote{},
-		SpecChanges: []models.SpecChange{},
-		Anomalies:   []models.Anomaly{},
-		Sprint: models.Sprint{
-			ID:      "sprint-1",
-			Number:  1,
-			GoalRef: goalID,
-			Scope: models.SprintScope{
-				Planned: []string{},
-				Stretch: []string{},
-			},
-			Timeline: models.SprintTimeline{
-				Started:      timestamp,
-				Deadline:     time.Time{}, // zero value for null
-				CheckpointAt: nil,
-				Ended:        nil,
-			},
-			Status: models.SprintStatusInProgress,
-			Metrics: models.SprintMetrics{
-				TasksDone:         0,
-				TasksInProgress:   0,
-				TasksBlocked:      0,
-				IterationsTotal:   0,
-				ReviewCyclesTotal: 0,
-			},
-			Retrospective: nil,
-		},
-		CircuitBreaker: models.CircuitBreaker{
-			LastCheck:      time.Time{}, // zero value for null
-			Status:         "OK",
-			CurrentTrigger: nil,
-			History:        []models.CircuitBreakerHistory{},
-		},
-		Config: models.Config{
-			TerminalTaskArchival:            true,
-			MaxCoderIterations:              10,
-			MaxReviewCycles:                 5,
-			MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),
-			MaxInstances:                    models.EffectiveMaxInstances(0, params.MaxInstances),
-			HeartbeatInterval:               60,
-			LeaseDuration:                   1800,
-			CoderPollInterval:               30,
-			DoerMaxWait:                     600,
-			OrchestratorPollInterval:        60,
-			OrchestratorMaxWait:             18000,
-			ReviewerPollInterval:            30,
-			ReviewerMaxWait:                 600,
-			AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
-			DefaultCLI:                      params.DefaultCLI,
-			ScipSearch:                      scipSearchConfig.LanguageNames(),
-			IntegrationBranch:               branch,
-			EscalationWebhook:               nil,
-			Mode:                            models.SystemModeRunning,
-			AutoResume:                      params.AutoResume,
-			NoFollowUp:                      params.NoFollowUp,
-			PostWorktreeCmd:                 stringPtrOrNil(postWorktreeCmd),
-			CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
-			AgentEnvDeny:                    agentEnvDeny,
-			AgentTools:                      validationTools,
-		},
-	}
-
-	// Write state file
-	bb := db.For(lizaPaths.StatePath())
-	if err := bb.Write(state); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to write state file: %w", err)
-	}
-
-	// Create log file
-	// Note: Using simple file write for log since it's not managed by blackboard
-	logPath := lizaPaths.LogPath()
-	logContent := fmt.Sprintf(`- timestamp: %s
-  agent: system
-  action: initialized
-  detail: %s
-`, timestamp.Format(time.RFC3339), description)
-
-	if err := os.WriteFile(logPath, []byte(logContent), 0644); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to write log file: %w", err)
-	}
-
-	// Create supporting files
-	alertsPath := lizaPaths.AlertsLogPath()
-	if err := os.WriteFile(alertsPath, []byte{}, 0644); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to create alerts.log: %w", err)
-	}
-
-	// Create lock file
-	if err := os.WriteFile(lizaPaths.LockPath(), []byte{}, 0644); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to create lock file: %w", err)
-	}
-
-	// Create integration branch if it doesn't exist
-	if err := createIntegrationBranch(branch); err != nil {
-		cleanupInit()
-		return fmt.Errorf("failed to create integration branch %q: %w", branch, err)
-	}
-
-	fmt.Printf("%s initialized at %s\n", brand.NameTitle, lizaPaths.LizaDir())
-	fmt.Printf("Integration branch: %s\n", branch)
-
-	hasNonClaude := false
-	for _, a := range params.Agents {
-		if a != "claude" {
-			hasNonClaude = true
-			break
-		}
-	}
-	if hasNonClaude {
-		fmt.Println("Some agents require manual configuration.")
-		fmt.Printf("See: https://github.com/%s/blob/main/GETTING_STARTED.md\n", brand.Repo)
-	}
-
-	return nil
-}
-
-// validateBranchName checks that name is a valid git branch name.
-func validateBranchName(name string) error {
-	cmd := gitpkg.Command("check-ref-format", "--branch", name)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("not a valid git branch name: %s", strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func createIntegrationBranch(name string) error {
-	needsCreate, err := integrationBranchNeedsCreate(name)
-	if err != nil {
+	if err := m.writeState(m.composeState(timestamp)); err != nil {
 		return err
 	}
-	if !needsCreate {
-		return nil
+	if err := m.writeLog(timestamp); err != nil {
+		return err
 	}
-
-	cmd := gitpkg.Command("branch", name, "HEAD")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git branch failed: %w: %s", err, string(output))
+	if err := m.ensureIntegrationBranch(); err != nil {
+		return err
 	}
-
+	m.reportInitialized()
 	return nil
-}
-
-func integrationBranchNeedsCreate(name string) (bool, error) {
-	cmd := gitpkg.Command("rev-parse", "--verify", name)
-	if err := cmd.Run(); err == nil {
-		return false, nil
-	}
-
-	cmd = gitpkg.Command("rev-parse", "--verify", "HEAD")
-	if err := cmd.Run(); err != nil {
-		return false, fmt.Errorf("repo has no commits (HEAD is unborn)")
-	}
-
-	return true, nil
 }
 
 // stringPtrOrNil returns a pointer to s if non-empty, otherwise nil.

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-init-split",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard: the InitCommandWithConfig function key is absent from area_a7_test.go, so the guard measures the orchestrating InitCommandWithConfig and the new init_mas_*.go and init_integration_branch.go files against the 100-line and 800-line thresholds",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-sites",
+      "approved_reference_id": "a7-sites"
+    },
+    {
+      "obligation_id": "AC-k1",
+      "approved_reference_id": "k1-ruling"
+    },
+    {
+      "obligation_id": "AC-k7",
+      "file": "internal/commands/init_mas_test.go",
+      "assertion": "TestMASInitDefaultsKeepFormerValues and TestMASInitStateKeepsFormerValues assert the default branch, file modes, state and pipeline versions, sprint identity, circuit-breaker status, alignment summary and every initial config value against their former literals",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-callers",
+      "approved_reference_id": "moves"
+    },
+    {
+      "obligation_id": "AC-frozen",
+      "file": "internal/oracle/a7/install/init_test.go",
+      "assertion": "TestOracleInitWorkspace and TestOracleProviderActivation run live against unchanged goldens (make test, index 0), and the regen check at index 4 reproduces every A7 golden from the starting tree",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-layout",
+      "approved_reference_id": "a7-components"
+    },
+    {
+      "obligation_id": "AC-whitebox",
+      "approved_reference_id": "goal-tests"
+    },
+    {
+      "obligation_id": "AC-ratchet",
+      "file": "internal/testguard/archguard/area_a7_test.go",
+      "assertion": "TestS1SizeGuard fails on a stale ratchet entry; the InitCommandWithConfig key is removed in this commit, the init.go file ceiling is lowered to its measured length and every other key is unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-docs",
+      "approved_reference_id": "goal-docs"
+    },
+    {
+      "obligation_id": "AC-sequence",
+      "approved_reference_id": "a7-proof"
+    },
+    {
+      "obligation_id": "AC-proof",
+      "file": "Makefile",
+      "assertion": "The test target (go test ./...) runs the commands, archguard and A7 oracle suites at index 0; lint at index 1, test-e2e at index 2, the commands and cmd/liza race run at index 3 and the regen check at index 4 are mandatory with it",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-environment",
+      "approved_reference_id": "goal-proof"
+    },
+    {
+      "obligation_id": "AC-branding",
+      "approved_reference_id": "guards"
+    }
+  ]
+}
