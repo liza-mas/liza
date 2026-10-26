@@ -57,7 +57,7 @@ func isDeadPathPlanSibling(status models.TaskStatus) bool {
 func siblingTaskSummary(task *models.Task) prompts.SiblingTaskSummary {
 	return prompts.SiblingTaskSummary{
 		ID:          task.ID,
-		Description: prompts.TruncateText(task.Description, 96),
+		Description: prompts.TruncateText(task.Description, taskGraphDescriptionLimit),
 		Status:      string(task.Status),
 		PlanRef:     task.PlanRef,
 		RolePair:    task.RolePair,
@@ -94,6 +94,34 @@ const (
 	maxTaskGraphChildDeps        = 3
 	maxTaskGraphEntries          = 16
 	maxTaskGraphOmittedSampleIDs = 8
+
+	// Truncation limits, in runes, of the task text a digest entry shows.
+	taskGraphDescriptionLimit   = 96
+	taskGraphBlockedReasonLimit = 120
+)
+
+// taskGraphRelation names why a task is in the digest. It is rendered as text
+// and converted to string where an entry stores it.
+type taskGraphRelation string
+
+const (
+	relationDependency       taskGraphRelation = "dependency"
+	relationBlocked          taskGraphRelation = "blocked"
+	relationSibling          taskGraphRelation = "sibling"
+	relationFileOverlap      taskGraphRelation = "file-overlap"
+	relationArtifactProducer taskGraphRelation = "artifact-producer"
+	relationArtifactRef      taskGraphRelation = "artifact-ref"
+)
+
+// Digest ordering weights: the higher a weight, the earlier the entry stays
+// when the digest is bounded.
+const (
+	taskGraphWeightDependency   = 100
+	taskGraphWeightBlocked      = 90
+	taskGraphWeightFileOverlap  = 80
+	taskGraphWeightSibling      = 50
+	taskGraphWeightDefault      = 30
+	taskGraphWeightArtifactOnly = 10
 )
 
 func buildRelevantTaskGraph(state *models.State, current *models.Task) prompts.TaskGraphDigest {
@@ -102,7 +130,7 @@ func buildRelevantTaskGraph(state *models.State, current *models.Task) prompts.T
 	entries := make(map[string]*prompts.TaskGraphEntry)
 	var ordered []*prompts.TaskGraphEntry
 
-	addTask := func(task *models.Task, relation string, sharedRefs []string) {
+	addTask := func(task *models.Task, relation taskGraphRelation, sharedRefs []string) {
 		if task == nil {
 			return
 		}
@@ -113,7 +141,7 @@ func buildRelevantTaskGraph(state *models.State, current *models.Task) prompts.T
 			entries[task.ID] = entry
 			ordered = append(ordered, entry)
 		}
-		entry.Relations = appendUniqueString(entry.Relations, relation)
+		entry.Relations = appendUniqueString(entry.Relations, string(relation))
 		entry.SharedRefs = appendUniqueStrings(entry.SharedRefs, sharedRefs...)
 	}
 
@@ -124,16 +152,16 @@ func buildRelevantTaskGraph(state *models.State, current *models.Task) prompts.T
 			continue
 		}
 		dependencies = append(dependencies, dep)
-		addTask(dep, "dependency", nil)
+		addTask(dep, relationDependency, nil)
 		if dep.Status == models.TaskStatusBlocked {
-			addTask(dep, "blocked", nil)
+			addTask(dep, relationBlocked, nil)
 		}
 	}
 
 	siblings := plannedSiblings(state, current.ID)
 	for _, sibling := range siblings {
 		if sibling.Status == models.TaskStatusBlocked {
-			addTask(sibling, "blocked", nil)
+			addTask(sibling, relationBlocked, nil)
 		}
 	}
 
@@ -143,38 +171,38 @@ func buildRelevantTaskGraph(state *models.State, current *models.Task) prompts.T
 		}
 		sharedRefs := intersectRefs(currentRefs, taskScopeRefs(sibling))
 		if len(sharedRefs) > 0 {
-			addTask(sibling, "sibling", nil)
-			addTask(sibling, "file-overlap", sharedRefs)
+			addTask(sibling, relationSibling, nil)
+			addTask(sibling, relationFileOverlap, sharedRefs)
 		}
 	}
 
 	for _, dep := range dependencies {
 		if taskHasProducedOutputRefs(dep) {
-			addTask(dep, "artifact-producer", nil)
+			addTask(dep, relationArtifactProducer, nil)
 		}
 		if !isCompletedForDigest(state, dep) {
 			continue
 		}
 		if taskHasTaskArtifactRefs(dep) {
-			addTask(dep, "artifact-ref", nil)
+			addTask(dep, relationArtifactRef, nil)
 		}
 	}
 
 	for _, sibling := range siblings {
 		if taskHasProducedOutputRefs(sibling) {
-			addTask(sibling, "artifact-producer", nil)
+			addTask(sibling, relationArtifactProducer, nil)
 		}
 		if !isCompletedForDigest(state, sibling) {
 			continue
 		}
 		if taskHasTaskArtifactRefs(sibling) {
-			addTask(sibling, "artifact-ref", nil)
+			addTask(sibling, relationArtifactRef, nil)
 		}
 	}
 
 	for _, sibling := range siblings {
 		if !isDeadPathPlanSibling(sibling.Status) {
-			addTask(sibling, "sibling", nil)
+			addTask(sibling, relationSibling, nil)
 		}
 	}
 
@@ -221,40 +249,40 @@ func taskGraphPriority(entry *prompts.TaskGraphEntry) int {
 	if entry == nil {
 		return 0
 	}
-	if hasTaskGraphRelation(entry, "dependency") {
-		return 100
+	if hasTaskGraphRelation(entry, relationDependency) {
+		return taskGraphWeightDependency
 	}
-	if hasTaskGraphRelation(entry, "blocked") || entry.BlockedReason != "" || entry.RepairOperation != "" {
-		return 90
+	if hasTaskGraphRelation(entry, relationBlocked) || entry.BlockedReason != "" || entry.RepairOperation != "" {
+		return taskGraphWeightBlocked
 	}
-	if hasTaskGraphRelation(entry, "file-overlap") {
-		return 80
+	if hasTaskGraphRelation(entry, relationFileOverlap) {
+		return taskGraphWeightFileOverlap
 	}
 	if isArtifactOnlyTaskGraphEntry(entry) {
-		return 10
+		return taskGraphWeightArtifactOnly
 	}
-	if hasTaskGraphRelation(entry, "sibling") {
-		return 50
+	if hasTaskGraphRelation(entry, relationSibling) {
+		return taskGraphWeightSibling
 	}
-	return 30
+	return taskGraphWeightDefault
 }
 
 func isArtifactOnlyTaskGraphEntry(entry *prompts.TaskGraphEntry) bool {
 	if entry == nil {
 		return false
 	}
-	if hasTaskGraphRelation(entry, "dependency") ||
-		hasTaskGraphRelation(entry, "blocked") ||
-		hasTaskGraphRelation(entry, "file-overlap") ||
+	if hasTaskGraphRelation(entry, relationDependency) ||
+		hasTaskGraphRelation(entry, relationBlocked) ||
+		hasTaskGraphRelation(entry, relationFileOverlap) ||
 		entry.BlockedReason != "" ||
 		entry.RepairOperation != "" {
 		return false
 	}
-	return hasTaskGraphRelation(entry, "artifact-producer") || hasTaskGraphRelation(entry, "artifact-ref")
+	return hasTaskGraphRelation(entry, relationArtifactProducer) || hasTaskGraphRelation(entry, relationArtifactRef)
 }
 
-func hasTaskGraphRelation(entry *prompts.TaskGraphEntry, relation string) bool {
-	return slices.Contains(entry.Relations, relation)
+func hasTaskGraphRelation(entry *prompts.TaskGraphEntry, relation taskGraphRelation) bool {
+	return slices.Contains(entry.Relations, string(relation))
 }
 
 func summarizeOmittedTaskGraphEntries(entries []prompts.TaskGraphEntry) prompts.TaskGraphOmittedSummary {
@@ -351,11 +379,11 @@ func plannedSiblings(state *models.State, currentTaskID string) []*models.Task {
 func taskGraphEntry(task *models.Task) prompts.TaskGraphEntry {
 	entry := prompts.TaskGraphEntry{
 		ID:          task.ID,
-		Description: prompts.TruncateText(task.Description, 96),
+		Description: prompts.TruncateText(task.Description, taskGraphDescriptionLimit),
 		Status:      string(task.Status),
 	}
 	if task.BlockedReason != nil {
-		entry.BlockedReason = prompts.TruncateText(*task.BlockedReason, 120)
+		entry.BlockedReason = prompts.TruncateText(*task.BlockedReason, taskGraphBlockedReasonLimit)
 	}
 	if task.RepairRequest != nil {
 		entry.RepairOperation = task.RepairRequest.Operation

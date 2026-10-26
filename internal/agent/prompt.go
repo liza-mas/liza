@@ -155,7 +155,7 @@ func buildOrchestratorRoleContextDataForWake(state *models.State, config Supervi
 	return &prompts.RoleContextData{
 		Role:               config.Role,
 		AgentID:            config.AgentID,
-		RoleType:           "orchestrator",
+		RoleType:           string(roles.RoleTypeOrchestrator),
 		DashboardOutput:    dashboard,
 		WakeInstruction:    wakeInstruction,
 		ScipIndexes:        availableIndexes,
@@ -261,7 +261,7 @@ func consumersValidateLocally(rolePair string, config models.Config, projectRoot
 // the role budget can render the same variants the compositor does.
 func TaskContextSections(base []string, task *models.Task, data *prompts.RoleContextData, resolver *pipeline.Resolver) ([]string, error) {
 	sections := append([]string(nil), base...)
-	if task.RolePair == "" || (data.RoleType != "doer" && data.RoleType != "reviewer") {
+	if task.RolePair == "" || (data.RoleType != string(roles.RoleTypeDoer) && data.RoleType != string(roles.RoleTypeReviewer)) {
 		return sections, nil
 	}
 
@@ -280,7 +280,7 @@ func TaskContextSections(base []string, task *models.Task, data *prompts.RoleCon
 
 	data.DecompositionRoot = true
 	data.MasterOutputRefField = refField
-	if data.RoleType == "doer" {
+	if data.RoleType == string(roles.RoleTypeDoer) {
 		if data.Role == models.RoleCodePlanner {
 			sections = slices.DeleteFunc(sections, func(section string) bool {
 				return section == "task-decomposition" || section == "implementation-phase"

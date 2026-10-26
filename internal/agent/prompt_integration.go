@@ -12,6 +12,10 @@ import (
 	"github.com/liza-mas/liza/internal/prompts"
 )
 
+// integrationDescriptionLimit truncates, in runes, a task description shown in
+// the integration context.
+const integrationDescriptionLimit = 200
+
 func populateIntegrationContext(task *models.Task, state *models.State, resolver *pipeline.Resolver, projectRoot string, data *prompts.RoleContextData) error {
 	metadata := task.IntegrationAnalysis
 	if metadata == nil {
@@ -106,7 +110,7 @@ func populateSliceIntegrationContext(task *models.Task, state *models.State, res
 		sort.Strings(dependsOn)
 		data.IntegrationDescendants = append(data.IntegrationDescendants, prompts.IntegrationDescendantSummary{
 			ID:            descendant.ID,
-			Description:   prompts.TruncateText(descendant.Description, 200),
+			Description:   prompts.TruncateText(descendant.Description, integrationDescriptionLimit),
 			DoneWhen:      descendant.DoneWhen,
 			SpecRef:       descendant.SpecRef,
 			Commit:        change.Commit,
@@ -240,7 +244,7 @@ func integrationTaskChangeSummaries(changes []ops.GlobalIntegrationTaskChange) [
 	for _, change := range changes {
 		summaries = append(summaries, prompts.IntegrationTaskChangeSummary{
 			ID:           change.TaskID,
-			Description:  prompts.TruncateText(change.Description, 200),
+			Description:  prompts.TruncateText(change.Description, integrationDescriptionLimit),
 			BaseCommit:   change.BaseCommit,
 			ReviewCommit: change.ReviewCommit,
 			PathCount:    len(change.Paths),
@@ -333,7 +337,7 @@ func collectCompletedTasks(state *models.State) []prompts.CompletedTaskSummary {
 		if t.Status == models.TaskStatusMerged {
 			tasks = append(tasks, prompts.CompletedTaskSummary{
 				ID:          t.ID,
-				Description: prompts.TruncateText(t.Description, 200),
+				Description: prompts.TruncateText(t.Description, integrationDescriptionLimit),
 				DoneWhen:    t.DoneWhen,
 				SpecRef:     t.SpecRef,
 			})

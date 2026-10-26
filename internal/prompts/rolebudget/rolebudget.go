@@ -26,6 +26,7 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/prompts/promptbench"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // Report is the committed baseline artifact.
@@ -62,14 +63,14 @@ func Measure(repoRoot string) (Report, error) {
 	resolver := pipeline.NewResolver(config)
 	shape := promptbench.CalibratedShape()
 
-	roles := make([]string, 0, len(config.Pipeline.Roles))
+	roleNames := make([]string, 0, len(config.Pipeline.Roles))
 	for name := range config.Pipeline.Roles {
-		roles = append(roles, name)
+		roleNames = append(roleNames, name)
 	}
-	sort.Strings(roles)
+	sort.Strings(roleNames)
 
 	var report Report
-	for _, role := range roles {
+	for _, role := range roleNames {
 		roleType, err := resolver.RoleType(role)
 		if err != nil {
 			return Report{}, err
@@ -86,7 +87,7 @@ func Measure(repoRoot string) (Report, error) {
 		if err != nil {
 			return Report{}, fmt.Errorf("base prompt for %s: %w", role, err)
 		}
-		if roleType == "orchestrator" {
+		if roleType == roles.RoleTypeOrchestrator {
 			// The orchestrator's instructions live in its wake templates,
 			// selected by trigger; each is a variant. The dashboard is run
 			// data and is not rendered here.
@@ -291,6 +292,9 @@ func Compare(baseline, current Report) []Delta {
 	return deltas
 }
 
+// percent scales a growth ratio to the percentage the table prints.
+const percent = 100
+
 func growth(before, after int) float64 {
 	if before == 0 {
 		return 0
@@ -317,8 +321,8 @@ func Table(deltas []Delta) string {
 			flag = "  OVER"
 		}
 		fmt.Fprintf(&b, "%-44s %10d %10d %+7.1f%%   %10d %10d %+7.1f%%%s\n",
-			d.Variant, d.RenderedBefore, d.RenderedAfter, 100*d.RenderedGrowth,
-			d.MandatoryBefore, d.MandatoryAfter, 100*d.MandatoryGrowth, flag)
+			d.Variant, d.RenderedBefore, d.RenderedAfter, percent*d.RenderedGrowth,
+			d.MandatoryBefore, d.MandatoryAfter, percent*d.MandatoryGrowth, flag)
 	}
 	return b.String()
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
+	"github.com/liza-mas/liza/internal/scipsearch"
 )
 
 // BasePromptConfig contains configuration for building the base prompt
@@ -155,22 +157,31 @@ func buildScipSearchPromptIndexes(indexes []ScipSearchIndex) []scipSearchPromptI
 	return promptIndexes
 }
 
+// Display order of the SCIP indexes a prompt lists: the supported languages in
+// this order, then any other.
+const (
+	scipRankGo = iota
+	scipRankTypeScript
+	scipRankPython
+	scipRankOther
+)
+
 func scipSearchLanguageOrder(language string) int {
-	switch strings.ToLower(language) {
-	case "go":
-		return 0
-	case "typescript":
-		return 1
-	case "python":
-		return 2
+	switch scipsearch.Language(strings.ToLower(language)) {
+	case scipsearch.LanguageGo:
+		return scipRankGo
+	case scipsearch.LanguageTypeScript:
+		return scipRankTypeScript
+	case scipsearch.LanguagePython:
+		return scipRankPython
 	default:
-		return 3
+		return scipRankOther
 	}
 }
 
 func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
-	switch strings.ToLower(index.Language) {
-	case "go":
+	switch scipsearch.Language(strings.ToLower(index.Language)) {
+	case scipsearch.LanguageGo:
 		return scipSearchPromptIndex{
 			DisplayLanguage:           "Go",
 			IndexPath:                 index.IndexPath,
@@ -179,7 +190,7 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 			ImplementationGuidance:    "Use implementations, graph, callers, callees, and impact for static SCIP-derived hints, then verify in files.",
 			ShowImplementationCommand: true,
 		}
-	case "typescript":
+	case scipsearch.LanguageTypeScript:
 		return scipSearchPromptIndex{
 			DisplayLanguage:           "TypeScript",
 			IndexPath:                 index.IndexPath,
@@ -188,7 +199,7 @@ func scipSearchPromptIndexFor(index ScipSearchIndex) scipSearchPromptIndex {
 			ImplementationGuidance:    "Use implementations, graph, callers, callees, and impact for static SCIP-derived hints, then verify in files.",
 			ShowImplementationCommand: true,
 		}
-	case "python":
+	case scipsearch.LanguagePython:
 		return scipSearchPromptIndex{
 			DisplayLanguage:        "Python",
 			IndexPath:              index.IndexPath,
@@ -367,7 +378,7 @@ func hasIntegrationTaskInSprint(state *models.State) bool {
 // control ({{- -}} trimming), which is fragile and linter-hostile. Each non-empty
 // block is TrimSpace'd and joined with a blank-line separator.
 func BuildRoleContext(role string, sectionNames []string, data *RoleContextData) (string, error) {
-	if data != nil && data.CorrectiveContext != nil && (data.RoleType == "doer" || data.RoleType == "reviewer") {
+	if data != nil && data.CorrectiveContext != nil && (data.RoleType == string(roles.RoleTypeDoer) || data.RoleType == string(roles.RoleTypeReviewer)) {
 		// Recovery evidence must reach custom task roles even when their section
 		// configuration omits it. Mandatory reads still render first below.
 		sectionNames = append([]string{"task-corrective-context"}, sectionNames...)
@@ -389,7 +400,7 @@ func BuildRoleContext(role string, sectionNames []string, data *RoleContextData)
 		data = &copy
 		sectionNames = append([]string{"mandatory-docs"}, sectionNames...)
 	}
-	missingReviewBoundary := data != nil && data.RoleType == "reviewer" && data.ReviewCommit == ""
+	missingReviewBoundary := data != nil && data.RoleType == string(roles.RoleTypeReviewer) && data.ReviewCommit == ""
 	if missingReviewBoundary {
 		// Keep the absent boundary explicit without changing the caller's task data.
 		copy := *data

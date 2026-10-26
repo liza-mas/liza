@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/referencecontract"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 type referenceContextRepository = referencecontract.ReviewRepository
@@ -87,7 +88,7 @@ func buildReferenceContextWithRepository(repo referenceContextRepository, task *
 		return "", nil, err
 	}
 	observations = append(observations, parents...)
-	if roleType == "reviewer" {
+	if roleType == string(roles.RoleTypeReviewer) {
 		reviewed, err := collectReviewCarriers(repo, head, task, config, proofs)
 		if err != nil {
 			return "", nil, err
@@ -271,7 +272,7 @@ func selectAssignedPresentation(observations []referencecontract.Carrier, assign
 			}
 		}
 	}
-	if roleType != "doer" || (role != models.RoleArchitect && role != models.RoleCodePlanner) {
+	if roleType != string(roles.RoleTypeDoer) || (role != models.RoleArchitect && role != models.RoleCodePlanner) {
 		return ""
 	}
 	ids, present, err := referencecontract.SectionReferenceIDs(winner.Span, assignedHeading)
