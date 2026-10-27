@@ -77,6 +77,7 @@ M9 and M16 first failed to build (unused variable) and were redone with compilin
 | Test or fixture | Old | New |
 |---|---|---|
 | `analysis/patterns_test.go` case "alias-only provider registration" (agent and health `codex-acp`, anomalies `codex`) | CHECKPOINT, health unknown | removed from the raw table; `TestC2ProviderAuditHealthMembershipSpansTheKeyGroup` asserts HALT with canonical keys and the unknown CHECKPOINT with a nil key func |
+| `cmd/liza/cmd_system_test.go` `TestAnalyzeProviderAuditLifecycle` subtest "canonical evidence with raw alias identity checkpoints" (agents and health `codex-acp`, anomalies `codex`); found by `make test` at submission | CHECKPOINT, "no currently registered agent has an exact provider match" | now HALT by the same canonical rule, as `exact degraded provider epochs halt` already asserts; the subtest keeps its checkpoint-persistence coverage by recording the health under tool `codex` (another tool's record never validates the epoch), asserting CHECKPOINT with "does not match its provider, PID, and registration-time epoch"; retitled |
 | A5 oracle `RC4` (`codex` doer, `codex-acp` claimer, `claude` reviewer, preferred) | claims (`claim` adapter, claimed state) | refused (`no-claim` adapter, unclaimed state) |
 
 "Mismatched health provider" (`patterns_test.go`) and `ops/analyze_test.go` "exact provider identity change before

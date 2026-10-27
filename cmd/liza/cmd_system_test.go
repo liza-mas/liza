@@ -543,7 +543,10 @@ func TestAnalyzeProviderAuditLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("canonical evidence with raw alias identity checkpoints", func(t *testing.T) {
+	// C2: a codex-acp registration belongs to the codex provider group, so its own
+	// degraded epoch halts (see "exact degraded provider epochs halt"). Health
+	// recorded under another tool name never validates its epoch and stays unknown.
+	t.Run("canonical evidence with alias registration and another tool's health checkpoints", func(t *testing.T) {
 		base := time.Now().UTC().Add(-time.Hour)
 		projectRoot, statePath := setupMutationTestProject(t, func(state *models.State) {
 			state.Anomalies = []models.Anomaly{
@@ -551,6 +554,10 @@ func TestAnalyzeProviderAuditLifecycle(t *testing.T) {
 				providerAuditAnomaly(base.Add(time.Minute), "coder-2"),
 			}
 			setProviderEpochs(state, "codex-acp", base.Add(-time.Minute))
+			for id, health := range state.AgentHealth {
+				health.Provider = "codex"
+				state.AgentHealth[id] = health
+			}
 		})
 
 		checkpointReport := runAnalyze(t, projectRoot,
@@ -558,7 +565,7 @@ func TestAnalyzeProviderAuditLifecycle(t *testing.T) {
 			models.CircuitBreakerResponseCheckpoint,
 			false,
 			"unknown",
-			"no currently registered agent has an exact provider match",
+			"does not match its provider, PID, and registration-time epoch",
 		)
 		if !strings.Contains(checkpointReport, "Sprint moved to CHECKPOINT") {
 			t.Errorf("alias report missing checkpoint action\n%s", checkpointReport)
