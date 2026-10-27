@@ -14,3 +14,5 @@ changed internal/oracle/a9/lifecycle_test.go determinism
 changed internal/oracle/a9/review_test.go determinism
 changed internal/oracle/a9/signals_test.go determinism
 changed internal/oracle/a9/supervisor_owner_linux_test.go determinism
+changed internal/oracle/a9/exit_release_test.go determinism
+changed internal/oracle/a9/exit_release_cleanup_test.go determinism

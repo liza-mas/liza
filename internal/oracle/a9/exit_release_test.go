@@ -60,16 +60,36 @@ func (p *scenario) installVersionProbeHook(t testing.TB, command string) {
 	}
 }
 
+// The three exit-release rows start a supervisor and a held provider, so they
+// follow the D48 isolation of the orchestrator rows: they are top-level and
+// serial (never t.Parallel: orchGuard's reap asserts that no other scenario owns
+// a child of the test process), and exitReleaseStart gives the supervisor its
+// own process group and the test process the subreaper role before launch. The
+// cleanup waits for the direct supervisor first, then signals, reaps and
+// asserts the absence of every remaining child on success, assertion failure,
+// cancellation and deadline alike (D45 group termination elsewhere).
+// exit_release_cleanup_test.go proves that path with a held provider.
+
+// exitReleaseStart starts the scenario's supervisor under D48 ownership.
+func exitReleaseStart(t *testing.T, p *scenario, args ...string) *runningAgent {
+	t.Helper()
+	a, _ := orchStart(t, p, args...)
+	return a
+}
+
+// exitReleaseRunLimit bounds a supervisor run; it is below the scenario command
+// context (100 s) so that the deadline failure path is the one observed.
+const exitReleaseRunLimit = 90 * time.Second
+
 // TestOracleA9HaltRelease freezes the release of a claim whose provider start a
 // halt refused: the pause commits between the claim and the launch gate, the
 // gate refuses the start, and the supervisor releases the doer's claim as a
 // continuation of the same iteration and idles at the pause gate. The launch
 // golden is the state observed while parked, before the stop that ends the run.
 func TestOracleA9HaltRelease(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i05-halt-release")
 	p.installVersionProbeHook(t, "pause")
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "halt release", func() bool {
 		s := p.state(t)
 		return bytes.Contains(s, []byte("mode: PAUSED")) && bytes.Contains(s, []byte("event: claim_released")) &&
@@ -99,11 +119,11 @@ func TestOracleA9HaltRelease(t *testing.T) {
 // the continuation that exit released, leaves the task unblocked. The crash
 // threshold is 1, so the second crash reaches the block decision.
 func TestOracleA9BlockReleasedStale(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i05-block-released-stale")
 	// Two crash exits (5 s and 10 s restart delays), then a third provider call
 	// that stops the run.
-	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	r := p.finish(t, a, exitReleaseRunLimit)
 	requireCode(t, p, r, 0)
 	after := p.state(t)
 	if len(p.records(t)) != 3 || bytes.Count(after, []byte("event: doer_claim_released")) != 2 {
@@ -120,9 +140,8 @@ func TestOracleA9BlockReleasedStale(t *testing.T) {
 // before it exits, so by the time the failure loop reaches its threshold (1) the
 // task is no longer owned by the agent and the block leaves it untouched.
 func TestOracleA9BlockDoerStale(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i05-block-doer-stale")
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	// Saved prompts are named by the second: each call is released only after
 	// the previous prompt's second has passed, so no two runs share a file name.
 	for i := 1; i <= 3; i++ {
