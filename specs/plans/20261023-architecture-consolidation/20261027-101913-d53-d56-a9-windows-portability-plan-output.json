@@ -1,0 +1,32 @@
+[
+  {
+    "desc": "Must: stop both A9 G8 Windows signatures of run 40480433464 — give the C6 listing test child a test-owned Go cache (F1) and refuse a non-directory verdict outbox before listing on every OS (F2)",
+    "done_when": "Per plan Task 1: (1) command 1 (no HOME) is red at the pre-edit SHA with the GOCACHE-not-defined signature and green after F1, and TestC6HostGoflagsDoNotReachTheListing keeps its assertion with a hostile GOFLAGS, test-owned GOCACHE/TMP/TEMP and no host-read cache value (T2, names/booleans only); (2) ReplayPendingVerdicts returns `read private verdict outbox: open <dir>: not a directory` (errors.Is ENOTDIR) for a regular-file outbox on every OS while every other outcome and the Linux/macOS text stay unchanged (T3), and TestA9SupervisorPB3ReplayPrecedesRegistration passes byte-identical; (3) the manifest records each command, tested SHA and outcome, red runs at the pre-edit SHA, and claims no Windows pass: native Windows proof is the operator's D52/D59 G8 dispatch at the post-merge integration SHA; (4) no assertion, fixture, golden, oracle driver, PROVENANCE line, build constraint, skip, timeout or time.Sleep added or edited.",
+    "scope": "IN: internal/testguard/archguard/c6_mutation_check_test.go (F1, T2); internal/ops/pending_verdict.go (F2 only); internal/ops/pending_verdict_test.go (T3); specs/plans/20261023-architecture-consolidation/acceptance/d53-d56-a9-windows-portability.json. OUT: supervisor*.go, waitforwork.go, internal/agent/a9_supervisor_pb_test.go, c6_mutation_load_test.go, internal/oracle/**, Makefile, .github/**, ADRs, arm-1-ar-25-cp-0 artifacts or state, live state, push, dispatch, PR.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D53 — Oracle portability for N2: generic fixes everywhere, process-supervision oracles Linux-only (human, 2026-10-24)",
+    "plan_ref": "specs/plans/20261023-architecture-consolidation/20261027-101913-d53-d56-a9-windows-portability-plan.md#Task 1: Give the C6 listing child a test-owned Go cache and refuse a non-directory verdict outbox on every OS",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard",
+      "env -i PATH=\"$PATH\" TMPDIR=/tmp GOCACHE=\"$HOME/.cache/go-build\" go test -count=1 -run '^TestC6HostGoflagsDoNotReachTheListing$' ./internal/testguard/archguard",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^(TestA9SupervisorPB3ReplayPrecedesRegistration|TestPendingVerdict.*|TestReplayPendingVerdicts.*)$' ./internal/agent ./internal/ops",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a5/supplement",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp GOOS=windows go vet ./internal/ops ./internal/agent ./internal/testguard/archguard",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
+    ],
+    "validation_prerequisites": [
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testguard/archguard", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i PATH=\"$PATH\" TMPDIR=/tmp GOCACHE=\"$HOME/.cache/go-build\" go test -count=1 -run '^TestC6HostGoflagsDoNotReachTheListing$' ./internal/testguard/archguard", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^(TestA9SupervisorPB3ReplayPrecedesRegistration|TestPendingVerdict.*|TestReplayPendingVerdicts.*)$' ./internal/agent ./internal/ops", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/oracle/a5/supplement", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"], ["git", "--version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp GOOS=windows go vet ./internal/ops ./internal/agent ./internal/testguard/archguard", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -run '^TestSleepUsageBudget$' ./internal/testguard", "executables": ["env", "go"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]},
+      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go", "git"], "env": ["HOME", "PATH"], "probes": [["make", "--version"], ["go", "version"]]}
+    ],
+    "inherit_inputs": {"mode": "none"}
+  }
+]
