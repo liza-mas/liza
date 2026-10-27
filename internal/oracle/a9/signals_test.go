@@ -32,11 +32,17 @@ func signalAlerts(p *scenario) string {
 // descendants, reaps them, and fails the test if one is left.
 func signalStart(t *testing.T, p *scenario, args ...string) *runningAgent {
 	t.Helper()
+	return signalLaunch(t, p, p.cli, append([]string{"-C", p.dir}, args...))
+}
+
+// signalLaunch is signalStart for an explicit binary and complete arguments.
+func signalLaunch(t *testing.T, p *scenario, bin string, args []string) *runningAgent {
+	t.Helper()
 	if err := signalSubreaper(); err != nil {
 		t.Fatalf("A9 %s setup: child subreaper unavailable", p.name)
 	}
 	a := &runningAgent{done: make(chan error, 1)}
-	a.cmd, a.cancel = p.command(p.cli, append([]string{"-C", p.dir}, args...)...)
+	a.cmd, a.cancel = p.command(bin, args...)
 	cancelled := signalIsolate(a.cmd)
 	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
 	if err := a.cmd.Start(); err != nil {

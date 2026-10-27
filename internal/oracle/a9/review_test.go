@@ -178,9 +178,8 @@ func reviewerArgs(extra ...string) []string {
 }
 
 func TestOracleA9ReviewerClaim(t *testing.T) {
-	t.Parallel()
 	p := newReviewScenario(t, "i08-claim", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
-	r := p.run(t, reviewerArgs()...)
+	r := p.runSupervisor(t, reviewerArgs()...)
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 	requireReviewLease(t, launch, "code-reviewer-1")
@@ -200,9 +199,8 @@ func TestOracleA9ReviewerClaim(t *testing.T) {
 // unexpired review lease: the starting binary registers, idles and never claims
 // or launches, and the test ends the run with liza stop.
 func TestOracleA9ReviewerClaimRefused(t *testing.T) {
-	t.Parallel()
 	p := newReviewScenario(t, "i08-refused", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
-	a := p.start(t, reviewerArgs()...)
+	a := p.startSupervisor(t, reviewerArgs()...)
 	p.await(t, "idle registration", func() bool {
 		s := p.state(t)
 		return bytes.Contains(s, []byte("code-reviewer-1:")) && bytes.Contains(s, []byte("status: IDLE"))
@@ -236,11 +234,9 @@ func TestOracleA9ReviewerClaimRefused(t *testing.T) {
 // I-10 refusal; the intact worktree of TestOracleA9ReviewerClaim is the I-09
 // refusal.
 func TestOracleA9ReviewerWorktree(t *testing.T) {
-	t.Parallel()
 	t.Run("i09-recovered", func(t *testing.T) {
-		t.Parallel()
 		p := newReviewScenario(t, "i09-recovered", reviewGit{state: reviewStateUnrecorded, branch: true})
-		r := p.run(t, reviewerArgs()...)
+		r := p.runSupervisor(t, reviewerArgs()...)
 		requireCode(t, p, r, 0)
 		launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 		if !bytes.Contains(launch, []byte("event: worktree_recovered")) || !bytes.Contains(launch, []byte("status: REVIEWING_CODE")) || bytes.Contains(launch, []byte("status: BLOCKED")) {
@@ -252,9 +248,8 @@ func TestOracleA9ReviewerWorktree(t *testing.T) {
 		p.check(t, r)
 	})
 	t.Run("i10-blocked", func(t *testing.T) {
-		t.Parallel()
 		p := newReviewScenario(t, "i10-blocked", reviewGit{state: reviewStateUnrecorded})
-		a := p.start(t, reviewerArgs()...)
+		a := p.startSupervisor(t, reviewerArgs()...)
 		p.await(t, "blocked task", func() bool { return bytes.Contains(p.state(t), []byte("status: BLOCKED")) })
 		p.observeLaunch(t)
 		state := p.state(t)
@@ -331,9 +326,8 @@ func reviewHeartbeatRecord(t *testing.T, p *scenario, launch []byte) {
 // TestOracleA9Heartbeat holds a reviewer session until the first default-interval
 // beat publishes its liveness record (R23), then lets the stub stop the run.
 func TestOracleA9Heartbeat(t *testing.T) {
-	t.Parallel()
 	p := newReviewScenario(t, "i03-success", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
-	r := p.run(t, reviewerArgs()...)
+	r := p.runSupervisor(t, reviewerArgs()...)
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 	requireReviewLease(t, launch, "code-reviewer-1")

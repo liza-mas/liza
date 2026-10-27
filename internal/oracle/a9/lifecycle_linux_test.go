@@ -21,9 +21,8 @@ import (
 )
 
 func TestOracleA9RegistrationCollision(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i01-collision")
-	r := p.run(t, "agent", "coder", "--cli", "claude", "--agent-id", "coder-1")
+	r := p.runSupervisor(t, "agent", "coder", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 1)
 	if !strings.Contains(r.stderr, "agent ID collision") || !bytes.Equal(p.before, p.state(t)) || len(p.records(t)) != 0 {
 		t.Fatal("I-01 collision must refuse before launch with byte-identical state")
@@ -32,9 +31,8 @@ func TestOracleA9RegistrationCollision(t *testing.T) {
 }
 
 func oracleA9CapacityRefused(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i02-refused")
-	r := p.run(t, "agent", "coder", "--cli", "claude")
+	r := p.runSupervisor(t, "agent", "coder", "--cli", "claude")
 	requireCode(t, p, r, 1)
 	if !strings.Contains(r.stderr, "already has 1 live agent(s) (max 1)") || !bytes.Equal(p.before, p.state(t)) || len(p.records(t)) != 0 {
 		t.Fatal("I-02 cap must refuse registration without state mutation or provider launch")
@@ -46,7 +44,7 @@ func oracleA9CapacityRefused(t *testing.T) {
 // canonical binary name, which process scans of other scenarios would match.
 func TestOracleA9AuthorityLost(t *testing.T) {
 	p := newScenario(t, "i05-authority-lost")
-	a := p.startNamed(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := p.startNamedSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "held provider launch", func() bool {
 		_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 		return err == nil

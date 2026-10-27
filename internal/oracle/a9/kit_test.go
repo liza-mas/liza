@@ -336,12 +336,34 @@ func (p *scenario) start(t *testing.T, args ...string) *runningAgent {
 	return p.launch(t, p.cli, append([]string{"-C", p.dir}, args...))
 }
 
-// startNamed runs the supervisor under the canonical binary name. Process scans
-// match supervisors by that name, so a scenario using it must not overlap
-// another supervisor: its test is not parallel.
-func (p *scenario) startNamed(t *testing.T, args ...string) *runningAgent {
+// The supervisor entry points below are the kit's D48 ownership wiring. run and
+// start stay generic (they also serve parallel callers that start no supervisor,
+// and exit_release_test.go's parallel supervisors); only an attributed
+// supervisor-starting call site opts in. Each entry point makes the test process
+// the child subreaper before the supervisor starts and, on success, failure and
+// cancellation, kills, reaps and asserts the absence of every child of the test
+// process (signalLaunch). That assertion is sound only when no other test owns a
+// child: callers are top-level tests that are not parallel and have no parallel
+// subtests, and start one supervisor at a time.
+
+// runSupervisor runs `liza agent ...` to its exit under D48 ownership.
+func (p *scenario) runSupervisor(t *testing.T, args ...string) invocation {
 	t.Helper()
-	return p.launch(t, p.named, args)
+	return signalRun(t, p, args...)
+}
+
+// startSupervisor starts `liza agent ...` under D48 ownership.
+func (p *scenario) startSupervisor(t *testing.T, args ...string) *runningAgent {
+	t.Helper()
+	return signalStart(t, p, args...)
+}
+
+// startNamedSupervisor runs the supervisor under the canonical binary name.
+// Process scans match supervisors by that name, so a scenario using it must not
+// overlap another supervisor.
+func (p *scenario) startNamedSupervisor(t *testing.T, args ...string) *runningAgent {
+	t.Helper()
+	return signalLaunch(t, p, p.named, args)
 }
 
 func (p *scenario) launch(t *testing.T, bin string, args []string) *runningAgent {

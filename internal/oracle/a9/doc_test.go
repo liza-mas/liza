@@ -45,6 +45,18 @@
 // Gap: --interactive launch is unreachable from the plain fixture. A refactor
 // touching that surface must first add its coverage.
 //
+// Process ownership (D43/D45/D48): the supervisor-starting lifecycle and reviewer
+// tests (lifecycle_test.go, lifecycle_linux_test.go, review_test.go) are
+// top-level, nonparallel tests without parallel subtests, and start their
+// supervisor through the kit entry points runSupervisor, startSupervisor and
+// startNamedSupervisor. Those make the test process the child subreaper before the
+// start and, on success, failure and cancellation, signal, reap and assert the
+// absence of every child of the test process, adopted zombies included
+// (supervisor_owner_linux_test.go proves each path). The generic run, execute,
+// start and launch stay unowned for callers that start no supervisor, such as
+// TestOracleA9PendingMergeStall; exit_release_test.go's parallel supervisor cases
+// are outside this guarantee (residual D48 concern, recorded for global analysis).
+//
 // Environment and recipe:
 // Every scenario uses an empty HOME, one bin directory as PATH, and ChildEnv
 // with TZ=Etc/GMT-2, update/catalog guards and fixed Git identity/dates. The only

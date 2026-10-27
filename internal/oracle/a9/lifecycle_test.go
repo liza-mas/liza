@@ -11,9 +11,8 @@ import (
 )
 
 func TestOracleA9Registration(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i01-success")
-	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 	requireLeases(t, launch, 3, true)
@@ -26,11 +25,9 @@ func TestOracleA9Registration(t *testing.T) {
 }
 
 func TestOracleA9AutoAssignID(t *testing.T) {
-	t.Parallel()
 	t.Run("success", func(t *testing.T) {
-		t.Parallel()
 		p := newScenario(t, "i02-success")
-		a := p.start(t, "agent", "coder", "--cli", "claude")
+		a := p.startSupervisor(t, "agent", "coder", "--cli", "claude")
 		p.await(t, "coder-2 registration", func() bool { return bytes.Contains(p.state(t), []byte("coder-2:")) })
 		p.observeLaunch(t)
 		if r := p.run(t, "stop"); r.code != 0 {
@@ -47,9 +44,8 @@ func TestOracleA9AutoAssignID(t *testing.T) {
 }
 
 func TestOracleA9DoerClaim(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i04-success")
-	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
 	launch := mustRead(t, filepath.Join(p.recordDir, "launch-1", "state.yaml"))
 	requireLeases(t, launch, 3, true)
@@ -66,12 +62,11 @@ func TestOracleA9DoerClaim(t *testing.T) {
 }
 
 func TestOracleA9DoerClaimRefused(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i04-refused")
 	// The starting binary does not exit on a named task its role cannot claim: the
 	// supervisor registers and idles, so the refusal is the unclaimed task and the
 	// absent provider call. The test ends the run with `liza stop`.
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "idle registration", func() bool {
 		s := p.state(t)
 		return bytes.Contains(s, []byte("coder-1:")) && bytes.Contains(s, []byte("status: IDLE"))
@@ -89,9 +84,8 @@ func TestOracleA9DoerClaimRefused(t *testing.T) {
 }
 
 func TestOracleA9Restart42(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i06-restart")
-	r := p.run(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
 	if len(p.records(t)) != 2 || !bytes.Contains(p.state(t), []byte("exit42_restart_count: 1")) {
 		t.Fatal("I-06 must restart exactly once and re-claim")
@@ -111,9 +105,8 @@ func TestOracleA9Restart42(t *testing.T) {
 // recorded. The BLOCKED branch is not pinned: no recipe reaches it at the
 // starting commit without a production change or a progress-signature change.
 func TestOracleA9Restart42Limit(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i06-limit")
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "second exit-42 restart", func() bool {
 		calls, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
 		return len(calls) >= 2 && bytes.Contains(p.state(t), []byte("exit42_restart_count: 2"))
@@ -132,9 +125,8 @@ func TestOracleA9Restart42Limit(t *testing.T) {
 }
 
 func TestOracleA9SpinBlock(t *testing.T) {
-	t.Parallel()
 	p := newScenario(t, "i07-spin")
-	a := p.start(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
+	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	// Distinct launch seconds prevent timestamp-named files from colliding.
 	// Each barrier is released only after its saved prompt's second has passed;
 	// the default spin threshold and all state values remain unchanged.
@@ -169,20 +161,18 @@ func TestOracleA9SpinBlock(t *testing.T) {
 }
 
 func TestOracleA9SurplusRetire(t *testing.T) {
-	t.Parallel()
 	for _, held := range []bool{false, true} {
 		name := "i16-idle"
 		if held {
 			name = "i16-held"
 		}
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			p := newScenario(t, name)
 			args := []string{"agent", "coder", "--cli", "claude", "--agent-id", "coder-2"}
 			if held {
 				args = append(args, "task-1")
 			}
-			a := p.start(t, args...)
+			a := p.startSupervisor(t, args...)
 			if held {
 				p.await(t, "held claim", func() bool {
 					_, err := os.Stat(filepath.Join(p.recordDir, "launch-1", "state.yaml"))
