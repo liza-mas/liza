@@ -1,0 +1,79 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00.5Z
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 blocked fixture
+    done_when: A9 oracle records note consumption
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00.5Z
+    iteration: 1
+    base_commit: '<base-sha>'
+    blocked_reason: fixture blocked
+    blocked_questions: [fixture question]
+    history:
+      - time: 2020-01-01T00:00:00.5Z
+        agent: coder-1
+        event: blocked
+        reason: fixture blocked
+  - id: task-2
+    type: coding
+    role_pair: coding-pair
+    description: A9 unassessed fixture
+    done_when: A9 oracle leaves this target unassessed
+    status: DRAFT_CODE
+    priority: 2
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00.5Z
+    iteration: 0
+    history: []
+agents: {}
+discovered: []
+human_notes:
+  - timestamp: 2020-01-01T00:00:00.5Z
+    message: Note for the assessed target.
+    for: task-1
+  - timestamp: 2020-01-01T00:00:01.5Z
+    message: Note for a target the turn does not assess.
+    for: task-2
+  - timestamp: 2020-01-01T00:00:02.5Z
+    message: Note for all targets.
+    for: all
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1, task-2]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00.5Z
+    deadline: 2099-01-01T00:00:00.5Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 1
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00.5Z
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
