@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -236,15 +237,13 @@ func TestC3StoreToolNamesStayInsideSignalDirectory(t *testing.T) {
 			t.Fatalf("tools %q and %q share %q", tool, other, path)
 		}
 		seen[path] = tool
-		if got := decodeSignalName(encodeSignalName(tool)); got != tool {
-			t.Fatalf("round trip of %q = %q", tool, got)
-		}
 	}
 	if encodeSignalName("my_tool-2.x") != "my_tool-2.x" {
 		t.Fatal("ordinary tool names must stay readable and equal their legacy file names")
 	}
-	// A recorded hostile tool is matched by identity, not by path.
-	pu := &ProviderUnavailable{Provider: "x", Tool: "../../escape", Message: "m"}
+	// A recorded hostile tool is matched by the identity its tool line carries,
+	// not by its file name, even when the label equals the tool.
+	pu := &ProviderUnavailable{Provider: "../../escape", Message: "m"}
 	if err := WriteProviderUnavailableSignal(root, pu); err != nil {
 		t.Fatal(err)
 	}
@@ -254,6 +253,9 @@ func TestC3StoreToolNamesStayInsideSignalDirectory(t *testing.T) {
 	}
 	if !CheckProviderUnavailableSignal(root, "../../escape", c3Keys(models.Config{})) {
 		t.Fatal("the hostile tool still matches its own record")
+	}
+	if signals := ListProviderUnavailableSignals(root); len(signals) != 1 || signals[0].Tool != "../../escape" || signals[0].Provider != "../../escape" {
+		t.Fatalf("records = %+v, want the identity and display read from the record", signals)
 	}
 	if _, err := os.Stat(filepath.Join(root, "escape")); err == nil {
 		t.Fatal("record escaped the signal directory")
@@ -327,5 +329,84 @@ func TestC3QuotaAliasBehaviourUnchanged(t *testing.T) {
 	}
 	if CheckQuotaSignal(custom, "bar") {
 		t.Fatal("quota matching is not converted to provider keys")
+	}
+}
+
+func TestC3FailUnlistableDirectoryKeepsStatVisibleSignal(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("directory modes are not enforced here")
+	}
+	root := c3Project(t)
+	c3Raise(t, root, c3CodexFailure, "codex")
+	dir := filepath.Join(root, paths.ProjectDirName())
+	if err := os.Chmod(dir, 0o111); err != nil { // searchable, not listable
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	for _, tool := range []string{"codex", "codex-acp"} {
+		if !CheckProviderUnavailableSignal(root, tool, c3Keys(models.Config{})) {
+			t.Fatalf("%s: a record that can still be stat'ed must keep stopping it", tool)
+		}
+	}
+	if CheckProviderUnavailableSignal(root, "claude", c3Keys(models.Config{})) {
+		t.Fatal("an unrelated provider has no visible record and must not stop")
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(ProviderUnavailableSignalPath(root, "codex")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o111); err != nil {
+		t.Fatal(err)
+	}
+	if CheckProviderUnavailableSignal(root, "codex", c3Keys(models.Config{})) {
+		t.Fatal("no visible record: not stopped")
+	}
+}
+
+func TestC3MatchLegacyPercentNameKeepsLiteralIdentity(t *testing.T) {
+	root := c3Project(t)
+	dir := filepath.Join(root, paths.ProjectDirName())
+	legacy := "provider: foo%41\ndetected: 2020-01-01T00:00:00Z\nmessage: m\n"
+	if err := os.WriteFile(filepath.Join(dir, "provider-unavailable-foo%41"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !CheckProviderUnavailableSignal(root, "foo%41", c3Keys(models.Config{})) {
+		t.Fatal("a legacy record with a literal percent keeps its identity")
+	}
+	if CheckProviderUnavailableSignal(root, "fooA", c3Keys(models.Config{})) {
+		t.Fatal("the legacy name must not be reinterpreted as fooA")
+	}
+	if signals := ListProviderUnavailableSignals(root); len(signals) != 1 || signals[0].Provider != "foo%41" || signals[0].Tool != "foo%41" {
+		t.Fatalf("legacy listing = %+v, want the literal name", signals)
+	}
+	// A new record for the same tool is stored under an escaped name that
+	// cannot collide with the legacy literal one, and carries its tool line.
+	if err := WriteProviderUnavailableSignal(root, &ProviderUnavailable{Provider: "foo%41", Message: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if signals := ListProviderUnavailableSignals(root); len(signals) != 2 {
+		t.Fatalf("records = %+v, want the legacy and the new record apart", signals)
+	}
+}
+
+func TestC3PresentKeepsPreC3RowOrderForAliasTools(t *testing.T) {
+	root := c3Project(t)
+	c3Raise(t, root, c3CodexFailure, "acpx-codex")
+	if err := WriteProviderUnavailableSignal(root, &ProviderUnavailable{Provider: "claude", Message: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	var rows []string
+	for _, r := range ClearProviderUnavailableSignals(root) {
+		if r.Err != nil {
+			t.Fatal(r.Err)
+		}
+		rows = append(rows, r.Provider)
+	}
+	// Before C3 the files were named claude and codex.
+	if !reflect.DeepEqual(rows, []string{"claude", "codex"}) {
+		t.Fatalf("rows = %v, want [claude codex] whatever the physical tool file names", rows)
 	}
 }

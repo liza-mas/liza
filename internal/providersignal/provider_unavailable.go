@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -98,11 +99,10 @@ func ProviderUnavailableSignalPath(projectRoot, tool string) string {
 	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+encodeSignalName(tool))
 }
 
-func providerUnavailableSignalGlob(projectRoot string) string {
-	return filepath.Join(paths.New(projectRoot).LizaDir(), providerUnavailableSignalPrefix+"*")
-}
-
 // signalNameEscape introduces a percent-encoded byte in a signal file name.
+// Names are never decoded: a record whose file name differs from its tool
+// carries the tool in its own tool line, because older records may hold a
+// literal '%'.
 const signalNameEscape = '%'
 
 // encodeSignalName maps a configured tool name to a file-name component: the
@@ -123,32 +123,6 @@ func encodeSignalName(tool string) string {
 	return b.String()
 }
 
-// decodeSignalName inverts encodeSignalName; a name it did not produce (an
-// older signal file) decodes to itself where it holds no valid escape.
-func decodeSignalName(name string) string {
-	var b strings.Builder
-	for i := 0; i < len(name); i++ {
-		if name[i] == signalNameEscape && i+2 < len(name) && isHex(name[i+1]) && isHex(name[i+2]) {
-			b.WriteByte(hexValue(name[i+1])<<4 | hexValue(name[i+2]))
-			i += 2
-			continue
-		}
-		b.WriteByte(name[i])
-	}
-	return b.String()
-}
-
-func isHex(c byte) bool {
-	return c >= '0' && c <= '9' || c >= 'A' && c <= 'F'
-}
-
-func hexValue(c byte) byte {
-	if c <= '9' {
-		return c - '0'
-	}
-	return c - 'A' + 10
-}
-
 // UnavailableSignal is one enumerated provider-unavailable record.
 type UnavailableSignal struct {
 	// Path is the physical handle: clearing removes exactly this file.
@@ -159,26 +133,39 @@ type UnavailableSignal struct {
 	// carries, or the file's own name for a record written before tools were
 	// recorded.
 	Tool string
+	// order is the file name earlier versions gave this record, so rows keep
+	// the order they were listed in whatever the physical name is.
+	order string
 }
 
-// ListProviderUnavailableSignals enumerates the signal records in file-name order.
+// ListProviderUnavailableSignals enumerates the signal records in the order
+// earlier versions listed them. An unlistable signal directory yields none.
 func ListProviderUnavailableSignals(projectRoot string) []UnavailableSignal {
-	matches, err := filepath.Glob(providerUnavailableSignalGlob(projectRoot))
-	if err != nil {
-		return nil
-	}
-	signals := make([]UnavailableSignal, 0, len(matches))
-	for _, path := range matches {
-		signals = append(signals, readUnavailableSignal(path))
-	}
+	signals, _ := listUnavailableSignals(projectRoot)
 	return signals
+}
+
+func listUnavailableSignals(projectRoot string) ([]UnavailableSignal, error) {
+	dir := paths.New(projectRoot).LizaDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var signals []UnavailableSignal
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), providerUnavailableSignalPrefix) {
+			signals = append(signals, readUnavailableSignal(filepath.Join(dir, entry.Name())))
+		}
+	}
+	sort.SliceStable(signals, func(i, j int) bool { return signals[i].order < signals[j].order })
+	return signals, nil
 }
 
 // readUnavailableSignal reads a record, falling back to its file name for any
 // field it does not carry or cannot read, so an unreadable file still blocks.
 func readUnavailableSignal(path string) UnavailableSignal {
-	name := decodeSignalName(filepath.Base(path)[len(providerUnavailableSignalPrefix):])
-	signal := UnavailableSignal{Path: path, Provider: name, Tool: name}
+	name := filepath.Base(path)[len(providerUnavailableSignalPrefix):]
+	signal := UnavailableSignal{Path: path, Provider: name, Tool: name, order: name}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return signal
@@ -189,6 +176,7 @@ func readUnavailableSignal(path string) UnavailableSignal {
 		if provider := fields[recordKeyProvider]; provider != "" {
 			signal.Provider = provider
 		}
+		signal.order = agentlaunch.ACPXAgentName(signal.Provider)
 	}
 	return signal
 }
@@ -196,14 +184,14 @@ func readUnavailableSignal(path string) UnavailableSignal {
 // WriteProviderUnavailableSignal creates the signal record that stops every
 // supervisor whose provider key matches pu.Tool until the provider environment
 // is repaired. A record without a tool is attributed to its provider label, and
-// a tool equal to the label is not repeated: that record reads as it always did.
+// a plain tool equal to the label is not repeated: that record reads as it always did.
 func WriteProviderUnavailableSignal(projectRoot string, pu *ProviderUnavailable) error {
 	tool := pu.Tool
 	if tool == "" {
 		tool = pu.Provider
 	}
 	content := recordLine(recordKeyProvider, pu.Provider)
-	if tool != pu.Provider {
+	if tool != pu.Provider || encodeSignalName(tool) != tool {
 		content += recordLine(recordKeyTool, tool)
 	}
 	content += recordLine(recordKeyDetected, time.Now().UTC().Format(time.RFC3339)) +
@@ -214,14 +202,31 @@ func WriteProviderUnavailableSignal(projectRoot string, pu *ProviderUnavailable)
 // CheckProviderUnavailableSignal reports whether a signal record names a tool
 // sharing tool's provider key. keys is called at most once, and only when a
 // record exists, so a caller with no signal pays no catalog or state read.
+// When the signal directory cannot be listed, the records earlier versions
+// would have found for tool are checked directly, so a record that can still
+// be stat'ed keeps stopping the provider.
 func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() agentlaunch.ProviderKeys) bool {
-	signals := ListProviderUnavailableSignals(projectRoot)
+	signals, err := listUnavailableSignals(projectRoot)
+	if err != nil {
+		return !os.IsNotExist(err) && knownRecordExists(projectRoot, tool)
+	}
 	if len(signals) == 0 {
 		return false
 	}
 	provider := keys()
 	for _, signal := range signals {
 		if provider.Same(signal.Tool, tool) {
+			return true
+		}
+	}
+	return false
+}
+
+// knownRecordExists reports whether a record earlier versions would have
+// stat'ed for tool is visible, without listing the directory.
+func knownRecordExists(projectRoot, tool string) bool {
+	for _, candidate := range []string{tool, agentlaunch.ACPXAgentName(tool)} {
+		if _, err := os.Stat(ProviderUnavailableSignalPath(projectRoot, candidate)); err == nil {
 			return true
 		}
 	}

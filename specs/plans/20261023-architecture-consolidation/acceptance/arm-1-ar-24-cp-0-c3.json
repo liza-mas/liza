@@ -10,7 +10,7 @@
     {
       "obligation_id": "C3-MATCH",
       "file": "internal/providersignal/c3_unavailable_test.go",
-      "assertion": "TestC3Match* (providersignal, index 0): custom tools foo/bar sharing a provider_key match and an unrelated key does not; an agent_tools override on codex-acp stops alias matching; a loaded catalog key (UseRuntimeCatalog fixture) is honoured; the same record stops or spares the alias as the configuration changes between checks (evaluation-time keys); a legacy record without a tool line is identified by its file name and read through the current keys; TestC3CheckReadsKeysOnlyWhenARecordExists shows keys are derived once and only when a record exists",
+      "assertion": "TestC3Match* (providersignal, index 0): custom tools foo/bar sharing a provider_key match and an unrelated key does not; an agent_tools override on codex-acp stops alias matching; a loaded catalog key (UseRuntimeCatalog fixture) is honoured; the same record stops or spares the alias as the configuration changes between checks (evaluation-time keys); a legacy record without a tool line is identified by its literal file name and read through the current keys (TestC3MatchLegacyPercentNameKeepsLiteralIdentity: a legacy foo%41 is not reinterpreted as fooA); TestC3CheckReadsKeysOnlyWhenARecordExists shows keys are derived once and only when a record exists",
       "command_index": 0
     },
     {
@@ -38,13 +38,13 @@
     {
       "obligation_id": "C3-STORE",
       "file": "internal/providersignal/c3_unavailable_test.go",
-      "assertion": "TestC3StoreRecordsDoNotConflateDistinctTools, TestC3StoreNewRecordFormatKeepsDisplayLine, TestC3StoreToolNamesStayInsideSignalDirectory and TestC3PresentCollapsesRowsByDisplayProviderAndClearsEveryHandle (providersignal, index 0): codex and codex-acp raises are separate records that clear independently, a record whose tool equals its label has the pre-C3 content, hostile tool names (separators, dot segments, NUL, percent) encode injectively inside the signal directory, rows collapse by display provider and every handle is removed",
+      "assertion": "TestC3StoreRecordsDoNotConflateDistinctTools, TestC3StoreNewRecordFormatKeepsDisplayLine, TestC3StoreToolNamesStayInsideSignalDirectory and TestC3PresentCollapsesRowsByDisplayProviderAndClearsEveryHandle (providersignal, index 0): codex and codex-acp raises are separate records that clear independently, a record whose tool equals its label has the pre-C3 content, hostile tool names (separators, dot segments, NUL, percent) encode injectively inside the signal directory, rows collapse by display provider and every handle is removed; TestC3PresentKeepsPreC3RowOrderForAliasTools: acpx-codex plus claude lists claude, codex as before C3",
       "command_index": 0
     },
     {
       "obligation_id": "C3-FAIL",
       "file": "internal/providersignal/c3_unavailable_test.go",
-      "assertion": "TestC3FailUnreadableRecordStillBlocksAndClearFailureNamesHandle (providersignal, index 0): an unreadable record still blocks by file name, a clear failure keeps the existing message naming the handle and a missing record clears without error; the commands and tui clear-failure tests (index 0) keep the warning text and attribution; existing TestResumeCommand_WarnsOnProviderSignalClearFailure and TestResumeSystemCmd_WarnsOnQuotaClearFailure run unedited",
+      "assertion": "TestC3FailUnreadableRecordStillBlocksAndClearFailureNamesHandle and TestC3FailUnlistableDirectoryKeepsStatVisibleSignal (providersignal, index 0): an unreadable record still blocks by file name, a record that can be stat'ed in an unlistable directory (mode 0111) still stops the tool and its alias-normalised name, a clear failure keeps the existing message naming the handle and a missing record clears without error; the commands and tui clear-failure tests (index 0) keep the warning text and attribution; existing TestResumeCommand_WarnsOnProviderSignalClearFailure and TestResumeSystemCmd_WarnsOnQuotaClearFailure run unedited",
       "command_index": 0
     },
     {

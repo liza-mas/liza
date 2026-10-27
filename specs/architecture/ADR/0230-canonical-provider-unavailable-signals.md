@@ -29,12 +29,16 @@ adds a `tool:` line.
 ### D2 - Match by C2 provider keys at evaluation time
 
 `CheckProviderUnavailableSignal(root, tool, keys)` enumerates the records and
-reports a match when `ProviderKeys.Same(record tool, tool)`. The keys are a
+reports a match when `ProviderKeys.Same(record tool, tool)`. If the signal
+directory cannot be listed, the record paths earlier versions would have
+stat'ed for the tool (its own and its alias-normalised name) are checked
+directly, so a stat-visible record keeps stopping the provider. The keys are a
 lazy argument: derived once, only when a record exists, from the catalog-derived
 registry under the configuration of the state the caller decides on. Nothing
 caches or stores a key, so a configuration change takes effect at the next
 check. A record without a `tool:` line (written by an earlier version) is
-identified by its file name and read through the same keys.
+identified by its literal file name, which is never percent-decoded, and read
+through the same keys.
 Unreadable records still block, identified by file name.
 
 Consumers: the supervisor admission check (last published snapshot, read only
@@ -46,13 +50,17 @@ the requested tool.
 
 ### D3 - Storage and presentation are separate
 
-The record file is named by the percent-encoded launch tool, so tools with
+The record file is named by the percent-encoded launch tool, and a record
+whose tool differs from its label or from its encoded name carries the tool in a
+`tool:` line, which is the only source of its identity, so tools with
 distinct keys never overwrite each other, ordinary names equal their legacy
 file names, and a configured tool name cannot address a path outside the signal
 directory. Presentation enumerates records and reads the display provider (the
 `provider:` line of a record that has a `tool:` line, otherwise the file name),
 collapses records that display the same provider into one row and clears every
-one by the path it enumerated. Provider values, row order, labels and failure
+one by the path it enumerated. Rows keep the order earlier versions listed:
+a record is ordered by the file name its display provider had before C3 (the
+alias-normalised label), not by its physical name. Provider values, row order, labels and failure
 attribution of existing fixtures are unchanged; a custom shared key never
 appears in them.
 

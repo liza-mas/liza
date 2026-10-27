@@ -27,8 +27,15 @@ now takes the record path. No shim or alias was added. Quota code is untouched.
 
 ## Encoding (plan constraints)
 
-- Legacy listing and clearing preserved: a file without a `tool:` line shows its decoded file name and is identified by
-  it (`TestC3MatchLegacyRecords`, `TestC3ResumeCommandListsAndClearsRecordsByHandle`).
+- Legacy listing and clearing preserved: a file without a `tool:` line shows its literal file name (never
+  percent-decoded) and is identified by it (`TestC3MatchLegacyRecords`, `TestC3MatchLegacyPercentNameKeepsLiteralIdentity`,
+  `TestC3ResumeCommandListsAndClearsRecordsByHandle`). A new record whose tool differs from its label or from its
+  encoded name carries a `tool:` line, the only source of its identity.
+- Row order is the pre-C3 order: records sort by the file name their display provider had before C3 (alias-normalised
+  label), not by physical name (`TestC3PresentKeepsPreC3RowOrderForAliasTools`: `acpx-codex` plus `claude` lists
+  `claude`, `codex`).
+- Unlistable directory: a stat-visible record of the tool or its alias-normalised name keeps stopping
+  (`TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, directory mode 0111).
 - Distinct effective keys are not conflated: one file per encoded launch tool (`TestC3StoreRecordsDoNotConflateDistinctTools`).
 - Filesystem addressing is separate from configured text: `encodeSignalName` percent-encodes every byte outside
   `[A-Za-z0-9_-]` and a leading dot, is injective and cannot yield a separator or dot segment
@@ -58,6 +65,10 @@ records, `TestC3CheckReadsKeysOnlyWhenARecordExists`); no refresh or cache was a
 | M3 | wake revalidation keys ignore `state.Config` | `TestC3SupervisorAndOrchestratorWakeAgree` |
 | M4 | spawn keys ignore the runtime config | `TestC3SpawnRefusesByCanonicalKey` |
 | M5 | classifier drops `Tool` | `TestC3CrashWriterKeepsOriginatingToolSeparateFromLabel` |
+
+| M6 | no stat fallback for an unlistable directory | `TestC3FailUnlistableDirectoryKeepsStatVisibleSignal` |
+| M7 | rows ordered by physical tool file name | `TestC3PresentKeepsPreC3RowOrderForAliasTools` |
+| M8 | no `tool:` line for escaped names | `TestC3StoreToolNamesStayInsideSignalDirectory` |
 
 Each mutation was applied alone, the named tests failed on the intended assertion, and the file was restored from a copy
 (the restored tree equals the committed one).
