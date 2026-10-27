@@ -70,6 +70,16 @@ D43/D45's cleanup requirement. No new production invariant is introduced.
 - `internal/oracle/a9/lifecycle_test.go:13`: registration calls `t.Parallel`
   before `p.run(..., "agent", ...)`. Claim, restart, spin and surplus tests also
   run in parallel; auto-assignment and surplus tests have parallel subtests.
+- `internal/oracle/a9/lifecycle_linux_test.go:23,35`:
+  `TestOracleA9RegistrationCollision` (I-01 refusal) and
+  `oracleA9CapacityRefused` (I-02 refusal) each call `t.Parallel` before
+  `p.run(..., "agent", ...)`. The latter is invoked by AutoAssignID's
+  `capacity-refused` subtest at `lifecycle_test.go:46`.
+  Commit `b3ee92c072bf503d5be5d5bb137c74fbfd61d052` moved these bodies
+  verbatim for D53; they remain attributed consumers of the original kit.
+  `internal/oracle/a9/lifecycle_other_test.go:10` supplies the non-Linux
+  `oracleA9CapacityRefused` skip stub; it already has no parallel call and must
+  retain its D53 skip behavior.
 - `internal/oracle/a9/review_test.go:180`: reviewer claim runs in parallel through
   `p.run`; refusal at line 202 and recovery at line 238 use the same original kit
   (including parallel subtests); heartbeat success at line 333 also starts a
@@ -98,14 +108,33 @@ Adding an unfiltered reaper alone would endanger concurrently running siblings;
 both isolation and cleanup must be applied together. This is a source-proven
 D48 violation; this analysis does not claim an observed leaked PID.
 
-**Closure condition:** the attributed lifecycle and reviewer supervisor paths
-run without parallel overlap and use the existing D48 cleanup shape on success,
-failure and cancellation. A controlled held-provider failure/cancellation test
+**Closure condition:** attributed supervisor-starting invocations in
+`lifecycle_test.go`, `lifecycle_linux_test.go`, `lifecycle_other_test.go` and
+`review_test.go` have no parallel overlap. This includes
+`TestOracleA9RegistrationCollision`, AutoAssignID's `capacity-refused` body and
+its non-Linux skip stub (whose skip behavior stays unchanged). Apply the existing
+D48 ownership and cleanup shape only to supervisor-starting invocations, through
+explicit call-site wiring or a distinct supervisor entry point, on success,
+failure and cancellation. No unfiltered reaper may run in a parallel test or
+parallel subtest. The generic `scenario.run`/`execute` paths must not acquire
+unconditional process-wide ownership or reaping: PendingMergeStall's parallel
+anomaly reads also use them. The same restriction applies to generic
+`scenario.start`/`launch`, which have out-of-slice parallel callers.
+A controlled held-provider failure/cancellation test
 must prove that detached live children and already-adopted zombies are reaped,
 with no children left. Preserve fixtures, goldens, assertions and production
 behavior. Pure normaliser/lease tests and adapter-only cases need not be
 serialised merely because they share these files. Reuse the existing helper
 shape; do not introduce another ownership mechanism.
+
+**Residual for global analysis:** `exit_release_test.go:68,101,122` contains
+out-of-slice parallel supervisor callers (`TestOracleA9HaltRelease`,
+`TestOracleA9BlockReleasedStale`, `TestOracleA9BlockDoerStale`). The bounded kit
+change must leave their behavior unchanged; neither their call sites nor their
+cleanup are repaired by this child. Their D48 compliance remains a global
+analysis concern, not a claim of closure by this slice. Serial attributed tests
+do not overlap them under Go's test scheduling, so a call-site-scoped repair can
+close this slice without adding an unfiltered reaper to those parallel callers.
 
 One downstream task is defined in the adjacent JSON. It repairs this shared
 boundary across `code-0` and `code-2`; separate per-consumer repairs would leave
@@ -113,8 +142,9 @@ the global subreaper contract vulnerable to partial adoption.
 
 ## Validation evidence
 
-Validation is run in the assigned worktree at the frozen source. Only analysis
-artifacts are subsequently added; no tested source is changed.
+The following execution evidence is retained from iteration 1 at the frozen
+source, not claimed as re-executed in iteration 2. Only analysis artifacts are
+subsequently changed; no tested source is changed.
 
 - Full package command below: exit 1, package duration 146.732 s. The sole
   reported failure was `TestOracleA9BlockDoerStale` in
@@ -153,6 +183,45 @@ env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go test -count=1 -timeout=15m ./int
 env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go test -count=1 -timeout=15m -run '^TestOracleA9(Kit|Stub|Normaliser|LeaseAssertion|ArtifactSet|Registration|RegistrationCollision|AutoAssignID|Heartbeat|HeartbeatRefused|DoerClaim|DoerClaimRefused|AuthorityLost|Restart42|Restart42Limit|SpinBlock|ReviewerClaim|ReviewerClaimRefused|ReviewerWorktree|PendingMergeStall|OrchestratorTurn|OrchestratorPlans|CheckpointSummary|SurplusRetire|AuditAndCleanup|QuotaRaise|UnavailableRaise|SignalMatch|SpawnGate|LaunchLines|ExplainLaunch|LaunchRefused|ReviewLeaseAssertion|OrchestratorReap|OrchestratorAdoptedZombie|LaunchCleanup|LaunchReapsZombie)$' ./internal/oracle/a9/...
 env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a9/...
 ```
+
+## Iteration 2 review reconciliation
+
+The current task record has no `rejection_rca` disposition; its rejection asks
+for a bounded analysis correction, not a code rewrite. Current all-agent human
+notes add no closure evidence for F1 and do not change this frozen boundary.
+
+- Blocker addressed: the F1 locations, closure condition, and child scope and
+  done_when now explicitly include `lifecycle_linux_test.go` and
+  `lifecycle_other_test.go`, naming collision, capacity refusal and the skip
+  stub. Verified against those source files at `ca8d76a3e`, AutoAssignID's call
+  site, and the D53 move commit `b3ee92c07`.
+- Concern addressed: ownership is limited to attributed supervisor invocations;
+  no unfiltered reaper runs in parallel tests. Generic runners retain behavior
+  for parallel non-supervisor callers and the out-of-slice exit-release cases.
+  Verified against `kit_test.go:259-358`, PendingMergeStall's parallel CLI reads
+  in `review_test.go`, and `exit_release_test.go:68-125`. D48 is the authority.
+- The reviewer reports `TestOracleA9BlockDoerStale` passed 3/3 alone at the frozen
+  source. That is reviewer-reported evidence, not a run by this analyst. It
+  supports retaining the child's package check; it neither establishes a green
+  full package nor erases the earlier failure or proves its cause.
+
+Corrective validation ran in the assigned worktree at
+`1531658c08118babea9af55ff519c4bfab847668`, with only these two analysis artifacts
+modified. `git diff --stat ca8d76a3e -- internal/oracle/a9` was empty, so the
+tested oracle source still equals the frozen slice. The focused command below
+passed: exit 0, `ok github.com/liza-mas/liza/internal/oracle/a9 1.119s`. It covers
+the moved refusal cells and the generic runner's parallel non-supervisor caller;
+it does not assert that the deferred D48 implementation is fixed.
+
+```sh
+env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp go test -count=1 -timeout=5m -run '^TestOracleA9(RegistrationCollision|AutoAssignID|PendingMergeStall)$' ./internal/oracle/a9/...
+```
+
+The revised JSON passed `validate-payload set-task-output` (COMPLETED,
+safe_action `continue`, schema_version 1). Touched-file pre-commit passed all
+applicable hooks, and `git diff --check` exited 0. The correction changes only
+the Markdown analysis and its adjacent JSON; full-package/provenance evidence
+above remains iteration 1 evidence rather than a duplicated execution.
 
 ## Assessment limits and value
 
