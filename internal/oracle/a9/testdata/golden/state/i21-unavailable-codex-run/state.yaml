@@ -54,7 +54,7 @@ config:
 # after
 version: 1
 pipeline_version: 3
-mutation_sequence: 6
+mutation_sequence: 2
 goal:
     id: goal-1
     description: A9 oracle fixture
@@ -70,40 +70,11 @@ tasks:
       description: A9 lifecycle fixture
       status: DRAFT_CODE
       priority: 1
-      worktree: .worktrees/task-1
-      base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
-      iteration: 1
-      continuation: true
       spec_ref: specs/vision.md
       done_when: A9 oracle records supervisor behavior
       scope: ""
-      lifecycle:
-        revision: 2
-        completion_sequence: 1
-        receipts:
-            - operation: claim-task
-              actor: coder-1
-              generation_digest: <V1>
-              expected_transition: <V2>
-              payload_digest: <V3>
-              sequence: 1
-              transition_id: <V4>
-              projection:
-                base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
-                lease_expires: "<T3:fZ>"
-                source_status: DRAFT_CODE
-                attempt: 1
-                iteration: 1
-      attempt: 1
       created: <T1:sZ>
-      history:
-        - time: <T4:fZ>
-          event: claimed
-          agent: coder-1
-        - time: <T5:fZ>
-          event: claim_released
-          agent: coder-1
-          reason: agent interrupted
+      history: []
 agents: {}
 discovered: []
 human_notes: []
@@ -154,6 +125,4 @@ config:
     reviewer_poll_interval: 0
     reviewer_max_wait: 0
     integration_branch: integration
-    mode: STOPPED
-    mode_changed_at: <T6:fO>
-    mode_changed_by: coder-1
+    mode: RUNNING

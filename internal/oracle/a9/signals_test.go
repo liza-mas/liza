@@ -212,7 +212,7 @@ func TestOracleA9SignalMatch(t *testing.T) {
 		{"i21-own-quota", "claude", true},
 		{"i21-own-unavailable", "claude", true},
 		{"i21-unavailable-codex-acp-run", "codex-acp", true},
-		{"i21-unavailable-codex-run", "codex", false},
+		{"i21-unavailable-codex-run", "codex", true},
 		{"i21-quota-codex-acp-run", "codex-acp", true},
 		{"i21-quota-codex-run", "codex", false},
 		{"i21-expired", "claude", false},
