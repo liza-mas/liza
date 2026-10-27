@@ -1,8 +1,8 @@
 [
   {
     "desc": "Must: regen binds the historical C5 WtMerge golden change to its commit 7e4e9f37d through one attributed ledger record, and stops reporting untouched goldens of an unresolved C package as extra",
-    "done_when": "Per plan Task 1: (1) T1 (late `changed <golden> C5 <X>` record naming the unrecorded golden commit X) exits 0 with `ok <golden> chain pre <P> C5 <X>`, the untouched golden `ok ... chain pre <P>`, no call or report at the ledger commit, and was red (exit 2, `ledger line <N>: invalid record`) before the change; (2) T2 (late plain record, C1's trial shape) reports `record without change` and `C record has no change point` on the golden and `ok ... H1`, never `extra`, for the untouched golden, red before; (3) T3 rejections (non-ancestor, merge, path unchanged -> `attributed record invalid <X>`; duplicate -> `change has multiple records <X>`; malformed 4-field records) and all existing regen tests pass unchanged; (4) PROVENANCE gains exactly `changed internal/oracle/a6/testdata/golden/state/WtMerge/success.yaml C5 7e4e9f37d5f791cd0adab602736a12a0c94dc5ba` and `env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...` exits 0 at the committed head with the WtMerge golden `ok ... chain pre 66f6fa871b42fe27c0c2f76a3a1e3dbe36a9af32 C5 7e4e9f37d5f791cd0adab602736a12a0c94dc5ba`; ADR-0219 states the bounded attributed form and the manifest records red/green runs and the head result.",
-    "scope": "IN: internal/testhelpers/oracle/cmd/regen/*.go (production and tests, new test file next to d56_test.go), the single A4 line in internal/oracle/PROVENANCE, ADR-0219 clarification (A5), acceptance manifest specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-0-cp-2-d56-c5-provenance.json. OUT: production Go, other internal/oracle files and goldens (C5 UTC golden and drivers unchanged), other harness library files, Makefile, ADR index, C1/C2/C3 work, history rewrite, exemptions, starting-tree backport, live state, remote actions.",
+    "done_when": "Plan Task 1 is met: its historical-attribution (T1) and unresolved-package (T2) regressions are red before and green after the change, T3/T4 pass, canonical regen (validation[1]) exits 0 at the committed head with the C5 WtMerge golden chained to 7e4e9f37d, and the ADR-0219 clarification and acceptance manifest satisfy Task 1's Acceptance Contract.",
+    "scope": "IN: Task 1 owned files (cmd/regen Go and tests, the single A4 PROVENANCE line, ADR-0219 clarification, acceptance manifest). OUT: everything Task 1 lists as Out (production Go, other oracle files and goldens, C1/C2/C3 work, history rewrite, exemptions, backports).",
     "spec_ref": "specs/goals/20261023-architecture-consolidation-decisions.md#D24 — Provenance of goldens changed by a C task (run, 2026-10-23)",
     "plan_ref": "specs/plans/20261023-architecture-consolidation/20261027-045137-arm-1-ar-0-cp-2-d56-c5-provenance.md#Task 1: Bind the historical C5 golden change to its commit and stop false extras of unresolved C packages",
     "priority": "Must",
@@ -15,17 +15,112 @@
       "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e"
     ],
     "validation_prerequisites": [
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["go", "version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...", "executables": ["env", "go", "git"], "env": ["HOME", "PATH"], "probes": [["git", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"]]},
-      {"command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e", "executables": ["env", "make", "go"], "env": ["HOME", "PATH"], "probes": [["make", "--version"]]}
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 ./internal/testhelpers/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "go",
+            "version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/...",
+        "executables": [
+          "env",
+          "go",
+          "git"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "git",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make lint",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ]
+        ]
+      },
+      {
+        "command": "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp make test-e2e",
+        "executables": [
+          "env",
+          "make",
+          "go"
+        ],
+        "env": [
+          "HOME",
+          "PATH"
+        ],
+        "probes": [
+          [
+            "make",
+            "--version"
+          ]
+        ]
+      }
     ],
     "inherit_inputs": {
       "mode": "selected",
       "selections": [
-        {"upstream_task": "arm-1-ar-0-cp-2-d56", "outputs": [0]},
-        {"upstream_task": "arm-1-ar-16-cp-0", "outputs": [0]}
+        {
+          "upstream_task": "arm-1-ar-0-cp-2-d56",
+          "outputs": [
+            0
+          ]
+        },
+        {
+          "upstream_task": "arm-1-ar-16-cp-0",
+          "outputs": [
+            0
+          ]
+        }
       ]
     }
   }
