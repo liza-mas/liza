@@ -4,7 +4,7 @@
     {
       "obligation_id": "C6-REGISTER",
       "file": "internal/ops/agent_registration_test.go",
-      "assertion": "TestC6RegisterAgentWritesIdleRowWithAuthority, TestC6RegisterAgentRefusesLiveCollisionAndLeavesState, TestC6RegisterAgentTakesOverExpiredRegistration and TestC6RegisterAgentEnforcesRoleCapacityAndSingularity assert the IDLE row, PID, generation and returned authority, lease, sweep of an orphan liveness record, collision refusal with unchanged bytes, takeover report and capacity/singularity messages; the PB tests (collision, takeover, capacity, generation, PID, TestRegisterAgentSweepsOrphanLivenessRecordInTransaction, TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration) were green on the unchanged tree 75d4084d4 and after (map, commands and outcomes: specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "assertion": "TestC6RegisterAgentWritesIdleRowWithAuthority, TestC6RegisterAgentRefusesLiveCollisionAndLeavesState, TestC6RegisterAgentTakesOverExpiredRegistration and TestC6RegisterAgentEnforcesRoleCapacityAndSingularity assert the IDLE row, PID, generation and returned authority, lease, sweep of an orphan liveness record, collision refusal with unchanged bytes, takeover report and capacity/singularity messages; the PB tests (collision, takeover, capacity, generation, PID, TestRegisterAgentSweepsOrphanLivenessRecordInTransaction, TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration) were green on the unchanged production tree (ae2228b1a, equal to 75d4084d4, with the two new tests overlaid) and after at 99d61f741, selection regex and counts (map, commands and outcomes: specs/architecture/consolidation-run/c6-ownership-evidence.md)",
       "command_index": 0
     },
     {
@@ -34,7 +34,7 @@
     {
       "obligation_id": "C6-GAPS",
       "file": "internal/oracle/a9/exit_release_test.go",
-      "assertion": "TestOracleA9HaltRelease, TestOracleA9BlockReleasedStale and TestOracleA9BlockDoerStale were committed in oracle-only commit ae2228b1a (production tree equal to 75d4084d4) with goldens from regen write-new, pass on the unchanged tree (count=2, ok 61.390s) and after the move (count=2, ok 60.965s); the executing-variant and in-transaction stale branches have no black-box recipe and are covered by focused tests (gap record in specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "assertion": "TestOracleA9HaltRelease, TestOracleA9BlockReleasedStale and TestOracleA9BlockDoerStale were committed in oracle-only commit ae2228b1a (production tree equal to 75d4084d4) with goldens from regen write-new, pass on the unchanged tree (count=2, ok 61.390s) and after the move (count=2, ok 60.965s); NOT discharged: the executing-variant and in-transaction stale/changed-owner branches have no black-box recipe, the unit is held for a human decision on them (gap record in specs/architecture/consolidation-run/c6-ownership-evidence.md)",
       "command_index": 1
     },
     {

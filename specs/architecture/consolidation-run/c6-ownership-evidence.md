@@ -33,12 +33,20 @@ edits listed below, no assertion changed):
 | Three block variants, WIP before transaction, stale no-op, release, history | `supervisor_block_ownership_test.go`: `TestSupervisorBlockReleasesAllTaskOwners`; `supervisor_block_preserves_work_test.go`: `TestWatchdogBlockPreservesWorkForUnblockAndReclaim`, `TestReviewerSupervisorBlockLeavesGitStateUntouched`, `TestSupervisorBlockLeavesALifecycleMovedDuringTheSave`, `TestReleasedSupervisorBlockActsOnlyOnTheReleasedContinuation`; `inflight_submit_deadline_test.go`: `TestBlockExecutingTaskFromSupervisorLeavesAMovedTask` |
 | Restart count persistence and conditional block | `a9_concerns_pb_test.go`: `TestA9RestartPB5BlockRecordsReasonQuestionsAndHistory`, `TestA9RestartPB5UnownedTaskIsCountedButNeverBlocked`; `supervisor_test.go`: `TestExit42RestartTracker_Blocking`, `TestExit42RestartTracker_BlocksNonCoderRoles` |
 
+PB selection (every test of the table above; `go test -count=1 -v -run '<regex>' ./internal/agent/`), regex:
+
+```text
+^(TestAgentGeneration|TestRegisterAgent|TestRegisterAgentNamespaceSafeSingularity|TestRegisterAgentKeepsUnknownActiveLeaseConservative|TestRegisterAgentCollisionIsTyped|TestRegisterAgentLeaseLessRegistrationOwnedForLivenessWindow|TestRegisterAgentLeaseLessRegistrationOccupiesRoleCapacity|TestRegisterAgentStoresPID|TestRegisterAgentRecordsLaunchModel|TestRegisterOrchestratorTakeoverExpired|TestRegisterSecondOrchestratorBlocked|TestRegisterOrchestratorSingularityAcrossRoleKeys|TestRegisterNonOrchestratorMaxInstancesUnaffected|TestRegisterDefaultMaxInstances|TestRegisterMaxInstancesUsesLeaseFirstCapacity|TestRegisterSecondOrchestratorBlockedDespiteMisconfiguredMaxInstances|TestRegisterAgentSweepsOrphanLivenessRecordInTransaction|TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration|TestReleaseIfSurplus.*|TestRunSupervisorParkedSurplusRetiresInsteadOfClaiming|TestRunSupervisorRetiresAtTaskBoundaryUnderBacklog|TestUnregisterAgent|TestUnregisterAgent_ReleasesTaskSideClaimWhenCurrentTaskMissing|TestUnregisterAgentReleasesDoerClaimUnderTransientLockHold|TestUnregisterAgentReleasesReviewerClaimUnderTransientLockHold|TestUnregisterAgentRejectsReplacementRegisteredDuringLockWait|TestResetAgentAfterExit_.*|TestReleasedSupervisorBlockActsOnlyOnTheReleasedContinuation|TestOrchestratorStatusTransitions|TestSetAgentToPlanningStatusNonExistent|TestResetAgentToIdle_NotFound|TestSupervisorBlockReleasesAllTaskOwners|TestWatchdogBlockPreservesWorkForUnblockAndReclaim|TestReviewerSupervisorBlockLeavesGitStateUntouched|TestSupervisorBlockLeavesALifecycleMovedDuringTheSave|TestBlockExecutingTaskFromSupervisorLeavesAMovedTask|TestA9RestartPB5BlockRecordsReasonQuestionsAndHistory|TestA9RestartPB5UnownedTaskIsCountedButNeverBlocked|TestExit42RestartTracker_Blocking|TestExit42RestartTracker_BlocksNonCoderRoles)$
+```
+
 | Claim | Command | Tree | Outcome |
 |---|---|---|---|
-| PB map and new TestA9-style tests green before any production edit | manifest command 0 (`go test -count=1 -run 'TestC6\|Regist\|Surplus\|Unregister\|ReleaseAgent\|ResetAgent\|Orchestrating\|SupervisorBlock\|BlockTask\|BlockExecuting\|BlockReleased\|Exit42\|Restart\|Halt\|PendingMerge' ./internal/agent/`), run in a disposable detached worktree at `75d4084d4` with the two new agent tests copied in | start | `ok github.com/liza-mas/liza/internal/agent 11.741s` |
-| Same set after the move | same command over `./internal/ops/ ./internal/agent/` | move | `ok internal/ops 3.122s`, `ok internal/agent 11.722s` |
+| Complete PB selection green before any production edit | the regex above, run in a disposable detached worktree at `ae2228b1a` (production tree equal to `75d4084d4`; test-only overlay: the two new agent tests `TestRegisterAgentSweepsOrphanLivenessRecordInTransaction` and `TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration` appended to `registration_test.go`, which did not exist yet) | start plus overlay | `ok internal/agent 3.765s`; every name of the table ran (59 PASS lines, tests and subtests), no FAIL |
+| Same selection after the move | the regex above | `99d61f741` | `ok internal/agent 3.808s`; every name ran (59 PASS lines), no FAIL |
+| Broader focused set before any production edit | manifest command 0 pattern over `./internal/agent/` in a detached worktree at `75d4084d4` with the two new tests overlaid | start plus overlay | `ok internal/agent 11.741s` |
+| Same broader set after the move | manifest command 0 over `./internal/ops/ ./internal/agent/` | `8361eca0f` | `ok internal/ops 3.122s`, `ok internal/agent 11.722s` |
 | New oracle rows on the unchanged production tree | `go test -count=2 -run 'TestOracleA9HaltRelease\|TestOracleA9BlockReleasedStale\|TestOracleA9BlockDoerStale' ./internal/oracle/a9/` in a detached worktree at `75d4084d4` with the oracle commit's files and goldens overlaid | start plus oracle files | `ok 61.390s` |
-| New oracle rows after the move | same command | move | `ok 60.965s` |
+| New oracle rows after the move | same command | `8361eca0f` | `ok 60.965s` |
 
 ## Gap record (plan Common Rules, `d40` excepted)
 
@@ -55,11 +63,13 @@ file or golden is edited.
 
 Not reachable black-box: the executing variant (`blockExecutingTaskFromSupervisor`, called only after a session
 ends past its execution timeout around its own in-flight submit) needs a live submit marker and a timeout, and
-the in-transaction recheck of every variant fires only on a race between the locked read and the transaction. Their
-stale outcome (state unchanged) is pinned by `TestBlockExecutingTaskFromSupervisorLeavesAMovedTask`,
-`TestSupervisorBlockLeavesALifecycleMovedDuringTheSave` and `TestC6BlockSupervisorTaskStaleObservationsAreNoOps`
-(moved token, changed owner, released task owned again). This is a deviation from "a row for each variant" and is
-raised for the reviewer.
+the in-transaction recheck of every variant fires only on a race between the locked read and the transaction (the
+window holds a Git WIP commit with hooks skipped). No deterministic recipe exists at the starting commit without
+a production change. These branches therefore have no oracle row. Plan Common Rules allow no substitute: the
+operation may not move on focused tests alone, so this unit is held for a decision (`mark-blocked` with a human
+action). The focused tests that exist (`TestBlockExecutingTaskFromSupervisorLeavesAMovedTask`,
+`TestSupervisorBlockLeavesALifecycleMovedDuringTheSave`, `TestC6BlockSupervisorTaskStaleObservationsAreNoOps`) are
+complementary evidence only and discharge nothing of C6-GAPS for these branches.
 
 ## Assertion-preservation map
 
