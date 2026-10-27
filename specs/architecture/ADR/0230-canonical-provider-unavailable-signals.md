@@ -30,9 +30,11 @@ adds a `tool:` line.
 
 `CheckProviderUnavailableSignal(root, tool, keys)` enumerates the records and
 reports a match when `ProviderKeys.Same(record tool, tool)`. If the signal
-directory cannot be listed, the record paths earlier versions would have
-stat'ed for the tool (its own and its alias-normalised name) are checked
-directly, so a stat-visible record keeps stopping the provider. The keys are a
+directory cannot be listed, the records visible by name that earlier versions
+would have stat'ed for the tool (its own and its alias-normalised name, under
+the literal and the encoded file name) are read and compared through the same
+keys, so a stat-visible record keeps stopping exactly the tools a listing would
+stop. Records of other tools cannot be discovered without a listing. The keys are a
 lazy argument: derived once, only when a record exists, from the catalog-derived
 registry under the configuration of the state the caller decides on. Nothing
 caches or stores a key, so a configuration change takes effect at the next

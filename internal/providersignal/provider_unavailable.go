@@ -208,7 +208,10 @@ func WriteProviderUnavailableSignal(projectRoot string, pu *ProviderUnavailable)
 func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() agentlaunch.ProviderKeys) bool {
 	signals, err := listUnavailableSignals(projectRoot)
 	if err != nil {
-		return !os.IsNotExist(err) && knownRecordExists(projectRoot, tool)
+		if os.IsNotExist(err) {
+			return false
+		}
+		signals = knownUnavailableSignals(projectRoot, tool)
 	}
 	if len(signals) == 0 {
 		return false
@@ -222,15 +225,28 @@ func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() agentl
 	return false
 }
 
-// knownRecordExists reports whether a record earlier versions would have
-// stat'ed for tool is visible, without listing the directory.
-func knownRecordExists(projectRoot, tool string) bool {
+// knownUnavailableSignals returns the records visible by name when the signal
+// directory cannot be listed: the ones earlier versions would have stat'ed for
+// tool (its own and its alias-normalised name), under the literal legacy file
+// name and the encoded one. Their identity is read as for a listing, so the
+// caller compares them through the same keys.
+func knownUnavailableSignals(projectRoot, tool string) []UnavailableSignal {
+	dir := paths.New(projectRoot).LizaDir()
+	var signals []UnavailableSignal
+	seen := map[string]bool{}
 	for _, candidate := range []string{tool, agentlaunch.ACPXAgentName(tool)} {
-		if _, err := os.Stat(ProviderUnavailableSignalPath(projectRoot, candidate)); err == nil {
-			return true
+		for _, name := range []string{candidate, encodeSignalName(candidate)} {
+			if strings.ContainsAny(name, "/\\\x00") || seen[name] {
+				continue
+			}
+			seen[name] = true
+			path := filepath.Join(dir, providerUnavailableSignalPrefix+name)
+			if _, err := os.Stat(path); err == nil {
+				signals = append(signals, readUnavailableSignal(path))
+			}
 		}
 	}
-	return false
+	return signals
 }
 
 // ClearProviderUnavailableSignal removes the record at path, a handle

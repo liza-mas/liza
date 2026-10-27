@@ -34,8 +34,10 @@ now takes the record path. No shim or alias was added. Quota code is untouched.
 - Row order is the pre-C3 order: records sort by the file name their display provider had before C3 (alias-normalised
   label), not by physical name (`TestC3PresentKeepsPreC3RowOrderForAliasTools`: `acpx-codex` plus `claude` lists
   `claude`, `codex`).
-- Unlistable directory: a stat-visible record of the tool or its alias-normalised name keeps stopping
-  (`TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, directory mode 0111).
+- Unlistable directory (mode 0111): the stat-visible records of the tool or its alias-normalised name, under the
+  literal and the encoded file name, are read and compared through the current keys, not by existence
+  (`TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, `...MissingRecordDoesNotStop`, `...StillComparesCanonicalKeys`,
+  `...FindsLegacyLiteralName`). Records of other tools cannot be discovered without a listing.
 - Distinct effective keys are not conflated: one file per encoded launch tool (`TestC3StoreRecordsDoNotConflateDistinctTools`).
 - Filesystem addressing is separate from configured text: `encodeSignalName` percent-encodes every byte outside
   `[A-Za-z0-9_-]` and a leading dot, is injective and cannot yield a separator or dot segment
@@ -66,7 +68,8 @@ records, `TestC3CheckReadsKeysOnlyWhenARecordExists`); no refresh or cache was a
 | M4 | spawn keys ignore the runtime config | `TestC3SpawnRefusesByCanonicalKey` |
 | M5 | classifier drops `Tool` | `TestC3CrashWriterKeepsOriginatingToolSeparateFromLabel` |
 
-| M6 | no stat fallback for an unlistable directory | `TestC3FailUnlistableDirectoryKeepsStatVisibleSignal` |
+| M6 | the unlistable-directory fallback decides by existence, ignoring the keys | `TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, `...MissingRecordDoesNotStop`, `...StillComparesCanonicalKeys`, `...FindsLegacyLiteralName` |
+| M6b | the fallback probes encoded names only | `TestC3FailUnlistableDirectoryFindsLegacyLiteralName` |
 | M7 | rows ordered by physical tool file name | `TestC3PresentKeepsPreC3RowOrderForAliasTools` |
 | M8 | no `tool:` line for escaped names | `TestC3StoreToolNamesStayInsideSignalDirectory` |
 

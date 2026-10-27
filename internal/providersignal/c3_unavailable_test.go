@@ -45,6 +45,8 @@ func c3Raise(t *testing.T, root, output, cli string) *ProviderUnavailable {
 	return pu
 }
 
+var c3SplitAlias = models.Config{AgentTools: map[string]models.AgentToolConfig{"codex-acp": {ProviderKey: "acp-lane"}}}
+
 const c3CodexFailure = "Error: thread/start: thread/start failed: error creating thread: Fatal error: Codex cannot access session files at /tmp/.codex/sessions (permission denied)."
 
 func TestC3ClassifierKeepsOriginatingTool(t *testing.T) {
@@ -332,17 +334,23 @@ func TestC3QuotaAliasBehaviourUnchanged(t *testing.T) {
 	}
 }
 
-func TestC3FailUnlistableDirectoryKeepsStatVisibleSignal(t *testing.T) {
+// c3Unlistable makes the signal directory searchable but not listable.
+func c3Unlistable(t *testing.T, root string) {
+	t.Helper()
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("directory modes are not enforced here")
 	}
-	root := c3Project(t)
-	c3Raise(t, root, c3CodexFailure, "codex")
 	dir := filepath.Join(root, paths.ProjectDirName())
-	if err := os.Chmod(dir, 0o111); err != nil { // searchable, not listable
+	if err := os.Chmod(dir, 0o111); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
+func TestC3FailUnlistableDirectoryKeepsStatVisibleSignal(t *testing.T) {
+	root := c3Project(t)
+	c3Raise(t, root, c3CodexFailure, "codex")
+	c3Unlistable(t, root)
 
 	for _, tool := range []string{"codex", "codex-acp"} {
 		if !CheckProviderUnavailableSignal(root, tool, c3Keys(models.Config{})) {
@@ -352,17 +360,41 @@ func TestC3FailUnlistableDirectoryKeepsStatVisibleSignal(t *testing.T) {
 	if CheckProviderUnavailableSignal(root, "claude", c3Keys(models.Config{})) {
 		t.Fatal("an unrelated provider has no visible record and must not stop")
 	}
-	if err := os.Chmod(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(ProviderUnavailableSignalPath(root, "codex")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(dir, 0o111); err != nil {
-		t.Fatal(err)
-	}
+}
+
+func TestC3FailUnlistableDirectoryMissingRecordDoesNotStop(t *testing.T) {
+	root := c3Project(t)
+	c3Unlistable(t, root)
 	if CheckProviderUnavailableSignal(root, "codex", c3Keys(models.Config{})) {
 		t.Fatal("no visible record: not stopped")
+	}
+}
+
+func TestC3FailUnlistableDirectoryStillComparesCanonicalKeys(t *testing.T) {
+	root := c3Project(t)
+	c3Raise(t, root, c3CodexFailure, "codex")
+	c3Unlistable(t, root)
+	if CheckProviderUnavailableSignal(root, "codex-acp", c3Keys(c3SplitAlias)) {
+		t.Fatal("the override gives codex-acp its own key: the visible codex record must not stop it, as with a listable directory")
+	}
+	if !CheckProviderUnavailableSignal(root, "codex", c3Keys(c3SplitAlias)) {
+		t.Fatal("the raising tool still observes its own visible record")
+	}
+}
+
+func TestC3FailUnlistableDirectoryFindsLegacyLiteralName(t *testing.T) {
+	root := c3Project(t)
+	dir := filepath.Join(root, paths.ProjectDirName())
+	legacy := "provider: foo%41\ndetected: 2020-01-01T00:00:00Z\nmessage: m\n"
+	if err := os.WriteFile(filepath.Join(dir, "provider-unavailable-foo%41"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c3Unlistable(t, root)
+	if !CheckProviderUnavailableSignal(root, "foo%41", c3Keys(models.Config{})) {
+		t.Fatal("a stat-visible legacy record keeps its literal identity")
+	}
+	if CheckProviderUnavailableSignal(root, "fooA", c3Keys(models.Config{})) {
+		t.Fatal("the legacy name must not be reinterpreted as fooA")
 	}
 }
 

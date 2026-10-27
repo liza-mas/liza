@@ -44,7 +44,7 @@
     {
       "obligation_id": "C3-FAIL",
       "file": "internal/providersignal/c3_unavailable_test.go",
-      "assertion": "TestC3FailUnreadableRecordStillBlocksAndClearFailureNamesHandle and TestC3FailUnlistableDirectoryKeepsStatVisibleSignal (providersignal, index 0): an unreadable record still blocks by file name, a record that can be stat'ed in an unlistable directory (mode 0111) still stops the tool and its alias-normalised name, a clear failure keeps the existing message naming the handle and a missing record clears without error; the commands and tui clear-failure tests (index 0) keep the warning text and attribution; existing TestResumeCommand_WarnsOnProviderSignalClearFailure and TestResumeSystemCmd_WarnsOnQuotaClearFailure run unedited",
+      "assertion": "TestC3FailUnreadableRecordStillBlocksAndClearFailureNamesHandle and TestC3FailUnlistableDirectoryKeepsStatVisibleSignal (providersignal, index 0): an unreadable record still blocks by file name, a record that can be stat'ed in an unlistable directory (mode 0111) is read and compared through the current keys (TestC3FailUnlistableDirectory*: stops the tool and its alias, not an override-separated alias, finds a legacy literal foo%41, a missing record does not stop), a clear failure keeps the existing message naming the handle and a missing record clears without error; the commands and tui clear-failure tests (index 0) keep the warning text and attribution; existing TestResumeCommand_WarnsOnProviderSignalClearFailure and TestResumeSystemCmd_WarnsOnQuotaClearFailure run unedited",
       "command_index": 0
     },
     {
