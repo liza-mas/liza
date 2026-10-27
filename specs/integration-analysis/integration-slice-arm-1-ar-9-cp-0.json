@@ -1,0 +1,12 @@
+[
+  {
+    "desc": "Complete D48 process isolation and descendant cleanup for the A9 oracle shared kit's lifecycle and reviewer consumers (slice finding F1). Remove parallel overlap only from attributed supervisor-starting tests and apply the existing D48 subreaper/cleanup shape to synchronous and asynchronous kit supervisor paths. Add focused held-provider cancellation/failure and adopted-zombie regression coverage. Preserve every behavioral assertion, fixture, golden and production file. Run touched-file pre-commit before submission; submission runs the declared package and provenance checks.",
+    "done_when": "Attributed supervisor-starting cases in lifecycle_test.go and review_test.go have no parallel overlap; both scenario.run and scenario.start supervisor paths establish ownership before starting and clean up on success, failure and cancellation. On Linux the existing D48 mechanism enumerates all actual children including adopted zombies, signals their groups, reaps with bounded waits and asserts none remain; non-Linux behavior follows D45 best effort. Focused controlled failure/cancellation tests prove live detached descendants and already-adopted zombies do not survive. No production, fixture, golden or asserted-value change; no blanket serialization of pure tests. A9 package tests and package-filtered regen check pass under env -i. Committed evidence records commands, tested SHA, outcomes and the unchanged fixture/golden diff.",
+    "scope": "Only the A9 oracle kit supervisor execution/cleanup paths, their lifecycle_test.go and review_test.go consumers, existing platform cleanup helpers if required for reuse, focused new cleanup tests and the relevant A9 acceptance documentation. Reuse the existing D48 helper shape rather than inventing ownership tracking. Out: production code, fixtures, goldens, later runtime/C-task behavior, other oracle packages and boundary CI holds.",
+    "spec_ref": "specs/integration-analysis/integration-slice-arm-1-ar-9-cp-0.md#F1 — Lifecycle and reviewer consumers bypass suite-wide process ownership",
+    "validation": [
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go test -count=1 -timeout=15m ./internal/oracle/a9/...",
+      "env -i HOME=\"$HOME\" PATH=\"$PATH\" TMPDIR=/tmp go run ./internal/testhelpers/oracle/cmd/regen -mode check -pkg ./internal/oracle/a9/..."
+    ]
+  }
+]
