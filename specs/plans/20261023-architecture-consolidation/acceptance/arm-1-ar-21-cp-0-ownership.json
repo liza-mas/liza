@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "C6-REGISTER",
+      "file": "internal/ops/agent_registration_test.go",
+      "assertion": "TestC6RegisterAgentWritesIdleRowWithAuthority, TestC6RegisterAgentRefusesLiveCollisionAndLeavesState, TestC6RegisterAgentTakesOverExpiredRegistration and TestC6RegisterAgentEnforcesRoleCapacityAndSingularity assert the IDLE row, PID, generation and returned authority, lease, sweep of an orphan liveness record, collision refusal with unchanged bytes, takeover report and capacity/singularity messages; the PB tests (collision, takeover, capacity, generation, PID, TestRegisterAgentSweepsOrphanLivenessRecordInTransaction, TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration) were green on the unchanged tree 75d4084d4 and after (map, commands and outcomes: specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C6-RETIRE",
+      "file": "internal/ops/agent_registration_test.go",
+      "assertion": "TestC6PoolSurplusAndRetireSurplusAgent, TestC6RetireSurplusAgentFailsClosed and TestC6OwnedPendingMergeFingerprintKeepsOwnerRegistered assert the locked surplus predicate per in-flight ownership case, row removal only when surplus, nil resolver and fenced-out caller leaving bytes unchanged, and an approved-merge owner never surplus; TestUnregisterAgent*, state_read_patience_test.go unregister tests and TestC6UnregisterAgentReleasesEveryClaimAndRemovesRow (agent_exit_release_test.go) assert patient unregistration releasing doer and reviewer claims and deleting the row; pool_surplus_test.go cases moved by call site only (map in specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C6-EXIT",
+      "file": "internal/ops/agent_exit_release_test.go",
+      "assertion": "TestC6ReleaseAgentAfterExitReleasesDoerAndReturnsWitness (released task, continuation, one claim_released entry, witness equals the post-release token), ...FirstIterationIsNotAContinuation, ...HandoffKeepsClaimAndWaitingReviewerReleases, ...MissingAgentAndStaleAuthorityChangeNothing, TestC6ReleaseClaimForHaltReleasesOnlyTheNamedHeldClaim, TestC6ResetAgentToIdleAndEnterOrchestration (lease from config and default); the halt-refused release is frozen by TestOracleA9HaltRelease at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C6-BLOCK",
+      "file": "internal/ops/supervisor_block_test.go",
+      "assertion": "TestC6BlockSupervisorTaskAppliesForDoerAndReleasesOwners, ...ReviewerOwnerBlocksOnlyWhileReviewing, ...StaleObservationsAreNoOps (moved token, changed owner, released task owned again: outcome stale, bytes unchanged), ...ReleasedContinuationAndMissingTask, ...StaleAuthorityAndIllegalTransition assert applied, task-missing and stale outcomes with history, owner release and unchanged state; supervisor_block_* agent tests stay green by call site only",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C6-RESTART",
+      "file": "internal/ops/exit42_restart_test.go",
+      "assertion": "TestC6PersistExit42RestartRecordsCountWithoutBlockingBelowLimit, TestC6PersistExit42RestartBlocksOwnedExecutingTaskPastTheLimit (the d40 BLOCKED branch: reason text, questions, history, ownership cleared, agent row kept), ...BlocksOwnedReviewingTask, ...LeavesUnownedAndInactiveTasksUnblocked, ...EmptyAndMissingTaskStillFenced, ...PipelineUnreadableSurfacesOnlyPastTheLimit; TestOracleA9Restart42 and TestOracleA9Restart42Limit run at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C6-GAPS",
+      "file": "internal/oracle/a9/exit_release_test.go",
+      "assertion": "TestOracleA9HaltRelease, TestOracleA9BlockReleasedStale and TestOracleA9BlockDoerStale were committed in oracle-only commit ae2228b1a (production tree equal to 75d4084d4) with goldens from regen write-new, pass on the unchanged tree (count=2, ok 61.390s) and after the move (count=2, ok 60.965s); the executing-variant and in-transaction stale branches have no black-box recipe and are covered by focused tests (gap record in specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C6-ORACLE",
+      "file": "internal/oracle/a9/lifecycle_test.go",
+      "assertion": "TestOracleA9Registration, ...RegistrationCollision, ...AutoAssignID, ...DoerClaim, ...AuthorityLost, ...Restart42, ...Restart42Limit, ...SpinBlock, ...SurplusRetire and ...OrchestratorTurn pass at index 1 with no oracle file or golden edited; regen check at index 2 reproduces every golden from the starting tree",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C6-SIZE",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard passes: new ops files 269, 333, 118 and 101 lines, releaseTaskClaim still 99 lines, no ratchet entry added; TestK4ImportDirectionGuard passes with ops importing no agent, commands or tui",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "C6-NO-VALIDATION",
+      "approved_reference_id": "changes"
+    },
+    {
+      "obligation_id": "C6-K1",
+      "approved_reference_id": "d33"
+    },
+    {
+      "obligation_id": "C6-WHITEBOX",
+      "approved_reference_id": "tests"
+    },
+    {
+      "obligation_id": "C6-DOCS",
+      "approved_reference_id": "docs"
+    },
+    {
+      "obligation_id": "C6-ENV",
+      "approved_reference_id": "proof"
+    }
+  ]
+}
