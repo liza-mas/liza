@@ -141,12 +141,7 @@ func (s *orchestratorStrategy) PreWork(ctx context.Context, bb *db.Blackboard, c
 
 	// Clear trigger even if transitions failed — the human approved, so don't
 	// re-checkpoint. Transition errors are logged; retry is manual.
-	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(s *models.State) error {
-		if ops.SameResumedTransitionCheckpoint(s.Sprint, state.Sprint) {
-			s.Sprint.CheckpointTrigger = ""
-		}
-		return nil
-	}); err != nil {
+	if err := ops.ClearResumedTransitionCheckpoint(bb, config.Authority, state.Sprint); err != nil {
 		return false, fmt.Errorf("clear checkpoint trigger: %w", err)
 	}
 
@@ -295,21 +290,11 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 	// wake the orchestrator again.
 	if ops.CountUnseenHumanNotes(stateBefore) > 0 {
 		trigger := result.Trigger
-		rendered := len(stateBefore.HumanNotes)
-		if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-			consumed := func(*models.HumanNote) bool { return true }
-			if trigger != WakeTriggerHumanNote {
-				assessed := ops.TasksAssessedBetween(stateBefore, state)
-				consumed = func(note *models.HumanNote) bool {
-					return assessed[note.For] || (note.For == humanNoteTargetAll && len(assessed) > 0)
-				}
-			}
-			if stamped := ops.MarkHumanNotesSeen(state, time.Now().UTC(), rendered, consumed); stamped > 0 {
-				GetLogger().Info("Marked operator notes as seen by orchestrator", "count", stamped, "trigger", trigger)
-			}
-			return nil
-		}); err != nil {
+		stamped, err := ops.ConsumeRenderedHumanNotes(bb, config.Authority, stateBefore, len(stateBefore.HumanNotes), trigger == WakeTriggerHumanNote)
+		if err != nil {
 			GetLogger().Warn("Failed to mark operator notes as seen", "error", err)
+		} else if stamped > 0 {
+			GetLogger().Info("Marked operator notes as seen by orchestrator", "count", stamped, "trigger", trigger)
 		}
 	}
 
@@ -405,28 +390,16 @@ func recordUndecidedPlans(bb *db.Blackboard, config SupervisorConfig, stateBefor
 		GetLogger().Warn("Failed to load plan hand-off domain for undecided plans", "error", err)
 		return
 	}
-	type recorded struct {
-		task        models.Task
-		observation ops.PlanHandoffUndecided
-	}
-	var observations []recorded
 	now := time.Now().UTC()
-	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-		observations = nil
-		for _, id := range planIDs {
-			if observation := domain.RecordUndecided(stateBefore, state, id, now); observation != nil {
-				observations = append(observations, recorded{task: *state.FindTask(id), observation: *observation})
-			}
-		}
-		return nil
-	}); err != nil {
+	observations, err := ops.RecordUndecidedPlans(bb, config.Authority, domain, stateBefore, planIDs, now)
+	if err != nil {
 		GetLogger().Warn("Failed to record undecided plans", "error", err, "plans", planIDs)
 		return
 	}
 	for _, r := range observations {
-		GetLogger().Warn("Plan left undecided; PLANNING_COMPLETE waits for new input", "task_id", r.observation.TaskID, "class", r.observation.Class)
-		if err := domain.WriteUndecidedAlert(config.ProjectRoot, &r.task, r.observation, now); err != nil {
-			GetLogger().Warn("Failed to write undecided-plan alert", "error", err, "task_id", r.observation.TaskID)
+		GetLogger().Warn("Plan left undecided; PLANNING_COMPLETE waits for new input", "task_id", r.Observation.TaskID, "class", r.Observation.Class)
+		if err := domain.WriteUndecidedAlert(config.ProjectRoot, &r.Task, r.Observation, now); err != nil {
+			GetLogger().Warn("Failed to write undecided-plan alert", "error", err, "task_id", r.Observation.TaskID)
 		}
 	}
 }

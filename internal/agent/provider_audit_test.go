@@ -104,8 +104,8 @@ func TestHandleProviderAuditDegraded_CanonicalizesProviderAliasInAnomaly(t *test
 		t.Fatalf("len(Anomalies) = %d, want 1", len(updated.Anomalies))
 	}
 	anomaly := updated.Anomalies[0]
-	if anomaly.Type != ProviderAuditDegradedAnomalyType {
-		t.Fatalf("anomaly.Type = %q, want %q", anomaly.Type, ProviderAuditDegradedAnomalyType)
+	if anomaly.Type != models.AnomalyTypeProviderAuditDegraded {
+		t.Fatalf("anomaly.Type = %q, want %q", anomaly.Type, models.AnomalyTypeProviderAuditDegraded)
 	}
 	if anomaly.Task != "task-1" {
 		t.Errorf("anomaly.Task = %q, want task-1", anomaly.Task)

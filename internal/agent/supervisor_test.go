@@ -987,8 +987,8 @@ func testSupervisorAuditPostExecution(t *testing.T, auditOutput string, wantAnom
 		}
 		return
 	}
-	if updated.Anomalies[0].Type != ProviderAuditDegradedAnomalyType {
-		t.Fatalf("anomaly.Type = %q, want %q", updated.Anomalies[0].Type, ProviderAuditDegradedAnomalyType)
+	if updated.Anomalies[0].Type != models.AnomalyTypeProviderAuditDegraded {
+		t.Fatalf("anomaly.Type = %q, want %q", updated.Anomalies[0].Type, models.AnomalyTypeProviderAuditDegraded)
 	}
 
 	alerts, err := os.ReadFile(filepath.Join(projectRoot, paths.ProjectDirName(), "alerts.log"))

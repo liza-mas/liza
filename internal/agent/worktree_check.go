@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/functionalclusters"
@@ -17,7 +16,7 @@ import (
 	"github.com/liza-mas/liza/internal/stacklit"
 )
 
-// errTaskBlocked is a sentinel indicating that blockReviewerTask already
+// errTaskBlocked is a sentinel indicating that ops.ForceBlockReviewerTask already
 // handled claim release and agent state cleanup. The supervisor must NOT
 // call releaseReviewerClaimQuietly when this error is returned.
 var errTaskBlocked = errors.New("task blocked")
@@ -103,7 +102,7 @@ func attachReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID string
 	for _, h := range task.History {
 		if h.Event == models.TaskEventWorktreeRecovered {
 			logger.Error("Blocking task: worktree still missing after prior recovery", "task_id", taskID)
-			if blockErr := blockReviewerTask(bb, taskID, authority, "worktree missing after prior recovery attempt"); blockErr != nil {
+			if blockErr := ops.ForceBlockReviewerTask(bb, authority, taskID, "worktree missing after prior recovery attempt"); blockErr != nil {
 				return nil, "", blockErr
 			}
 			return nil, "", fmt.Errorf("task %s: unrecoverable worktree: %w", taskID, errTaskBlocked)
@@ -119,7 +118,7 @@ func attachReviewerWorktree(projectRoot string, bb *db.Blackboard, taskID string
 	}
 	if !branchExists {
 		logger.Error("Cannot recover: branch also missing", "task_id", taskID, "branch", branchName)
-		if blockErr := blockReviewerTask(bb, taskID, authority, "worktree and branch both missing — unrecoverable"); blockErr != nil {
+		if blockErr := ops.ForceBlockReviewerTask(bb, authority, taskID, "worktree and branch both missing — unrecoverable"); blockErr != nil {
 			return nil, "", blockErr
 		}
 		return nil, "", fmt.Errorf("task %s: branch missing: %w", taskID, errTaskBlocked)
@@ -220,19 +219,7 @@ func refreshRecoveredReviewerIndexes(projectRoot, taskID, wtPath string, cfg mod
 // recordReviewerWorktreeRecovery records the recovery in the task history. A
 // failed write is a warning: the worktree is already back.
 func recordReviewerWorktreeRecovery(bb *db.Blackboard, taskID string, authority models.AgentAuthority) {
-	agentID := authority.ID
-	if modErr := ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
-		t := s.FindTask(taskID)
-		if t != nil {
-			agentPtr := agentID
-			t.History = append(t.History, models.TaskHistoryEntry{
-				Time:  time.Now().UTC(),
-				Event: models.TaskEventWorktreeRecovered,
-				Agent: &agentPtr,
-			})
-		}
-		return nil
-	}); modErr != nil {
+	if modErr := ops.RecordWorktreeRecovered(bb, authority, taskID); modErr != nil {
 		GetLogger().Warn("Failed to record worktree recovery in history", "task_id", taskID, "error", modErr)
 	}
 }
@@ -257,52 +244,4 @@ func runReviewerWorktreeSetup(projectRoot string, bb *db.Blackboard, taskID, wtP
 		GetLogger().Error("post-worktree-cmd failed for reviewer worktree", "task_id", taskID, "error", postErr)
 	}
 	return postErr
-}
-
-// blockReviewerTask forces a task into BLOCKED status, bypassing normal
-// transition validation. This handles the exceptional case where a reviewer
-// task's worktree is unrecoverable and no valid transition path to BLOCKED exists.
-//
-// Reserved for lost work. A task blocked here is restored by unblock-task to the
-// doer's executing status (unblock_task.go), which discards review readiness —
-// acceptable when the worktree is gone, not when it merely failed to prepare.
-func blockReviewerTask(bb *db.Blackboard, taskID string, authority models.AgentAuthority, reason string) error {
-	agentID := authority.ID
-	if err := ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		t := state.FindTask(taskID)
-		if t == nil {
-			return nil
-		}
-
-		// Force status to BLOCKED — no valid transition exists from REVIEWING.
-		t.Status = models.TaskStatusBlocked
-		t.BlockedReason = &reason
-		t.BlockedQuestions = []string{
-			"Is the task branch recoverable from a remote or backup?",
-			"Should this task be recreated with a fresh worktree?",
-		}
-
-		// Release the reviewer agent state before clearing claim fields.
-		if t.ReviewingBy != nil {
-			state.ReleaseAgent(*t.ReviewingBy)
-		}
-
-		// Clear reviewer claim.
-		t.ReviewingBy = nil
-		t.ReviewLeaseExpires = nil
-		models.AdvanceLifecycle(t)
-
-		now := time.Now().UTC()
-		t.History = append(t.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventBlocked,
-			Agent:  &agentID,
-			Reason: &reason,
-		})
-
-		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
 }

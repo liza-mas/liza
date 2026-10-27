@@ -16,8 +16,6 @@ import (
 
 const defaultMaxMergeRetries = 3
 
-const pendingMergeStallAnomalyType = models.AnomalyTypePendingMergeStalled
-
 // Overridable in tests, which must not spend the production cadence to observe
 // one round of it.
 var (
@@ -232,20 +230,7 @@ func (s *reviewerStrategy) awaitPendingMergeWake(ctx context.Context, bb *db.Bla
 // recordPendingMergeStall leaves durable evidence that automatic merge
 // convergence gave up, so the stall is visible without reading supervisor logs.
 func (s *reviewerStrategy) recordPendingMergeStall(bb *db.Blackboard, config SupervisorConfig) {
-	err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-		state.Anomalies = append(state.Anomalies, models.Anomaly{
-			Timestamp: time.Now().UTC(),
-			Reporter:  config.AgentID,
-			Type:      pendingMergeStallAnomalyType,
-			Details: map[string]any{
-				"agent_id": config.AgentID,
-				"role":     s.role,
-				"rounds":   s.mergeStallRounds,
-				"impact":   models.PendingMergeStallImpact,
-			},
-		})
-		return nil
-	})
+	err := ops.RecordPendingMergeStall(bb, config.Authority, config.AgentID, s.role, s.mergeStallRounds)
 	if err != nil {
 		GetLogger().Warn("Failed to record pending merge stall anomaly", "agent_id", config.AgentID, "error", err)
 	}
@@ -420,7 +405,7 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 			"task_id", taskID, "error", wtErr)
 		if !errors.Is(wtErr, errTaskBlocked) {
 			// Transient error (bb.Read, BranchExists, AttachWorktree) or a
-			// post_worktree_cmd failure. blockReviewerTask was NOT called, so the
+			// post_worktree_cmd failure. ops.ForceBlockReviewerTask was NOT called, so the
 			// reviewer claim and agent state are still dangling — release them.
 			// Release restores the task to its reviewable status, preserving the
 			// doer's completed work for the next reviewer.
@@ -428,7 +413,7 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 				return "", "", releaseErr
 			}
 		}
-		// For errTaskBlocked, blockReviewerTask already cleared
+		// For errTaskBlocked, ops.ForceBlockReviewerTask already cleared
 		// claim fields and released agent state.
 		//
 		// A failed setup command is project-level, so this reviewer cannot make

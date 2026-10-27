@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -94,7 +94,7 @@ func TestEmitCheckpointSummary_DefaultOn(t *testing.T) {
 	})
 
 	// Empty config — default is ON.
-	emitCheckpointSummary(context.Background(), tmp, "task-1", checkpointSummaryScope{}, models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-1", ops.CheckpointSummaryScope{}, models.Config{})
 
 	if !called {
 		t.Fatal("expected checkpoint summary runner to be called for default config")
@@ -125,7 +125,7 @@ func TestEmitCheckpointSummary_UsesBrandedProjectPathsInPrompt(t *testing.T) {
 		return nil
 	})
 
-	emitCheckpointSummary(context.Background(), tmp, "task-branded", checkpointSummaryScope{}, models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-branded", ops.CheckpointSummaryScope{}, models.Config{})
 
 	for _, want := range []string{".acme/state.yaml", ".acme/checkpoint-summary.md"} {
 		if !strings.Contains(gotPrompt, want) {
@@ -146,7 +146,7 @@ func TestEmitCheckpointSummary_OptOut(t *testing.T) {
 	})
 
 	off := false
-	emitCheckpointSummary(context.Background(), tmp, "task-2", checkpointSummaryScope{}, models.Config{AutoCheckpointSummary: &off})
+	emitCheckpointSummary(context.Background(), tmp, "task-2", ops.CheckpointSummaryScope{}, models.Config{AutoCheckpointSummary: &off})
 
 	if called {
 		t.Fatal("expected runner to be skipped when AutoCheckpointSummary is false")
@@ -162,7 +162,7 @@ func TestEmitCheckpointSummary_ExplicitOn(t *testing.T) {
 	})
 
 	on := true
-	emitCheckpointSummary(context.Background(), tmp, "task-3", checkpointSummaryScope{}, models.Config{AutoCheckpointSummary: &on})
+	emitCheckpointSummary(context.Background(), tmp, "task-3", ops.CheckpointSummaryScope{}, models.Config{AutoCheckpointSummary: &on})
 	if !called {
 		t.Fatal("expected runner to fire when AutoCheckpointSummary is explicitly true")
 	}
@@ -175,7 +175,7 @@ func TestEmitCheckpointSummary_RunnerErrorIsSwallowed(t *testing.T) {
 	})
 
 	// Must not panic / must not propagate — runner errors are best-effort.
-	emitCheckpointSummary(context.Background(), tmp, "task-4", checkpointSummaryScope{}, models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-4", ops.CheckpointSummaryScope{}, models.Config{})
 }
 
 func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
@@ -187,7 +187,7 @@ func TestEmitCheckpointSummary_HonoursConfiguredCLI(t *testing.T) {
 		return nil
 	})
 
-	emitCheckpointSummary(context.Background(), tmp, "task-cli", checkpointSummaryScope{}, models.Config{DefaultCLI: "codex"})
+	emitCheckpointSummary(context.Background(), tmp, "task-cli", ops.CheckpointSummaryScope{}, models.Config{DefaultCLI: "codex"})
 	if gotCLI != "codex" {
 		t.Errorf("cli = %q, want %q (config override)", gotCLI, "codex")
 	}
@@ -203,7 +203,7 @@ func TestEmitCheckpointSummary_FollowsOrchestratorCLI(t *testing.T) {
 		return nil
 	})
 
-	emitCheckpointSummary(context.Background(), tmp, "task-cli", checkpointSummaryScope{}, models.Config{})
+	emitCheckpointSummary(context.Background(), tmp, "task-cli", ops.CheckpointSummaryScope{}, models.Config{})
 	if gotCLI != "codex" {
 		t.Errorf("cli = %q, want %q (orchestrator role default)", gotCLI, "codex")
 	}
@@ -278,7 +278,7 @@ func TestEmitCheckpointSummary_FailureWritesAlert(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(tmp, paths.ProjectDirName()), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	emitCheckpointSummary(context.Background(), tmp, "SPRINT_COMPLETE", checkpointSummaryScope{}, models.Config{DefaultCLI: "opencode"})
+	emitCheckpointSummary(context.Background(), tmp, "SPRINT_COMPLETE", ops.CheckpointSummaryScope{}, models.Config{DefaultCLI: "opencode"})
 
 	data, err := os.ReadFile(paths.New(tmp).AlertsLogPath())
 	if err != nil {
@@ -566,70 +566,9 @@ func installFakeCLI(t *testing.T, name string, body []string) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-func mergedTask(id string, at time.Time) models.Task {
-	return models.Task{ID: id, History: []models.TaskHistoryEntry{{Event: models.TaskEventMerged, Time: at}}}
-}
-
-// #171: a summary told to read the whole run outgrew its bound. The scope is
-// the work merged since the previous checkpoint, newest first.
-func TestBuildCheckpointSummaryScope_MergesSinceThePreviousCheckpoint(t *testing.T) {
-	base := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
-	since := base
-	state := &models.State{Tasks: []models.Task{
-		mergedTask("before", base.Add(-time.Minute)),
-		mergedTask("at-since", base),
-		mergedTask("older", base.Add(time.Minute)),
-		mergedTask("newer", base.Add(2*time.Minute)),
-		mergedTask("after", base.Add(4*time.Minute)),
-		{ID: "unmerged"},
-	}}
-	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: base.Add(3 * time.Minute), Since: &since})
-
-	if want := []string{"newer", "older"}; !slices.Equal(scope.TaskIDs, want) {
-		t.Errorf("TaskIDs = %v, want %v", scope.TaskIDs, want)
-	}
-	if !scope.Since.Equal(since) || scope.Omitted != 0 {
-		t.Errorf("Since = %v, Omitted = %d; want %v, 0", scope.Since, scope.Omitted, since)
-	}
-}
-
-// Without a previous checkpoint (or on an obligation recorded before Since
-// existed) the window opens at the sprint start.
-func TestBuildCheckpointSummaryScope_FallsBackToTheSprintStart(t *testing.T) {
-	start := time.Date(2026, 10, 7, 8, 0, 0, 0, time.UTC)
-	state := &models.State{Tasks: []models.Task{
-		mergedTask("previous-sprint", start.Add(-time.Hour)),
-		mergedTask("this-sprint", start.Add(time.Hour)),
-	}}
-	state.Sprint.Timeline.Started = start
-
-	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: start.Add(2 * time.Hour)})
-	if !slices.Equal(scope.TaskIDs, []string{"this-sprint"}) || !scope.Since.Equal(start) {
-		t.Errorf("scope = %+v, want only this-sprint since %v", scope, start)
-	}
-}
-
-// The scope is capped; the remainder is counted so the report can say what
-// it does not cover.
-func TestBuildCheckpointSummaryScope_CapsTheTaskList(t *testing.T) {
-	base := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
-	state := &models.State{}
-	for i := range checkpointSummaryScopeLimit + 3 {
-		state.Tasks = append(state.Tasks, mergedTask(fmt.Sprintf("task-%02d", i), base.Add(time.Duration(i+1)*time.Second)))
-	}
-	scope := buildCheckpointSummaryScope(state, &models.PendingCheckpointSummary{At: base.Add(time.Hour), Since: &base})
-
-	if len(scope.TaskIDs) != checkpointSummaryScopeLimit || scope.Omitted != 3 {
-		t.Fatalf("len = %d, Omitted = %d; want %d, 3", len(scope.TaskIDs), scope.Omitted, checkpointSummaryScopeLimit)
-	}
-	if want := fmt.Sprintf("task-%02d", checkpointSummaryScopeLimit+2); scope.TaskIDs[0] != want {
-		t.Errorf("first = %q, want the newest %q", scope.TaskIDs[0], want)
-	}
-}
-
 func TestBuildCheckpointSummaryPrompt_NamesTheScopeAndTheOneTurnRule(t *testing.T) {
 	since := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
-	prompt := buildCheckpointSummaryPrompt("PLANNING_COMPLETE", checkpointSummaryScope{Since: since, TaskIDs: []string{"task-a", "task-b"}, Omitted: 4})
+	prompt := buildCheckpointSummaryPrompt("PLANNING_COMPLETE", ops.CheckpointSummaryScope{Since: since, TaskIDs: []string{"task-a", "task-b"}, Omitted: 4})
 	for _, want := range []string{
 		"since 2026-10-07T09:00:00Z", "- task-a\n", "- task-b\n",
 		"4 earlier tasks merged in this window are not covered",
@@ -640,7 +579,7 @@ func TestBuildCheckpointSummaryPrompt_NamesTheScopeAndTheOneTurnRule(t *testing.
 		}
 	}
 
-	empty := buildCheckpointSummaryPrompt("", checkpointSummaryScope{Since: since})
+	empty := buildCheckpointSummaryPrompt("", ops.CheckpointSummaryScope{Since: since})
 	if !strings.Contains(empty, "(no task merged in this window)") || strings.Contains(empty, "not covered") {
 		t.Errorf("empty-scope prompt:\n%s", empty)
 	}

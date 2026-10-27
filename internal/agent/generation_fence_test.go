@@ -282,7 +282,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		{
 			name: "reviewer worktree blocking",
 			mutate: func(bb *db.Blackboard, _, _ string) error {
-				return blockReviewerTask(bb, "task-1", stale, "worktree missing")
+				return ops.ForceBlockReviewerTask(bb, stale, "task-1", "worktree missing")
 			},
 		},
 		{
@@ -361,10 +361,11 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		"heartbeat.go":             {"CheckAgentAuthoritySnapshot", "db.WriteLivenessRecord"},
 		"supervisor.go":            {}, // still barred from direct .Modify(
 		"supervisor_restart.go":    {"ops.PersistExit42Restart"},
-		"claiming.go":              {"ModifyWithAgentAuthority"},
-		"strategy_orchestrator.go": {"ModifyWithAgentAuthority"},
-		"provider_audit.go":        {"ModifyWithAgentAuthority"},
-		"worktree_check.go":        {"ModifyWithAgentAuthority"},
+		"claiming.go":              {"ops.FinalizeCleanTerminalTask"},
+		"strategy_orchestrator.go": {"ops.ClearResumedTransitionCheckpoint", "ops.ConsumeRenderedHumanNotes", "ops.RecordUndecidedPlans"},
+		"provider_audit.go":        {"ops.RecordProviderAuditDegraded"},
+		"worktree_check.go":        {"ops.RecordWorktreeRecovered", "ops.ForceBlockReviewerTask"},
+		"strategy_reviewer.go":     {"ops.RecordPendingMergeStall"},
 	}
 	for name, required := range fences {
 		data, err := os.ReadFile(filepath.Join(filepath.Dir(sourceFile), name))

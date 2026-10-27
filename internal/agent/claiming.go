@@ -368,7 +368,7 @@ func claimReviewerTask(projectRoot, agentID string, leaseDuration int, bb *db.Bl
 
 // releaseReviewerClaimQuietly releases a reviewer claim, logging but not
 // propagating errors. Used in supervisor recovery paths for transient failures
-// where blockReviewerTask was NOT called.
+// where ops.ForceBlockReviewerTask was NOT called.
 func releaseReviewerClaimQuietly(projectRoot, taskID string, authority models.AgentAuthority) error {
 	_, err := ops.ReleaseClaimWithAuthority(projectRoot, taskID, string(roles.ClaimReviewer), true, "supervisor: worktree check transient failure", authority)
 	if err != nil {
@@ -482,25 +482,7 @@ func handleCleanTaskCleanup(projectRoot string, authority models.AgentAuthority)
 		// Finalize: mirror non-git cleanup from the merge path.
 		// Records completion handoff event and releases the assigned agent.
 		taskID := task.ID
-		if err := ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
-			t := s.FindTask(taskID)
-			if t == nil {
-				return nil
-			}
-			if t.AssignedTo != nil {
-				if a, ok := s.Agents[*t.AssignedTo]; ok {
-					if a.CurrentTask != nil && *a.CurrentTask == taskID {
-						s.ReleaseAgent(*t.AssignedTo)
-					}
-				}
-			}
-			t.HandoffEvents = append(t.HandoffEvents, models.HandoffEvent{
-				Timestamp: time.Now(),
-				Agent:     "system",
-				Trigger:   models.HandoffTriggerCompletion,
-			})
-			return nil
-		}); err != nil {
+		if err := ops.FinalizeCleanTerminalTask(bb, authority, taskID); err != nil {
 			logger.Warn("Failed to finalize clean-terminal task", "task_id", taskID, "error", err)
 		}
 	}

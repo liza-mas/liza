@@ -2,16 +2,12 @@ package agent
 
 import (
 	"strings"
-	"time"
 
 	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/providersignal"
 )
-
-const ProviderAuditDegradedAnomalyType = "provider_audit_degraded"
 
 type providerAuditPattern struct {
 	Provider   string
@@ -83,21 +79,7 @@ func handleProviderAuditDegraded(bb *db.Blackboard, config SupervisorConfig, tas
 	}
 
 	if bb != nil {
-		if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-			state.Anomalies = append(state.Anomalies, models.Anomaly{
-				Timestamp: time.Now().UTC(),
-				Task:      taskID,
-				Reporter:  config.AgentID,
-				Type:      ProviderAuditDegradedAnomalyType,
-				Details: map[string]any{
-					"provider": pad.Provider,
-					"agent_id": config.AgentID,
-					"message":  pad.Message,
-					"impact":   "provider transcript or rollout persistence may be incomplete",
-				},
-			})
-			return nil
-		}); err != nil {
+		if err := ops.RecordProviderAuditDegraded(bb, config.Authority, taskID, config.AgentID, pad.Provider, pad.Message); err != nil {
 			GetLogger().Warn("Failed to record provider audit degradation anomaly", "error", err)
 			return true, err
 		}
