@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "C2-KEY",
+      "file": "internal/agentlaunch/provider_identity_test.go",
+      "assertion": "TestC2ProviderKey* (index 0): codex and codex-acp share key codex; an agent_tools provider_key wins on a built-in; custom tools sharing a provider_key collapse; keyless unknown tools stay distinct and keep their name; a loaded catalog key that differs from the embedded one is honoured (UseRuntimeCatalog fixture, no network); empty and whitespace cases equal ResolveLaunchPlan(...).ProviderKey for each registered fixture tool; the captured base map is unmodified",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C2-INPUTS",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "C2-CLAIM",
+      "file": "internal/ops/provider_diversity_test.go",
+      "assertion": "TestC2ClaimDoerDiversityComparesCanonicalKeys, TestC2ClaimPrefersCanonicallyDiverseSecondReview, TestC2FreshSubmissionSatisfiabilityComparesCanonicalKeys and TestC2ReviewerClaimEligibilityProjectionAgreesWithClaim (index 1): codex and codex-acp or custom tools sharing a key are one provider in the doer filter, the alternative-reviewer pool, the second-review preference and fresh satisfiability; a different backend still claims; an alias-only pool falls back and claims; TestC2ClaimUsesLockedStateConfig flips the outcome through the locked state's agent_tools. Mutation records M1-M5, M12, M17 in specs/architecture/consolidation-run/c2-provider-keys-evidence.md",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C2-POOL",
+      "file": "internal/commands/repair_agent_pool_provider_keys_test.go",
+      "assertion": "TestC2PoolRepairProjectsCanonicalDoerDiversity, TestC2ReviewerStartPlannerDerivesKeysFromProjectedConfig and TestC2CapacityDemandMatchesIdleReviewersByCanonicalKey (index 1): an idle or planned alias of the doer is not eligible where the claim blocks it, a different backend and keyless custom tools are; keys come from the projected state's config. Mutation records M14-M16",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C2-MERGE",
+      "file": "internal/agent/merge_gate_provider_keys_test.go",
+      "assertion": "TestC2MergeGate* (index 1): same-key approvals never set diversity_achieved, claude plus codex still does, an alias-only pool yields diversity_not_achievable with the smallest recorded provider named and the merge proceeds, a quorum shortfall is unchanged; TestC2MergeGateBatchTreatsAliasApprovalsAsOneProvider and TestC2MergeGateBatchUsesSnapshotConfig run the merge batch on a disposable project with built-in aliases and with custom tools sharing a key. Mutation records M5, M6, M13",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C2-EXISTING",
+      "file": "internal/ops/provider_diversity_test.go",
+      "assertion": "TestC2PartiallyApprovedPreferenceUsesCurrentConfig and TestC2MergeGatePersistedApprovalsFollowCurrentConfig (index 1): persisted approvals whose reviewers are absent are evaluated by the current config, an agent_tools override flips the outcome, and the stored approval providers are not rewritten; TestC2ClaimUsesLockedStateConfig does the same for the claim on a rewritten state",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C2-ANOMALY",
+      "file": "internal/analysis/provider_keys_test.go",
+      "assertion": "TestC2ProviderAudit* (analysis, index 0): mixed aliases and custom tools cross the count and distinct-agent threshold as one group through both DetectPatterns and DetectUnacknowledgedPatterns with equal evidence; keyless distinct tools do not combine; all key-group agents are health members, one healthy or unknown member yields CHECKPOINT, a health record of another tool, PID or registration epoch stays unknown; original anomalies deep-equal the state's. TestC2Analyze* in internal/ops/analyze_provider_keys_test.go (index 1) runs the same through ops.Analyze, including the beforeModify agent_tools change. Mutation records M7-M9, M11",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C2-WATCH",
+      "file": "internal/commands/watch_provider_keys_test.go",
+      "assertion": "TestC2AnalyzeWatchAgreeOnCanonicalProviderGroups (index 1): for equal state the read-only watch prediction alerts exactly when ops.Analyze halts, for built-in aliases, custom tools sharing a key, one healthy alias member and keyless tools; throttle, mode gates and alert text are the unchanged function. Mutation record M10",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "C2-PRESERVE",
+      "approved_reference_id": "frozen"
+    },
+    {
+      "obligation_id": "C2-STOP",
+      "approved_reference_id": "parent"
+    },
+    {
+      "obligation_id": "C2-ORACLE",
+      "file": "internal/oracle/a5/testdata/golden/state/RC4.state.yaml",
+      "assertion": "go test ./internal/oracle/... (index 2) passes with RC4 as the only changed golden (no-claim adapter, unclaimed state); regen -mode check (index 3) exits 0 and reproduces RC4.state.yaml through the chain record 'changed internal/oracle/a5/testdata/golden/state/RC4.state.yaml C2' appended in the same non-merge commit as the golden; every other golden reproduces as H1 and only the existing C5 record besides C2 exists",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "C2-STRUCT",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard, TestK4ImportDirectionGuard and TestC6MutationGuard run in go test ./internal/testguard/archguard/ (index 4): no ratchet ceiling rose, ops/commands/agent to agentlaunch are infrastructure imports, no mutation closure was added",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "C2-DOCS",
+      "approved_reference_id": "docs"
+    },
+    {
+      "obligation_id": "C2-ENV",
+      "approved_reference_id": "proof"
+    }
+  ]
+}
