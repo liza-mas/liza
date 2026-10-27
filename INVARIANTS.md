@@ -242,7 +242,7 @@ Integration-fix claims preserve `output[]` alongside the reused worktree so conf
 
 | Invariant | Protects Against | Enforced |
 |-----------|------------------|----------|
-| Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files) | Uncommitted work in review | spec (`worktree-management.md`), code (`submit_review.go`) |
+| Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files) | Uncommitted work in review | spec (`worktree-management.md`); not enforced in code at submission ([open issue](specs/architecture/architectural-issues.md#invariantsmd-7-clean-worktree-not-enforced-at-submission)) |
 | Coders cannot commit to or merge to integration branch; only supervisor after reviewer approval | Uncontrolled integration branch | spec (`worktree-management.md`) |
 | Merge constructs commits without a working tree (`merge-tree`, `commit-tree`); transient main-index sync/restore is serialized by the integration mutation lock | Race conditions, checkout conflicts, cross-process index collisions | spec, code (`merge_forward.go`, `merge_publication.go`, `merge_finalize.go`, `integration_mutation_lock.go`) |
 | If submit/merge conflict detected → INTEGRATION_FAILED (must be reclaimed); unblock-time `--rebase-on` conflicts remain BLOCKED with repair metadata | Silent conflict resolution, wrong recovery path | spec, code |

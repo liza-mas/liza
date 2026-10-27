@@ -35,19 +35,12 @@ sprint:
 
 **Sprint Completion Semantic:**
 
-"Planned tasks" = tasks listed in `sprint.scope.planned[]`. The planned list is updated in two ways:
-- **At sprint creation:** initial task list is set
-- **By pipeline transitions:** when the orchestrator executes `ExecuteAvailableTransitions` after a planning checkpoint is resumed, children are automatically added to `sprint.scope.planned[]`
+"Planned tasks" = tasks listed in `sprint.scope.planned[]`. The planned list is set at sprint creation, and every task created mid-sprint is added to it automatically:
+- **Pipeline transitions:** children created by `ExecuteAvailableTransitions`, including crash-recovered children
+- **Rescoping and replacement:** `liza add-task`, `liza replace-task` and `liza replan` (e.g., task-3a and task-3b replacing SUPERSEDED task-3)
+- **Plan amendment and integration analysis:** correction and integration tasks
 
-Tasks created mid-sprint via orchestrator rescoping (e.g., task-3a and task-3b replacing SUPERSEDED task-3) are **not** automatically added to the planned list.
-
-This means:
-- Pipeline-created children (from planning → coding transitions) are tracked in sprint scope and prevent premature sprint completion
-- Orchestrator-created replacement tasks are NOT in scope — a sprint can complete while they are still in progress
-- Sprint metrics may show more `tasks_done` than originally planned (includes replacements)
-- Sprint boundaries are for human planning cadence, not work completion guarantees
-
-If precise work-completion tracking is needed, human should update `sprint.scope.planned[]` when rescoping, or wait for all active tasks (planned + unplanned) to finish before considering sprint complete.
+A sprint therefore cannot complete while a replacement or other mid-sprint task is still active.
 
 ---
 

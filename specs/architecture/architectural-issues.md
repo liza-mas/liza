@@ -8,6 +8,8 @@ Persistent record of issues identified by architectural analysis skills.
 
 **Run-close reconciliation:** 2026-10-27, at `6eb9f9fab4fd1f4b681d8b6d17a6ea419e9514d0`, the architecture consolidation run's close reviewed every open entry against the merged tree and the nine boundary records ([run close](consolidation-run/run-close.md)). It corrected the code references the run moved and recorded the residual of each partial fix; it closed no further issue. Measurements and sizes not tied to a run move keep their earlier dates.
 
+**Verification pass:** 2026-10-27, at `ca8d76a3e`, every entry open before architecture review pass 23 was checked against the working tree. It closed one issue, corrected stale references and counts in place, and added dated updates where code had moved past an entry. Pass 23's two entries were not part of it.
+
 **Skills that contribute here:**
 - `systemic-thinking` — Systemic coherence and risk analysis
 - `software-architecture-review` — Code-level architectural patterns and smells
@@ -31,7 +33,6 @@ Persistent record of issues identified by architectural analysis skills.
 - [Systemic Tensions](#systemic-tensions)
   - [Role-Boundary Severity Drift](#role-boundary-severity-drift)
   - [Merge Execution Authority Split](#merge-execution-authority-split)
-  - [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
   - [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
   - [Cross-Pair Knowledge Required by Single-Pair Reviewers](#cross-pair-knowledge-required-by-single-pair-reviewers)
   - [Status Vocabulary Partition Between Go Constants and Declarative Pipeline](#status-vocabulary-partition-between-go-constants-and-declarative-pipeline)
@@ -57,6 +58,10 @@ Persistent record of issues identified by architectural analysis skills.
   - [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks)
   - [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening)
   - [Provider Support Crosses the Catalog Boundary](#provider-support-crosses-the-catalog-boundary)
+  - [Sliced-Integration Capability Detected by Role-Pair Names](#sliced-integration-capability-detected-by-role-pair-names)
+  - [TDD Gate Hardcodes Target-Project Test Conventions](#tdd-gate-hardcodes-target-project-test-conventions)
+  - [Secret Redaction Strength Depends on Call Site](#secret-redaction-strength-depends-on-call-site)
+  - [State Cache Treats mtime as Publication Identity](#state-cache-treats-mtime-as-publication-identity)
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
   - [Initialization Completion Unverifiable](#initialization-completion-unverifiable)
@@ -96,6 +101,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates)
   - [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership)
   - [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity)
+  - [Ops Concern-Family Ownership Is Nominal](#ops-concern-family-ownership-is-nominal)
 - [Completed Fixes](#completed-fixes)
 - [Fixed (Traceability)](#fixed-traceability)
 - [Fix Details](#fix-details)
@@ -126,7 +132,6 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | STRESS POINT | [Manual Sprint Transitions as Scaling Bottleneck](#manual-sprint-transitions-as-scaling-bottleneck) |
 | **medium** | STRESS POINT | [Filesystem/Git I/O Contention](#filesystemgit-io-contention) |
 | **medium** | TENSION | [Merge Execution Authority Split](#merge-execution-authority-split) |
-| **medium** | TENSION | [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) |
 | **medium** | TENSION | [Spec Completeness vs Reality](#spec-completeness-vs-reality) |
 | **medium** | FEEDBACK | [Issue Registry Resolution Drift](#issue-registry-resolution-drift) |
 | **medium** | FEEDBACK | [Restart/Lease Churn Under Load](#restartlease-churn-under-load) |
@@ -159,13 +164,18 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 | **low** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
+| **low** | FRAGILITY | [Sliced-Integration Capability Detected by Role-Pair Names](#sliced-integration-capability-detected-by-role-pair-names) |
 | **medium** | STRUCTURAL DEBT | [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners) |
 | **medium** | CROSS-CUTTING | [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates) |
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
+| **medium** | FRAGILITY | [TDD Gate Hardcodes Target-Project Test Conventions](#tdd-gate-hardcodes-target-project-test-conventions) |
+| **medium** | STRUCTURAL DEBT | [Ops Concern-Family Ownership Is Nominal](#ops-concern-family-ownership-is-nominal) |
+| **medium** | FRAGILITY | [Secret Redaction Strength Depends on Call Site](#secret-redaction-strength-depends-on-call-site) |
+| **medium** | FRAGILITY | [State Cache Treats mtime as Publication Identity](#state-cache-treats-mtime-as-publication-identity) |
 
-**Counts:** 17 high, 27 medium, 15 low — 59 open issues total. *(2026-10-27, run close: the final reconciliation corrected moved code references and recorded the residual of the partially fixed entries (Commands Layer Imports Agent Runtime, Coverage Basis, Control-Flow Vocabulary, Provider Stop-Signal Recovery); it closed nothing further, so the counts stand. 2026-10-27: the A9 boundary checkpoint closed the supervisor.go decomposition, with C1 the configured agent lease duration and with C2 and C3 the canonical provider identity gap. 2026-10-26: the A8 boundary checkpoint closed the prompts-to-ops dependency. 2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 30 medium, 16 low — 63 open issues total. *(2026-10-27, architecture review Adversarial pass: added the call-site-dependent secret redaction and the mtime-only state cache identity, and extended Control-Flow Vocabulary with the circuit-breaker pattern residue. 2026-10-27, verification pass: closed the sprint-completion scope tension, corrected stale references and counts, and recorded unlisted partial fixes. 2026-10-27, architecture review pass 23 (Complexity lens): added the TDD-gate test-convention fragility and the nominal ops concern-family ownership. 2026-10-27, post-close reassessment: the code quality reassessment and architecture-review health check added the sliced-integration name fingerprint and updated the provider-catalog, coverage-basis and CI-gate entries. 2026-10-27, run close: the final reconciliation corrected moved code references and recorded the residual of the partially fixed entries (Commands Layer Imports Agent Runtime, Coverage Basis, Control-Flow Vocabulary, Provider Stop-Signal Recovery); it closed nothing further, so the counts stand. 2026-10-27: the A9 boundary checkpoint closed the supervisor.go decomposition, with C1 the configured agent lease duration and with C2 and C3 the canonical provider identity gap. 2026-10-26: the A8 boundary checkpoint closed the prompts-to-ops dependency. 2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -183,6 +193,8 @@ Single points of failure with no redundancy or validation mechanism.
 **Implication:** Mode detection correctness depends on convention alignment between two independently maintained artifacts (CORE.md detection table and prompt templates). No compile-time or runtime check validates this alignment.
 
 **Current mitigation:** Prompt template output currently matches CORE.md detection patterns. Builder tests (`builder_test.go`) assert the expected prefix, providing regression coverage.
+
+**Update (2026-10-27, verification pass):** Partly mitigated, still open. The template and CORE.md now share the brand macro (`base_prompt.tmpl:2`, `contracts/CORE.md:33`). The session-context hook (`internal/embedded/hooks/session-context.sh:180-206`, `6ed315eb4`) also selects the mode contract from the `*_AGENT_ID` environment variable, a second, non-lexical signal. It does not compare that signal with the prompt wording or fail on divergence, and no detected mode is recorded in state.
 
 **Future options:**
 - Add explicit mode declaration outside free-text prompt (e.g., structured field/environment variable)
@@ -227,22 +239,7 @@ Design contradictions that create structural friction.
 - Record merge executor identity explicitly in task history for auditability
 - Add validation/docs linting to flag authority contradictions across artifacts
 
-### Sprint Completion Signal Diverges from Active Scope
-
-**Skill:** systemic-thinking
-**Category:** TENSION
-
-**Issue:** Sprint governance allows sprint completion when only the original planned task list is terminal, while replacement tasks created by rescoping may still be active. The completion signal is therefore cadence-based rather than work-closure-based.
-
-**Implication:** A sprint can report completion while unresolved implementation risk remains in flight under replacement tasks.
-
-**Current mitigation:** Pipeline-created children (from `ExecuteAvailableTransitions`, executed by orchestrator PreWork after planning checkpoint is resumed) are automatically added to `sprint.scope.planned[]`, preventing premature sprint completion when planning tasks transition to coding tasks. Orchestrator-created replacement tasks (rescoping) are still NOT automatically added — humans must manually update scope or wait for all active tasks. Sprint governance protocol (`sprint-governance.md`) documents this as expected behavior.
-
-**Remaining gap:** Orchestrator rescoping (SUPERSEDED → replacement tasks) does not auto-update scope. This is intentional — rescoping is a human-guided decision, and auto-inclusion could mask scope creep.
-
-**Future options:**
-- Add an alternate completion criterion based on all active (planned + replacement) tasks
-- Separate cadence checkpoint status from true work-closure status
+**Update (2026-10-27, verification pass):** Partly resolved, still open. The second option has landed: `recordMergeCompletion` (`internal/ops/merge_finalize.go:137-150`) records the merging agent and commit on `TaskEventMerged`. The contradiction has moved rather than gone: `specs/protocols/worktree-management.md:10,54,56` now name the Supervisor as merge executor, while `contracts/MULTI_AGENT_MODE.md:41` ("Review and merge") and `specs/build/1 - Vision.md:299` ("Reviews and merges") still give it to the Code Reviewer.
 
 ### Commands Layer Imports Agent Runtime
 
@@ -286,7 +283,7 @@ Design contradictions that create structural friction.
 **Category:** TENSION
 **Related:** [Sub-Pipeline Expansion Multiplies Every Existing Issue](#sub-pipeline-expansion-multiplies-every-existing-issue), [Sprint Metrics Lossy at Sprint Boundary](#sprint-metrics-lossy-at-sprint-boundary), [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope)
 
-**Issue:** The role vocabulary was deliberately unified — ADR-0024 introduced dual role names as acknowledged debt, ADR-0045 made roles derived from YAML with no hardcoded constants, ADR-0047 paid the debt off and deleted the conversion machinery. The status vocabulary never received that treatment and now carries the same duality in a worse form. `internal/models/task.go:104-127` binds generic Go identifiers to code-pipeline-specific values: `TaskStatusReady = "DRAFT_CODE"`, `TaskStatusReadyForReview = "CODE_TO_REVIEW"`, `TaskStatusApproved = "CODE_APPROVED"`. Meanwhile `internal/embedded/pipeline.yaml` carries 59 distinct status literals across all role-pairs, and `internal/pipeline/resolver.go:63-99` converts them with a raw `models.TaskStatus(s.Initial)` — no validation against the constant set. Two paths therefore coexist for the same question: resolver lookups that follow the declarative pipeline, and constant comparisons that silently mean "the coding pipeline only." `internal/ops/release_claim.go:41-54` contains both. The consequence is already visible in generically-named surfaces: `internal/models/sprint.go:118-149` computes velocity, in-progress, and blocked counts against code-only constants, and `internal/ops/sprint_checkpoint.go:147-157` renders a table labeled MERGED/APPROVED/IMPLEMENTING/REJECTED that counts code-only values — so a task sitting in `ARCHITECTURE_APPROVED`, `CODING_PLAN_TO_REVIEW`, or `US_TO_REVIEW` is neither in-progress nor done in the system's own reporting. The architecture states the pipeline is declarative; the status layer is a partial hardcoded mirror of it.
+**Issue:** The role vocabulary was deliberately unified — ADR-0024 introduced dual role names as acknowledged debt, ADR-0045 made roles derived from YAML with no hardcoded constants, ADR-0047 paid the debt off and deleted the conversion machinery. The status vocabulary never received that treatment and now carries the same duality in a worse form. `internal/models/task_status.go:13-19` binds generic Go identifiers to code-pipeline-specific values: `TaskStatusReady = "DRAFT_CODE"`, `TaskStatusReadyForReview = "CODE_TO_REVIEW"`, `TaskStatusApproved = "CODE_APPROVED"`. Meanwhile `internal/embedded/pipeline.yaml` carries 70 distinct status literals across its 10 role-pairs, and the accessors in `internal/pipeline/resolver_status.go` convert them with a raw `models.TaskStatus(s.Initial)` — no validation against the constant set. Two paths therefore coexist for the same question: resolver lookups that follow the declarative pipeline, and constant comparisons that silently mean "the coding pipeline only." `internal/ops/release_claim_descriptor.go` contains both. The consequence is already visible in generically-named surfaces: `internal/models/sprint.go:134-166` computes in-progress and blocked counts against code-only constants, and `taskStatusSection` (`internal/ops/sprint_summary.go:55-82`) renders a table labeled MERGED/APPROVED/IMPLEMENTING/REJECTED that counts code-only values — so a task sitting in `ARCHITECTURE_APPROVED`, `CODING_PLAN_TO_REVIEW`, or `US_TO_REVIEW` is neither in-progress nor done in the system's own reporting. The architecture states the pipeline is declarative; the status layer is a partial hardcoded mirror of it.
 
 **Implication:** Each new sub-pipeline extends the region of the state space that generically-named Go surfaces cannot see, so the declarative pipeline's reach shrinks relative to its stated scope rather than growing.
 
@@ -391,6 +388,8 @@ routing.
 
 **Update (2026-10-27, run close):** Partly resolved, still open. The run's coverage-basis scope merged `de166d2d83ab9d3a5c9bb940add7f8c2295aec46`: `make coverage` now runs `go test -coverpkg=./... -coverprofile=…`, and `docs/TESTING.md` states the whole-module basis (local, non-gating); its acceptance manifest is `consolidation-run/acceptance-coverage-basis.json`. The first Direction clause is therefore delivered and the "without `-coverpkg=./...`" claim in the Issue above is superseded. The residual is the other two clauses: no deterministic summarization method and no freshly generated, retained coverage artifact exist, and the temporary profile is still removed on exit, so a figure cannot be regenerated and compared from a retained artifact.
 
+**Update (2026-10-27, code quality reassessment):** CI coverage regressed from decorative to absent. The non-blocking Codecov upload step was removed from `.github/workflows/`, and no workflow generates or retains a coverage profile. `make coverage` remains interactive and self-deleting, so there is still no reproducible artifact to compare against.
+
 ### Issue Registry Resolution Drift
 
 **Skill:** systemic-thinking
@@ -415,7 +414,7 @@ routing.
 **Category:** FEEDBACK
 **Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
 
-**Issue:** The architecture has two enforcement strategies operating simultaneously. The 778-line CORE.md suppresses agent failure modes through behavioral rules loaded into context. The Go binary (`liza`) enforces structural invariants through code (supervisor-assigned work, lease management, state-machine validation, and the `ops` layer). ADR-0011 and ADR-0030 explicitly chose structural enforcement over behavioral compliance. Yet the most critical safety properties — no fabrication, no test corruption, no unapproved state change — still require semantic judgment and cannot be fully reduced to runtime checks. Each new structural enforcement removes a mechanical rule from the contract, leaving a higher concentration of the hard-to-enforce behavioral residue.
+**Issue:** The architecture has two enforcement strategies operating simultaneously. The 799-line CORE.md suppresses agent failure modes through behavioral rules loaded into context. The Go binary (`liza`) enforces structural invariants through code (supervisor-assigned work, lease management, state-machine validation, and the `ops` layer). ADR-0011 and ADR-0030 explicitly chose structural enforcement over behavioral compliance. Yet the most critical safety properties — no fabrication, no test corruption, no unapproved state change — still require semantic judgment and cannot be fully reduced to runtime checks. Each new structural enforcement removes a mechanical rule from the contract, leaving a higher concentration of the hard-to-enforce behavioral residue.
 
 **Implication:** The contract will asymptotically approach a core of pure behavioral rules that cannot be structurally enforced, and that residue is precisely the set the system was designed to solve.
 
@@ -464,7 +463,7 @@ Implicit dependencies that constrain system behavior.
 **Skill:** systemic-thinking
 **Category:** ASSUMPTION
 
-**Issue:** The active blackboard schema has exactly one `goal` section, one `sprint` section, and a `tasks` array. Tasks represent hierarchical relationships through `ParentTask` and `ParentTasks` (`internal/models/task.go`), populated by transition execution (`internal/ops/proceed.go`). Completed sprints are preserved in full archive files and summarized in `sprint_history`, so the system now has historical memory. The remaining structural limit is one active goal and sprint at a time: concurrent goals and a visible multi-sprint backlog cannot be represented in active state. Historical summaries also retain only a small subset of sprint metrics. *(Hierarchy claim corrected 2026-09-06.)*
+**Issue:** The active blackboard schema has exactly one `goal` section, one `sprint` section, and a `tasks` array. Tasks represent hierarchical relationships through `ParentTask` and `ParentTasks` (`internal/models/task.go`), populated by transition execution (`internal/ops/transition_children.go`, `transition_cohort.go`). Completed sprints are preserved in full archive files and summarized in `sprint_history`, so the system now has historical memory. The remaining structural limit is one active goal and sprint at a time: concurrent goals and a visible multi-sprint backlog cannot be represented in active state. Historical summaries also retain only a small subset of sprint metrics. *(Hierarchy claim corrected 2026-09-06.)*
 
 **Implication:** Liza remains structurally a single-goal-at-a-time system. Teams that need concurrent objectives or portfolio planning require a schema and query-model change rather than a configuration switch.
 
@@ -502,7 +501,7 @@ Bottlenecks that emerge under load.
 **Category:** STRESS POINT
 **Related:** [Human Availability as Bottleneck](#human-availability-as-bottleneck)
 
-**Issue:** Manual/checkpoint transitions remain at trust boundaries in the deployed multi-stage topology. The configured pipeline contains 9 role-pairs, and a feature can traverse several reviewed stages before coding and integration. Human checkpoints are therefore structural rather than exceptional, so throughput is partly capped by response time at each manual boundary regardless of available agent capacity.
+**Issue:** Manual/checkpoint transitions remain at trust boundaries in the deployed multi-stage topology. The configured pipeline contains 10 role-pairs, and a feature can traverse several reviewed stages before coding and integration. Human checkpoints are therefore structural rather than exceptional, so throughput is partly capped by response time at each manual boundary regardless of available agent capacity.
 
 **Implication:** The system's throughput ceiling shifts from "agent capacity" toward "human gate frequency × pipeline depth" — adding more agents does not help when the bottleneck is response time at configured manual boundaries.
 
@@ -559,7 +558,7 @@ unversioned, and semantic changes outside a declared read set still depend on re
 **Category:** FRAGILITY
 **Status:** Low-visibility concern
 
-**Issue:** `statevalidate` has 82 direct tests across task, agent, dependency, role, sprint, pipeline, spec-reference, and artifact-reference validation. Pass 20's separate full `-coverpkg` run measured the package at 89.6%, confirming that the inner validators are exercised. The remaining observable gap is narrower: there are no focused tests named for `ValidateStateFile` or `ValidateAnomalies`, so the public composition behavior is less visible than the validation units it coordinates.
+**Issue:** `statevalidate` has 166 top-level tests across task, agent, dependency, role, sprint, pipeline, spec-reference, and artifact-reference validation. Pass 20's separate full `-coverpkg` run measured the package at 89.6%, confirming that the inner validators are exercised. The remaining observable gap is narrower: the package has no focused tests named for `ValidateStateFile` or `ValidateAnomalies`, so the public composition behavior is less visible than the validation units it coordinates. *(2026-10-27: `internal/commands/validate_test.go` now has `TestValidateAnomalies_RequiredDetailsByType` and `_RequestedTypeBranchesPassWithValidDetails`, and tests in `ops`, `db` and `integration` call both entry points, which narrows the gap to `ValidateStateFile` composition.)*
 
 **Implication:** A composition-only regression could be harder to localize, but this is not evidence of a broad validation coverage gap and does not warrant blanket coverage work.
 
@@ -571,11 +570,11 @@ unversioned, and semantic changes outside a declared read set still depend on re
 **Category:** FRAGILITY
 **Related:** [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
 
-**Issue:** INVARIANTS.md §7 states: "Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files)." The `submit_review.go` submission path validates commit SHA match, TDD enforcement, pre-execution checkpoint, rebase onto integration, and re-validates status/assignment under lock — but performs no `git status` or working tree cleanliness check. The invariant is documented but not enforced.
+**Issue:** INVARIANTS.md §7 states: "Clean sync: before READY_FOR_REVIEW, working tree must be clean (no staged, unstaged, or untracked files)." The submission path (`internal/ops/submission_preconditions.go`, `submission_git_work.go`, `submission_finalize.go`; formerly `submit_review.go`) validates commit SHA match, TDD enforcement, pre-execution checkpoint, rebase onto integration, and re-validates status/assignment under lock — but performs no `git status` or working tree cleanliness check. The invariant is documented but not enforced.
 
 **Implication:** A coder can submit work with uncommitted changes in the worktree. The reviewer sees only the committed code (via `review_commit`), but the coder may have relied on uncommitted files during local testing. If the coder's tests passed partly due to uncommitted state, the reviewer approves code that may fail on integration. This is a concrete instance of the structural enforcement asymptote — the invariant document promises a protection the code doesn't deliver.
 
-**Direction:** Add a clean worktree check (`git status --porcelain` in the worktree) to `submit_review.go` before the rebase step. This matches the invariant's intent and catches a real failure mode. Alternatively, if clean worktree enforcement is intentionally deferred (e.g., to allow configuration files), narrow the invariant in INVARIANTS.md and the worktree-management spec.
+**Direction:** Add a clean worktree check (`git status --porcelain` in the worktree) to the submission path before the rebase step in `submission_git_work.go`. This matches the invariant's intent and catches a real failure mode. Alternatively, if clean worktree enforcement is intentionally deferred (e.g., to allow configuration files), narrow the invariant in INVARIANTS.md and the worktree-management spec.
 
 ### INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time
 
@@ -601,7 +600,7 @@ Both compare canonical provider keys derived at evaluation time since C2 ([ADR-0
 **Category:** FRAGILITY
 **Related:** [Mode Selection Trigger Coupled to Prompt Lexeme](#mode-selection-trigger-coupled-to-prompt-lexeme), [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
 
-**Issue:** `internal/agent/supervisor_lifetime.go:93-95` (formerly `supervisor.go:648-650`) documents that the resolver reads role definitions from pipeline YAML, "enabling custom YAML-defined roles without Go code changes". No layer validates the role *name*. Pipeline `validate` (`internal/pipeline/config_validation.go:16`, formerly `config.go:214-221`) checks only that `role.Type` is one of `doer|reviewer|orchestrator`. `Resolver.RoleType` looks the name up in the YAML map itself, so any declared role resolves. `agent/registration.go:18-48` (`validateIdentity`) validates the `{role}-{number}` ID shape and ID/config agreement, but never calls `roles.IsValid`. The closed 13-role registry in `internal/roles` is consulted in exactly one production path (`ops/claim_reviewer_task.go:153`, formerly `:61`), on an already-inferred role. Prompt content, however, is selected by hardcoded `if/else if` chains over role names in `internal/prompts/templates/blocks/review_instructions.tmpl` (392 lines, six roles) and `implementation_phase.tmpl` (240 lines, five roles). Neither chain has an `else` branch.
+**Issue:** `internal/agent/supervisor_lifetime.go:93-95` (formerly `supervisor.go:648-650`) documents that the resolver reads role definitions from pipeline YAML, "enabling custom YAML-defined roles without Go code changes". No layer validates the role *name*. Pipeline `validate` (`internal/pipeline/config_validation.go:16`, formerly `config.go:214-221`) checks only that `role.Type` is one of `doer|reviewer|orchestrator`. `Resolver.RoleType` looks the name up in the YAML map itself, so any declared role resolves. `agent/registration.go:18-48` (`validateIdentity`) validates the `{role}-{number}` ID shape and ID/config agreement, but never calls `roles.IsValid`. The closed 13-role registry in `internal/roles` is consulted in exactly one production path (`ops/claim_reviewer_task.go:153`, formerly `:61`), on an already-inferred role. Prompt content, however, is selected by hardcoded `if/else if` chains over role names in `internal/prompts/templates/blocks/review_instructions.tmpl` (521 lines, six roles) and `implementation_phase.tmpl` (404 lines, five roles). Neither chain has an `else` branch.
 
 **Implication:** A YAML-defined role passes config validation, resolves a strategy, registers an agent, and launches successfully — then receives an empty instruction block. Every layer reports success; the agent simply has no role instructions. The declarative-lifecycle capability is real for the state machine and absent for prompt content, and the gap is silent at the boundary where it matters. This is the same failure shape as the mode-selection lexeme coupling: two independently maintained artifacts aligned only by convention, with no structural guard.
 
@@ -618,7 +617,7 @@ Both compare canonical provider keys derived at evaluation time since C2 ([ADR-0
 
 **Direction:** Route all Git invocation through `gitenv`. Consider a pre-commit or lint guard rejecting `exec.Command("git"` outside `internal/gitenv`, which converts a convention into a check.
 
-**Update (2026-10-26):** The initialization half is resolved: C4 (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`) deleted `internal/ops/init_project.go` and runs the four init helper subprocesses of `internal/commands` through `gitenv` timed runners in the project root. The remaining raw call is `exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")` in `cmd/liza/launch_resolve.go` (formerly `cmd_launch.go`), the `--cwd` path the run keeps out of scope. The entry stays open for it and for the lint guard.
+**Update (2026-10-26):** The initialization half is resolved: C4 (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`) deleted `internal/ops/init_project.go` and runs the four init helper subprocesses of `internal/commands` through `gitenv` timed runners in the project root. The remaining raw call is `exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")` in `cmd/liza/launch_resolve.go` (formerly `cmd_launch.go`), the `--cwd` path the run keeps out of scope. The entry stays open for it and for the lint guard. *(2026-10-27: 25 non-test files outside `internal/gitenv` now import it, against sixteen when the entry was written.)*
 
 ### Provider Support Crosses the Catalog Boundary
 
@@ -632,6 +631,62 @@ Both compare canonical provider keys derived at evaluation time since C2 ([ADR-0
 
 **Direction:** Keep behavioral output parsers in code, but move declarative dependencies and activation assets into catalog-owned data. Maintain one explicit provider-extension checklist; do not introduce a generalized plug-in framework until another implementation proves the need.
 
+**Update (2026-10-27, code quality reassessment):** The duplicated expansion has diverged. `internal/commands/init.go:193` expands `cursor` into `claude`, `codex` and `cursor-acp`, while `internal/commands/setup.go:229` expands it into `claude` and `codex` only. The non-Claude manual-configuration check is likewise repeated at `init_mas_state.go:155` and `setup.go:391`. Whether `setup` should include `cursor-acp` needs a human ruling before the expansion moves into catalog data. Raw provider-ID dispatch also remains outside the catalog in `internal/agent` (`cli_agent_command.go:149`, `session_preflight.go:66`, `tool_result_acp.go:17`), `providers/await.go:16` and `providersignal/quota.go:71`, `quota_reset.go:41,54`.
+
+### Sliced-Integration Capability Detected by Role-Pair Names
+
+**Skill:** code-quality-assessment
+**Category:** FRAGILITY
+**Assessment:** [2026-10-27 code quality assessment](code_quality_assessment.md#28-declare-the-sliced-integration-capability-instead-of-fingerprinting-names)
+**Related:** [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks)
+
+**Issue:** `internal/pipeline/resolver_sliced.go:31-42` decides whether a workspace supports sliced integration by matching YAML identities. It checks that the role-pairs `slice-integration-pair` and `integration-pair` exist with doer `integration-analyst` and reviewer `integration-reviewer`, that `integration-subpipeline` lists three named steps, and that two transitions have specific names and sources. `preIntegrationPlanningTransitions` (`:62`, `:73`) also excludes and targets role-pairs by literal name (`coding-pair`, `integration-pair`, `slice-integration-pair`). ADR-0045 makes these identities user-configurable YAML data.
+
+**Implication:** A workspace that renames or customizes these role-pairs or transitions degrades to `SlicedIntegrationUpgradeRequired`. The failure is visible, since the guidance asks for a fresh workspace or a manual topology update, so it is not a silent fault. But the domain layer encodes one shipped topology's names, and a custom topology cannot opt in.
+
+**Direction:** Declare the capability in pipeline YAML, or derive it from role types and transition shape, and keep the upgrade-required guidance for workspaces that lack it. This changes the pipeline schema and therefore needs an ADR.
+
+### TDD Gate Hardcodes Target-Project Test Conventions
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Review:** [pass 23, Complexity lens](architecture-review.md#tdd-gate-hardcodes-the-target-projects-test-conventions-pass-23-complexity-lens)
+**Related:** GUARDRAILS G1.1
+
+**Issue:** `internal/ops/test_detection.go:62-130` `isTestFile` recognises test files by naming conventions hardcoded for nine languages: Go, Python, JS/TS, shell, Ruby, Java, Kotlin, C# and Rust. `testFileMatcherPatterns` (`:10-31`) is a hand-kept display copy of the same rules. `submissionRun.enforceTDD` (`submission_git_work.go:119-148`) refuses a doer's code submission when no changed file matches. The only bypass is `--tdd-not-required`, which the error text reserves for non-behavioural work. No configuration field reaches the matcher, and languages have been added by fix commits (`66f802f1b` C#, `44035e294` Node modules).
+
+**Implication:** A project whose tests follow another convention, such as PHP `*Test.php`, Swift `*Tests.swift`, Elixir `*_test.exs` or C/C++ under `test/`, has correct code submissions with tests refused. The agent must either misuse the non-behavioural waiver or stall. Liza's stack-agnostic promise stops at its own submission gate.
+
+**Direction:** Keep the current table as the default, and add a project-level pattern list in `Config` that extends or replaces it, set at `init` and editable later. Derive the display patterns from the same table.
+
+### Secret Redaction Strength Depends on Call Site
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Review:** [Adversarial pass](architecture-review.md#secret-redaction-has-three-strengths-chosen-per-call-site-adversarial-pass)
+
+**Issue:** Three policies mask text before it is persisted or shown, and each caller picks one:
+- `secretmask.MaskText` (`internal/secretmask/masker.go:23-45`) masks only the values of environment variables whose names match a suffix list and are at least 8 characters long. It is used at 25 `secretmask.New()` sites in 18 files, mostly for text written to state, including integration test output stored as `task.IntegrationFailure` (`ops/merge_failure.go:161`).
+- `ops.acceptanceExecutionMaskWith` (`ops/acceptance_execution.go:216-250`) adds `*_URL`/`*_DSN` values, DSN passwords and declared runtime-input secrets with their URL escapes, for acceptance execution and `run-live` only.
+- `toolresult.newSanitizer` (`internal/toolresult/redact.go:64-104`) adds JSON-escaped values and pattern rules for bearer/basic values, credential headers, flags and assignments, URL userinfo, private keys and known token shapes.
+
+**Implication:** Masking strength is chosen by whichever helper the author used, not by where the text goes. A failing integration test that prints a credential-bearing `DATABASE_URL` is masked under `run-live` but persisted verbatim into `state.yaml` by merge failure, because `_URL` is not a secret-key suffix and `secretmask` has no URL rule. Nothing checks that state, history, anomaly details or prompt-bound text passed the strongest policy.
+
+**Direction:** Define one redaction policy for persisted and agent-visible text in a leaf package, with `secretmask` as its environment-value primitive rather than an alternative to it. Apply it at the persistence boundaries (task diagnostics, anomaly details, history) so new fields inherit it. Keep the streaming supervisor-log masker value-only only if that is documented as deliberate.
+
+### State Cache Treats mtime as Publication Identity
+
+**Skill:** software-architecture-review
+**Category:** FRAGILITY
+**Review:** [Adversarial pass](architecture-review.md#state-cache-identity-is-mtime-alone-adversarial-pass)
+**Related:** [Cache Coherence Gap in Multi-Process Deployments](#cache-coherence-gap-in-multi-process-deployments) (resolved)
+
+**Issue:** `Blackboard.ReadCached` (`internal/db/blackboard.go:339-374`) reuses its parsed state while `state.yaml`'s modification time is unchanged. Writers publish by atomic rename, so each publication is a new file, but the cache does not compare file identity or size. The TUI already does: `sameStatePublication` (`internal/tui/commands.go:77-80`) uses `os.SameFile`, mtime and size. `ops/review_reservation.go:84-95` re-reads uncached before acting because "mtime caching can lag a write". On the reviewing host (ext4, Linux 6.8), 1,694 of 2,000 back-to-back atomic publications shared an mtime.
+
+**Implication:** A cross-process write in the same timestamp tick as the read that filled the cache stays invisible until the next write. `ReadCached` feeds decisions, not only display: orchestrator wake verification, which can refuse (`agent/orchestrator_verify.go:35`), verdict and resubmission awaits (`ops/await_verdict.go:289`, `await_resubmission.go:331,364`), and reviewer and merge strategy reads. An await can run to its budget on a verdict it missed. How often real state writes share a tick was not measured.
+
+**Direction:** Key the cache on publication identity (`os.SameFile` plus mtime and size), which the existing `os.Stat` result already provides, and then decide whether the local fresh-read workaround stays as defence in depth.
+
 ---
 
 ## Blind Spots
@@ -643,7 +698,7 @@ Unacknowledged forces or gaps the system doesn't model.
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
 
-**Issue:** The contract's failure mode coverage is self-certified. The failure mode map (`CONTRACT_FAILURE_MODE_MAP.md`) claims 55/55 "Strong" coverage with 0 Partial and 0 Gap. This assessment is produced by the same process that writes the contract — there is no independent validation that clauses actually suppress the failure modes they claim to cover. The map still describes "Contract v3 (882 lines)" and includes line references beyond the current 778-line CORE.md. The maintenance protocol ("check which failure modes the affected clause covers") is itself a behavioral rule. There is no test suite, simulation, or adversarial probe demonstrating that the 55 claims hold under context pressure, novel model versions, or multi-agent interaction.
+**Issue:** The contract's failure mode coverage is self-certified. The failure mode map (`CONTRACT_FAILURE_MODE_MAP.md`) claims 55/55 "Strong" coverage with 0 Partial and 0 Gap. This assessment is produced by the same process that writes the contract — there is no independent validation that clauses actually suppress the failure modes they claim to cover. The map still describes "Contract v3 (882 lines)" and includes line references beyond the current 799-line CORE.md (FM-2.1 cites lines 824-831). The maintenance protocol ("check which failure modes the affected clause covers") is itself a behavioral rule. There is no test suite, simulation, or adversarial probe demonstrating that the 55 claims hold under context pressure, novel model versions, or multi-agent interaction.
 
 **Implication:** The 55/55 coverage claim provides confidence without evidence — the map may be accurate, or it may be a snapshot of aspirational intent that has drifted from reality as the contract evolved.
 
@@ -671,11 +726,11 @@ Unacknowledged forces or gaps the system doesn't model.
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
 
-**Issue:** The architecture describes the circuit breaker as a systemic observer with access to anomalies, logs, sprint metrics, and selected durable task state. Most task-semantic inputs remain behavioral logging duties assigned to Coders and Code Reviewers; independently derived provider degradation and planning-review churn cover only two known cases. Detection therefore still assumes affected agents report and consistently classify other equivalent failures.
+**Issue:** The architecture describes the circuit breaker as a systemic observer with access to anomalies, logs, sprint metrics, and selected durable task state. Most task-semantic inputs remain behavioral logging duties assigned to Coders and Code Reviewers; independently derived provider degradation, planning-review churn and blocked-replacement chains cover only three known cases. Detection therefore still assumes affected agents report and consistently classify other equivalent failures.
 
 **Implication:** Correlated failures that suppress, misclassify, or normalize anomaly reporting are invisible to the mechanism intended to detect systemic failure.
 
-**Current mitigation:** Multiple role classes can report anomalies, anomaly payloads are validated, and operational monitoring observes several direct health signals. `planning_review_churn` is a partial independent mitigation: analysis also reads planning task review evidence, triggers at four or more durable planning rejection cycles, and classifies the signal as `PLANNING_CONVERGENCE_DEGRADED`; `MERGED` tasks remain eligible. The broader participant-reporting blind spot remains open because other direct signals are not combined with the circuit-breaker pattern model.
+**Current mitigation:** Multiple role classes can report anomalies, anomaly payloads are validated, and operational monitoring observes several direct health signals. `planning_review_churn` is a partial independent mitigation: analysis also reads planning task review evidence, triggers at four or more durable planning rejection cycles, and classifies the signal as `PLANNING_CONVERGENCE_DEGRADED`; `MERGED` tasks remain eligible. `checkBlockedReplacementChain` (`internal/analysis/patterns.go:223`, ADR-0171) derives `RECOVERY_CONVERGENCE_DEGRADED` from task state in the same way. The broader participant-reporting blind spot remains open because other direct signals are not combined with the circuit-breaker pattern model.
 
 **Future options:**
 - Derive additional corroborating signals from task history, retries, verdict cycles, and sprint metrics
@@ -703,7 +758,7 @@ Unacknowledged forces or gaps the system doesn't model.
 **Skill:** systemic-thinking
 **Category:** BLIND SPOT
 
-**Issue:** `RunSupervisor` builds and saves the prompt from its pre-execution state snapshot before starting the agent subprocess. The subprocess may then read a newer state. There is no version marker tying the saved prompt to the state snapshot from which it was constructed.
+**Issue:** The supervisor (`supervisorLifetime.buildTurnPrompt`, `internal/agent/supervisor_turn.go:252`) builds and saves the prompt from its pre-execution state snapshot before starting the agent subprocess. The subprocess may then read a newer state. There is no version marker tying the saved prompt to the state snapshot from which it was constructed.
 
 **Implication:** When debugging failures, the saved prompt may not represent the actual state the agent operated on. Agents can read live state through CLI JSON commands and the blackboard during execution, so the prompt is initial context rather than runtime truth and the behavioral impact remains low.
 
@@ -731,7 +786,7 @@ Unacknowledged forces or gaps the system doesn't model.
 **Category:** BLIND SPOT
 **Related:** [Self-Reported Validation](#self-reported-validation), [Contract-Driven Safety vs Structural Enforcement Asymptote](#contract-driven-safety-vs-structural-enforcement-asymptote)
 
-**Issue:** ADR-0072 made `validation[]` a canonical task field executed by both doer and reviewer — which is how the "Self-Reported Validation" issue was closed. ADR-0084 then layered a break-glass on top: `destructive_db: true` unlocks commands that would otherwise be rejected, provided every one is prefixed `LIZA_ALLOW_DESTRUCTIVE_DB=1 `. The ADR is explicit that "the marker is a human/operator safety contract, not proof that the selected DB target is disposable." But no human sits on that contract in normal operation. `internal/ops/add_tasks.go:67` (reached via the orchestrator's `liza add-task`) and `internal/ops/set_task_output.go:44` (reached via the planning doer's `liza set-task-output`) both accept `destructive_db` and the accompanying commands from an agent. The same actor class that authors the destructive command also sets the flag that authorizes it, and a downstream doer or reviewer executes it inside a worktree that ADR-0082 may have provisioned with real credential-bearing env files copied from the project root. Three independently reasonable ADRs compose into a path where an agent writes, authorizes, and has another agent execute a destructive database command against whatever the environment actually points at.
+**Issue:** ADR-0072 made `validation[]` a canonical task field executed by both doer and reviewer — which is how the "Self-Reported Validation" issue was closed. ADR-0084 then layered a break-glass on top: `destructive_db: true` unlocks commands that would otherwise be rejected, provided every one is prefixed `LIZA_ALLOW_DESTRUCTIVE_DB=1 `. The ADR is explicit that "the marker is a human/operator safety contract, not proof that the selected DB target is disposable." But no human sits on that contract in normal operation. `internal/ops/add_tasks.go:38,205` (reached via the orchestrator's `liza add-task`) and `internal/payloadschema/set_task_output.go:122` (reached via the planning doer's `liza set-task-output`) both accept `destructive_db` and the accompanying commands from an agent. The same actor class that authors the destructive command also sets the flag that authorizes it, and a downstream doer or reviewer executes it inside a worktree that ADR-0082 may have provisioned with real credential-bearing env files copied from the project root. Three independently reasonable ADRs compose into a path where an agent writes, authorizes, and has another agent execute a destructive database command against whatever the environment actually points at.
 
 **Implication:** The safety property ADR-0084 claims — human authorization for destructive operations — is not structurally present in the path the system uses by default.
 
@@ -837,8 +892,10 @@ Long-term concerns about system evolution.
 Recording a new orchestrator assessment drops the dependency-descendant wake
 snapshots from that task's earlier assessments. Wake detection reads only the
 latest assessment, so this bounds one append-only payload without a retention
-window. Assessment notes remain unbounded; operator-enabled whole terminal
-record archival now keeps their payload outside physical live state.
+window. Assessment notes remain unbounded; whole terminal record archival,
+on by default for new runs (`internal/ops/init_state.go:121`) and
+operator-enabled for older ones, now keeps their payload outside physical live
+state.
 
 **Traceability (#157, mitigated):** [Blocked-Assessment Idempotency](../protocols/blocked-assessment-idempotency.md#persistence-and-no-change-result) suppresses content-equivalent appends at the source with `NO_CHANGE`. Existing entries are not pruned; general retention remains open.
 
@@ -867,7 +924,7 @@ discoveries, anomalies, notes and active records remain in live state.
 **Category:** TRAJECTORY
 **Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure)
 
-**Issue:** The deployed topology now contains 13 roles and 9 role-pairs. Each additional role still requires coordinated changes across pipeline configuration, role documentation, prompts/context sections, allowed operations, task-type workflow registration, and tests. The baseline contract corpus is already 1,230 lines before role-specific inputs, so role growth continues to consume the same context budget needed for task work.
+**Issue:** The deployed topology now contains 13 roles and 10 role-pairs. Each additional role still requires coordinated changes across pipeline configuration, role documentation, prompts/context sections, allowed operations, task-type workflow registration, and tests. The baseline contract corpus (CORE, MULTI_AGENT_MODE and AGENT_TOOLS) is already 1,289 lines before role-specific inputs, so role growth continues to consume the same context budget needed for task work.
 
 **Implication:** Topology expansion has moved from a future concern to an active maintenance multiplier. The tier architecture handles mid-session degradation, but initialization and cross-artifact consistency costs grow with each role.
 
@@ -883,9 +940,9 @@ discoveries, anomalies, notes and active records remain in live state.
 **Skill:** code-review
 **Category:** FRAGILITY
 
-**Issue:** The merged model accepts 21 anomaly types. `internal/models/history.go` (`anomalyRequiredDetails`, enforced by `validate` and, since [ADR-0166](ADR/0166-anomaly-records-validated-at-write-boundary.md), on every `Modify`) declares type-specific detail fields for 11 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
+**Issue:** The merged model accepts 23 anomaly types (`Anomaly.IsValidType`). `internal/models/history.go` (`anomalyRequiredDetails`, enforced by `validate` and, since [ADR-0166](ADR/0166-anomaly-records-validated-at-write-boundary.md), on every `Modify`) declares type-specific detail fields for 13 of them; the other 10, including `reviewer_loop` and `review_exhaustion`, receive no type-specific detail validation even where specs or prompts expect structured fields.
 
-**Traceability (#156, mitigated):** [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) adds `reviewer_claim_circuit_open` with its six required fields, bringing the planned output's counts to 20 accepted / 10 validated. The merged tree additionally contains `obligation_content_drifted` and its detail validator (21 / 11 in total). The ten unvalidated types are unchanged; this issue remains open.
+**Traceability (#156, mitigated):** [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) adds `reviewer_claim_circuit_open` with its six required fields, bringing the planned output's counts to 20 accepted / 10 validated. The merged tree additionally contains `obligation_content_drifted`, `pending_merge_stalled` and `runtime_input_unavailable`, each with a detail validator (23 / 13 in total). The ten unvalidated types are unchanged; this issue remains open.
 
 **Implication:** Agents can write structurally valid but informationally empty anomalies. Circuit breaker pattern detection and retrospective analysis degrade when detail fields are missing.
 
@@ -904,6 +961,8 @@ discoveries, anomalies, notes and active records remain in live state.
 **Implication:** Future operations must keep the four lists and the implicit gating decision aligned. Drift can appear as unavailable metrics, an RBAC denial, or accidental gating/ungating by omission.
 
 **Traceability:** The master plan's systemic review and [Payload Validation](../protocols/payload-validation.md#fifth-operation-register-traceability) assign this finding to register reconciliation. [ADR-0142](ADR/0142-payload-preflight-validation.md) records preflight's ungated decision; it does not centralize the vocabulary.
+
+**Update (2026-10-27, verification pass):** The predicted drift has occurred. `heal-orphaned-review-base` is registered in `IsLifecycleOperation` (`internal/models/lifecycle.go:204`) but is absent from `lifecycleMetricOperations` (`internal/ops/lifecycle_metrics.go`), so it is lifecycle-named but not counted. `TestLifecycleMetricsRegistersAgree` checks only that the metrics matrix is a subset of the lifecycle register, so it does not catch this direction.
 
 ### Spec Corpus Lacks Lifecycle Management
 
@@ -927,13 +986,15 @@ discoveries, anomalies, notes and active records remain in live state.
 **Skill:** systemic-thinking
 **Category:** TRAJECTORY
 
-**Issue:** The system collects file-lock timing, sprint metrics, and diagnostic data, but there is no unified query layer or historical store across those sources. Operators can inspect current sprint metrics through CLI status/JSON commands, but questions such as agent performance over time or current lock contention still require archive inspection or custom code.
+**Issue:** The system can collect file-lock timing and does collect sprint metrics and diagnostic data, but there is no unified query layer or historical store across those sources. Operators can inspect current sprint metrics through CLI status/JSON commands, but questions such as agent performance over time or current lock contention still require archive inspection or custom code.
 
 **Implication:** Operational visibility requires ad hoc tooling or direct state.yaml inspection. The investment in metrics instrumentation doesn't translate to operational insight because the data is fragmented and inaccessible through standard interfaces.
 
 **Current mitigation:** Current metrics are accessible through `liza inspect metrics` and `liza status`.
 
 **Traceability (#160, mitigated):** [Usage Attribution](../protocols/usage-attribution.md#relationship-to-open-architecture-issues) adds `usage report`, one outcome-scoped query surface over provider records. A general query layer over lock timing and sprint archives remains open.
+
+**Update (2026-10-27, verification pass):** File-lock timing is never enabled in production. `Blackboard.EnableMetrics` (`internal/db/blackboard.go:154`) and `FileLock.EnableMetrics` (`internal/filelock/filelock.go:84`) have no non-test caller, so there is no lock-contention data to query.
 
 **Future options:**
 - Unified query interface aggregating all metric sources
@@ -946,7 +1007,7 @@ discoveries, anomalies, notes and active records remain in live state.
 **Category:** TRAJECTORY
 **Coupled with:** [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic), [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
 
-**Issue:** The system has a clear mutation layer (`ops`) but no cohesive query layer. Read operations are distributed across `models`, `db`, `commands`, `agent`, and `ops`. `models/diagnostics.go` provides a partial query home, yet prompt assembly still imports lifecycle queries from `ops` and commands still import agent runtime functions. Each consumer builds its own view of state rather than depending on a stable structured query boundary.
+**Issue:** The system has a clear mutation layer (`ops`) but no cohesive query layer. Read operations are distributed across `models`, `db`, `commands`, `agent`, and `ops`. `models/diagnostics.go` provides a partial query home, yet commands still import agent runtime functions (`internal/commands/status_orchestrator.go`, for orchestrator wake detection). Prompt assembly no longer imports `ops` since A8 closed [Prompts Layer Imports Business Logic](#prompts-layer-imports-business-logic). Each consumer builds its own view of state rather than depending on a stable structured query boundary.
 
 **Implication:** As dashboards, diagnostics, and prompt context evolve, query logic can be duplicated or exposed through package seams whose primary responsibility is mutation or runtime control.
 
@@ -961,7 +1022,7 @@ discoveries, anomalies, notes and active records remain in live state.
 **Category:** TRAJECTORY
 **Related:** [Restart/Lease Churn Under Load](#restartlease-churn-under-load), [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration)
 
-**Issue:** Recovery still depends on OS process identity at some boundaries. Stale review-claim clearing now preserves a structurally coherent active/passive claim with a current review lease, nonzero heartbeat and unexpired registration lease despite dead/mismatched PID observations; `AgentProcessStatus(...).IsLiveOrUnknown()` remains its fallback without that registration evidence (`internal/ops/clear_stale_review_claims.go`). Registration uses `AgentProcessOwnership(...).Occupied()` and remains lease-first (`internal/agent/registration.go`, `internal/ops/agent_process_status.go`). Thus process liveness is no longer the universal ownership authority. ADR-0085 already carries the other half of the picture: `ACPXAgent` exposes `SessionID`/`WarmUsage`, and warm sessions survive across process restarts (`acp-vs-cli.md`: local `seen` map plus `acpx sessions show`), so conversational state can outlive the process that hosted it. This is **not an unnoticed gap** — ADR-0085:68 records the exclusion deliberately: `WarmUsage` "is best-effort operational metadata … It must not drive correctness-sensitive task transitions." The blackboard schema models no session identity accordingly. Remaining process-based recovery and cancellation boundaries assume locally spawned providers. *(Review ownership scope updated 2026-09-22; broader backend concern remains open.)*
+**Issue:** Recovery still depends on OS process identity at some boundaries. Stale review-claim clearing now preserves a structurally coherent active/passive claim with a current review lease, nonzero heartbeat and unexpired registration lease despite dead/mismatched PID observations; `AgentProcessStatus(...).IsLiveOrUnknown()` remains its fallback without that registration evidence (`internal/ops/clear_stale_review_claims.go`). Registration uses `AgentProcessOwnership(...).Occupied()` and remains lease-first (`internal/ops/agent_registration.go:57,153`, `internal/ops/agent_process_status.go`). Thus process liveness is no longer the universal ownership authority. ADR-0085 already carries the other half of the picture: `ACPXAgent` exposes `SessionID`/`WarmUsage`, and warm sessions survive across process restarts (`acp-vs-cli.md`: local `seen` map plus `acpx sessions show`), so conversational state can outlive the process that hosted it. This is **not an unnoticed gap** — ADR-0085:68 records the exclusion deliberately: `WarmUsage` "is best-effort operational metadata … It must not drive correctness-sensitive task transitions." The blackboard schema models no session identity accordingly. Remaining process-based recovery and cancellation boundaries assume locally spawned providers. *(Review ownership scope updated 2026-09-22; broader backend concern remains open.)*
 
 **Implication:** The exclusion of session state from correctness paths is sound only while providers remain locally-spawned processes; a remote, daemonized, or pooled backend would make PID liveness answer a different question than the one recovery is asking, with no signal that the recorded decision's premise has lapsed.
 
@@ -984,7 +1045,7 @@ Failure propagation and compound interaction effects.
 **Category:** CASCADE
 **Related:** [Contract Complexity vs Context Pressure](#contract-complexity-vs-context-pressure), [Role Addition Accelerates Contract Complexity Pressure](#role-addition-accelerates-contract-complexity-pressure), [Filesystem/Git I/O Contention](#filesystemgit-io-contention), [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
 
-**Issue:** Sub-pipeline expansion is deployed: 13 roles operate across 9 role-pairs, including epic planning, user-story writing, architecture, code planning, coding, and integration. Concerns that scale with topology now compound in production: contract/context pressure, cross-pair decomposition quality, supervisor process count, restart/lease churn, and filesystem/Git load. The 53 open issues are tracked individually, but their interaction under full topology remains largely unmeasured.
+**Issue:** Sub-pipeline expansion is deployed: 13 roles operate across 10 role-pairs, including epic planning, user-story writing, architecture, code planning, coding, and integration. Concerns that scale with topology now compound in production: contract/context pressure, cross-pair decomposition quality, supervisor process count, restart/lease churn, and filesystem/Git load. The open issues are tracked individually, but their interaction under full topology remains largely unmeasured.
 
 **Implication:** Risks that were tolerable in a smaller topology can amplify one another as task fan-out and agent count increase; the aggregate risk profile is not captured by individual issue severity alone.
 
@@ -1028,6 +1089,8 @@ Failure propagation and compound interaction effects.
 **Current mitigation:** `liza cancel-task` prevents further task progression and the supervisor observes the cancelled state.
 
 **Future option:** Supervisor-mediated cancellation signal that terminates the active provider process and then performs normal cleanup.
+
+**Update (2026-10-27, verification pass):** Delivered for reviewers only. `startReviewExecutionWatchdog` (`internal/agent/review_execution.go:135-176`) polls review ownership at the heartbeat interval and cancels the provider turn when ownership is lost, so a cancel that releases the review claim stops the reviewer within one interval. Doer and orchestrator turns still run until their command or progress watchdog ends them.
 
 ### Orchestrator as Single Semantic Interpreter
 
@@ -1082,7 +1145,7 @@ Failure propagation and compound interaction effects.
 **Skill:** systemic-thinking
 **Category:** TENSION
 
-**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval-rate metric, `MULTI_AGENT_MODE.md`) and abandonment (review exhaustion — two reviewers exit without verdict). These remain contract-specified rather than supervisor-computed signals. The system cannot directly detect incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces implement-review cycles before Orchestrator evaluation, while a flawed approval may be caught by canonical validation or downstream integration review without being attributed back to the original verdict. Coders can plead a contested finding and, absent consensus, mark the task BLOCKED for Orchestrator rescope (`MULTI_AGENT_MODE.md`, Iteration Protocol), but verdict quality itself remains unmeasured.
+**Issue:** The Code Reviewer has binding approval/rejection authority but no structural accountability for verdict quality. The contract specifies detection of reviewer dysfunction in two modes: rubber-stamping (>95% approval rate) and abandonment (review exhaustion — two reviewers exit without verdict, `MULTI_AGENT_MODE.md:150-153`). The approval-rate check is computed in code (`CheckSuspiciousRates`, `internal/ops/update_sprint_metrics.go:71-97`) but only returns CLI warnings from `update-sprint-metrics`; nothing persists or acts on them. Review exhaustion remains contract-specified: `AnomalyTypeReviewExhaustion` exists but has no production emitter. The system cannot directly detect incorrect verdicts with plausible reasoning. A reviewer that rejects valid work forces implement-review cycles before Orchestrator evaluation, while a flawed approval may be caught by canonical validation or downstream integration review without being attributed back to the original verdict. Coders can plead a contested finding and, absent consensus, mark the task BLOCKED for Orchestrator rescope (`MULTI_AGENT_MODE.md`, Iteration Protocol), but verdict quality itself remains unmeasured.
 
 **Implication:** Code review quality is the least observable dimension of system health, yet it gates all task completion — the system optimizes for reviewer throughput signals while reviewer accuracy remains unmeasured.
 
@@ -1161,7 +1224,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 **Category:** STRUCTURAL DEBT
 **Related:** [Commands Layer Imports Agent Runtime](#commands-layer-imports-agent-runtime)
 
-**Issue:** Quota exhaustion and provider-unavailable stop states are implemented as parallel agent-runtime helpers, then interpreted and cleared independently by CLI resume and TUI resume. The two presentation paths duplicate signal detection, cleanup, target-state selection, and user-facing reporting, with corresponding duplicated tests. Policy is therefore spread across `internal/agent`, `internal/commands`, and `internal/tui`. Narrowed 2026-10-01 (D58): which quota signals resume clears is decided once, by `agent.ClearExpiredQuotaSignals` (now `providersignal.ClearExpiredQuotaSignals`); provider-unavailable clearing and the rendering of both stay duplicated. *(2026-10-27: A9 moved the signal primitives to `internal/providersignal` and C3 changed how unavailable signals are matched, by canonical provider key and clearable by enumerated handle ([ADR-0230](ADR/0230-canonical-provider-unavailable-signals.md)). CLI resume and TUI resume still detect, clear, choose the target state and report on their own, in separate tests (`TestC3ResumeCommandListsAndClearsRecordsByHandle`, `TestC3ResumeSystemCmdClearsEveryRecordByHandle`); the single owning operation is not delivered, so the entry stays open.)*
+**Issue:** Quota exhaustion and provider-unavailable stop states are implemented as parallel agent-runtime helpers, then interpreted and cleared independently by CLI resume and TUI resume. The two presentation paths duplicate signal detection, cleanup, target-state selection, and user-facing reporting, with corresponding duplicated tests. Policy is therefore spread across `internal/agent`, `internal/commands`, and `internal/tui`. Narrowed 2026-10-01 (D58): which quota signals resume clears is decided once, by `agent.ClearExpiredQuotaSignals` (now `providersignal.ClearExpiredQuotaSignals`); provider-unavailable clearing and the rendering of both stay duplicated. *(2026-10-27: A9 moved the signal primitives to `internal/providersignal` and C3 changed how unavailable signals are matched, by canonical provider key and clearable by enumerated handle ([ADR-0230](ADR/0230-canonical-provider-unavailable-signals.md)). Target-state selection is shared through `ops.Resume`, and both surfaces call the same `providersignal` clearing primitives (`internal/commands/resume.go:46,54`, `internal/tui/commands.go:286,288`); CLI resume and TUI resume still sequence the sweeps, aggregate clearing errors and report on their own, in separate tests (`TestC3ResumeCommandListsAndClearsRecordsByHandle`, `TestC3ResumeSystemCmdClearsEveryRecordByHandle`); the single owning operation is not delivered, so the entry stays open.)*
 
 **Implication:** Adding a provider stop reason or changing recovery semantics requires coordinated edits across runtime and both interaction surfaces. Each surface can remain locally tested while disagreeing about which signals to clear or which agent state to restore.
 
@@ -1191,6 +1254,21 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Direction:** Add a shared, reproducible CI quality target that installs the locked Python development environment and runs pytest, ruff, and mypy alongside the intended Go and cross-language checks. Pin Go lint-tool versions.
 
+**Update (2026-10-27, code quality reassessment and architecture-review health check):** Progress, still open.
+
+*Now in CI:*
+- The full Go suite under `-race` on Linux (`ci-test-go-nosync`).
+- A reconciled seven-shard native Windows suite.
+- `make lint` with gofmt, three-OS `go vet` and the archguard size, import and mutation checks.
+
+*Still local-only:* staticcheck and goimports (both `@latest`), jscpd (unpinned `npx`), ruff and mypy.
+
+*Remaining gaps:*
+- CI Python tests cover only `skills/liza-logs/scripts`; the adversarial-pairing and liza-operator suites do not run.
+- `ci.yml:171-174` still claims Linux and macOS cover the Python pre-commit hooks.
+- `actions/setup-node` is tag-pinned at `ci.yml:167` while `ci-core.yml` pins by SHA.
+- The shipped `internal/embedded/opencode-tools/exec.ts` now has a runtime test (`internal/embedded/opencode_exec_runtime_test.go`), but it skips without Bun, and no workflow installs Bun, so CI never executes or type-checks it.
+
 ### Control-Flow Vocabulary Bypasses Domain Ownership
 
 **Skill:** code-quality-assessment
@@ -1205,6 +1283,11 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Update (2026-10-27, run close):** Substantially narrowed, still open. The run typed and named the vocabulary area by area (K7 inventories `consolidation-run/a4-k7-inventory.md` to `a7-k7-inventory.md`, and ADRs 0220 to 0228): transition cardinalities are `models.TransitionCardinality` constants (`internal/models/transition_vocabulary.go`) and `internal/roles` owns role and claim types. A residual remains in `internal/agent`: the role value `"orchestrator"` is still a raw string at five production sites (`checkpoint_summary.go:176` and `:450`, `strategy_orchestrator.go:183` and `:255`, `supervisor_restart.go:321`) although `roles.Orchestrator` exists. The entry is left open for those sites and for the unexported `ops` constants the earlier boundary records name; no behaviour changes.
 
+**Update (2026-10-27, architecture review Adversarial pass):** Circuit-breaker patterns are a further residue, outside the run's K7 inventories ([review](architecture-review.md#circuit-breaker-pattern-vocabulary-is-split-across-producer-consumer-and-spec-adversarial-pass)):
+- Pattern names and severities are raw strings in `internal/analysis/patterns.go` (`"retry_cluster"`, `"provider_audit_degradation"` at `:401` and `:435`, `"ARCHITECTURE_FLAW"`), and the persisted fields are `string` (`models/history.go:454-455,490-491`).
+- `ops/analyze.go:22-24` re-declares `"provider_audit_degradation"` privately and branches on it (`:116`). Only `models.BlockedReplacementChainPattern` is domain-owned.
+- Code and spec disagree. `retry_cluster` fires on three retry loops of which two share an error pattern (`patterns.go:275-296`), while `specs/protocols/circuit-breaker.md:146-149` requires three similar ones. `workaround_pattern` also groups by `what` when `root_cause` is absent (`patterns.go:352-357`), which the spec does not state. `thresholds_test.go` pins neither case. Which side is correct needs a human ruling.
+
 ### Python Skill Utilities Lack Quality Parity
 
 **Skill:** code-quality-assessment
@@ -1216,6 +1299,25 @@ File sizes in issue titles retain the original assessment values to preserve exi
 **Implication:** A material production surface has weaker regression protection and substantially larger modules than the repository's Go conventions. CLI and serialized-output changes can break skill workflows without blocking a merge.
 
 **Direction:** Extend CI beyond the log-analyzer suite to enforce the remaining Python tests and tooling. Add behavioral tests for the untested skill packages, then split the largest scripts around parsing, analysis/state operations, and rendering boundaries while preserving their CLI contracts.
+
+### Ops Concern-Family Ownership Is Nominal
+
+**Skill:** software-architecture-review
+**Category:** STRUCTURAL DEBT
+**Review:** [pass 23, Complexity lens](architecture-review.md#ops-concern-family-ownership-is-nominal-pass-23-complexity-lens)
+
+**Issue:** `internal/ops` is one package of 53,699 production lines in 241 files, 35% of production Go, at `ca8d76a3`. ADR-0222 through ADR-0225 assign it to four concern families (A3 to A6). Each rejects sub-packages because "private concern files give the same separation". Nothing checks that separation, and measurement does not show it:
+- 47 of the 241 files are cited by none of the four ADRs, although `overview.md` §Permanent component groups says "the ADRs list every file". The 47 include agent registration, health, deletion and lease; state init and migration; checkpoints; and `helpers.go`.
+- Only 52% of 1,795 cross-file call sites to package-level `ops` functions stay within one family; method calls are not counted, so the edge counts are lower bounds.
+- The kernel A3 calls into A4, A5 and A6 66 times, and A4 and A5 call each other 44 times in each direction.
+- `pipeline_ops.go`, filed under A4 "Sprint coordination", is called from 74 of the other 240 files. It holds `loadResolver`, `BuildPipelineTransitions` and the integration-completion authorization.
+- Generic helpers sit in whichever family first needed them: `shortSHA` in `wt_merge.go`, `uniqueSortedStrings` in `integration_progress.go`.
+
+**Implication:** The overview's "Where new code goes" rule cannot be followed for a fifth of the files, and nothing fails when a family calls across. The equivalence the ADRs relied on to reject sub-packages erodes one call at a time, so A3 to A6 cannot be reviewed or owned independently.
+
+**Direction:** Keep the one-package decision; its exported-seam cost argument holds. Either:
+- make the claim checkable: a K4-style archguard test over file families inside `ops`, with a rationale-carrying allowlist seeded from current edges, plus an owner for the 47 files, with resolver loading and generic helpers moved to the kernel or a leaf; or
+- state in `overview.md` that the `ops` groups are review aids, not boundaries.
 
 ---
 
@@ -1235,6 +1337,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-10-27:** [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — `RunSupervisor` is a 29-line coordinator over lifetime, turn, completed-turn, restart and session concern files; `supervisor.go` 198 lines against 663 at the starting commit (`75eb56dde216a9dc0d3ce4491b9ecf63097cd5f3`, `5289fc4b190539db4849451d6ea11250391d9393`, `831ad892ebb929eaaf3f746ece8b2da13b7a7b51`, `e8fca74ee03c918b77bb1720036ec5d71d00a0d7`).
 - **2026-10-27:** [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration) — C1: registration, heartbeat, reviewer claim, re-review reclaim and agent-pool repair resolve one `lease_duration`; the terminal value `"terminal-1"` is an unchanged named constant (`8124f434b053bd497133f97f87982d7ce8bf2abb`).
 - **2026-10-27:** [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement) — C2 and C3: review diversity, provider-audit grouping and provider-unavailable stop signals compare canonical provider keys derived at evaluation time; stored provider values are unchanged (`1dd4045af1722607e1c4390d639b8d779afbc892`, `e63a111b1975471d998416b642e0ead262a83fc5`, `f751d845c3d48d4a01d330cfd80c37ba41b30116`).
+- **2026-10-27:** [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) — found resolved by the verification pass: every task-creation path adds the new task to sprint scope (`875a5dc6a`, `3789104b4`).
 
 ---
 
@@ -1267,6 +1370,7 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) | STRUCTURAL DEBT | 2026-10-26 — `init.go` 516 lines against 1,684 at the starting commit, `InitCommandWithConfig` 60 lines against 471, init and setup concerns in ten files with the longest function 70 lines (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) | STRUCTURAL DEBT | 2026-10-26 — `internal/ops/init_project.go` and its tests deleted, no `InitProject` or `InitProjectParams` reference left in `cmd` or `internal` outside the immutable start snapshot; init Git runs through `gitenv` timed runners in the project root (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) | STRUCTURAL DEBT | 2026-10-26 — `watch.go` 151 lines against 2,084 at the starting commit, `RunAutoRepairAgentPool` 35 lines against 133, watch concerns in eleven files with the longest function 76 lines (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
+| [Sprint Completion Signal Diverges from Active Scope](#sprint-completion-signal-diverges-from-active-scope) | TENSION | 2026-10-27 — replan, add-task, replace-task, plan amendment, integration analysis and transition children all add the new task to `sprint.scope.planned[]`; `TestReplan_HappyPath` and `TestReplaceTaskSchemaParity` pin it (`875a5dc6a`, `3789104b4`) |
 | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) | STRUCTURAL DEBT | 2026-10-27 — `supervisor.go` 198 lines against 663 at the starting commit, `RunSupervisor` 29 lines against 521, the 12 A9 function offenders and `systemctl.go` (861 lines, now 57) under the S1 limits with the A9 ratchet and S2 empty (`TestAreaA9RatchetIsEmpty`) (`75eb56dde216a9dc0d3ce4491b9ecf63097cd5f3`, `5289fc4b190539db4849451d6ea11250391d9393`, `831ad892ebb929eaaf3f746ece8b2da13b7a7b51`, `e8fca74ee03c918b77bb1720036ec5d71d00a0d7`, `f915f01ab49bf61921b82c78def9ee3792e485d2`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
 | [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration) | FRAGILITY | 2026-10-27 — the five lease sites resolve `ops.LeaseDurationSeconds` (`TestC1RegistrationHonoursConfiguredLease`, `TestC1HeartbeatHonoursConfiguredLease*`, `TestC1ReviewerClaimHonoursConfiguredLease`, `TestC1Reclaim*`, `TestC1ReviewerStartPlannerRowsHonourConfiguredLease`); the terminal value stays `"terminal-1"` by C1 (`8124f434b053bd497133f97f87982d7ce8bf2abb`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
 | [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement) | FRAGILITY | 2026-10-27 — `agentlaunch.ProviderKeys` is consumed by reviewer-claim diversity, the merge gate, provider-audit grouping and provider-unavailable signal matching (`TestC2*`, `TestC3*`); stored `agents[].provider` unchanged (`1dd4045af1722607e1c4390d639b8d779afbc892`, `e63a111b1975471d998416b642e0ead262a83fc5`, `f751d845c3d48d4a01d330cfd80c37ba41b30116`, `cbce741a8771a2021e19d34fbfa1d469a320b0a3`, `ecf80111a4742dc39ff25a3b6108e72a793afe8d`, `225ed0af8c7734e67e83baadebc16817afed8e02`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
@@ -1427,6 +1531,8 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Evidence:** `internal/db/blackboard.go` and cache invalidation/external-modification tests.
 
+**Update (2026-10-27, architecture review Adversarial pass):** The resolution keys on mtime alone, so a publication in the same timestamp tick goes unobserved. Tracked as the open [State Cache Treats mtime as Publication Identity](#state-cache-treats-mtime-as-publication-identity); this closure stands for the invalidation-message gap it addressed.
+
 ### Bootstrap Artifact Path Drift
 
 **Resolution:** The compatibility entry point `docs/USAGE.md` exists, and active repository references use `specs/build/1 - Vision.md`. Remaining references to the former usage arrangement are confined to archived historical contracts.
@@ -1462,3 +1568,11 @@ File sizes in issue titles retain the original assessment values to preserve exi
 **Resolution:** ADR-0113 supersedes the accepted no-rescan limitation with independent, bounded global rescans after integration repairs and ties successful completion to clean evidence for the current integration HEAD. Its linearizable finalization and mutation-side invalidation prevent a concurrent HEAD change from leaving stale success.
 
 **Evidence:** `TestSlicedIntegrationLifecycle` and `TestSlicedIntegrationFinalizationRace` both passed for the merged acceptance task at merge commit `84159a1eb0593e2e4eb5288e9ed6c65ae4776a4d`, proving repair rescans, generation exhaustion, current-HEAD closure, and both finalization race orderings.
+
+### Sprint Completion Signal Diverges from Active Scope
+
+**Original issue:** Sprint completion checked only the planned task list, and replacement tasks created by rescoping were not added to it, so a sprint could report completion while replacements were still active. The entry treated this as intentional.
+
+**Resolution:** Every task-creation path in `internal/ops` now adds the new task to `sprint.scope.planned[]`: `ops.Replan` (`replan.go:360`, since `875a5dc6a`), `insertTaskInState` for add-task and `replace-task` (`add_tasks.go:340-342`, `3789104b4`), plan amendment (`plan_amendment_begin.go:160`), integration analysis (`integration_reconcile.go:344`), and transition children, including crash recovery, through `proceed.go:175` and `transition_pass.go:381-382`. Planned-list completion (`models.AllPlannedTasksTerminalWith`) therefore covers replacements.
+
+**Evidence:** `TestReplan_HappyPath` (`internal/ops/replan_test.go:159`) and `TestReplaceTaskSchemaParity` (`internal/ops/replace_task_test.go:131`) assert the replacement is in `Sprint.Scope.Planned`. Verified 2026-10-27 at `ca8d76a3e`.

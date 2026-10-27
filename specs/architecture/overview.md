@@ -281,7 +281,8 @@ groups A3 to A6.
 | A9 Agent runtime | `area_a9_test.go` | Supervision, provider launch and signals, process management | runtime `agent` (all other files), `process`; infrastructure `agentlaunch`, `providersignal` |
 
 The ops groups share one package, so their ownership is by capability and file, not by layer entry
-(representative files; the ADRs list every file):
+(representative files; the ADRs list most of them, while 47 files have no family yet — see
+[Ops Concern-Family Ownership Is Nominal](architectural-issues.md#ops-concern-family-ownership-is-nominal)):
 
 | Group | Capability | Concern families in `internal/ops` | Record |
 |---|---|---|---|
