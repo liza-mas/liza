@@ -193,7 +193,6 @@ config:
     mode: RUNNING
 # after
 version: 1
-mutation_sequence: 1
 goal:
     id: goal-1
     description: A5 fixture
@@ -206,33 +205,17 @@ tasks:
       type: planning
       role_pair: code-planning-main-pair
       description: Frozen A5 fixture
-      status: REVIEWING_CODING_PLAN_MAIN
+      status: CODING_PLAN_MAIN_TO_REVIEW
       priority: 1
       assigned_to: code-planner-1
       worktree: .worktrees/task-1
       base_commit: <commit:base>
       iteration: 1
       review_commit: <commit:candidate>
-      reviewing_by: code-plan-reviewer-1
-      review_lease_expires: <lease:+30m>
       lease_expires: <TIME>
       spec_ref: ""
       done_when: ""
       scope: ""
-      lifecycle:
-        revision: 1
-        completion_sequence: 1
-        receipts:
-            - operation: claim-reviewer-task
-              actor: code-plan-reviewer-1
-              generation_digest: <ID>
-              expected_transition: <ID>
-              payload_digest: <ID>
-              sequence: 1
-              transition_id: <ID>
-              projection:
-                review_commit: <commit:candidate>
-                lease_expires: <lease:+30m>
       handoff_events:
         - timestamp: <TIME>
           agent: code-planner-1
@@ -248,16 +231,12 @@ tasks:
                 - feature_test.go
             intent: freeze A5
             validation_plan: fixture validation
-        - time: <TIME>
-          event: claimed
-          agent: code-plan-reviewer-1
 agents:
     code-plan-reviewer-1:
         role: code-plan-reviewer
-        status: REVIEWING
+        status: WAITING
         generation: generation-1
-        current_task: task-1
-        lease_expires: <lease:+30m>
+        lease_expires: <TIME>
         heartbeat: <TIME>
         terminal: test
         provider: codex-acp

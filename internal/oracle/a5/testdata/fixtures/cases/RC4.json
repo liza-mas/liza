@@ -60,7 +60,7 @@
   "prepare": [],
   "step": {
     "agent": "code-plan-reviewer-1",
-    "adapter": "claim",
+    "adapter": "no-claim",
     "exit": 0
   },
   "modes": [
