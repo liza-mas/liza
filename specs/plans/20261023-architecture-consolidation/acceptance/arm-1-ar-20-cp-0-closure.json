@@ -40,14 +40,8 @@
     {
       "obligation_id": "AC-frozen",
       "file": "internal/oracle/a9/lifecycle_test.go",
-      "assertion": "the A9 oracle suite (index 2) passes and regen check (index 3) reproduces every golden from the starting tree; no oracle file, golden or PROVENANCE record is edited by this unit",
+      "assertion": "the A9 oracle suite (index 2) passes and regen check over ./internal/oracle/a9/... (index 3) reproduces every golden from the starting tree; no oracle file, golden or PROVENANCE record is edited by this unit",
       "command_index": 2
-    },
-    {
-      "obligation_id": "AC-frozen",
-      "file": "internal/oracle/a9/lifecycle_test.go",
-      "assertion": "regen check over ./internal/oracle/a9/... reproduces every golden unchanged",
-      "command_index": 3
     },
     {
       "obligation_id": "AC-proof",
