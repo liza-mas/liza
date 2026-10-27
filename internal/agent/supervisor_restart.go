@@ -196,6 +196,13 @@ func effectiveExit42RestartLimit(cfg models.Config) int {
 	return limit
 }
 
+// Restart backoff doubles from a base delay up to a ceiling. The exit-42 ceiling
+// is configurable (exit42_max_backoff_seconds); the crash-restart one is fixed.
+const (
+	exit42BackoffBaseDelay = 2 * time.Second
+	restartBackoffFactor   = 2
+)
+
 func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.Duration {
 	if restartCount <= 0 {
 		restartCount = 1
@@ -204,7 +211,7 @@ func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.
 		maxBackoff = time.Duration(models.DefaultExit42MaxBackoffSec) * time.Second
 	}
 
-	delay := 2 * time.Second
+	delay := exit42BackoffBaseDelay
 	if delay > maxBackoff {
 		return maxBackoff
 	}
@@ -213,10 +220,10 @@ func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.
 		if delay >= maxBackoff {
 			return maxBackoff
 		}
-		if delay > maxBackoff/2 {
+		if delay > maxBackoff/restartBackoffFactor {
 			return maxBackoff
 		}
-		delay *= 2
+		delay *= restartBackoffFactor
 	}
 
 	if delay > maxBackoff {
@@ -320,7 +327,7 @@ const (
 func crashRestartDelay(consecutiveCrashes int) time.Duration {
 	delay := crashRestartBaseDelay
 	for i := 1; i < consecutiveCrashes && delay < crashRestartMaxDelay; i++ {
-		delay *= 2
+		delay *= restartBackoffFactor
 	}
 	return min(delay, crashRestartMaxDelay)
 }

@@ -6,31 +6,44 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
-// orderDoerCandidates keeps explicit priority authoritative, then prefers owned
-// rejection, other rework, and active dependency demand. Shuffling before the
-// stable sort preserves random contention spreading among equivalent ranks.
-// Every top-tier candidate remains available for the claim loop's fallback.
 // minOrderableCandidates is the smallest tier that has anything to order: a
 // tier of fewer candidates is already in its only order.
 const minOrderableCandidates = 2
 
+// doerClaimRank orders candidates of one priority tier; a lower rank is claimed
+// first.
+type doerClaimRank int
+
+const (
+	// rankOwnRejection is rejected work this agent already owns.
+	rankOwnRejection doerClaimRank = iota
+	// rankOtherRework is other rework: someone else's rejection or an integration failure.
+	rankOtherRework
+	// rankFresh is work nobody has started.
+	rankFresh
+)
+
+// orderDoerCandidates keeps explicit priority authoritative, then prefers owned
+// rejection, other rework, and active dependency demand. Shuffling before the
+// stable sort preserves random contention spreading among equivalent ranks.
+// Every top-tier candidate remains available for the claim loop's fallback.
 func orderDoerCandidates(candidates []*models.Task, state *models.State, agentID string, pr models.PipelineResolver) []*models.Task {
 	tier := shuffledByPriorityTier(candidates)
 	if len(tier) < minOrderableCandidates {
 		return tier
 	}
 	impact := doerDependencyImpact(state, pr, tier)
-	classes := make(map[string]int, len(tier))
+	classes := make(map[string]doerClaimRank, len(tier))
 	for _, task := range tier {
-		class := 2
+		class := rankFresh
 		rejected, err := pr.RejectedStatus(task.RolePair)
 		if err == nil && task.Status == rejected {
-			class = 1
+			class = rankOtherRework
 			if task.AssignedTo != nil && *task.AssignedTo == agentID {
-				class = 0
+				class = rankOwnRejection
 			}
 		} else if task.Status == models.TaskStatusIntegrationFailed {
-			class = 1
+			class = rankOtherRework
 		}
 		classes[task.ID] = class
 	}

@@ -22,6 +22,9 @@ const (
 	// so first-failure behavior is unchanged; it doubles up to claimBackoffMax.
 	claimBackoffBase = 5 * time.Second
 	claimBackoffMax  = 5 * time.Minute
+	// claimBackoffFactor is the growth of both the claim backoff and the
+	// quarantine cooldown.
+	claimBackoffFactor = 2
 )
 
 // claimBreakerKey identifies one quarantined condition: a candidate, the class
@@ -183,7 +186,7 @@ func (b *claimBreaker) advanceBackoff(role string, class ops.ReviewClaimClass) t
 		state.delay = claimBackoffBase
 		return state.delay
 	}
-	state.delay = min(state.delay*2, claimBackoffMax)
+	state.delay = min(state.delay*claimBackoffFactor, claimBackoffMax)
 	return state.delay
 }
 
@@ -214,7 +217,7 @@ func (b *claimBreaker) observeCandidate(role string, candidate ops.ReviewClaimCa
 	case now.Before(entry.counters.CooldownUntil):
 		return key, 0, false
 	default:
-		entry.cooldown = min(entry.cooldown*2, claimQuarantineCooldownMax)
+		entry.cooldown = min(entry.cooldown*claimBackoffFactor, claimQuarantineCooldownMax)
 	}
 	entry.counters.CooldownUntil = now.Add(entry.cooldown)
 	return key, entry.cooldown, true

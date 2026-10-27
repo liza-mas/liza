@@ -88,3 +88,15 @@ func TestA9ProgressPollIntervalClamps(t *testing.T) {
 		}
 	}
 }
+
+// The doubling factors and the claim ranks keep their values: the exit-42
+// backoff sequence and the crash-restart delays are pinned by the existing
+// backoff tests; these pin the names the sweep introduced.
+func TestA9BackoffAndRankConstantsKeepValues(t *testing.T) {
+	if exit42BackoffBaseDelay != 2*time.Second || restartBackoffFactor != 2 || claimBackoffFactor != 2 {
+		t.Fatalf("backoff base %v factors %d %d, want 2s 2 2", exit42BackoffBaseDelay, restartBackoffFactor, claimBackoffFactor)
+	}
+	if rankOwnRejection != 0 || rankOtherRework != 1 || rankFresh != 2 {
+		t.Fatalf("ranks = %d %d %d, want 0 1 2", rankOwnRejection, rankOtherRework, rankFresh)
+	}
+}
