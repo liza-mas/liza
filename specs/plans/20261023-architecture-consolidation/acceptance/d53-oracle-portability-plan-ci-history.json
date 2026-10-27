@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "mappings": [
-    {"obligation_id": "H-depth", "file": "internal/testguard/ci_checkout_history_test.go", "assertion": "TestCIWorkflowCheckoutsFetchFullHistory checkout assertions", "command_index": 0},
-    {"obligation_id": "H-guard", "file": "internal/testguard/ci_checkout_history_test.go", "assertion": "TestCIWorkflowCheckoutsFetchFullHistory exemption tripwire, backed by TestCheckoutHistoryViolationsDetection", "command_index": 0},
-    {"obligation_id": "H-proof", "file": "internal/testhelpers/oracle/correction_start_test.go", "assertion": "TestProviderCorrectionA8Start and siblings plus TestRegenNamesAlteredSampleGolden resolve the starting commit", "command_index": 1},
-    {"obligation_id": "H-env", "approved_reference_id": "goal-proof"}
-  ]
-}
