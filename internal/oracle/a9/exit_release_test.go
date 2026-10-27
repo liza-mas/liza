@@ -142,21 +142,27 @@ func TestOracleA9BlockReleasedStale(t *testing.T) {
 func TestOracleA9BlockDoerStale(t *testing.T) {
 	p := newScenario(t, "i05-block-doer-stale")
 	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
-	// Saved prompts are named by the second: each call is released only after
-	// the previous prompt's second has passed, so no two runs share a file name.
+	// A run names two files by the UTC second: its saved prompt and, set up
+	// separately, its agent-outputs stream (newAgentOutputLogs in
+	// cli_agent_streams.go), which truncates a same-named file. Both stamps are
+	// fixed before the provider writes call i's record, so each call is released
+	// only after the clock has left the prompt's second and the second in which
+	// that record was observed: no two runs share a prompt or an output name.
 	for i := 1; i <= 3; i++ {
 		index := i
 		p.await(t, fmt.Sprintf("failing call %d", i), func() bool {
 			paths, _ := filepath.Glob(filepath.Join(p.recordDir, "call-*.json"))
 			return len(paths) >= index
 		})
+		observed := time.Now().UTC().Format("20060102-150405")
 		prompts, _ := filepath.Glob(filepath.Join(p.dir, ".liza", "agent-prompts", "*.txt"))
 		if len(prompts) == 0 {
 			t.Fatal("I-05 provider launched without saved prompt")
 		}
 		stamp := a9StampRE.FindString(filepath.Base(prompts[len(prompts)-1]))
-		p.await(t, "next prompt second", func() bool {
-			return time.Now().UTC().Format("20060102-150405") != stamp
+		p.await(t, "next prompt and output second", func() bool {
+			now := time.Now().UTC().Format("20060102-150405")
+			return now != stamp && now != observed
 		})
 		p.write(t, fmt.Sprintf(".liza/oracle-release-%d", i), []byte("release\n"))
 	}

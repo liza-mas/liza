@@ -331,15 +331,9 @@ func (p *scenario) records(t testing.TB) []stubRecord {
 	return records
 }
 
-func (p *scenario) start(t *testing.T, args ...string) *runningAgent {
-	t.Helper()
-	return p.launch(t, p.cli, append([]string{"-C", p.dir}, args...))
-}
-
-// The supervisor entry points below are the kit's D48 ownership wiring. run and
-// start stay generic (they also serve parallel callers that start no supervisor,
-// and exit_release_test.go's parallel supervisors); only an attributed
-// supervisor-starting call site opts in. Each entry point makes the test process
+// The supervisor entry points below are the kit's D48 ownership wiring. run
+// stays generic (it also serves parallel callers that start no supervisor); only
+// an attributed supervisor-starting call site opts in. Each entry point makes the test process
 // the child subreaper before the supervisor starts and, on success, failure and
 // cancellation, kills, reaps and asserts the absence of every child of the test
 // process (signalLaunch). That assertion is sound only when no other test owns a
@@ -366,18 +360,6 @@ func (p *scenario) startNamedSupervisor(t *testing.T, args ...string) *runningAg
 	return signalLaunch(t, p, p.named, args)
 }
 
-func (p *scenario) launch(t *testing.T, bin string, args []string) *runningAgent {
-	t.Helper()
-	a := &runningAgent{done: make(chan error, 1)}
-	a.cmd, a.cancel = p.command(bin, args...)
-	a.cmd.Stdout, a.cmd.Stderr = &a.stdout, &a.stderr
-	if err := a.cmd.Start(); err != nil {
-		t.Fatalf("A9 %s run: agent start", p.name)
-	}
-	go func() { a.done <- a.cmd.Wait(); close(a.done) }()
-	t.Cleanup(func() { a.cancel(); <-a.done })
-	return a
-}
 func (p *scenario) finish(t *testing.T, a *runningAgent, deadline time.Duration) invocation {
 	t.Helper()
 	timer := time.NewTimer(deadline)
