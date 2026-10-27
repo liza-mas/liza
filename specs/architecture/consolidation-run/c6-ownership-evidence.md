@@ -12,7 +12,9 @@ records it.
 |---|---|---|
 | start | `75d4084d4` | integration head at claim; production tree before this unit |
 | gap rows | `ae2228b1a` | oracle-only commit; its production tree equals `start` (`git diff 75d4084d4 ae2228b1a` over `internal/ops`, `internal/agent`, `internal/commands`, `cmd` is empty) |
-| move | `8361eca0f` | the C6 move; sweep and site names refer to it |
+| move | `bc6945b07` | the C6 move (rebased onto `d276773bb`; recorded as `8361eca0f`/`99d61f741` before the rebase, same trees); sweep and site names refer to it |
+| head | `f37fffe2e` | submitted code head before this record's last commit; every commit after `bc6945b07` touches only `specs/` (`git diff --stat bc6945b07 f37fffe2e` lists the evidence and manifest files only), so `bc6945b07` and `f37fffe2e` share one Go tree |
+| oracle rows, rebased | `3fe6f3cb5` | `ae2228b1a` rebased onto `d276773bb`; `git diff --stat ae2228b1a 3fe6f3cb5` lists only the decision record |
 
 ## PB map, pre-edit run and after
 
@@ -41,14 +43,14 @@ PB selection (every test of the table above; `go test -count=1 -v -run '<regex>'
 
 | Claim | Command | Tree | Outcome |
 |---|---|---|---|
-| Complete PB selection green before any production edit | the regex above, run in a disposable detached worktree at `ae2228b1a` (production tree equal to `75d4084d4`; test-only overlay: the two new agent tests `TestRegisterAgentSweepsOrphanLivenessRecordInTransaction` and `TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration` appended to `registration_test.go`, which did not exist yet) | start plus overlay | `ok internal/agent 3.765s`; every name of the table ran (59 PASS lines, tests and subtests), no FAIL |
-| Same selection after the move | the regex above | `99d61f741` | `ok internal/agent 3.808s`; every name ran (59 PASS lines), no FAIL |
+| Complete PB selection green before any production edit | the regex above, run in a disposable detached worktree at `ae2228b1a` (production tree equal to `75d4084d4`; test-only overlay: the two new agent tests `TestRegisterAgentSweepsOrphanLivenessRecordInTransaction` and `TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration` appended to `registration_test.go`, which did not exist yet) | start plus overlay | `ok internal/agent 3.765s`; every name of the table ran (59 top-level `--- PASS` lines), no FAIL |
+| Same selection after the move | the regex above, `go test -count=1 -v`, at the rebased head | `f37fffe2e` (Go tree of `bc6945b07`) | `ok internal/agent 3.758s`; 59 top-level `--- PASS` lines (102 with subtests), no FAIL |
 | Broader focused set before any production edit | manifest command 0 pattern over `./internal/agent/` in a detached worktree at `75d4084d4` with the two new tests overlaid | start plus overlay | `ok internal/agent 11.741s` |
-| Same broader set after the move | manifest command 0 over `./internal/ops/ ./internal/agent/` | `8361eca0f` | `ok internal/ops 3.122s`, `ok internal/agent 11.722s` |
+| Same broader set after the move | manifest command 0 over `./internal/ops/ ./internal/agent/` | `8361eca0f` (pre-rebase, Go tree of `bc6945b07`) | `ok internal/ops 3.122s`, `ok internal/agent 11.722s` |
 | New oracle rows on the unchanged production tree | `go test -count=2 -run 'TestOracleA9HaltRelease\|TestOracleA9BlockReleasedStale\|TestOracleA9BlockDoerStale' ./internal/oracle/a9/` in a detached worktree at `75d4084d4` with the oracle commit's files and goldens overlaid | start plus oracle files | `ok 61.390s` |
-| New oracle rows after the move | same command | `8361eca0f` | `ok 60.965s` |
+| New oracle rows after the move | same command | `8361eca0f` (pre-rebase, Go tree of `bc6945b07`) | `ok 60.965s` |
 
-## Gap record (plan Common Rules, `d40` excepted)
+## Gap record (plan Common Rules, `d40` and `D61` excepted)
 
 | Gap at `75d4084d4` | Row | Recipe | Frozen observation |
 |---|---|---|---|
@@ -61,15 +63,34 @@ were needed while the recipes were made deterministic (standard-library log line
 console text by the new driver, prompt files are spaced by whole seconds as in the I-07 row). No existing oracle
 file or golden is edited.
 
-Not reachable black-box: the executing variant (`blockExecutingTaskFromSupervisor`, called only after a session
-ends past its execution timeout around its own in-flight submit) needs a live submit marker and a timeout, and
-the in-transaction recheck of every variant fires only on a race between the locked read and the transaction (the
-window holds a Git WIP commit with hooks skipped). No deterministic recipe exists at the starting commit without
-a production change. These branches therefore have no oracle row. Plan Common Rules allow no substitute: the
-operation may not move on focused tests alone, so this unit is held for a decision (`mark-blocked` with a human
-action). The focused tests that exist (`TestBlockExecutingTaskFromSupervisorLeavesAMovedTask`,
-`TestSupervisorBlockLeavesALifecycleMovedDuringTheSave`, `TestC6BlockSupervisorTaskStaleObservationsAreNoOps`) are
-complementary evidence only and discharge nothing of C6-GAPS for these branches.
+### Branches (a) and (b): covered under D61
+
+Not reachable black-box (verified by the operator at `ae2228b1a`, `D61` in
+`specs/goals/20261023-architecture-consolidation-decisions.md`): (a) the stale no-op of
+`blockExecutingTaskFromSupervisor`, whose only production caller is `execution_deadline.go:141` (a session ending
+past its execution timeout around its own in-flight submit), and (b) the in-transaction stale/changed-owner
+recheck of every supervisor block variant, reachable only through the unexported
+`supervisorBlockBeforeModifyTestHook`. No deterministic recipe exists at the starting commit without a production
+seam. D61 accepts, for exactly these two branches, the pre-existing focused pins as the preservation evidence.
+Per its five conditions:
+
+| D61 condition | Record |
+|---|---|
+| 1. Both pins pass at the pre-move tree and at the submitted head | see the run table below |
+| 2. Call-site/package adaptation only, with a preservation map | neither test was edited: `git diff ae2228b1a f37fffe2e -- internal/agent/inflight_submit_deadline_test.go` is empty, and `git diff ae2228b1a f37fffe2e -- internal/agent/supervisor_block_preserves_work_test.go` touches only `TestReleasedSupervisorBlockActsOnlyOnTheReleasedContinuation` (`releasedTaskClaim` to `ops.ReleasedTaskClaim`, listed in the assertion-preservation map); `TestSupervisorBlockLeavesALifecycleMovedDuringTheSave` is byte-identical. The pins still drive the relocated code through the agent's `applySupervisorBlock` and `blockExecutingTaskFromSupervisor` |
+| 3. No production seam added or exported | none; `supervisorBlockBeforeModifyTestHook` is unchanged and unexported, and `ops` exports only the named `BlockSupervisorTask` operation |
+| 4. `TestC6BlockSupervisorTaskStaleObservationsAreNoOps` is additive | it is extra coverage; the pins above are the evidence for (a) and (b) |
+| 5. C6-GAPS cites D61 for (a) and (b) | the manifest mapping of C6-GAPS records both branches as "covered under D61" |
+
+| Branch | Pin | Command | Tree | Outcome |
+|---|---|---|---|---|
+| (a) | `TestBlockExecutingTaskFromSupervisorLeavesAMovedTask` (`inflight_submit_deadline_test.go`) | `go test -count=1 -v -run '^(TestBlockExecutingTaskFromSupervisorLeavesAMovedTask\|TestSupervisorBlockLeavesALifecycleMovedDuringTheSave)$' ./internal/agent/`, after `make sync-embedded` in a disposable detached worktree | `ae2228b1a` (pre-move) | `--- PASS` (0.05s), `ok internal/agent 0.181s` |
+| (b) | `TestSupervisorBlockLeavesALifecycleMovedDuringTheSave` (`supervisor_block_preserves_work_test.go`) | same | `ae2228b1a` (pre-move) | `--- PASS` (0.12s), same `ok` |
+| (a) | as above | same command in the task worktree | `f37fffe2e` (Go tree of `bc6945b07`) | `--- PASS` (0.06s), `ok internal/agent 0.186s` |
+| (b) | as above | same | `f37fffe2e` | `--- PASS` (0.12s), same `ok` |
+| additive | `TestC6BlockSupervisorTaskStaleObservationsAreNoOps` | `go test -count=1 -v -run '^TestC6BlockSupervisorTaskStaleObservationsAreNoOps$' ./internal/ops/` | `f37fffe2e` | `--- PASS` (0.03s), `ok internal/ops 0.033s` |
+
+Every other relocated effect keeps its oracle row or PB test (gap table above).
 
 ## Assertion-preservation map
 

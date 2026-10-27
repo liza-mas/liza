@@ -34,7 +34,7 @@
     {
       "obligation_id": "C6-GAPS",
       "file": "internal/oracle/a9/exit_release_test.go",
-      "assertion": "TestOracleA9HaltRelease, TestOracleA9BlockReleasedStale and TestOracleA9BlockDoerStale were committed in oracle-only commit ae2228b1a (production tree equal to 75d4084d4) with goldens from regen write-new, pass on the unchanged tree (count=2, ok 61.390s) and after the move (count=2, ok 60.965s); NOT discharged: the executing-variant and in-transaction stale/changed-owner branches have no black-box recipe, the unit is held for a human decision on them (gap record in specs/architecture/consolidation-run/c6-ownership-evidence.md)",
+      "assertion": "TestOracleA9HaltRelease, TestOracleA9BlockReleasedStale and TestOracleA9BlockDoerStale were committed in oracle-only commit ae2228b1a (rebased 3fe6f3cb5; production tree equal to 75d4084d4) with goldens from regen write-new, pass on the unchanged tree (count=2, ok 61.390s) and after the move (count=2, ok 60.965s). Covered under D61 (specs/goals/20261023-architecture-consolidation-decisions.md): the executing-variant stale no-op (a) is pinned by the pre-existing TestBlockExecutingTaskFromSupervisorLeavesAMovedTask and the in-transaction stale/changed-owner recheck (b) by the pre-existing TestSupervisorBlockLeavesALifecycleMovedDuringTheSave; both pass at the pre-move tree ae2228b1a and at head f37fffe2e (Go tree of bc6945b07), neither test edited, no production seam added; TestC6BlockSupervisorTaskStaleObservationsAreNoOps is additive only (commands, SHAs, outcomes: specs/architecture/consolidation-run/c6-ownership-evidence.md, section Branches (a) and (b))",
       "command_index": 1
     },
     {
