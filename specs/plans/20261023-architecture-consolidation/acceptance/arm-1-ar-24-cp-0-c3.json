@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "C3-RAISE",
+      "file": "internal/agent/c3_provider_unavailable_test.go",
+      "assertion": "TestC3CrashWriterRaiseStopsAliasSupervisorBothWays and TestC3CrashWriterKeepsOriginatingToolSeparateFromLabel (agent, index 0): handleClassifiedProviderCrash for codex raises a record the codex-acp supervisor check stops on, and the reverse, an unrelated claude supervisor keeps running, the record keeps tool codex-acp displayed as codex and the alert keeps the classifier label. TestC3ProviderUnavailableRaiseStopsAliasSupervisorBothWays (integration, index 0) does the same through RunSupervisor with a deterministic LLMAgent: the raising supervisor runs once, the other Codex tool executes nothing. TestC3ClassifierKeepsOriginatingTool (providersignal) proves the raw tool survives the classifier",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-MATCH",
+      "file": "internal/providersignal/c3_unavailable_test.go",
+      "assertion": "TestC3Match* (providersignal, index 0): custom tools foo/bar sharing a provider_key match and an unrelated key does not; an agent_tools override on codex-acp stops alias matching; a loaded catalog key (UseRuntimeCatalog fixture) is honoured; the same record stops or spares the alias as the configuration changes between checks (evaluation-time keys); a legacy record without a tool line is identified by its file name and read through the current keys; TestC3CheckReadsKeysOnlyWhenARecordExists shows keys are derived once and only when a record exists",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-CONSUMERS",
+      "file": "internal/agent/c3_provider_unavailable_test.go",
+      "assertion": "TestC3SupervisorAndOrchestratorWakeAgree (agent, index 0) runs the supervisor admission check and RevalidateWake on five fixtures (both alias directions, custom shared key, unrelated key, override separating the aliases) and requires equal outcomes; TestC3SupervisorDecidesUnderSnapshotConfigAtCheckTime proves the admission check uses the published snapshot config at check time. internal/process/c3_spawn_unavailable_test.go TestC3SpawnRefusesByCanonicalKey (index 0) covers the same fixtures at the spawn gate with the refusal error and alert naming the requested CLI, and TestC3SpawnQuotaRefusalPrecedesUnavailableAlias proves quota-first precedence with a matching alias record. Mutation records M1-M5 in specs/architecture/consolidation-run/c3-unavailable-signals-evidence.md",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-INPUTS",
+      "approved_reference_id": "scope"
+    },
+    {
+      "obligation_id": "C3-QUOTA",
+      "file": "internal/providersignal/c3_unavailable_test.go",
+      "assertion": "TestC3QuotaAliasBehaviourUnchanged (providersignal) and TestC3QuotaStaysSpelledAlias (process), index 0: a codex-acp quota record still blocks codex and the reverse by the spelled alias rule, and a quota record for foo does not block bar through a shared provider key. The existing quota suites (internal/providersignal and internal/agent Quota tests, spawn quota tests) run unedited in the same command and pass; the A9 i21-quota-* and i20 goldens pass unchanged at index 1",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-PRESENT",
+      "file": "internal/commands/c3_resume_unavailable_test.go",
+      "assertion": "TestC3ResumeCommandListsAndClearsRecordsByHandle (commands, index 0): legacy claude, codex and stray codex-acp-style files, a codex-acp raise and a custom-key raise print the cleared rows claude, codex, foo, zz-stray-acp (codex and codex-acp one row, legacy names kept), every record is removed and none is left matching; TestC3ResumeCommandClearFailureAttributesDisplayProvider keeps the warning attribution. internal/tui/c3_resume_unavailable_test.go TestC3ResumeSystemCmdClearsEveryRecordByHandle and TestC3ResumeSystemCmdClearFailureNamesDisplayProvider (tui, index 0) do the same for resumeSystemCmd with the unchanged message text. TUI message content reviewed (S4): text and fields are the unchanged functions",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-STORE",
+      "file": "internal/providersignal/c3_unavailable_test.go",
+      "assertion": "TestC3StoreRecordsDoNotConflateDistinctTools, TestC3StoreNewRecordFormatKeepsDisplayLine, TestC3StoreToolNamesStayInsideSignalDirectory and TestC3PresentCollapsesRowsByDisplayProviderAndClearsEveryHandle (providersignal, index 0): codex and codex-acp raises are separate records that clear independently, a record whose tool equals its label has the pre-C3 content, hostile tool names (separators, dot segments, NUL, percent) encode injectively inside the signal directory, rows collapse by display provider and every handle is removed",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-FAIL",
+      "file": "internal/providersignal/c3_unavailable_test.go",
+      "assertion": "TestC3FailUnreadableRecordStillBlocksAndClearFailureNamesHandle (providersignal, index 0): an unreadable record still blocks by file name, a clear failure keeps the existing message naming the handle and a missing record clears without error; the commands and tui clear-failure tests (index 0) keep the warning text and attribution; existing TestResumeCommand_WarnsOnProviderSignalClearFailure and TestResumeSystemCmd_WarnsOnQuotaClearFailure run unedited",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "C3-ORACLE",
+      "file": "internal/oracle/a9/signals_test.go",
+      "assertion": "go test ./internal/oracle/... (index 1) passes with only the listed C3 changes: signals_test.go flips i21-unavailable-codex-run to blocked; the human agent.txt and the state launch.yaml, listing.txt and state.yaml goldens change to the refusal; files/usage-records-1.jsonl is deleted; the other A9 i20/i21 goldens and all other oracles are unchanged. regen -mode check (index 2) exits 0 under D24/D56 through the six 'changed ... C3' records of commit 7ffba17f6",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "C3-STRUCT",
+      "file": "internal/testguard/archguard/s1_guard_test.go",
+      "assertion": "TestS1SizeGuard, TestK4ImportDirectionGuard and TestC6MutationGuard run in go test ./internal/testguard/archguard/ (index 3): no ratchet entry or import edge is added; providersignal already imports agentlaunch, and the new code adds no mutation closure",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "C3-DOCS",
+      "approved_reference_id": "docs"
+    },
+    {
+      "obligation_id": "C3-ENV",
+      "approved_reference_id": "proof"
+    }
+  ]
+}
