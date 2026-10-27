@@ -115,7 +115,7 @@ func c6ChildEnv(environ []string, goos string) ([]string, []c6Mask) {
 		for _, allowed := range c6EnvNames {
 			if strings.EqualFold(name, allowed) {
 				env = append(env, entry)
-				if len(value) >= c6MaskMinLen {
+				if value != "" {
 					masks = append(masks, c6Mask{Name: strings.ToUpper(name), Value: value})
 				}
 				break
@@ -125,10 +125,6 @@ func c6ChildEnv(environ []string, goos string) ([]string, []c6Mask) {
 	sort.SliceStable(masks, func(i, j int) bool { return len(masks[i].Value) > len(masks[j].Value) })
 	return append(env, "GOOS="+goos, "GOARCH=amd64", "CGO_ENABLED=0"), masks
 }
-
-// c6MaskMinLen is the shortest retained value masked in child output; shorter
-// values would mangle unrelated text.
-const c6MaskMinLen = 4
 
 // c6List runs go list for one configuration and decodes its package stream.
 // The child sees only c6ChildEnv(environ, goos). Failures name the

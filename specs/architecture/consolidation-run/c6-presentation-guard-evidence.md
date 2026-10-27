@@ -92,15 +92,15 @@ failure test).
 Round-1 finding C6-ENV-1 (the `go list` child inherited the host environment and a failure could echo a value such
 as an invalid `GOFLAGS`): `c6ChildEnv` now builds the child environment from an allowlist (`HOME`, `PATH`, `TMPDIR`,
 `TEMP`, `TMP`, `GOROOT`, `GOPATH`, `GOCACHE`, `GOMODCACHE` and the Windows-required names) plus `GOOS`, `GOARCH` and
-`CGO_ENABLED`; `c6Sanitize` replaces every retained value of at least four characters by `$NAME`, after making the
-root relative. Regressions use an explicitly constructed synthetic environment (`GOROOT=/c6-synthetic-goroot-marker`,
+`CGO_ENABLED`; `c6Sanitize` replaces every non-empty retained value, however short, by `$NAME`, after making the
+root relative (round 2: an earlier four-character floor still echoed `GOROOT=abc`). Regressions use an explicitly constructed synthetic environment (`GOROOT=/c6-synthetic-goroot-marker`,
 `GOFLAGS=-c6-synthetic-flags-marker`, `C6_SYNTHETIC_SECRET=c6-synthetic-secret-marker`, no real value):
 
 | Claim | Test | Red when |
 |---|---|---|
 | Child inherits only the allowlist | `TestC6ChildEnvWithholdsEverythingOutsideTheAllowlist` | the allowlist test is bypassed: fails naming `GOFLAGS`, the secret name and both marker values |
-| A failure that echoes a retained value shows its name only, and still names the configuration | `TestC6ListingFailureNeverEchoesInheritedEnvironmentValues` (bad `GOROOT`: message `go list (GOOS=linux) exit status 2: go: cannot find GOROOT directory: $GOROOT`) | masking is disabled: fails with the message carrying `/c6-synthetic-goroot-marker` |
+| A failure that echoes a retained value shows its name only, whatever the value length, and still names the configuration | `TestC6ListingFailureNeverEchoesInheritedEnvironmentValues` (bad `GOROOT` of `/c6-synthetic-goroot-marker`, `abc` and `x`: message `go list (GOOS=linux) exit status 2: go: cannot find GOROOT directory: $GOROOT`) | masking is disabled, or limited to values of four or more characters: fails with the message carrying the value |
 | A withheld host `GOFLAGS` no longer breaks the listing | `TestC6HostGoflagsDoNotReachTheListing` | n/a (previously the listing failed with the value in the message) |
 
 The reviewer's probe (`go test -exec 'env GOFLAGS=-C6_DIAGNOSTIC_ENV_MARKER' -run '^TestC6MutationGuard$' ./internal/testguard/archguard/`)
-now passes with the marker withheld from the child (0 violations).
+now passes with the marker withheld from the child (0 violations); `-exec 'env GOROOT=abc'` fails as it must (bad GOROOT) with `cannot find GOROOT directory: $GOROOT`.

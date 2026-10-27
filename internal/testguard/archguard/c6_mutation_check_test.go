@@ -270,24 +270,32 @@ func TestC6ChildEnvWithholdsEverythingOutsideTheAllowlist(t *testing.T) {
 }
 
 // A listing failure that echoes a retained variable's value (a bad GOROOT)
-// reports the variable name, never the value, and still names the configuration.
+// reports the variable name, never the value, however short the value is, and
+// still names the configuration.
 func TestC6ListingFailureNeverEchoesInheritedEnvironmentValues(t *testing.T) {
 	root := writeC6Module(t, map[string]string{
 		"go.mod":           "module c6env\n\ngo 1.22\n",
 		"cmd/tool/main.go": "package main\n\nfunc main() {}\n",
 	})
-	_, err := c6List(root, "linux", c6SyntheticEnviron())
-	if err == nil {
-		t.Fatal("a bad GOROOT must fail the listing")
-	}
-	text := err.Error()
-	for _, leaked := range []string{"c6-synthetic-goroot-marker", "c6-synthetic-flags-marker", "c6-synthetic-secret-marker"} {
-		if strings.Contains(text, leaked) {
-			t.Errorf("failure echoes an environment value (%s): %v", leaked, err)
+	for _, goroot := range []string{"/c6-synthetic-goroot-marker", "abc", "x"} {
+		environ := append(c6SyntheticEnviron()[:3:3], "GOROOT="+goroot,
+			"GOFLAGS=-c6-synthetic-flags-marker", "C6_SYNTHETIC_SECRET=c6-synthetic-secret-marker")
+		_, err := c6List(root, "linux", environ)
+		if err == nil {
+			t.Fatalf("GOROOT=%q must fail the listing", goroot)
 		}
-	}
-	if !strings.Contains(text, "GOOS=linux") || !strings.Contains(text, "$GOROOT") {
-		t.Errorf("failure lost the configuration or the variable name: %v", err)
+		text := err.Error()
+		if strings.Contains(text, "cannot find GOROOT directory: "+goroot) || strings.Contains(text, "directory: /"+goroot) {
+			t.Errorf("failure echoes the value %q: %v", goroot, err)
+		}
+		for _, leaked := range []string{"c6-synthetic-flags-marker", "c6-synthetic-secret-marker", "c6-synthetic-goroot-marker"} {
+			if strings.Contains(text, leaked) {
+				t.Errorf("failure echoes an environment value (%s) for GOROOT=%q: %v", leaked, goroot, err)
+			}
+		}
+		if !strings.Contains(text, "GOOS=linux") || !strings.Contains(text, "$GOROOT") {
+			t.Errorf("failure lost the configuration or the variable name for GOROOT=%q: %v", goroot, err)
+		}
 	}
 }
 
