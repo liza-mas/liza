@@ -7,10 +7,12 @@ date: 2026-02-24
 
 > **Historical context (2026-10-27).** This lesson was written when the merge ran porcelain `git merge` in the main
 > checkout. The merge now builds the merge commit without a working tree (`MergeTree` and `UpdateRef` in
-> `internal/ops/merge_publication.go`), advances the integration ref by compare-and-swap, and then syncs or restores
-> the main checkout's files under the integration mutation lock (`SyncMergedFiles` and `RestoreSyncedFiles` through
-> `internal/ops/merge_finalize.go`; INVARIANTS.md §7). `MergeBranch` (`internal/git/merge.go`) remains with no
-> production caller. The failure mode and the advice below are kept as written, not re-validated against that flow.
+> `internal/ops/merge_publication.go`) and advances the integration ref by compare-and-swap. The main checkout's files
+> are then synced (`SyncMergedFiles`, called by `publishForward` in `internal/ops/merge_forward.go`) and, when another
+> branch is checked out, restored (`RestoreSyncedFiles`, called by `restoreCheckout` in `internal/ops/merge_finalize.go`),
+> each under the integration mutation lock; both methods are defined in `internal/git/merge.go`, as is `MergeBranch`,
+> which has no production caller (INVARIANTS.md §7). The failure mode and the advice below are kept as written, not
+> re-validated against that flow.
 
 ## Context
 
