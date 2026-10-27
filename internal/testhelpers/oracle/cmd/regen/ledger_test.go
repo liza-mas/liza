@@ -20,7 +20,7 @@ func TestLedger(t *testing.T) {
 		{"second start", "start " + sha + "\nstart " + sha + "\n", "line 2"},
 		{"nonhex", "start " + strings.Repeat("z", 40) + "\n", "line 1"},
 		{"sha reason", "start " + sha + "\nchanged " + sampleGolden + " " + sha + "\n", "line 2"},
-		{"fourth field", "start " + sha + "\nchanged " + sampleGolden + " C1 " + sha + "\n", "line 2"},
+		{"fourth field", "start " + sha + "\nchanged " + sampleGolden + " C1 abc\n", "line 2"},
 		{"unknown reason", "start " + sha + "\nchanged " + sampleGolden + " C7\n", "line 2"},
 		{"unknown kind", "start " + sha + "\nchanged internal/oracle/demo/testdata/golden/yaml/x C1\n", "line 2"},
 		{"traversal", "start " + sha + "\nchanged internal/oracle/demo/../testdata/golden/human/x C1\n", "line 2"},

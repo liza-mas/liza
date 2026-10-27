@@ -4,6 +4,9 @@
 
 ACCEPTED. Amended by [D56](../../goals/20261023-architecture-consolidation-decisions.md#d56--d24-extended-c-tasks-may-flip-in-driver-assertions-and-delete-goldens-regen-must-reproduce-both-run-2026-10-24): §§4–8 gain
 package-scoped change points (M1–M9); D24's text and §1's D53 text are unchanged.
+Clarified (2026-10-27) for one merged omission, the C5 golden change at
+`7e4e9f37d`: §4 gains the attributed record, §5 its binding, §7 the check-mode
+exclusion of an unresolved C package. D24, D53 and D56 text are unchanged.
 
 ## Context
 
@@ -47,7 +50,8 @@ produces. Both are C change points, and regeneration must reproduce them.
    one first-line `start <40-hex>` (the run starts at
    `96c9ad69aee983ce2b929dd681b6ba43bf920535`), then `fix <40-hex>` and
    `changed <path> <reason>` records. Reasons are C1–C6, `determinism`
-   or `fix`; a changed record never carries a SHA. No comments or blank lines.
+   or `fix`; a changed record carries no SHA, except the attributed form below.
+   No comments or blank lines.
    **M1 (D56).** `<path>` names a golden, or another tracked path of an oracle
    package (driver, adapter, fixture); never `PROVENANCE`, a path outside a
    package, or a golden path of an unknown kind. A driver-only C change records
@@ -59,6 +63,15 @@ produces. Both are C change points, and regeneration must reproduce them.
    earlier changes remain covered by H1. Review verifies the permitted oracle
    exception. Task branches merge with `--no-ff`; SHA-free changed records
    survive rebasing before merge.
+   **Attributed record (clarification).** `changed <golden> <C1–C6> <40-hex>`
+   binds a golden change already merged without its same-commit record to the
+   commit that made it. It is reserved for an omission already in history, under
+   a recorded human ruling naming commit and path; review verifies that ruling.
+   Its first and only authorized use is the C5 change of
+   `internal/oracle/a6/testdata/golden/state/WtMerge/success.yaml` at
+   `7e4e9f37d5f791cd0adab602736a12a0c94dc5ba` (ruling 2026-10-27T04:41Z). Every
+   other change keeps the same-commit record; the attributed form does not
+   replace it, and the ledger commit adding it is no change point.
 5. **D24 change points.** For a golden with a C record at HEAD, inspect
    `git log --reverse --format=%H -- <golden>` from HEAD. The chain begins at
    the first candidate adding its C record; every later golden-changing
@@ -77,7 +90,10 @@ produces. Both are C change points, and regeneration must reproduce them.
    (`merge changes golden` / `merge changes oracle files`), adding a record for
    a package path it changes, and exactly one record for each package golden it
    adds, modifies or deletes (`change without record`, `change has multiple
-   records`). A golden first committed after the pre-C commit has no
+   records`). An attributed record counts as a same-commit record of the
+   commit it names, which must be an ancestor of the ledger commit adding it,
+   have one parent and change the record's path; otherwise the path is
+   `unexplained … attributed record invalid <sha>`. A golden first committed after the pre-C commit has no
    reproducible pre-change blob (`pre-change blob absent`).
 6. **Comparison.** A non-chained golden must equal its H1 reproduction byte
    for byte. For a chained golden, first reproduce its pre-change blob from
@@ -118,7 +134,12 @@ produces. Both are C change points, and regeneration must reproduce them.
    excluded package directories, lists packages with `go list` under the Go
    `ChildEnv`, and runs no `go test` when none remain. A C package runs from its
    pre-C commit (tagged baseline) and from each point (untagged); a failing run
-   is the runtime form of D56's disproof and exits 2, never bypassed.
+   is the runtime form of D56's disproof and exits 2, never bypassed. In check
+   mode only a package whose change points resolved is excluded from the working
+   baseline: a package holding a C record but no resolvable first point runs
+   under H1, so its untouched goldens report `ok … H1` or a true H1 failure,
+   never `extra`, and its unexplained paths keep their lines. `write-new` still
+   excludes every package holding a C record.
 8. **Entry point.** Run `go run ./internal/testhelpers/oracle/cmd/regen`.
    `-repo DIR` selects a repository; the default contains the current directory.
    `-mode check` is default and returns 0 only when all selected goldens pass,
@@ -148,6 +169,11 @@ produces. Both are C change points, and regeneration must reproduce them.
   there has no fitting reason and a later determinism edit records an edited
   path. Writers beyond the known graph are unchecked; the upgrade trigger is the
   first unsupported need, raised by its owner as a correction.
+- The harness cannot verify human authority for an attributed record
+  (provenance is not authentication); review of the `PROVENANCE` diff against
+  the cited ruling is the control. An unresolved C package whose driver a C
+  commit flipped fails its H1 run loudly (exit 2) instead of listing `extra`
+  goldens.
 - Each C package adds one run for its pre-C commit (shared by packages with the
   same pre-C commit) and one per distinct point, besides the H1 run.
 

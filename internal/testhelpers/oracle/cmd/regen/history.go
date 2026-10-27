@@ -60,9 +60,8 @@ func (e *engine) recordsAdded(ctx context.Context, sha string, parents []string)
 		if !strings.HasPrefix(line, "+changed ") {
 			continue
 		}
-		fields := strings.Split(strings.TrimPrefix(line, "+"), " ")
-		if len(fields) == 3 {
-			result = append(result, change{fields[1], fields[2]})
+		if c, ok := parseChange(strings.Split(strings.TrimPrefix(line, "+"), " ")); ok {
+			result = append(result, c)
 		}
 	}
 	return result, nil
@@ -99,8 +98,27 @@ func (e *engine) cPackages(l ledger) []string {
 	return dirs
 }
 
+// attributable reports whether the attributed record c, added by ledger commit
+// y, may stand as a same-commit record of the commit it names: an ancestor of
+// y (never y itself, which cannot name its own hash), with one parent,
+// changing the record's path. An unknown commit is not attributable; only
+// cancellation and a failed diff are errors.
+func (e *engine) attributable(ctx context.Context, y string, c change) (bool, error) {
+	parents, err := e.parents(ctx, c.commit)
+	if err != nil || len(parents) != 1 {
+		return false, ctx.Err()
+	}
+	if _, err := e.commands.git(ctx, e.repo, "merge-base", "--is-ancestor", c.commit, y); err != nil {
+		return false, ctx.Err()
+	}
+	changed, err := e.commands.git(ctx, e.repo, "diff", "--name-only", parents[0], c.commit, "--", c.path)
+	return len(changed) > 0, err
+}
+
 // scanRecords reads every ledger commit independently of golden history: a
-// record-only commit would otherwise be invisible to git log -- <path>.
+// record-only commit would otherwise be invisible to git log -- <path>. A
+// record is keyed to the commit it must change: the ledger commit adding it,
+// or, when attributed, the commit it names.
 func (e *engine) scanRecords(ctx context.Context, issues map[string][]string) (map[string][]change, error) {
 	byCommit := map[string][]change{}
 	b, err := e.commands.git(ctx, e.repo, "log", "--format=%H", "HEAD", "--", ledgerPath)
@@ -116,8 +134,23 @@ func (e *engine) scanRecords(ctx context.Context, issues map[string][]string) (m
 		if err != nil {
 			return nil, err
 		}
-		byCommit[sha] = added
 		for _, c := range added {
+			if c.commit != "" {
+				if !selected(c.path, e.packages) {
+					continue
+				}
+				ok, err := e.attributable(ctx, sha, c)
+				if err != nil {
+					return nil, err
+				}
+				if !ok {
+					issues[c.path] = append(issues[c.path], "attributed record invalid "+c.commit)
+					continue
+				}
+				byCommit[c.commit] = append(byCommit[c.commit], c)
+				continue
+			}
+			byCommit[sha] = append(byCommit[sha], c)
 			if !selected(c.path, e.packages) || len(parents) == 0 {
 				continue
 			}

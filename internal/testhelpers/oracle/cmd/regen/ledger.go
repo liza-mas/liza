@@ -12,7 +12,9 @@ const (
 	ledgerPath = oracleRoot + "PROVENANCE"
 )
 
-type change struct{ path, reason string }
+// change is a changed record. commit is set only on the attributed form, which
+// names the earlier commit that made the change; it is lower case.
+type change struct{ path, reason, commit string }
 type ledger struct {
 	start   string
 	fixes   []string
@@ -42,15 +44,30 @@ func parseLedger(data []byte) (ledger, error) {
 			}
 			result.fixes = append(result.fixes, fields[1])
 		case "changed":
-			if len(fields) != 3 || !recordPath(fields[1]) || !validReason(fields[2]) {
+			c, ok := parseChange(fields)
+			if !ok {
 				return bad()
 			}
-			result.changes = append(result.changes, change{fields[1], fields[2]})
+			result.changes = append(result.changes, c)
 		default:
 			return bad()
 		}
 	}
 	return result, nil
+}
+
+// parseChange reads the fields of a changed record: path and reason, then an
+// optional commit. The attributed form binds a C1-C6 golden change to the
+// commit that made it; it names a golden, as the change point it creates is a
+// golden change.
+func parseChange(fields []string) (change, bool) {
+	switch len(fields) {
+	case 3:
+		return change{fields[1], fields[2], ""}, recordPath(fields[1]) && validReason(fields[2])
+	case 4:
+		return change{fields[1], fields[2], strings.ToLower(fields[3])}, goldenPath(fields[1]) && isC(fields[2]) && commitSHA.MatchString(fields[3])
+	}
+	return change{}, false
 }
 
 func validReason(reason string) bool {

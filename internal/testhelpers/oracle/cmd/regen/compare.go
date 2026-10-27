@@ -17,7 +17,15 @@ func (e *engine) compare(ctx context.Context, l ledger, out io.Writer) (int, err
 	if err != nil {
 		return 2, fmt.Errorf("error history HEAD: %w", err)
 	}
-	baseline, err := e.values(ctx, "working", true, e.packages, dotted(e.excluded))
+	// Only a package whose chain resolved is reproduced from history; any other
+	// package runs under H1, where its unexplained paths keep their issues.
+	var chained []string
+	for _, dir := range e.excluded {
+		if h.packages[dir] != nil {
+			chained = append(chained, dir)
+		}
+	}
+	baseline, err := e.values(ctx, "working", true, e.packages, dotted(chained))
 	if err != nil {
 		return 2, err
 	}
@@ -31,11 +39,8 @@ func (e *engine) compare(ctx context.Context, l ledger, out io.Writer) (int, err
 	}
 	reports := map[string]string{}
 	var packageLines []string
-	for _, dir := range e.excluded {
+	for _, dir := range chained {
 		pc := h.packages[dir]
-		if pc == nil {
-			continue
-		}
 		lines, err := e.checkPackage(ctx, pc, current, h.issues, r)
 		if err != nil {
 			return 2, err
