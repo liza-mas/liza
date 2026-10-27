@@ -1145,6 +1145,25 @@ rewrite"; that conclusion predates this growth.
 - `specs/goals/` is ignored by `.local_gitignore:22`; the goal document must be committed before
   `init --spec`. Human: "I'll manage the commit of the goal" (2026-10-23).
 
+### D61 — C6 relocation: two race/deadline-only block branches keep their pre-existing focused pins instead of a black-box oracle row (operator, standing delegation, 2026-10-27)
+Operator ruling under the standing delegation (oracle-contract class, as D40), 2026-10-27T02:01Z. `arm-1-ar-21-cp-0-code-0` blocked. The plan's Task 1 Common Rules require a pre-move A9 oracle row for every relocated
+effect, with D40 as the only exception. Two branches have no deterministic black-box recipe at the starting commit without a production change, verified by the operator at `ae2228b1a`:
+(a) the stale no-op of `blockExecutingTaskFromSupervisor`, whose only production caller is `execution_deadline.go:141` (execution-deadline expiry during an in-flight submit), and
+(b) the in-transaction stale/changed-owner recheck of every supervisor block variant, reachable only in the window between the locked read and `Modify` through the unexported
+`supervisorBlockBeforeModifyTestHook` (`supervisor_block.go:14-16,149-150`). The coder added oracle rows for every other uncovered effect (`ae2228b1a`).
+- Ruling: for exactly branches (a) and (b), the preservation evidence is the pre-existing focused tests `TestBlockExecutingTaskFromSupervisorLeavesAMovedTask`
+  (`inflight_submit_deadline_test.go`) and `TestSupervisorBlockLeavesALifecycleMovedDuringTheSave` (`supervisor_block_preserves_work_test.go`). Both exist at the pre-move commit, so they pin starting behaviour (D40 principle).
+  Conditions:
+  1. The evidence record shows both tests passing at the pre-move tree `ae2228b1a` and at the submitted head (command, SHA, result).
+  2. Any change to those tests is call-site/package adaptation only, with an assertion-preservation map. No assertion is weakened, removed or re-expected.
+  3. No production test seam is added or exported for this purpose.
+  4. The new `TestC6BlockSupervisorTaskStaleObservationsAreNoOps` is additive and counts as extra coverage, not as the substitute.
+  5. C6-GAPS records branches (a) and (b) as covered under D61 with these citations.
+- Scope: only these two branch classes. Every other relocated effect keeps the pre-move oracle-row requirement. C6 siblings (`arm-1-ar-21-cp-0-code-1`, `code-2`) may invoke D61 only for the same two branch
+  classes, under the same conditions and with their own pre-existing pins. Any other unreachable branch blocks again.
+- Rejected: exporting a production seam to make a black-box recipe possible (a production change in a behaviour-preserving move); leaving the two operations in `internal/agent` (defeats C6 ownership).
+- Kind: oracle contract (D40 analogue). Revert: require black-box rows and accept a seam change under a separate decision.
+
 ## Next contribution only the human can make
 
 Before `init --spec`: settle in-flight work on `main`, cut `refactor/architecture-consolidation`,
