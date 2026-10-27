@@ -4,7 +4,7 @@ Close of the architecture consolidation run (goal `specs/goals/20261023-architec
 arm-1-ar-25 plan, Scope 1, Task 2, task `arm-1-ar-25-cp-0-code-1`. The unit links the evidence of the nine area
 boundaries and the six behaviour changes; it is not a second issue registry or a replacement specification. It changes
 only documentation: `specs/architecture/overview.md`, `specs/architecture/architectural-issues.md`,
-`lessons/humans/branch-switch-during-sprint.md`, this file and
+`specs/architecture/blackboard-schema.md` (one line), `lessons/humans/branch-switch-during-sprint.md`, this file and
 `specs/plans/20261023-architecture-consolidation/acceptance/arm-1-ar-25-cp-0-close.json`. It changes no production,
 test, guard-data, oracle, baseline, ADR, contract, skill, support-doc or `Makefile` file. `tdd_not_required`:
 documentation and evidence only.
@@ -147,17 +147,19 @@ Markdown links and anchors were checked. The area chains had already updated the
 |---|---|
 | `INVARIANTS.md` | Reviewed. No path, symbol or ownership mismatch from a run move. Not edited |
 | `specs/architecture/state-machines.md` | Reviewed. Not edited |
-| `specs/architecture/blackboard-schema.md` | Reviewed. Not edited (one observation below) |
+| `specs/architecture/blackboard-schema.md` | Reviewed. One line corrected (symbol and owner only, below) |
 | `specs/architecture/supervision-model.md` | Reviewed. Not edited |
 | `specs/protocols/` (14 documents: acceptance-evidence, agent-initialization, await-primitives, blocked-assessment-idempotency, circuit-breaker, lifecycle-results, payload-validation, replacement-transactions, runtime-inputs, sprint-governance, task-lifecycle, usage-attribution, validation-prerequisites, worktree-management) | Reviewed. Not edited |
-| `lessons/` (9 agent lessons, 1 human lesson, 1 README) | One location corrected (below) |
+| `lessons/` (9 agent lessons, 1 human lesson, 1 README) | One location corrected and one historical note added to the human lesson (below) |
 | `specs/architecture/overview.md` | Rewritten for the delivered Go structure: [Go Code Structure](../overview.md#go-code-structure) |
 | `specs/architecture/architectural-issues.md` | Run-close reconciliation, see Registry |
 
 **Edits made.** (1) `lessons/humans/branch-switch-during-sprint.md`: `internal/git/worktree.go:283` became
 `internal/git/merge.go:99`, where `MergeBranch` is defined (it was already there at the starting commit; the function
-has no production caller today). The sentence is otherwise unchanged. (2) The registry corrections below. (3) The
-overview rewrite. No invariant, schema or protocol semantics changed.
+has no production caller today), and a dated historical-context note points at the current merge flow. (2)
+`specs/architecture/blackboard-schema.md:627`: the predicate and owner of the checkpoint auto-trigger, meaning
+unchanged. (3) The registry corrections below. (4) The overview rewrite. No invariant, schema or protocol semantics
+changed.
 
 **Intentionally historical or untouched references.**
 
@@ -172,16 +174,20 @@ overview rewrite. No invariant, schema or protocol semantics changed.
 - Historical ADRs, the A1 to A9 boundary records and the sizes in the registry's closure entries keep the values of the
   date they were written (for example `init.go` 516 lines at the A7 closure, 508 now: still far under the limit).
 
-**Observations routed to the owners, not rewritten into agreement.** Each concerns a document sentence whose cited file
-exists but does not hold the claim, identical at the starting commit and tracked as an open registry entry; resolving it
-is a behaviour or wording decision for the owner, not a location fix:
+**Semantic discrepancies found and their dispositions.** Four document sentences name a file that exists but does not
+hold the claim as worded. All four are identical at the starting commit, none comes from a run move, and none was
+rewritten into agreement with different behaviour:
 
-| Location | Observation | Owner entry |
+| Location | Discrepancy | Disposition |
 |---|---|---|
-| `INVARIANTS.md:245` (§7 clean sync) | cites `submit_review.go`; only the strict acceptance gate checks a clean worktree | [INVARIANTS.md §7 Clean Worktree Not Enforced at Submission](../architectural-issues.md#invariantsmd-7-clean-worktree-not-enforced-at-submission) |
-| `INVARIANTS.md:218` (§6 quorum) | cites `verdict_transition.go`; provider diversity is enforced at reviewer claim and preferred at merge readiness, not at verdict time | [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](../architectural-issues.md#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time) |
-| `specs/architecture/blackboard-schema.md:627` | says the checkpoint auto-trigger in `sprint_checkpoint.go` "still uses `IsUnconsumedPlanningOutput`"; `resolveCheckpointTrigger` calls `PlanHandoff.HasUnfailedHandoff`, which falls back to that predicate outside the plan-hand-off domain | no registry entry; for the plan-hand-off owner |
-| `lessons/humans/branch-switch-during-sprint.md` | describes a porcelain `git merge` in the main checkout; the merge now constructs commits without a working tree and publishes by compare-and-swap (INVARIANTS §7, `merge_publication.go`), while the main-index sync stays serialized | no registry entry; for the lesson owner (a dated human lesson) |
+| `specs/architecture/blackboard-schema.md:627` | said the checkpoint auto-trigger in `sprint_checkpoint.go` "still uses `IsUnconsumedPlanningOutput`" | **Resolved here, symbol and owner only.** `resolveCheckpointTrigger` (`sprint_checkpoint.go:153`) evaluates `PlanHandoffDomain.HasUnfailedHandoff` (`plan_handoff.go:132`), whose own comment says cycle admission "is evaluated separately" (`PlanningCompleteEligible`, `plan_handoff.go:103`, applies it); outside the plan-hand-off domain it reduces to `IsUnconsumedPlanningOutput` (`Pending`, `plan_handoff.go:82`). The line now names that predicate and keeps its meaning: the trigger applies no cycle-blocked exclusion. No decision was needed |
+| `lessons/humans/branch-switch-during-sprint.md` | describes a porcelain `git merge` in the main checkout | **Resolved here by annotation.** A dated "Historical context" note states what the merge does now (`MergeTree` and `UpdateRef` in `merge_publication.go`, compare-and-swap, then `SyncMergedFiles` and `RestoreSyncedFiles` under the integration mutation lock in `merge_finalize.go`, INVARIANTS §7) and that `MergeBranch` has no production caller; the failure mode and advice are kept as written and stated as not re-validated. The `MergeBranch` location in References is corrected to `internal/git/merge.go:99`. Whether the advice still holds in full is a lesson-content question the annotation does not answer and this record does not claim |
+| `INVARIANTS.md:245` (§7 clean sync) | cites `submit_review.go`; only the strict acceptance gate checks a clean worktree | **Open finding, unchanged:** [INVARIANTS.md §7 Clean Worktree Not Enforced at Submission](../architectural-issues.md#invariantsmd-7-clean-worktree-not-enforced-at-submission) already records the conflict and its two directions (enforce, or reword); choosing is a behaviour decision outside this run. The row is not edited |
+| `INVARIANTS.md:218` (§6 quorum) | cites `verdict_transition.go`; provider diversity is enforced at reviewer claim and preferred at merge readiness, not at verdict time | **Open finding, unchanged:** [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](../architectural-issues.md#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time), narrowed in this close to the current owners. The row is not edited |
+
+The two open findings are in the registry with their owner decision pending; the registry is the lifecycle authority for
+them and neither blocks the close (neither is in the run's change list, and ADR-0224 note 19 handed them to this record
+unresolved).
 
 ## Registry
 
@@ -282,7 +288,8 @@ them:
 
 ## Process evidence
 
-- Documentation-only diff: the unit's changes are the five files named at the top. `git diff --name-only 6eb9f9fab6
+- Documentation-only diff: the unit's changes are the six files named at the top (the five
+  documents and the close manifest). `git diff --name-only 6eb9f9fab6
   HEAD` at submission lists no path outside them.
 - Frozen surfaces: no embedded, installed or rendered artifact, `state.yaml` schema, CLI surface or oracle golden was
   touched; `make sync-embedded` was not needed.

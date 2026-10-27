@@ -5,6 +5,13 @@ keywords: [git merge, wt_merge, branch switch, staged changes, index corruption,
 date: 2026-02-24
 ---
 
+> **Historical context (2026-10-27).** This lesson was written when the merge ran porcelain `git merge` in the main
+> checkout. The merge now builds the merge commit without a working tree (`MergeTree` and `UpdateRef` in
+> `internal/ops/merge_publication.go`), advances the integration ref by compare-and-swap, and then syncs or restores
+> the main checkout's files under the integration mutation lock (`SyncMergedFiles` and `RestoreSyncedFiles` through
+> `internal/ops/merge_finalize.go`; INVARIANTS.md §7). `MergeBranch` (`internal/git/merge.go`) remains with no
+> production caller. The failure mode and the advice below are kept as written, not re-validated against that flow.
+
 ## Context
 
 Liza's `wt_merge` operation runs `git merge` in the main repository directory (`projectRoot`). This is a porcelain command that updates three things: the ref, the working tree, and the index — all relative to whatever branch is currently checked out in that directory.
