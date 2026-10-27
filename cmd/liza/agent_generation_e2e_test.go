@@ -66,15 +66,15 @@ var atomicGenerationFenceInventory = []atomicFenceInventoryEntry{
 	{name: "assess-hypothesis-exhausted", command: "assess-hypothesis-exhausted", sourceFile: "cmd/liza/cmd_task_blocked.go", declaration: "assessHypothesisExhaustedCmd", call: "ops.AssessHypothesisExhaustedWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "cancel-task", command: "cancel-task", sourceFile: "cmd/liza/cmd_task_retire.go", declaration: "cancelTaskCmd", call: "ops.CancelTaskWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "reconcile-merged", command: "reconcile-merged", sourceFile: "cmd/liza/cmd_task_retire.go", declaration: "reconcileMergedCmd", call: "ops.ReconcileMergedWithAuthority", authorityBinding: "authority"},
-	{name: "claim-doer", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ClaimTaskWithAuthority", authorityBinding: "*authority"},
-	{name: "resume-handoff", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ResumeHandoff", authorityField: "Authority", authorityBinding: "authority"},
-	{name: "resume-owned-task", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ResumeOwnedTask", authorityField: "Authority", authorityBinding: "authority"},
+	{name: "claim-doer", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerCandidate", call: "ops.ClaimTaskWithAuthority", authorityBinding: "*authority"},
+	{name: "resume-handoff", sourceFile: "internal/agent/claiming.go", declaration: "resumeDoerTask", call: "ops.ResumeHandoff", authorityField: "Authority", authorityBinding: "authority"},
+	{name: "resume-owned-task", sourceFile: "internal/agent/claiming.go", declaration: "resumeDoerTask", call: "ops.ResumeOwnedTask", authorityField: "Authority", authorityBinding: "authority"},
 	{name: "claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "markAgentDegradedForInfraClaim", call: "ops.MarkAgentDegraded", authorityField: "Authority", authorityBinding: "authority"},
-	{name: "clear-claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ClearAgentDegradedWithAuthority", authorityBinding: "*authority"},
+	{name: "clear-claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "clearDegradedAfterClaim", call: "ops.ClearAgentDegradedWithAuthority", authorityBinding: "*authority"},
 	{name: "claim-reviewer", sourceFile: "internal/agent/claiming.go", declaration: "claimReviewerTaskForRoleWithOptionalAuthority", call: "ops.ClaimReviewerTask", authorityField: "Authority", authorityBinding: "authority"},
 	{name: "release-reviewer-claim", sourceFile: "internal/agent/claiming.go", declaration: "releaseReviewerClaimQuietly", call: "ops.ReleaseClaimWithAuthority", authorityBinding: "authority"},
 	{name: "watchdog-block", sourceFile: "internal/agent/supervisor_block.go", declaration: "transitionSupervisorBlock", call: "ops.ModifyWithAgentAuthority", authorityBinding: "authority"},
-	{name: "approved-merge-dispatch", sourceFile: "internal/agent/claiming.go", declaration: "handleApprovedMergesWithOptionalAuthority", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "*authority"},
+	{name: "approved-merge-dispatch", sourceFile: "internal/agent/claiming_merge.go", declaration: "mergeApprovedTask", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "*authority"},
 }
 
 func TestCLIStaleSupervisorGenerationEndToEnd(t *testing.T) {
