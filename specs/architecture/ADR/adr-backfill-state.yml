@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-09-21T12:00:00Z"
+last_updated: "2026-10-25T00:00:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -1777,27 +1777,119 @@ clusters:
       intent_hypothesis: "Stop specs going stale while a self-declared Doc Impact of 'none' passes unexamined."
       solution_detected: "Two falsifying questions in the Doc Impact declaration and a review-checklist item testing it, with severity left to reviewer judgment."
       rationale_status: "Commit-evidenced; no separate user intent supplied."
+  - id: 231
+    title: "Submission Refuses What Reference Consumers Would Refuse"
+    commit_shas: ["e0cbc16eb","e7e205ab9","fab54f2da","e6504c085","1830329de","5a0295ea2","1a837e148","b720929dc","4a715e0d0"]
+    date_range: "2026-09-23 to 2026-10-23"
+    first_author_date: "2026-09-23T09:17:45+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0231-submission-refuses-what-reference-consumers-would-refuse.md"
+    adr_path: "specs/architecture/ADR/0231-submission-refuses-what-reference-consumers-would-refuse.md"
+    user_context:
+      selection: "2026-10-25: user approved all five Tier A records."
+      intent: "Confirmed without further alternatives or trade-offs."
+      provenance: "Commit-evidenced, including the two rejected options."
+    related_adrs: [133,134,139,160]
+    analysis:
+      intent_hypothesis: "Stop carrier mistakes surfacing only after the author's session ends."
+      solution_detected: "Submit-for-review runs the consumers' own reference checks through shared referencecontract code; validate warns."
+  - id: 232
+    title: "Provider-Native Tool-Result Budgets"
+    commit_shas: ["997ae78a2","5049f50a0"]
+    date_range: "2026-09-24 to 2026-09-26"
+    first_author_date: "2026-09-24T04:06:51+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0232-provider-native-tool-result-budgets.md"
+    adr_path: "specs/architecture/ADR/0232-provider-native-tool-result-budgets.md"
+    user_context:
+      selection: "2026-10-25: user approved all five Tier A records."
+      intent: "Context flooding; built downstream first by mistake."
+      provenance: "User-supplied trigger; alternatives reconstructed."
+    related_adrs: [121,164,178]
+    analysis:
+      intent_hypothesis: "Bound what tool results put into the model's context."
+      solution_detected: "Sanitized content-addressed artifacts above a byte threshold, bounded digest, one boundary per provider."
+  - id: 233
+    title: "Bounds, Not Benchmarks: Unnamed Assurance Is the Human's Decision"
+    commit_shas: ["c1619f04f","5704e5c83"]
+    date_range: "2026-09-27 to 2026-09-27"
+    first_author_date: "2026-09-27T00:01:05+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0233-bounds-not-benchmarks.md"
+    adr_path: "specs/architecture/ADR/0233-bounds-not-benchmarks.md"
+    user_context:
+      selection: "2026-10-25: user approved all five Tier A records."
+      intent: "Human-decides is intended; benchmarks tend to be overkill in common situations."
+      provenance: "User-confirmed; options commit-evidenced."
+    related_adrs: [132,149,150]
+    analysis:
+      intent_hypothesis: "Stop authors escalating approximate bounds into assurance frameworks."
+      solution_detected: "Least costly reading; unnamed guarantees and machinery are the human's to add via an Open Question."
+  - id: 234
+    title: "Skill Invocation as a Standing Delegation"
+    commit_shas: ["0f0180404"]
+    date_range: "2026-10-16 to 2026-10-16"
+    first_author_date: "2026-10-16T17:51:24+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0234-skill-invocation-as-standing-delegation.md"
+    adr_path: "specs/architecture/ADR/0234-skill-invocation-as-standing-delegation.md"
+    user_context:
+      selection: "2026-10-25: user approved all five Tier A records."
+      intent: "Protection against prompt injection; delegation framed once in a controlled way rather than restated per run."
+      provenance: "User-supplied intent; mechanism commit-evidenced."
+    related_adrs: [132,147,154]
+    analysis:
+      intent_hypothesis: "Let unattended runs proceed through rulings without opening an injection path."
+      solution_detected: "Only a human-invoked skill grants a standing delegation; the operator settles rulings by default with a hold list."
+  - id: 235
+    title: "Shared CI Core Merged Upstream, and CI-Gated Releases"
+    commit_shas: ["8e117e1fa","63596d743"]
+    date_range: "2026-10-22 to 2026-10-23"
+    first_author_date: "2026-10-22T12:49:11+02:00"
+    confidence: 0.85
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0235-shared-ci-core-and-ci-gated-releases.md"
+    adr_path: "specs/architecture/ADR/0235-shared-ci-core-and-ci-gated-releases.md"
+    user_context:
+      selection: "2026-10-25: user approved all five Tier A records."
+      intent: "Easier to maintain along the upstream merge flow; macOS-off-PR was the user's call to speed up CI."
+      provenance: "User-supplied rationale; pinned-workflow option evidenced in the squash."
+    related_adrs: [17,118]
+    analysis:
+      intent_hypothesis: "End divergent fork CI and unverified tag releases."
+      solution_detected: "ci-core.yml merged to forks with declared extension points; releases gated on the CI-verified tagged SHA."
 processing_cursor:
   step: "complete"
-  substep: "post_0132_tier_a_adrs_generated"
-  cluster_index: 155
-  last_triaged_commit: "d12866d8b"
-  selected_ids: [146, 147, 148, 149, 150, 151, 152, 153, 154, 155]
+  substep: "post_0155_selected_adrs_generated"
+  cluster_index: 235
+  last_triaged_commit: "97ccf330c"
+  selected_ids: [231, 232, 233, 234, 235]
   not_selected_ids: []
-  note: "119 commits since 73a50ca8 triaged. Thirteen decisions (ADR-0133..0145) were already recorded in-session by the work itself and were not re-derived; six further commits amended existing records (0031, 0071, 0133, 0137, 0139). Ten Tier A candidates approved and generated. Six Tier B candidates were presented and declined by the user: AppArmor profile auto-install (0071100c1), bounded advisory index subprocesses (770c5ade9/07c2bdbfe), evidence preservation across repair and claim release (eight commits, 09-08 to 09-20), merge resumption on proven effect (a03a04664/f51580742), background-job-aware claim retention (016724045/6c7d5467b), empty-cohort analysis recovery (525f28a66). Not recommended and not generated: C#/Node test-filename admission (amends ADR-0007/0030), race-gate concurrency cap (belongs to previously declined candidate 128)."
-  covered_by_in_session_adrs: [133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
-  numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0146 by earliest author timestamp. Chronological interleaving with 0133-0145 is accepted rather than renumbering them."
-  user_confirmation: "2026-09-21: backfill since cluster 0132; generate all ten Tier A records and no Tier B; ADR-0150 as a single record rather than a three-way split; append numbering. Intent supplied for 0146, 0147, 0149, 0151; none supplied for 0148, 0152-0155; ADR-0150's release-timing rationale explicitly unknown."
+  note: "285 commits since d12866d8b triaged: 62 added ADR-0156..0217 in-session, 89 amended existing ADRs, 157 triaged by subject. Five Tier A records generated and ADR-0151 amended (observation reads use lock-free snapshots). Tier B pi/Copilot providers (6aca8a8a1/9ad0c936d) and the Claude Stop hook holding turns for background jobs (16971d7fd/293574d13) were presented and not selected."
+  covered_by_in_session_adrs: "0156-0217"
+  amended_existing: [151]
+  inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0155-inventory.yml"
+  numbering_policy: "Keep existing IDs; selected candidates numbered compactly by earliest author timestamp, first from 0218, renumbered 0231-0235 when main merged into global-refactoring (its consolidation ADRs hold 0218-0230)."
+  user_confirmation: "2026-10-25: resume from d12866d8b; generate all five Tier A records and amend ADR-0151; decline the two Tier B candidates; 0218 as one record; compact numbering. Intent supplied for 0219-0222; 0218 confirmed without additions."
   previous_batch:
-    substep: "post_0097_selected_adrs_generated"
-    cluster_index: 132
-    selected_ids: [121, 123, 124, 125, 129, 130, 131, 132]
-    not_selected_ids: [119, 120, 122, 126, 127, 128]
-    note: "108 post-0097 commits triaged; eight approved records generated and six optional candidates not selected. User intent captured for all eight; historical alternatives remain explicitly reconstructed where unconfirmed."
-    inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0097-inventory.yml"
-    reconciled_existing_adrs: [111, 112, 113, 114, 115, 116, 117, 118]
-    numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0119 by earliest author timestamp."
-    user_confirmation: "2026-09-06: resume saved state, accept classification, preserve existing IDs, start new numbering at 0119; subsequently approve the eight recommended records and proceed; provide intent context for all eight."
+    substep: "post_0132_tier_a_adrs_generated"
+    cluster_index: 155
+    last_triaged_commit: "d12866d8b"
+    selected_ids: [146, 147, 148, 149, 150, 151, 152, 153, 154, 155]
+    not_selected_ids: []
+    note: "119 commits since 73a50ca8 triaged. Thirteen decisions (ADR-0133..0145) were already recorded in-session by the work itself and were not re-derived; six further commits amended existing records (0031, 0071, 0133, 0137, 0139). Ten Tier A candidates approved and generated. Six Tier B candidates were presented and declined by the user: AppArmor profile auto-install (0071100c1), bounded advisory index subprocesses (770c5ade9/07c2bdbfe), evidence preservation across repair and claim release (eight commits, 09-08 to 09-20), merge resumption on proven effect (a03a04664/f51580742), background-job-aware claim retention (016724045/6c7d5467b), empty-cohort analysis recovery (525f28a66). Not recommended and not generated: C#/Node test-filename admission (amends ADR-0007/0030), race-gate concurrency cap (belongs to previously declined candidate 128)."
+    covered_by_in_session_adrs: [133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
+    numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0146 by earliest author timestamp. Chronological interleaving with 0133-0145 is accepted rather than renumbering them."
+    user_confirmation: "2026-09-21: backfill since cluster 0132; generate all ten Tier A records and no Tier B; ADR-0150 as a single record rather than a three-way split; append numbering. Intent supplied for 0146, 0147, 0149, 0151; none supplied for 0148, 0152-0155; ADR-0150's release-timing rationale explicitly unknown."
 
 non_adr_findings:
   - title: "Init Preflight Requires Committed Spec and Valid Integration Branch"
