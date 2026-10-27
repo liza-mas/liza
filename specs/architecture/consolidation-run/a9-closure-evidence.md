@@ -110,3 +110,15 @@ value).
 helper `testhelpers.SetupLizaDir`, called by `a9_concerns_pb_test.go`. No presentation text, user-facing
 string or documentation line of this unit contains a raw default-brand identifier; the documents of
 this unit name the `cmd/liza` directory once (ADR 0228, D3) as a repository path.
+
+## Existing test file changed
+
+\`git diff 80b3323f5 HEAD --stat -- '*_test.go'\` lists new files (\`a9_concerns_pb_test.go\`, the four
+\`a9_vocabulary_test.go\`), \`area_a9_test.go\` (closure test added) and one existing file,
+\`cmd/liza/agent_generation_e2e_test.go\` (5 lines): the first canonical \`make test\` run failed in
+\`TestCLIStaleSupervisorGenerationEndToEnd/exhaustive_operation_inventory\` because the inventory finds
+each fenced call by declaration name and the claim and merge reductions had moved five of them. The
+entries now name \`claimDoerCandidate\`, \`resumeDoerTask\`, \`clearDegradedAfterClaim\` and
+\`mergeApprovedTask\` (\`claiming_merge.go\`); the operation, authority field and binding each entry
+asserts are unchanged. After the update \`go test -count=1 -run TestCLIStaleSupervisorGenerationEndToEnd
+./cmd/liza/\` printed \`ok\`. The frozen start snapshot \`s1_snapshot_test.go\` is not edited.

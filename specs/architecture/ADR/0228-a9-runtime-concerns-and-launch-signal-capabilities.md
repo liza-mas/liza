@@ -727,8 +727,14 @@ forwarder. The Shim Register stays empty.
 
 ### Assertion preservation
 
-White-box tests moved with their code in the earlier units; this unit changes no
-existing test file. It adds `a9_concerns_pb_test.go` and `a9_vocabulary_test.go`
+White-box tests moved with their code in the earlier units. This unit changes one
+existing test file, `cmd/liza/agent_generation_e2e_test.go`, by location only:
+the exhaustive fence inventory finds each authority-bound call by the declaration
+that holds it, so its entries `claim-doer`, `resume-handoff`, `resume-owned-task`,
+`clear-claim-degradation` and `approved-merge-dispatch` now name `claimDoerCandidate`,
+`resumeDoerTask` (twice), `clearDegradedAfterClaim` and `mergeApprovedTask` (in
+`claiming_merge.go`); operations, authority fields and bindings asserted are
+unchanged. It adds `a9_concerns_pb_test.go` and `a9_vocabulary_test.go`
 (agent), `a9_vocabulary_test.go` in `agentlaunch`, `providersignal` and
 `process`, and `TestAreaA9RatchetIsEmpty`. The PB map of this unit:
 
