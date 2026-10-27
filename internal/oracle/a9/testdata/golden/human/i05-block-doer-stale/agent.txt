@@ -1,0 +1,13 @@
+exit_code: 0
+[stdout]
+{"ok":true,"result":{"operation":"release-claim","outcome":"COMPLETED","safe_action":"continue","task_status":"DRAFT_CODE","transition_id":"<V1>","completed_transition_id":"<V1>","effects":"committed","changed":true,"task_id":"task-1","role":"doer","released_reviewer":false,"released_doer":true}}
+{"ok":false,"error":{"code":"ORACLE_TOOL_FAILURE"}}
+{"ok":true,"result":{"operation":"release-claim","outcome":"COMPLETED","safe_action":"continue","task_status":"DRAFT_CODE","transition_id":"<V2>","completed_transition_id":"<V2>","effects":"committed","changed":true,"task_id":"task-1","role":"doer","released_reviewer":false,"released_doer":true}}
+{"ok":false,"error":{"code":"ORACLE_TOOL_FAILURE"}}
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: coder-1
+Agents will exit cleanly at their next check.
+[stderr]
+Warning: no Liza contract symlink found for claude. Agents may not find the behavioral contract.
+Run 'liza init --claude' to create one.

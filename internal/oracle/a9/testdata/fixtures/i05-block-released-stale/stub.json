@@ -1,0 +1,49 @@
+{
+  "executables": {
+    "claude": [
+      {
+        "args": [
+          "--version"
+        ],
+        "reply": "2.1.300 (Claude Code)"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "release-claim",
+          "task-1",
+          "--role",
+          "doer",
+          "--force",
+          "--json"
+        ]
+      ],
+      "exit_code": 1
+    },
+    {
+      "commands": [
+        [
+          "release-claim",
+          "task-1",
+          "--role",
+          "doer",
+          "--force",
+          "--json"
+        ]
+      ],
+      "exit_code": 1
+    },
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ],
+  "snapshot_each": true
+}

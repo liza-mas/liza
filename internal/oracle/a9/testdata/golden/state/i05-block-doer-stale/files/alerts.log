@@ -1,0 +1,4 @@
+# before
+
+# after
+[<T1:sZ>] 🚨 TOOL FAILURE RETRY LOOP — tool failure retry loop detected: 2 consecutive observed CLI/runtime failures for task task-1 without progress (threshold=1, command=unknown-json-envelope, code=ORACLE_TOOL_FAILURE)
