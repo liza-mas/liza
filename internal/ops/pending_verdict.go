@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -52,6 +53,14 @@ type pendingVerdict struct {
 	Request                                       models.LifecycleIdentity
 	GenerationDigest                              string // Public lifecycle JSON intentionally omits this private fence.
 }
+
+// notDirectoryError is the refusal of a non-directory outbox. Its text is the
+// same on every OS, and it matches syscall.ENOTDIR, whose own text varies.
+type notDirectoryError struct{}
+
+func (notDirectoryError) Error() string { return "not a directory" }
+
+func (notDirectoryError) Is(target error) bool { return target == syscall.ENOTDIR }
 
 func pendingVerdictDir(projectRoot string) string {
 	return filepath.Join(paths.New(projectRoot).LizaDir(), pendingVerdictDirName)
@@ -217,7 +226,13 @@ func publishPendingVerdictFile(filename string, data []byte) (string, error) {
 // Unreadable or invalid envelopes are retained for manual recovery, without
 // preventing unrelated agents from registering or valid verdicts from draining.
 func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) error {
-	entries, err := os.ReadDir(pendingVerdictDir(projectRoot))
+	outbox := pendingVerdictDir(projectRoot)
+	// Windows lists a regular file as an empty directory, which would let the
+	// supervisor register over a corrupt outbox; refuse it as Linux and macOS do.
+	if info, statErr := os.Stat(outbox); statErr == nil && !info.IsDir() {
+		return fmt.Errorf("read private verdict outbox: %w", &os.PathError{Op: "open", Path: outbox, Err: notDirectoryError{}})
+	}
+	entries, err := os.ReadDir(outbox)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}

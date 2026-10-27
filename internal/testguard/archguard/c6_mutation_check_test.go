@@ -307,7 +307,49 @@ func TestC6HostGoflagsDoNotReachTheListing(t *testing.T) {
 		"cmd/tool/main.go": "package main\n\nfunc main() {}\n",
 	})
 	environ := append(c6SyntheticEnviron()[:3:3], "GOFLAGS=-c6-synthetic-flags-marker")
+	environ = append(environ, c6OwnedGoEnviron(t)...)
 	if _, err := c6List(root, "linux", environ); err != nil {
 		t.Fatalf("withheld GOFLAGS still reached go list: %v", err)
+	}
+}
+
+// c6OwnedGoEnviron names the locations go list needs on a host that provides
+// none (no HOME, no LocalAppData): a build cache and the Windows temp names,
+// each a fresh test-owned directory. Nothing is read from the host.
+func c6OwnedGoEnviron(t *testing.T) []string {
+	t.Helper()
+	tmp := t.TempDir()
+	return []string{"GOCACHE=" + t.TempDir(), "TMP=" + tmp, "TEMP=" + tmp}
+}
+
+// The F1 environ reaches a Windows child with its owned locations, and carries
+// nothing that would locate a cache or flags elsewhere. Failures name
+// variables, never values.
+func TestC6OwnedEnvironReachesAWindowsChildWithoutHostCacheHints(t *testing.T) {
+	environ := append(c6SyntheticEnviron()[:3:3], c6OwnedGoEnviron(t)...)
+	environ = append(environ, "GOFLAGS=-c6-synthetic-flags-marker")
+	env, _ := c6ChildEnv(environ, "windows")
+	values := map[string]string{}
+	for _, entry := range env {
+		name, value, _ := strings.Cut(entry, "=")
+		values[name] = value
+	}
+	for _, owned := range []string{"GOCACHE", "TMP", "TEMP"} {
+		value, ok := values[owned]
+		if !ok {
+			t.Errorf("child environment lacks %s", owned)
+			continue
+		}
+		if info, err := os.Stat(value); err != nil || !info.IsDir() {
+			t.Errorf("%s is not a test-owned directory", owned)
+		}
+	}
+	for _, absent := range []string{"GOFLAGS", "LOCALAPPDATA", "XDG_CACHE_HOME"} {
+		if _, ok := values[absent]; ok {
+			t.Errorf("child environment carries %s", absent)
+		}
+	}
+	if values["GOOS"] != "windows" {
+		t.Error("child environment lacks GOOS=windows")
 	}
 }
