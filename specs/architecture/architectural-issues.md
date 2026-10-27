@@ -54,9 +54,7 @@ Persistent record of issues identified by architectural analysis skills.
   - [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time)
   - [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks)
   - [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening)
-  - [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration)
   - [Provider Support Crosses the Catalog Boundary](#provider-support-crosses-the-catalog-boundary)
-  - [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement)
 - [Blind Spots](#blind-spots)
   - [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification)
   - [Initialization Completion Unverifiable](#initialization-completion-unverifiable)
@@ -93,7 +91,6 @@ Persistent record of issues identified by architectural analysis skills.
 - [Structural Debt](#structural-debt)
   - [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners)
   - [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners)
-  - [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc)
   - [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates)
   - [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership)
   - [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity)
@@ -140,9 +137,7 @@ Persistent record of issues identified by architectural analysis skills.
 | **medium** | FRAGILITY | [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time) |
 | **medium** | FRAGILITY | [Custom Roles Render Empty Prompt Blocks](#custom-roles-render-empty-prompt-blocks) |
 | **medium** | FRAGILITY | [Raw Git Calls Bypass gitenv Hardening](#raw-git-calls-bypass-gitenv-hardening) |
-| **medium** | FRAGILITY | [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration) |
 | **medium** | FRAGILITY | [Provider Support Crosses the Catalog Boundary](#provider-support-crosses-the-catalog-boundary) |
-| **medium** | FRAGILITY | [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement) |
 | **medium** | BLIND SPOT | [Contract Effectiveness Self-Certification](#contract-effectiveness-self-certification) |
 | **medium** | BLIND SPOT | [Initialization Completion Unverifiable](#initialization-completion-unverifiable) |
 | **medium** | BLIND SPOT | [Circuit Breaker Depends on Participant Reporting](#circuit-breaker-depends-on-participant-reporting) |
@@ -162,14 +157,13 @@ Persistent record of issues identified by architectural analysis skills.
 | **low** | TRAJECTORY | [No Query Layer](#no-query-layer) |
 | **low** | ACCEPTED v1 | [Kill Switch Granularity](#kill-switch-granularity) |
 | **low** | FRAGILITY | [State Validation Composition Gap](#state-validation-composition-gap) |
-| **medium** | STRUCTURAL DEBT | [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — mitigated, open |
 | **medium** | STRUCTURAL DEBT | [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) |
 | **medium** | STRUCTURAL DEBT | [Worktree Intelligence Refresh Has Multiple Owners](#worktree-intelligence-refresh-has-multiple-owners) |
 | **medium** | CROSS-CUTTING | [CI Does Not Enforce Cross-Language Quality Gates](#ci-does-not-enforce-cross-language-quality-gates) |
 | **medium** | CROSS-CUTTING | [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) |
 | **medium** | SUBSYSTEM CONCERN | [Python Skill Utilities Lack Quality Parity](#python-skill-utilities-lack-quality-parity) |
 
-**Counts:** 17 high, 30 medium, 15 low — 62 open issues total. *(2026-10-26: the A8 boundary checkpoint closed the prompts-to-ops dependency. 2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
+**Counts:** 17 high, 27 medium, 15 low — 59 open issues total. *(2026-10-27: the A9 boundary checkpoint closed the supervisor.go decomposition, with C1 the configured agent lease duration and with C2 and C3 the canonical provider identity gap. 2026-10-26: the A8 boundary checkpoint closed the prompts-to-ops dependency. 2026-10-26: the A7 boundary checkpoint closed the init.go and watch.go decompositions and, with C4, the duplicate initialization implementations. 2026-10-25: the A4 boundary checkpoint closed the proceed.go decomposition; the A2 boundary checkpoint closed the embedded.go split. 2026-09-20: CLI help alignment closed the SetTaskOutput spec_ref gap after register reconciliation added the operation-vocabulary trajectory and mitigated seven issues. 2026-08-20: ADR-0113 and the merged sliced-integration acceptance tests resolved the integration-closure issue. The 2026-07-25 review follow-up added the non-reproducible coverage basis; the Adversarial architecture pass added the canonical-provider-identity concern; a systemic-thinking pass over `specs/architecture/` added the status-vocabulary partition, the destructive-DB break-glass authority, and the process-shaped liveness evidence behind ownership recovery — the last reframed from ASSUMPTION to TRAJECTORY after ADR-0085:68 was found to record the exclusion deliberately. A MAS-focused systemic pass added the discovery-channel, integration-closure, and circuit-breaker sensing issues, and extended Dual Contract Delivery Paths to cover the project pipeline control plane.)*
 
 ---
 
@@ -620,18 +614,6 @@ Neither matches the invariant's description of hard enforcement during verdict s
 
 **Update (2026-10-26):** The initialization half is resolved: C4 (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`) deleted `internal/ops/init_project.go` and runs the four init helper subprocesses of `internal/commands` through `gitenv` timed runners in the project root. The remaining raw call is `exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")` in `cmd/liza/launch_resolve.go` (formerly `cmd_launch.go`), the `--cwd` path the run keeps out of scope. The entry stays open for it and for the lint guard.
 
-### Agent Lease Renewal Ignores Configured Lease Duration
-
-**Skill:** software-architecture-review
-**Category:** FRAGILITY
-**Related:** [Restart/Lease Churn Under Load](#restartlease-churn-under-load)
-
-**Issue:** `RunSupervisor` registers the agent with terminal identity `"terminal-1"` and a literal 1,800-second lease. It then constructs heartbeat configuration without a lease duration, causing the heartbeat path to apply its own 1,800-second default. The configuration schema says heartbeats extend the configured lease, but neither runtime path consumes that configured value.
-
-**Implication:** A deployment that changes the agent lease duration still registers and renews agents on the duplicated default. A shorter configured lease leaves agent ownership active longer than intended; a longer configured lease allows earlier expiry than intended. The duplicated literal also hides the mismatch because registration and renewal agree with each other while disagreeing with configuration.
-
-**Direction:** Build one runtime identity/lease context from configuration and pass it to both registration and heartbeat setup. Derive terminal identity from the actual launch context rather than a fixed placeholder.
-
 ### Provider Support Crosses the Catalog Boundary
 
 **Skill:** software-architecture-review
@@ -643,18 +625,6 @@ Neither matches the invariant's description of hard enforcement during verdict s
 **Implication:** Adding a catalog entry can make a provider resolvable and launchable without complete setup or operational-diagnostics support. Full onboarding requires coordinated edits across `providers`, `commands/init`, `embedded`, and `agent`, and omissions are discovered only at runtime.
 
 **Direction:** Keep behavioral output parsers in code, but move declarative dependencies and activation assets into catalog-owned data. Maintain one explicit provider-extension checklist; do not introduce a generalized plug-in framework until another implementation proves the need.
-
-### Canonical Provider Identity Lost Before Policy Enforcement
-
-**Skill:** software-architecture-review
-**Category:** FRAGILITY
-**Related:** [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time), [Provider Support Crosses the Catalog Boundary](#provider-support-crosses-the-catalog-boundary), [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners)
-
-**Issue:** The provider catalog populates `AgentToolConfig.ProviderKey`, and `ResolveLaunchPlan` copies it into `LaunchPlan.ProviderKey`, but production code does not consume that launch-plan field. `SupervisorConfig` carries only the raw `CLIName`; `RunSupervisor` registers that value as `Agent.Provider`, and approval diversity compares the resulting strings. Quota signals canonicalize aliases such as `codex-acp` to `codex`, while provider-unavailable signals and audit anomalies use raw CLI names.
-
-**Implication:** `codex` and `codex-acp` can falsely satisfy provider diversity despite sharing a backend, while a provider-unavailable signal for one alias does not stop supervisors using another. Custom tools sharing a `provider_key` are similarly fragmented across review, stop-state, and anomaly policy.
-
-**Direction:** Carry canonical provider identity alongside tool identity through `SupervisorConfig`. Use canonical identity for registration, review policy, stop signals, and anomaly grouping; retain tool identity for launching and tool-specific diagnostics. Add alias-focused tests across diversity and both signal paths.
 
 ---
 
@@ -1203,20 +1173,6 @@ File sizes in issue titles retain the original assessment values to preserve exi
 
 **Direction:** Introduce one refresh coordinator with explicit inputs for trigger, enabled tools, and failure policy. Keep lifecycle-specific decisions at callers and tool-specific execution in the existing adapters; do not collapse distinct tool semantics into a generic command runner.
 
-### Decompose supervisor.go (1,129 LOC)
-
-**Skill:** code-quality-assessment
-**Category:** RECOMMENDATION (P1 — reassessed 2026-07-24)
-**Assessment:** [2026-07-24 code quality assessment](code_quality_assessment.md#13-decompose-internalagentsupervisorgo)
-
-**Issue:** `internal/agent/supervisor.go` reached 1,129 LOC at the 2026-07-24 assessment, up from 831 at the 2026-04-13 assessment. It continues to mix restart tracking, spinning detection, lease behavior, and the supervisor loop. CLI execution already lives in `internal/agent/cli_agent.go` as `CLIAgent`, with `NewDefaultCLIExecutor` retained as a deprecated constructor alias. The historical assessment measured `RunSupervisor` growing from 287 to 442 LOC.
-
-**Implication:** Policy, process execution, and recovery behavior now compete for attention in the runtime's central loop. The larger function makes lifecycle changes harder to review against concurrency and lease invariants.
-
-**Direction:** Extract restart tracking and spinning policy into focused files, then simplify `RunSupervisor` around a small set of named lifecycle phases. Preserve the existing `CLIAgent` execution boundary.
-
-**Traceability (#156, mitigated):** Reviewer-claim policy lives in `internal/agent/claim_breaker.go`, with an executable `supervisor.go` file-size budget in `internal/agent/supervisor_test.go`. [ADR-0140](ADR/0140-reviewer-claim-circuit-breaker.md) records the bounded policy; broader supervisor decomposition remains open.
-
 ### CI Does Not Enforce Cross-Language Quality Gates
 
 **Skill:** code-quality-assessment
@@ -1268,6 +1224,9 @@ File sizes in issue titles retain the original assessment values to preserve exi
 - **2026-10-26:** [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) — MAS and pairing init phases split into concern files within the S1 limits (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`).
 - **2026-10-26:** [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) — watch checks, diagnosis, auto-repair policy and alert output split into concern files within the S1 limits (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`).
 - **2026-10-26:** [Duplicate Initialization Implementations](#duplicate-initialization-implementations) — C4 deleted `ops.InitProject`; the CLI init path is the only implementation and runs its Git through `gitenv` (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`).
+- **2026-10-27:** [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) — `RunSupervisor` is a 29-line coordinator over lifetime, turn, completed-turn, restart and session concern files; `supervisor.go` 198 lines against 663 at the starting commit (`75eb56dde216a9dc0d3ce4491b9ecf63097cd5f3`, `5289fc4b190539db4849451d6ea11250391d9393`, `831ad892ebb929eaaf3f746ece8b2da13b7a7b51`, `e8fca74ee03c918b77bb1720036ec5d71d00a0d7`).
+- **2026-10-27:** [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration) — C1: registration, heartbeat, reviewer claim, re-review reclaim and agent-pool repair resolve one `lease_duration`; the terminal value `"terminal-1"` is an unchanged named constant (`8124f434b053bd497133f97f87982d7ce8bf2abb`).
+- **2026-10-27:** [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement) — C2 and C3: review diversity, provider-audit grouping and provider-unavailable stop signals compare canonical provider keys derived at evaluation time; stored provider values are unchanged (`1dd4045af1722607e1c4390d639b8d779afbc892`, `e63a111b1975471d998416b642e0ead262a83fc5`, `f751d845c3d48d4a01d330cfd80c37ba41b30116`).
 
 ---
 
@@ -1300,10 +1259,39 @@ File sizes in issue titles retain the original assessment values to preserve exi
 | [Decompose init.go (1,268 LOC)](#decompose-initgo-1268-loc) | STRUCTURAL DEBT | 2026-10-26 — `init.go` 516 lines against 1,684 at the starting commit, `InitCommandWithConfig` 60 lines against 471, init and setup concerns in ten files with the longest function 70 lines (`e11874725b7221a36733ef863557a7aeef6fe85f`, `2c289761fc7ed8da922b9736bd31119d740ded7e`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Duplicate Initialization Implementations](#duplicate-initialization-implementations) | STRUCTURAL DEBT | 2026-10-26 — `internal/ops/init_project.go` and its tests deleted, no `InitProject` or `InitProjectParams` reference left in `cmd` or `internal` outside the immutable start snapshot; init Git runs through `gitenv` timed runners in the project root (`009d4835a6ab4f0b428a3e97aba13b63297ba9ba`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
 | [Decompose watch.go (1,407 LOC)](#decompose-watchgo-1407-loc) | STRUCTURAL DEBT | 2026-10-26 — `watch.go` 151 lines against 2,084 at the starting commit, `RunAutoRepairAgentPool` 35 lines against 133, watch concerns in eleven files with the longest function 76 lines (`6e24bb215c5a8ad0b0f7e557a5b709f2d446bc49`); A7 boundary record `specs/architecture/consolidation-run/boundary-a7.md` |
+| [Decompose supervisor.go (1,129 LOC)](#decompose-supervisorgo-1129-loc) | STRUCTURAL DEBT | 2026-10-27 — `supervisor.go` 198 lines against 663 at the starting commit, `RunSupervisor` 29 lines against 521, the 12 A9 function offenders and `systemctl.go` (861 lines, now 57) under the S1 limits with the A9 ratchet and S2 empty (`TestAreaA9RatchetIsEmpty`) (`75eb56dde216a9dc0d3ce4491b9ecf63097cd5f3`, `5289fc4b190539db4849451d6ea11250391d9393`, `831ad892ebb929eaaf3f746ece8b2da13b7a7b51`, `e8fca74ee03c918b77bb1720036ec5d71d00a0d7`, `f915f01ab49bf61921b82c78def9ee3792e485d2`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
+| [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration) | FRAGILITY | 2026-10-27 — the five lease sites resolve `ops.LeaseDurationSeconds` (`TestC1RegistrationHonoursConfiguredLease`, `TestC1HeartbeatHonoursConfiguredLease*`, `TestC1ReviewerClaimHonoursConfiguredLease`, `TestC1Reclaim*`, `TestC1ReviewerStartPlannerRowsHonourConfiguredLease`); the terminal value stays `"terminal-1"` by C1 (`8124f434b053bd497133f97f87982d7ce8bf2abb`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
+| [Canonical Provider Identity Lost Before Policy Enforcement](#canonical-provider-identity-lost-before-policy-enforcement) | FRAGILITY | 2026-10-27 — `agentlaunch.ProviderKeys` is consumed by reviewer-claim diversity, the merge gate, provider-audit grouping and provider-unavailable signal matching (`TestC2*`, `TestC3*`); stored `agents[].provider` unchanged (`1dd4045af1722607e1c4390d639b8d779afbc892`, `e63a111b1975471d998416b642e0ead262a83fc5`, `f751d845c3d48d4a01d330cfd80c37ba41b30116`, `cbce741a8771a2021e19d34fbfa1d469a320b0a3`, `ecf80111a4742dc39ff25a3b6108e72a793afe8d`, `225ed0af8c7734e67e83baadebc16817afed8e02`); A9 boundary record `specs/architecture/consolidation-run/a9-boundary.md` |
 
 ---
 
 ## Fix Details
+
+### Decompose supervisor.go (1,129 LOC)
+
+**Resolution:** `75eb56dde216a9dc0d3ce4491b9ecf63097cd5f3` (`refactor(agent): separate the supervisor lifetime, turn preparation and completed-turn policy`), `5289fc4b190539db4849451d6ea11250391d9393` (`executeAgent` into session preparation, gated start and result classification), `831ad892ebb929eaaf3f746ece8b2da13b7a7b51` (pause gates, usage sink and verification out of `systemctl.go`) and `e8fca74ee03c918b77bb1720036ec5d71d00a0d7` (restart tracking separated from its fenced persistence) replaced the central loop with a 29-line `RunSupervisor` coordinator over `supervisor_lifetime.go`, `supervisor_turn.go`, `supervisor_completed_turn.go`, `supervisor_restart.go`, `supervisor_runtime_failure.go` (runtime-failure tracking) and `session_execution.go`; the `CLIAgent` execution boundary is unchanged. Lease behaviour is resolved once per lifetime (see [Agent Lease Renewal Ignores Configured Lease Duration](#agent-lease-renewal-ignores-configured-lease-duration)). ADR 0228 (`f915f01ab49bf61921b82c78def9ee3792e485d2`) records the layout.
+
+**Evidence:** Measured with `go/parser` at integration `7a44042ba68f09011d6bc92a77ea716c105f029a`: `supervisor.go` 198 lines (663 at the starting commit; the title keeps the original assessment value), `RunSupervisor` 29 lines (521 at the A9 start), `executeAgent` 15 (207), `verifyOrchestratorWakeChanges` 40 (124), `systemctl.go` 57 lines (861); no A9 file is over 800 lines and no A9 function over 100 lines; the A9 ratchet and S2 are empty (`TestAreaA9RatchetIsEmpty`). The deprecated `NewDefaultCLIExecutor` constructor in `cli_agent.go` is the pre-existing alias the entry mentions; the run neither added nor removed it. See [A9 boundary record](consolidation-run/a9-boundary.md#g6--architectural-issues-resolved-by-a9-and-c6-c1-c2-c3).
+
+**Related:** The reviewer-claim circuit breaker traceability (#156) is unchanged. [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) and [Control-Flow Vocabulary Bypasses Domain Ownership](#control-flow-vocabulary-bypasses-domain-ownership) stay open.
+
+### Agent Lease Renewal Ignores Configured Lease Duration
+
+**Resolution:** `8124f434b053bd497133f97f87982d7ce8bf2abb` (`feat(ops): honour configured lease_duration at the five agent and review lease sites`, C1) resolves `lease_duration` once through `ops.LeaseDurationSeconds(models.Config)` (the default 1800 s when unset) at agent registration and heartbeat (`internal/agent/supervisor_lifetime.go`, the heartbeat taking the value registration used), the reviewer claim (`internal/agent/strategy_reviewer.go`), the re-review reclaim (`internal/ops/review_reclaim.go`) and agent-pool repair (`internal/commands/repair_agent_pool_start.go`). The duplicated literal `1800` and the `30 * time.Minute` reclaim constant are gone from those sites; `NewHeartbeat` keeps its default only for standalone construction.
+
+**Evidence:** `TestC1RegistrationHonoursConfiguredLease`, `TestC1HeartbeatHonoursConfiguredLeaseForAgentAndOwnedTask`, `TestC1HeartbeatHonoursConfiguredLeaseForActiveReview`, `TestC1ReviewerClaimHonoursConfiguredLease`, `TestC1ReclaimEarlyResubmissionHonoursConfiguredLease`, `TestC1ReclaimReservationHeldHonoursConfiguredLease` and `TestC1ReviewerStartPlannerRowsHonourConfiguredLease` pass at integration `7a44042ba68f09011d6bc92a77ea716c105f029a`, with a 600 s `lease_duration` giving 600 s leases and the default keeping 1800 s; the mutation table is in `specs/architecture/consolidation-run/c1-lease-duration-evidence.md`.
+
+**Not resolved, by design:** the entry's Direction also suggested deriving the terminal identity from the launch context. C1's acceptance criterion keeps the stored terminal value `"terminal-1"`, now the named constant `terminalPlaceholder`, and `TestC1TerminalPlaceholderKeepsStoredValue` pins it. The closure covers the lease defect the entry's Issue and Implication describe; the terminal identity is unchanged and is not claimed fixed. See [A9 boundary record](consolidation-run/a9-boundary.md#g6--architectural-issues-resolved-by-a9-and-c6-c1-c2-c3).
+
+**Related:** [Restart/Lease Churn Under Load](#restartlease-churn-under-load) stays open.
+
+### Canonical Provider Identity Lost Before Policy Enforcement
+
+**Resolution:** The Direction's single canonical identity is derived at policy-evaluation time rather than carried through `SupervisorConfig` (C2, goal `changes`). `1dd4045af1722607e1c4390d639b8d779afbc892` (`feat(ops): compare canonical provider keys for review diversity and provider-audit grouping`) and `e63a111b1975471d998416b642e0ead262a83fc5` (`fix(analysis): honour an empty canonical provider key in provider-audit grouping`) make reviewer-claim diversity, the merge gate and provider-audit anomaly grouping compare `agentlaunch.ProviderKeys` keys (catalog `provider_key`, overridden by `agent_tools`, falling back to the tool name). `f751d845c3d48d4a01d330cfd80c37ba41b30116` (`feat(providersignal): match provider-unavailable signals by canonical provider keys`), with the follow-ups `cbce741a8771a2021e19d34fbfa1d469a320b0a3`, `ecf80111a4742dc39ff25a3b6108e72a793afe8d`, `225ed0af8c7734e67e83baadebc16817afed8e02`, records the originating tool in provider-unavailable signals and matches them by the same keys at the supervisor, spawn gate and orchestrator wake. The stored `agents[].provider` keeps the tool name and launch lookups keep using it; quota-signal behaviour is unchanged.
+
+**Evidence:** `TestC2*` and `TestC3*` pass at integration `7a44042ba68f09011d6bc92a77ea716c105f029a`: `codex` and `codex-acp` approvals do not satisfy diversity, custom tools sharing a `provider_key` do not, and a provider-unavailable signal raised for `codex` stops a `codex-acp` supervisor and conversely. `git grep -n HasProviderDiversity -- '*.go' ':!*_test.go'` finds only the raw `models.Task` utility and a comment. Evidence records: `specs/architecture/consolidation-run/c2-provider-keys-evidence.md`, `specs/architecture/consolidation-run/c3-unavailable-signals-evidence.md`, ADR 0229 and ADR 0230.
+
+**Related:** [INVARIANTS.md §6 Provider Diversity Not Enforced at Verdict Time](#invariantsmd-6-provider-diversity-not-enforced-at-verdict-time) stays open: C2 changes which provider keys the existing checks compare, not whether a verdict is refused for missing diversity. [Provider Stop-Signal Recovery Has Multiple Owners](#provider-stop-signal-recovery-has-multiple-owners) and [Provider Support Crosses the Catalog Boundary](#provider-support-crosses-the-catalog-boundary) stay open. See [A9 boundary record](consolidation-run/a9-boundary.md#g6--architectural-issues-resolved-by-a9-and-c6-c1-c2-c3).
 
 ### Prompts Layer Imports Business Logic
 
