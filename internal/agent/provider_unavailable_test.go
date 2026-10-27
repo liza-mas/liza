@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -28,7 +29,7 @@ func TestHandleClassifiedProviderCrash_WritesProviderUnavailableSignal(t *testin
 		t.Fatal("handleClassifiedProviderCrash returned false, want true")
 	}
 
-	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "codex", providerKeysOfConfig(models.Config{})) {
 		t.Fatal("provider unavailable signal should exist")
 	}
 
@@ -61,7 +62,7 @@ func TestHandleClassifiedProviderCrash_PersistsOnlyBoundedDiagnostic(t *testing.
 	}
 
 	for _, path := range []string{
-		providersignal.ProviderUnavailableSignalPath(projectRoot, "codex"),
+		providersignal.ProviderUnavailableSignalPath(projectRoot, "codex-acp"),
 		filepath.Join(lizaDir, "alerts.log"),
 	} {
 		data, err := os.ReadFile(path)
@@ -96,7 +97,7 @@ func TestHandleClassifiedProviderCrash_CodexACPWritesCanonicalSignal(t *testing.
 	if !handled {
 		t.Fatal("handleClassifiedProviderCrash returned false, want true")
 	}
-	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "codex", providerKeysOfConfig(models.Config{})) {
 		t.Fatal("canonical codex provider unavailable signal should exist")
 	}
 }
@@ -116,7 +117,7 @@ func TestHandleClassifiedProviderCrash_ClaudeOAuthSessionExpiredWritesSignal(t *
 	if !handled {
 		t.Fatal("handleClassifiedProviderCrash returned false, want true: an expired login must not count as a crash")
 	}
-	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "claude") {
+	if !providersignal.CheckProviderUnavailableSignal(projectRoot, "claude", providerKeysOfConfig(models.Config{})) {
 		t.Fatal("claude provider unavailable signal should exist")
 	}
 
@@ -150,7 +151,7 @@ func TestHandleClassifiedProviderCrash_IgnoresStaleOutputFiles(t *testing.T) {
 	if handled {
 		t.Fatal("handleClassifiedProviderCrash used stale output files, want current-output-only classification")
 	}
-	if providersignal.CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if providersignal.CheckProviderUnavailableSignal(projectRoot, "codex", providerKeysOfConfig(models.Config{})) {
 		t.Fatal("provider unavailable signal should not be written from stale output files")
 	}
 }
@@ -161,7 +162,7 @@ func TestHandleProviderUnavailableSignal(t *testing.T) {
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, &providersignal.ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
 		t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
 	}
 
@@ -169,7 +170,7 @@ func TestHandleProviderUnavailableSignal(t *testing.T) {
 		AgentID:     "coder-1",
 		ProjectRoot: projectRoot,
 		CLIName:     "codex",
-	})
+	}, providerKeysOfConfig(models.Config{}))
 	if !handled {
 		t.Fatal("handleProviderUnavailableSignal returned false, want true")
 	}
@@ -181,7 +182,7 @@ func TestHandleProviderUnavailableSignal_CodexAliasesObserveCanonicalSignal(t *t
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, "codex-acp", "session access denied"); err != nil {
+	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, &providersignal.ProviderUnavailable{Provider: "codex", Tool: "codex-acp", Message: "session access denied"}); err != nil {
 		t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
 	}
 
@@ -191,7 +192,7 @@ func TestHandleProviderUnavailableSignal_CodexAliasesObserveCanonicalSignal(t *t
 				AgentID:     "coder-1",
 				ProjectRoot: projectRoot,
 				CLIName:     cliName,
-			})
+			}, providerKeysOfConfig(models.Config{}))
 			if !handled {
 				t.Fatal("handleProviderUnavailableSignal returned false, want true")
 			}

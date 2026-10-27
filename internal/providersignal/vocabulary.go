@@ -2,6 +2,7 @@ package providersignal
 
 import (
 	"os"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/alerts"
 )
@@ -11,6 +12,7 @@ import (
 const (
 	recordSeparator     = ": "
 	recordKeyProvider   = "provider"
+	recordKeyTool       = "tool"
 	recordKeyDetected   = "detected"
 	recordKeyMessage    = "message"
 	recordKeyResetsAt   = "resets_at"
@@ -54,4 +56,18 @@ const (
 // recordLine is one "key: value" line of a signal record.
 func recordLine(key, value string) string {
 	return key + recordSeparator + value + "\n"
+}
+
+// parseRecord reads the "key: value" lines of a signal record; the first
+// occurrence of a key wins.
+func parseRecord(content string) map[string]string {
+	fields := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		if key, value, found := strings.Cut(line, recordSeparator); found {
+			if _, seen := fields[key]; !seen {
+				fields[key] = strings.TrimSpace(value)
+			}
+		}
+	}
+	return fields
 }

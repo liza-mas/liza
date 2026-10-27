@@ -90,7 +90,7 @@ func (lt *supervisorLifetime) admitIteration() (loopFlow, error) {
 		GetLogger().Info("ABORT signal received, system shutting down")
 		return flowExit, nil
 	}
-	if handleProviderUnavailableSignal(lt.config) {
+	if handleProviderUnavailableSignal(lt.config, providerKeysOfSnapshot(lt.supervisorCtx, lt.bb)) {
 		return flowExit, nil
 	}
 	if handleQuotaSignal(lt.config) {

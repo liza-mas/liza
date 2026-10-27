@@ -150,14 +150,17 @@ func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string
 		}
 		return nil, err
 	}
-	if providersignal.CheckProviderUnavailableSignal(projectRoot, cli) {
+	runtimeConfig := readRuntimeConfig(projectRoot)
+	keys := func() agentlaunch.ProviderKeys {
+		return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), runtimeConfig)
+	}
+	if providersignal.CheckProviderUnavailableSignal(projectRoot, cli, keys) {
 		err := fmt.Errorf("provider unavailable for %s; refusing to spawn %s", cli, role)
 		if alertErr := providersignal.LogProviderUnavailableSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
 			return nil, errors.Join(err, fmt.Errorf("write provider-unavailable spawn-blocked alert: %w", alertErr))
 		}
 		return nil, err
 	}
-	runtimeConfig := readRuntimeConfig(projectRoot)
 	if err := agentlaunch.CheckCLIPrerequisitesWithConfig(cli, runtimeConfig); err != nil {
 		return nil, fmt.Errorf("spawn %s with %s: %w", role, cli, err)
 	}

@@ -162,21 +162,19 @@ func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {
 		t.Fatalf("BlockedReason = %q, provider classification must win before generic crash handling", *task.BlockedReason)
 	}
 
-	canonicalSignal := providersignal.ProviderUnavailableSignalPath(fixture.projectRoot, "codex")
-	signalData, err := os.ReadFile(canonicalSignal)
+	// The record is keyed by the launch tool; its provider line is the display
+	// value, so a codex-acp raise still shows as codex.
+	acpSignal := providersignal.ProviderUnavailableSignalPath(fixture.projectRoot, "codex-acp")
+	signalData, err := os.ReadFile(acpSignal)
 	if err != nil {
-		t.Fatalf("read canonical provider-unavailable signal: %v", err)
+		t.Fatalf("read provider-unavailable signal: %v", err)
 	}
 	signal := string(signalData)
-	if !strings.Contains(signal, "provider: codex\n") || !strings.Contains(signal, "thread/start failed") || !strings.Contains(signal, ".codex/sessions") {
-		t.Fatalf("canonical signal missing provider or representative failure:\n%s", signal)
+	if !strings.Contains(signal, "provider: codex\n") || !strings.Contains(signal, "tool: codex-acp\n") || !strings.Contains(signal, "thread/start failed") || !strings.Contains(signal, ".codex/sessions") {
+		t.Fatalf("signal missing provider, tool or representative failure:\n%s", signal)
 	}
 	if strings.Contains(signal, "private transport context") {
-		t.Fatalf("canonical signal exposed unrelated stderr:\n%s", signal)
-	}
-	rawACPSignal := filepath.Join(filepath.Dir(canonicalSignal), "provider-unavailable-codex-acp")
-	if _, err := os.Stat(rawACPSignal); !os.IsNotExist(err) {
-		t.Fatalf("raw ACP provider-unavailable signal state = %v, want absent", err)
+		t.Fatalf("signal exposed unrelated stderr:\n%s", signal)
 	}
 
 	alertsData, err := os.ReadFile(paths.New(fixture.projectRoot).AlertsLogPath())
@@ -188,7 +186,7 @@ func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {
 		t.Fatalf("PROVIDER UNAVAILABLE alert count = %d, want 1:\n%s", count, alerts)
 	}
 	if !strings.Contains(alerts, "PROVIDER UNAVAILABLE — codex:") || !strings.Contains(alerts, ".codex/sessions") {
-		t.Fatalf("alerts log missing canonical Codex provider failure:\n%s", alerts)
+		t.Fatalf("alerts log missing Codex provider failure:\n%s", alerts)
 	}
 	if strings.Contains(alerts, "private transport context") {
 		t.Fatalf("alerts log exposed unrelated stderr:\n%s", alerts)
@@ -206,7 +204,7 @@ func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {
 			observer := &deterministicLLMAgent{}
 			runProviderUnavailableSupervisor(t, fixture, supervisor.agentID, supervisor.cliName, observer)
 			if got := observer.recordedBackends(); len(got) != 0 {
-				t.Fatalf("provider executions = %v, want none while canonical signal exists", got)
+				t.Fatalf("provider executions = %v, want none while the signal exists", got)
 			}
 		})
 	}

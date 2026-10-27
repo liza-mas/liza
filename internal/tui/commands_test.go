@@ -301,7 +301,7 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 	// An expired quota signal no longer blocks; resume removes it.
 	writeExpiredQuotaSignal(t, tmpDir, "codex")
 	quotaSignalPath := providersignal.QuotaSignalPath(tmpDir, "codex")
-	if err := providersignal.WriteProviderUnavailableSignal(tmpDir, "codex", "session access denied"); err != nil {
+	if err := providersignal.WriteProviderUnavailableSignal(tmpDir, &providersignal.ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
 		t.Fatal(err)
 	}
 	unavailableSignalPath := providersignal.ProviderUnavailableSignalPath(tmpDir, "codex")

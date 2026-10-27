@@ -14,10 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -35,6 +37,7 @@ var dependencyRepairCLIBuild struct {
 // repositories. Tests that exercise indexing opt in with t.Setenv. In-process
 // init likewise must not depend on whether this host has pre-commit.
 func TestMain(m *testing.M) {
+	agentlaunch.UseRuntimeCatalog(providers.EmbeddedCatalog())
 	testhelpers.DisableIndexEnvGates()
 	restorePreCommit := commands.SetInitPreCommitLookPathForTest(func(name string) (string, error) { return "/stub/" + name, nil })
 	code := m.Run()

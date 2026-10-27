@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/providersignal"
@@ -119,6 +120,29 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 	}
 }
 
+// providerKeysOfConfig derives the provider keys policy compares from the
+// catalog-derived tool registry under cfg, outside any blackboard transaction.
+func providerKeysOfConfig(cfg models.Config) func() agentlaunch.ProviderKeys {
+	return func() agentlaunch.ProviderKeys {
+		return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), cfg)
+	}
+}
+
+// providerKeysOfSnapshot is providerKeysOfConfig for the configuration of the
+// last published state, read only when the keys are needed. An unreadable
+// snapshot compares under the catalog alone.
+func providerKeysOfSnapshot(ctx context.Context, bb *db.Blackboard) func() agentlaunch.ProviderKeys {
+	return func() agentlaunch.ProviderKeys {
+		var cfg models.Config
+		if bb != nil {
+			if state, err := readStateSnapshot(ctx, bb); err == nil && state != nil {
+				cfg = state.Config
+			}
+		}
+		return providerKeysOfConfig(cfg)()
+	}
+}
+
 func handleQuotaSignal(config SupervisorConfig) bool {
 	if !providersignal.CheckQuotaSignal(config.ProjectRoot, config.CLIName) {
 		return false
@@ -130,8 +154,11 @@ func handleQuotaSignal(config SupervisorConfig) bool {
 	return true
 }
 
-func handleProviderUnavailableSignal(config SupervisorConfig) bool {
-	if !providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) {
+// handleProviderUnavailableSignal reports whether a provider-unavailable record
+// names a tool sharing this supervisor's provider key; keys is read only when a
+// record exists.
+func handleProviderUnavailableSignal(config SupervisorConfig, keys func() agentlaunch.ProviderKeys) bool {
+	if !providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName, keys) {
 		return false
 	}
 
@@ -150,7 +177,7 @@ func handleClassifiedProviderCrash(config SupervisorConfig, output string) bool 
 		if alertErr := providersignal.LogProviderUnavailableAlert(config.ProjectRoot, pu); alertErr != nil {
 			GetLogger().Warn("Failed to write provider unavailable alert", "error", alertErr)
 		}
-		if err := providersignal.WriteProviderUnavailableSignal(config.ProjectRoot, pu.Provider, pu.Message); err != nil {
+		if err := providersignal.WriteProviderUnavailableSignal(config.ProjectRoot, pu); err != nil {
 			GetLogger().Warn("Failed to write provider unavailable signal", "error", err)
 		}
 		return true

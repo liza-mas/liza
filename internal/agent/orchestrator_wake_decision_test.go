@@ -77,7 +77,7 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 					case "quota":
 						return providersignal.WriteQuotaSignal(root, "codex", "test quota")
 					case "provider unavailable":
-						return providersignal.WriteProviderUnavailableSignal(root, "codex", "test unavailable")
+						return providersignal.WriteProviderUnavailableSignal(root, &providersignal.ProviderUnavailable{Provider: "codex", Message: "test unavailable"})
 					}
 					return nil
 				})

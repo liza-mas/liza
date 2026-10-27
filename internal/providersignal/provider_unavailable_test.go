@@ -6,9 +6,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
+
+// defaultKeys are the provider keys of the embedded catalog under an empty
+// configuration.
+func defaultKeys() agentlaunch.ProviderKeys {
+	return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), models.Config{})
+}
 
 func TestDetectProviderUnavailable_CodexSessionAccess(t *testing.T) {
 	output := `Error: thread/start: thread/start failed: error creating thread: Fatal error: Codex cannot access session files at /Users/me/.codex/sessions (permission denied). If sessions were created using sudo, fix ownership: sudo chown -R $(whoami) /Users/me/.codex (underlying error: Operation not permitted (os error 1))`
@@ -101,67 +109,55 @@ func TestProviderUnavailableSignal_WriteCheckClear(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if CheckProviderUnavailableSignal(projectRoot, "codex", defaultKeys) {
 		t.Fatal("signal should not exist before write")
 	}
 
-	if err := WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+	if err := WriteProviderUnavailableSignal(projectRoot, &ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
 		t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
 	}
 
-	if !CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if !CheckProviderUnavailableSignal(projectRoot, "codex", defaultKeys) {
 		t.Fatal("signal should exist after write")
 	}
 
-	if CheckProviderUnavailableSignal(projectRoot, "claude") {
+	if CheckProviderUnavailableSignal(projectRoot, "claude", defaultKeys) {
 		t.Fatal("claude signal should not exist")
 	}
 
-	if err := ClearProviderUnavailableSignal(projectRoot, "codex"); err != nil {
+	if err := ClearProviderUnavailableSignal(ProviderUnavailableSignalPath(projectRoot, "codex")); err != nil {
 		t.Fatalf("ClearProviderUnavailableSignal failed: %v", err)
 	}
 
-	if CheckProviderUnavailableSignal(projectRoot, "codex") {
+	if CheckProviderUnavailableSignal(projectRoot, "codex", defaultKeys) {
 		t.Fatal("signal should not exist after clear")
 	}
 }
 
-func TestProviderUnavailableSignal_NormalizesACPXProviderAliases(t *testing.T) {
+func TestProviderUnavailableSignal_AliasesObserveEachOthersRecord(t *testing.T) {
 	projectRoot := t.TempDir()
 	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
 	if err := os.MkdirAll(lizaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	if ProviderUnavailableSignalPath(projectRoot, "codex-acp") != ProviderUnavailableSignalPath(projectRoot, "codex") {
-		t.Fatal("codex-acp provider-unavailable signal path should use canonical codex provider")
-	}
-
-	tests := []struct {
-		name    string
-		writer  string
-		clearer string
-	}{
-		{name: "ACP writer native clearer", writer: "codex-acp", clearer: "codex"},
-		{name: "native writer ACP clearer", writer: "codex", clearer: "codex-acp"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := WriteProviderUnavailableSignal(projectRoot, tt.writer, "session access denied"); err != nil {
+	for _, writer := range []string{"codex-acp", "codex"} {
+		t.Run(writer, func(t *testing.T) {
+			if err := WriteProviderUnavailableSignal(projectRoot, &ProviderUnavailable{Provider: "codex", Tool: writer, Message: "session access denied"}); err != nil {
 				t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
 			}
 			for _, provider := range []string{"codex", "codex-acp"} {
-				if !CheckProviderUnavailableSignal(projectRoot, provider) {
-					t.Fatalf("%s should find canonical codex signal after %s write", provider, tt.writer)
+				if !CheckProviderUnavailableSignal(projectRoot, provider, defaultKeys) {
+					t.Fatalf("%s should find the signal written for %s", provider, writer)
 				}
 			}
 
-			if err := ClearProviderUnavailableSignal(projectRoot, tt.clearer); err != nil {
+			if err := ClearProviderUnavailableSignal(ProviderUnavailableSignalPath(projectRoot, writer)); err != nil {
 				t.Fatalf("ClearProviderUnavailableSignal failed: %v", err)
 			}
 			for _, provider := range []string{"codex", "codex-acp"} {
-				if CheckProviderUnavailableSignal(projectRoot, provider) {
-					t.Fatalf("%s should not find canonical codex signal after %s clear", provider, tt.clearer)
+				if CheckProviderUnavailableSignal(projectRoot, provider, defaultKeys) {
+					t.Fatalf("%s should not find the signal after %s record clear", provider, writer)
 				}
 			}
 		})
@@ -179,10 +175,10 @@ func TestProviderUnavailableSignalUsesBrandedProjectDir(t *testing.T) {
 	if got := ProviderUnavailableSignalPath(projectRoot, "codex"); got != filepath.Join(brandedDir, "provider-unavailable-codex") {
 		t.Fatalf("ProviderUnavailableSignalPath() = %q, want branded project dir", got)
 	}
-	if got := ProviderUnavailableSignalGlob(projectRoot); got != filepath.Join(brandedDir, "provider-unavailable-*") {
-		t.Fatalf("ProviderUnavailableSignalGlob() = %q, want branded project dir", got)
+	if got := providerUnavailableSignalGlob(projectRoot); got != filepath.Join(brandedDir, "provider-unavailable-*") {
+		t.Fatalf("providerUnavailableSignalGlob() = %q, want branded project dir", got)
 	}
-	if err := WriteProviderUnavailableSignal(projectRoot, "codex", "session access denied"); err != nil {
+	if err := WriteProviderUnavailableSignal(projectRoot, &ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
 		t.Fatalf("WriteProviderUnavailableSignal failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(brandedDir, "provider-unavailable-codex")); err != nil {
