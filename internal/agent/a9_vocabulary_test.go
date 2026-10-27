@@ -26,10 +26,10 @@ func TestA9NamedVocabularyKeepsStringValues(t *testing.T) {
 		"alertCategoryIndexHooksUnavailable":   {alertCategoryIndexHooksUnavailable, "INDEX HOOKS UNAVAILABLE"},
 		"alertCategoryCheckpointSummaryFailed": {alertCategoryCheckpointSummaryFailed, "CHECKPOINT SUMMARY FAILED"},
 		"streamJSONObjectPrefix":               {streamJSONObjectPrefix, "{"},
-		"streamTaskNotification":               {streamTaskNotification, "task_notification"},
-		"streamToolResult":                     {streamToolResult, "tool_result"},
+		"streamTaskNotification":               {string(streamTaskNotification), "task_notification"},
+		"streamToolResult":                     {string(streamToolResult), "tool_result"},
 		"acpSessionUpdateKey":                  {acpSessionUpdateKey, "sessionUpdate"},
-		"acpSessionUpdateMessageChunk":         {acpSessionUpdateMessageChunk, "agent_message_chunk"},
+		"acpSessionUpdateMessageChunk":         {string(acpSessionUpdateMessageChunk), "agent_message_chunk"},
 		"submitVerdictFailedCode":              {submitVerdictFailedCode, "submit_verdict_failed"},
 		"submitVerdictCommand":                 {submitVerdictCommand, "submit-verdict"},
 		"codexVersionProgram":                  {codexVersionProgram, "codex-cli"},
@@ -98,5 +98,41 @@ func TestA9BackoffAndRankConstantsKeepValues(t *testing.T) {
 	}
 	if rankOwnRejection != 0 || rankOtherRework != 1 || rankFresh != 2 {
 		t.Fatalf("ranks = %d %d %d, want 0 1 2", rankOwnRejection, rankOtherRework, rankFresh)
+	}
+}
+
+// ACP updates are decoded as map[string]any, so the typed discriminator must be
+// compared as its string spelling: a boxed defined type would never match, and
+// an unknown or differently spelled update must still yield nothing.
+func TestA9ACPUpdateKindMatchesDecodedStrings(t *testing.T) {
+	content := map[string]any{"type": "text", "text": "hello"}
+	tests := []struct {
+		name   string
+		update map[string]any
+		want   string
+	}{
+		{"message chunk", map[string]any{"sessionUpdate": "agent_message_chunk", "content": content}, "hello"},
+		{"unknown kind", map[string]any{"sessionUpdate": "agent_thought_chunk", "content": content}, ""},
+		{"different case", map[string]any{"sessionUpdate": "Agent_Message_Chunk", "content": content}, ""},
+		{"missing kind", map[string]any{"content": content}, ""},
+		{"boxed typed value", map[string]any{"sessionUpdate": acpSessionUpdateMessageChunk, "content": content}, ""},
+	}
+	for _, tt := range tests {
+		if got := acpxAgentMessageChunk(tt.update); got != tt.want {
+			t.Errorf("%s: acpxAgentMessageChunk() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// Stream event kinds select parsing branches by their provider spelling; an
+// unknown subtype or a line without the kind token is not a notification.
+func TestA9StreamEventKindsSelectOnlyTheirSpelling(t *testing.T) {
+	notification := `{"type":"system","subtype":"task_notification","task_id":"t1","status":"stopped","summary":"s"}`
+	other := `{"type":"system","subtype":"task_started","task_id":"t1","status":"stopped","summary":"s"}`
+	if got := detectAbandonedBackgroundTask(notification); got == nil {
+		t.Error("a stopped task_notification must be reported as abandoned")
+	}
+	if got := detectAbandonedBackgroundTask(other); got != nil {
+		t.Errorf("a different subtype must not be reported, got %+v", got)
 	}
 }

@@ -122,3 +122,17 @@ entries now name \`claimDoerCandidate\`, \`resumeDoerTask\`, \`clearDegradedAfte
 \`mergeApprovedTask\` (\`claiming_merge.go\`); the operation, authority field and binding each entry
 asserts are unchanged. After the update \`go test -count=1 -run TestCLIStaleSupervisorGenerationEndToEnd
 ./cmd/liza/\` printed \`ok\`. The frozen start snapshot \`s1_snapshot_test.go\` is not edited.
+
+## Review iteration 1: typed stream vocabulary
+
+The first review (blocker R1-K7) found the branch-selecting stream kinds named but untyped.
+`streamTaskNotification` and `streamToolResult` now have the defined type `streamEventKind`, and
+`acpSessionUpdateMessageChunk` has `acpSessionUpdateKind` (`internal/agent/stream_vocabulary.go`);
+consumers convert explicitly (`supervisor_background.go`, `acpx_agent.go`). Values and unknown-value
+behaviour are unchanged. Commands, all on the fix tree under `env -i`:
+
+| Claim | Command | Outcome |
+|---|---|---|
+| typed vocabulary and its consumers keep behaviour | `go test -count=1 -run 'TestA9\|Abandoned\|Background\|AcpxAgent\|ACPX\|RuntimeFailure\|StreamEvent' ./internal/agent/` | `ok github.com/liza-mas/liza/internal/agent 3.489s` |
+| the `string(...)` conversion at the ACP boundary matters | same package, `-run TestA9ACPUpdateKind`, with the conversion temporarily removed (reverted afterwards) | FAIL: the plain decoded message chunk returned "" and the boxed typed value matched |
+| sweep unchanged | the ADR sweep program over the four packages | 726 rows; `file:line` and kind columns identical to the closure code commit |

@@ -143,7 +143,9 @@ refreshes, the history entry written last and only warned on failure.
 The inventory covers all 75 production Go files of the four packages
 (`internal/agent`, `internal/process`, `internal/agentlaunch`,
 `internal/providersignal`), not only the offenders. Locations are `file:line`
-relative to `internal/` at the closure code commit `633a39144`.
+relative to `internal/` at the closure code commit `633a39144`; the sweep was re-run
+after the stream-vocabulary typing (review iteration 1) and lists the same 726
+positions and kinds.
 
 Reproduction. The program below uses only the standard library; save it as
 `k7sweep.go` outside the repository and run, from the repository root,
@@ -647,6 +649,29 @@ the type of `supervisorTaskSlot` in `supervisor_block.go`;
 `quota_termination_wip.go`; `alerts.AlertLevelCritical` and `AlertLevelWarning`
 through `alertLevelCritical` and `alertLevelWarning`.
 
+Defined types introduced by this unit for finite sets that select a parsing
+branch (`agent/stream_vocabulary.go`): `streamEventKind` with
+`streamTaskNotification` ("task_notification") and `streamToolResult`
+("tool_result"), read from provider session output in `supervisor_background.go`
+(`detectAbandonedBackgroundTask`, `deliberatelyStoppedTaskIDs`), and
+`acpSessionUpdateKind` with `acpSessionUpdateMessageChunk` ("agent_message_chunk"),
+read in `acpxAgentMessageChunk`. The spellings are the providers' own, so the
+types live in `agent`, next to the readers. Conversions are explicit at the
+boundaries that hold plain strings: `strings.Contains(line, string(kind))`,
+`streamEventKind(env.Subtype) != streamTaskNotification` for the decoded JSON
+subtype, and `update[acpSessionUpdateKey] != string(acpSessionUpdateMessageChunk)`
+for the ACP update decoded as `map[string]any`, where a boxed defined type would
+never equal the decoded string. Unknown values behave as before (they match no
+kind). `TestA9ACPUpdateKindMatchesDecodedStrings` pins that boundary, including
+the boxed-value case, and `TestA9StreamEventKindsSelectOnlyTheirSpelling` the
+subtype selection; removing the `string(...)` conversion makes the former fail.
+`LLMAgentEventKind` (`LLMAgentEventMessage`) spells the same text but names the
+runtime's own event kind, not the provider's wire value, so it is not adopted.
+The JSON line prefix, the ACP discriminator key (a map key) and the verdict
+command's spelling and failure code (compared as text of the command's own
+output) are syntax, keys and message text, not finite kinds, and stay named
+strings.
+
 Constants named by this unit (class N; values unchanged and pinned by
 `TestA9NamedVocabularyKeepsStringValues`, `TestA9NamedVocabularyKeepsNumericValues`
 and `TestA9BackoffAndRankConstantsKeepValues` in `internal/agent`, and the
@@ -665,7 +690,7 @@ and `TestA9BackoffAndRankConstantsKeepValues` in `internal/agent`, and the
 | `agent/claim_breaker.go:27` | `claimBackoffFactor` | 2 |
 | `agent/tool_result_claude.go:47`-`:52`, `:57` | `claudeToolResultMinMajor`, `claudeToolResultMinMinor`, `claudeToolResultMinPatch`, `claudeToolResultHookTimeoutSeconds`, `claudeVersionMatchLen`, `toolResultVersionProbeTimeout` | 2, 1, 267; 60; 4; 5 s |
 | `agent/tool_result_codex.go:131`-`:135` | `codexVersionProgram`, `codexVersionFields`, `codexVersionComponents`, `codexToolResultMinMinor`, `toolResultScriptMode` | "codex-cli"; 2; 3; 154; 0700 |
-| `agent/stream_vocabulary.go:8`-`:20` | `streamJSONObjectPrefix`, `streamTaskNotification`, `streamToolResult`, `acpSessionUpdateKey`, `acpSessionUpdateMessageChunk`, `submitVerdictFailedCode`, `submitVerdictCommand` | the spellings of the provider streams and the verdict command failure code |
+| `agent/stream_vocabulary.go` | `streamJSONObjectPrefix`, `acpSessionUpdateKey`, `submitVerdictFailedCode`, `submitVerdictCommand` (plain named strings; the typed kinds are described above) | the spellings of the provider streams and the verdict command failure code |
 | `agent/alert_vocabulary.go:9`-`:22` | `alertLevelCritical`, `alertLevelWarning` and eleven `alertCategory…` | the spellings written to `alerts.log` |
 | `agentlaunch/launch_resolver.go:47`, `:48` | `templateExprOpen`, `templateExprClose` | "{{", "}}" |
 | `providersignal/vocabulary.go:50`, `:51` | `jsonObjectLinePrefix`, `jsonArrayLinePrefix` | "{", "[" |

@@ -56,14 +56,14 @@ func detectAbandonedBackgroundTask(output string) *abandonedBackgroundTask {
 
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, streamTaskNotification) {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, string(streamTaskNotification)) {
 			continue
 		}
 		var env backgroundTaskEnvelope
 		if err := json.Unmarshal([]byte(line), &env); err != nil {
 			continue
 		}
-		if env.Subtype != streamTaskNotification || env.TaskID == "" || env.Status == "" {
+		if streamEventKind(env.Subtype) != streamTaskNotification || env.TaskID == "" || env.Status == "" {
 			continue
 		}
 		if _, seen := lastStatus[env.TaskID]; !seen {
@@ -100,7 +100,7 @@ func deliberatelyStoppedTaskIDs(output string) map[string]struct{} {
 	stopped := make(map[string]struct{})
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, streamToolResult) {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, string(streamToolResult)) {
 			continue
 		}
 		for _, match := range deliberateStopPattern.FindAllStringSubmatch(line, -1) {
