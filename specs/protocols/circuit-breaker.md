@@ -177,7 +177,7 @@ circuit_breaker_rules:
 
     - name: provider_audit_degradation
       description: "Provider transcript or rollout persistence degraded across agent work"
-      condition: count(type=provider_audit_degraded, same(provider), distinct(agent_id) >= 2) OR count(type=provider_audit_degraded, same(provider)) >= 3
+      condition: count(type=provider_audit_degraded, same(provider_key), distinct(agent_id) >= 2) OR count(type=provider_audit_degraded, same(provider_key)) >= 3  # provider_key: canonical key of the recorded tool name, derived at evaluation (ADR-0229)
       severity: OBSERVABILITY_DEGRADED
       action: PROPORTIONAL_RESPONSE  # WARNING, CHECKPOINT, or HALT from evidence lifecycle and exact current-health proof
 
@@ -276,18 +276,25 @@ eligible when later evidence arrives.
 `NEW` or `CONTINUING` provider-audit evidence may select `HALT` only when the
 state committed by analysis proves all of the following:
 
-1. The qualifying anomaly group has one non-empty provider key.
-2. At least one currently registered agent has `Agent.Provider` exactly equal
-   to that key.
-3. Every exact-matching registration has a degraded `agent_health` entry for
-   the same agent ID, provider, PID, and registration time.
-4. No exact-matching registration lacks that current epoch-matched degraded
-   record.
+1. The qualifying anomaly group has one non-empty canonical provider key.
+   Anomalies group by the key of their recorded `provider` tool name, so
+   `codex` and `codex-acp` evidence, or custom tools declaring one
+   `provider_key`, form one group ([ADR-0229](../architecture/ADR/0229-policy-time-canonical-provider-keys.md)).
+2. At least one currently registered agent belongs to that group: the key of its
+   `Agent.Provider` equals the group's key.
+3. Every member registration has a degraded `agent_health` entry for the same
+   agent ID, recorded provider, PID, and registration time. This epoch match is
+   exact on the recorded tool name; a health record of another tool never
+   validates it.
+4. No member registration lacks that current epoch-matched degraded record.
 
-An alias-only match (for example `codex` evidence with a `codex-acp`
-registration), empty or absent identity, missing health, or a mismatched/stale
-PID or registration-time epoch is non-halting unknown. Analysis returns
-`CHECKPOINT` and explains the failed join; it does not guess canonical identity.
+Empty or absent identity, a registration of another key, missing health, a
+healthy or not-degraded member, or a mismatched/stale provider, PID or
+registration-time epoch is non-halting unknown. Analysis returns `CHECKPOINT`
+and explains the failed join. The keys are derived from the catalog and the
+configuration of the state being analyzed; original anomalies are not rewritten.
+A group that mixes recorded values is named in evidence by its smallest recorded
+provider.
 
 ---
 
@@ -430,7 +437,7 @@ circuit_breaker:
     severity: OBSERVABILITY_DEGRADED
     response: CHECKPOINT
     classification: CONTINUING
-    explanation: current provider health is unknown because the registered alias does not exactly match the anomaly provider
+    explanation: current health for provider codex is unknown: agent coder-2 health does not match its provider, PID, and registration-time epoch
     report_file: .liza/circuit_breaker_report.md
   history:
     - timestamp: 2025-01-17T12:00:00Z
@@ -442,7 +449,7 @@ circuit_breaker:
       result: CHECKPOINT
       response: CHECKPOINT
       classification: CONTINUING
-      explanation: current provider health is unknown because the registered alias does not exactly match the anomaly provider
+      explanation: current health for provider codex is unknown: agent coder-2 health does not match its provider, PID, and registration-time epoch
       resolution: "resumed by human"                 # Added by resume acknowledgement
       resolved_at: 2025-01-18T19:00:00Z
 ```

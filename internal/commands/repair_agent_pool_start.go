@@ -131,6 +131,7 @@ type reviewerStartPlanner struct {
 	perItem bool
 	taken   map[string]bool
 	now     time.Time
+	keys    agentlaunch.ProviderKeys
 }
 
 func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, repairCLI RepairCLI, reviewerRole string, reservedIDs map[string]bool, now time.Time) *reviewerStartPlanner {
@@ -171,6 +172,7 @@ func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, re
 		rows:       []models.Agent{row},
 		taken:      taken,
 		now:        now,
+		keys:       providerKeysOf(state),
 	}
 	planner.slots, planner.perItem = repairCLI.RoleModels.ReviewSlots(reviewerRole)
 	// An explicit --cli starts every reviewer on that CLI; the slots still
@@ -219,7 +221,7 @@ func (p *reviewerStartPlanner) assign(task *models.Task, policy ops.ReviewerClai
 		p.projection.Agents[agentID] = row
 		eligible := ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
 			State: p.projection, Task: task, AgentID: agentID,
-			ReviewerRole: p.role, Now: p.now, Resolver: policy, Slots: p.slots,
+			ReviewerRole: p.role, Now: p.now, Resolver: policy, Slots: p.slots, Keys: p.keys,
 		})
 		if existed {
 			p.projection.Agents[agentID] = previous

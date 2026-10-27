@@ -149,6 +149,12 @@ func agentToolsFromCatalogs(embedded, loaded providers.Catalog) map[string]model
 
 func AgentToolRegistry(config models.Config) map[string]models.AgentToolConfig {
 	registry := BuiltInAgentTools()
+	overlayAgentTools(registry, config)
+	return registry
+}
+
+// overlayAgentTools applies the project's agent_tools over registry in place.
+func overlayAgentTools(registry map[string]models.AgentToolConfig, config models.Config) {
 	for name, override := range config.AgentTools {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -157,7 +163,6 @@ func AgentToolRegistry(config models.Config) map[string]models.AgentToolConfig {
 		base := registry[name]
 		registry[name] = mergeAgentToolConfig(name, base, override)
 	}
-	return registry
 }
 
 func AvailableCLIs(config models.Config) []string {

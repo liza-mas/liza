@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -21,6 +22,9 @@ type mergeGateInput struct {
 	effectiveQuorum   int
 	providerDiversity string // "preferred" or ""
 	reviewerRole      string // workflow role name for reviewers in this role-pair
+	// keys derives the provider keys diversity compares; the zero value compares
+	// recorded tool names exactly.
+	keys agentlaunch.ProviderKeys
 }
 
 // mergeGateResult holds the outcome of the merge gate evaluation.
@@ -49,24 +53,30 @@ func evaluateMergeGate(input mergeGateInput) *mergeGateResult {
 	}
 
 	// Diversity achieved — approvals come from different providers
-	if input.task.HasProviderDiversity() {
+	if ops.ApprovalsHaveProviderDiversity(input.task.Approvals, input.keys) {
 		result.extra = map[string]any{"diversity_achieved": true}
 		return result
 	}
 
 	// Diversity not achieved — check if it's achievable in the reviewer pool
-	providers := make(map[string]bool)
+	// Pool members group by provider key; a group is named by its smallest
+	// recorded provider so a mixed alias group renders deterministically.
+	providers := make(map[string]string)
 	for _, agent := range input.agents {
-		if agent.Role == input.reviewerRole {
-			providers[agent.Provider] = true
+		if agent.Role != input.reviewerRole {
+			continue
+		}
+		key := input.keys.Key(agent.Provider)
+		if label, ok := providers[key]; !ok || agent.Provider < label {
+			providers[key] = agent.Provider
 		}
 	}
 
 	if len(providers) <= 1 {
 		// All reviewers share one provider (or no reviewers registered)
 		reason := "no reviewer agents registered"
-		for p := range providers {
-			reason = fmt.Sprintf("all reviewers use provider %s", p)
+		for _, label := range providers {
+			reason = fmt.Sprintf("all reviewers use provider %s", label)
 		}
 		result.extra = map[string]any{
 			"diversity_not_achievable": true,
@@ -105,13 +115,16 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 		return fmt.Errorf("failed to load pipeline config: %w", cfgErr)
 	}
 	resolver := pipeline.NewResolver(cfg)
+	// One catalog capture and one key derivation from the evaluated snapshot's
+	// config serve every candidate of the batch; no blackboard transaction is open.
+	keys := agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), state.Config)
 
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
 		if !ops.ApprovedMergePending(task, state, agentID, pr) {
 			continue
 		}
-		gate, ok := resolveApprovedMergeGate(task, state, resolver, pr)
+		gate, ok := resolveApprovedMergeGate(task, state, resolver, pr, keys)
 		if !ok {
 			continue
 		}
@@ -126,7 +139,7 @@ func handleApprovedMergesWithOptionalAuthority(projectRoot, agentID string, auth
 // resolveApprovedMergeGate resolves the effective quorum, provider-diversity
 // policy and reviewer role of an approved task and evaluates the merge gate.
 // It reports false, after logging why, when the task must be skipped.
-func resolveApprovedMergeGate(task *models.Task, state *models.State, resolver *pipeline.Resolver, pr models.PipelineResolver) (*mergeGateResult, bool) {
+func resolveApprovedMergeGate(task *models.Task, state *models.State, resolver *pipeline.Resolver, pr models.PipelineResolver, keys agentlaunch.ProviderKeys) (*mergeGateResult, bool) {
 	logger := GetLogger()
 
 	// Resolve effective impact and quorum for merge gate
@@ -161,6 +174,7 @@ func resolveApprovedMergeGate(task *models.Task, state *models.State, resolver *
 		effectiveQuorum:   effectiveQuorum,
 		providerDiversity: string(diversity),
 		reviewerRole:      reviewerRole,
+		keys:              keys,
 	})
 	if !gate.proceed {
 		logger.Warn("Merge gate: quorum defense-in-depth failed, skipping merge",

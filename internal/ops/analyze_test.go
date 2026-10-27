@@ -596,7 +596,7 @@ func TestAnalyzePreservesActiveProviderResponseUntilResume(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read prepared candidate: %v", err)
 			}
-			candidate, _, _ := analysis.DetectUnacknowledgedPatterns(prepared)
+			candidate, _, _ := analysis.DetectUnacknowledgedPatterns(prepared, nil)
 			if candidate.Pattern != tt.wantPattern || candidate.Response != tt.wantResponse {
 				t.Fatalf("committed candidate fixture = {pattern:%q response:%q}, want {%q %q}", candidate.Pattern, candidate.Response, tt.wantPattern, tt.wantResponse)
 			}

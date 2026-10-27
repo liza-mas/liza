@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/rolemodels"
@@ -94,10 +95,10 @@ func TestDoerDiversityYieldsToBoundSlot(t *testing.T) {
 	resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 	bound := rolemodels.Selection{Items: []rolemodels.Entry{{CLI: "claude"}}, List: true}
 
-	if !isBlockedByDoerDiversityAt(task, "claude", "code-reviewer-1", state, resolver, rolemodels.Selection{}, now) {
+	if !isBlockedByDoerDiversityAt(task, "claude", "code-reviewer-1", state, resolver, rolemodels.Selection{}, now, agentlaunch.ProviderKeys{}) {
 		t.Fatal("unbound: same-provider reviewer must yield to the registered codex reviewer")
 	}
-	if isBlockedByDoerDiversityAt(task, "claude", "code-reviewer-1", state, resolver, bound, now) {
+	if isBlockedByDoerDiversityAt(task, "claude", "code-reviewer-1", state, resolver, bound, now, agentlaunch.ProviderKeys{}) {
 		t.Fatal("bound to claude: the codex reviewer cannot take the slot, so claude must not be blocked")
 	}
 }

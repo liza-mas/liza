@@ -241,6 +241,10 @@ provider diversity at two levels:
   tasks where the claimer's provider differs from existing approvals, so the second reviewer
   brings a different model's perspective.
 
+"Provider" means the effective provider key (the catalog's `provider_key`, overridden by
+`agent_tools`, defaulting to the tool name), so `codex` and `codex-acp`, or custom tools
+declaring one `provider_key`, count as one provider.
+
 Diversity is a soft preference, not a hard gate — if only one provider is available,
 reviews still proceed. The mechanism is configurable per impact level, so high-impact
 tasks can require diversity while routine tasks skip the overhead.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
@@ -75,14 +76,14 @@ func blockedOrchestratorWork(roleWork MissingRoleWork, repairCLI RepairCLI, stat
 // matchIdleReviewer assigns task to the first unmatched idle reviewer that
 // may claim it. Greedy matching can overestimate demand; the overshoot is
 // bounded by max-instances and idle agents leave after their max-wait.
-func matchIdleReviewer(state *models.State, task *models.Task, reviewerRole string, slots rolemodels.Selection, idle []string, matched map[string]bool, policy ops.ReviewerClaimPolicyResolver, now time.Time) bool {
+func matchIdleReviewer(state *models.State, task *models.Task, reviewerRole string, slots rolemodels.Selection, idle []string, matched map[string]bool, policy ops.ReviewerClaimPolicyResolver, now time.Time, keys agentlaunch.ProviderKeys) bool {
 	for _, agentID := range idle {
 		if matched[agentID] {
 			continue
 		}
 		if ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
 			State: state, Task: task, AgentID: agentID,
-			ReviewerRole: reviewerRole, Now: now, Resolver: policy, Slots: slots,
+			ReviewerRole: reviewerRole, Now: now, Resolver: policy, Slots: slots, Keys: keys,
 		}) {
 			matched[agentID] = true
 			return true
@@ -113,6 +114,7 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 		}
 	}
 	reviewerPolicy, _ := pr.(ops.ReviewerClaimPolicyResolver)
+	keys := providerKeysOf(state)
 
 	missingRoleTasks := make(map[string][]string)
 	for i := range state.Tasks {
@@ -150,7 +152,7 @@ func FindMissingRolesWithClaimableWork(state *models.State, pr models.PipelineRe
 				}
 				if reviewerPolicy != nil && ops.ReviewerClaimEligible(ops.ReviewerClaimEligibilityInput{
 					State: state, Task: task, AgentID: agentID,
-					ReviewerRole: reviewerRuntime, Now: now, Resolver: reviewerPolicy, Slots: slots,
+					ReviewerRole: reviewerRuntime, Now: now, Resolver: reviewerPolicy, Slots: slots, Keys: keys,
 				}) {
 					hasClaimEligibleReviewer = true
 					break
@@ -347,6 +349,7 @@ type capacityDemand struct {
 	usable   map[string][]string
 
 	reviewerPolicy ops.ReviewerClaimPolicyResolver
+	keys           agentlaunch.ProviderKeys
 	planners       map[string]*reviewerStartPlanner
 	plannedIDs     map[string][]string
 	plannedItems   map[string][]int
@@ -374,6 +377,7 @@ func newCapacityDemand(state *models.State, pr models.PipelineResolver, repairCL
 		idle:           make(map[string][]string),
 		usable:         make(map[string][]string),
 		reviewerPolicy: reviewerPolicy,
+		keys:           providerKeysOf(state),
 		planners:       make(map[string]*reviewerStartPlanner),
 		plannedIDs:     make(map[string][]string),
 		plannedItems:   make(map[string][]int),
@@ -493,7 +497,7 @@ func (d *capacityDemand) classifyReviewerDemand(task *models.Task, reviewerRole 
 		return
 	}
 	slots, _ := d.repairCLI.RoleModels.ReviewSlots(reviewerRole)
-	if matchIdleReviewer(d.state, task, reviewerRole, slots, d.idle[reviewerRole], d.matched, d.reviewerPolicy, d.now) {
+	if matchIdleReviewer(d.state, task, reviewerRole, slots, d.idle[reviewerRole], d.matched, d.reviewerPolicy, d.now, d.keys) {
 		return
 	}
 	planner, ok := d.planners[reviewerRole]

@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -15,7 +16,8 @@ import (
 // Eligibility and selection of the reviewer claim: which tasks a registered
 // reviewer may take (snapshot and gates) and which one it takes (priority,
 // approval diversity, fresh diversity). The diversity comparisons live in the
-// selection functions below, single and findable for C2.
+// selection functions below and compare canonical provider keys, never the
+// recorded tool names (ADR-0229).
 
 // defaultReviewClaimCooldown is the duration after a review claim release
 // during which the same agent cannot re-claim the same task. This prevents
@@ -41,6 +43,9 @@ type ReviewerClaimEligibilityInput struct {
 	Resolver     ReviewerClaimPolicyResolver
 	// Slots is the reviewer role's models.yaml selection; only a list binds.
 	Slots rolemodels.Selection
+	// Keys derives the provider keys diversity compares, from the config of State.
+	// The zero value compares recorded tool names exactly.
+	Keys agentlaunch.ProviderKeys
 }
 
 type reviewerClaimEligibility struct {
@@ -81,7 +86,7 @@ func projectReviewerClaimEligibility(input ReviewerClaimEligibilityInput) review
 		alreadyApproved:        input.Task.HasApprovalFromAgent(input.AgentID),
 		inCooldown:             isInReviewClaimCooldown(input.Task, input.AgentID, input.Now.Add(-defaultReviewClaimCooldown)),
 		wrongSlot:              !ReviewerSlotAdmits(input.Slots, input.Task, agent),
-		blockedByDoerDiversity: isBlockedByDoerDiversityAt(input.Task, agent.Provider, input.AgentID, input.State, input.Resolver, input.Slots, input.Now),
+		blockedByDoerDiversity: isBlockedByDoerDiversityAt(input.Task, agent.Provider, input.AgentID, input.State, input.Resolver, input.Slots, input.Now, input.Keys),
 		validationFailed:       models.ValidationTaskKnownFailed(input.State, input.Task, input.AgentID, input.Now),
 	}
 }
@@ -178,12 +183,12 @@ type eligibilityGate struct {
 
 // eligibleCandidates applies the eligibility gates in order, each against the
 // projection taken before any gate ran.
-func (c *reviewerClaim) eligibleCandidates(state *models.State, candidates []*models.Task) ([]*models.Task, error) {
+func (c *reviewerClaim) eligibleCandidates(state *models.State, candidates []*models.Task, keys agentlaunch.ProviderKeys) ([]*models.Task, error) {
 	projected := make(map[*models.Task]reviewerClaimEligibility, len(candidates))
 	for _, task := range candidates {
 		projected[task] = projectReviewerClaimEligibility(ReviewerClaimEligibilityInput{
 			State: state, Task: task, AgentID: c.input.AgentID,
-			ReviewerRole: c.role, Now: c.now, Resolver: c.pb.resolver, Slots: c.slots,
+			ReviewerRole: c.role, Now: c.now, Resolver: c.pb.resolver, Slots: c.slots, Keys: keys,
 		})
 	}
 	gates := []eligibilityGate{
@@ -230,6 +235,7 @@ func selectBestCandidate(
 	claimerProvider string,
 	claimerAgentID string,
 	state *models.State,
+	keys agentlaunch.ProviderKeys,
 ) *models.Task {
 	tier := models.TopPriorityTier(candidates)
 	if len(tier) == 0 {
@@ -249,16 +255,16 @@ func selectBestCandidate(
 
 	// Prefer partially_approved tasks (claim priority).
 	if len(partiallyApprovedTasks) > 0 {
-		return pickWithApprovalDiversity(partiallyApprovedTasks, claimerProvider)
+		return pickWithApprovalDiversity(partiallyApprovedTasks, claimerProvider, keys)
 	}
 
 	// Fall back to submitted tasks with fresh-submission diversity.
-	return pickWithFreshDiversity(submittedTasks, claimerProvider, claimerAgentID, pr, state)
+	return pickWithFreshDiversity(submittedTasks, claimerProvider, claimerAgentID, pr, state, keys)
 }
 
 // pickWithApprovalDiversity selects from partially_approved tasks, preferring
 // tasks where the claimer's provider differs from existing approvals.
-func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string) *models.Task {
+func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string, keys agentlaunch.ProviderKeys) *models.Task {
 	// No diversity preference possible: single candidate, or claimer has no
 	// provider configured (falls back to random selection).
 	if claimerProvider == "" || len(tasks) <= 1 {
@@ -267,7 +273,7 @@ func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string) *mo
 
 	var diverse, same []*models.Task
 	for _, t := range tasks {
-		if hasDifferentProvider(t.Approvals, claimerProvider) {
+		if hasDifferentProvider(t.Approvals, claimerProvider, keys) {
 			diverse = append(diverse, t)
 		} else {
 			same = append(same, t)
@@ -282,9 +288,9 @@ func pickWithApprovalDiversity(tasks []*models.Task, claimerProvider string) *mo
 
 // hasDifferentProvider returns true if any existing approval on the task was
 // made by a provider different from the claiming reviewer's provider.
-func hasDifferentProvider(approvals []models.Approval, claimerProvider string) bool {
+func hasDifferentProvider(approvals []models.Approval, claimerProvider string, keys agentlaunch.ProviderKeys) bool {
 	for _, a := range approvals {
-		if a.Provider != claimerProvider {
+		if !keys.Same(a.Provider, claimerProvider) {
 			return true
 		}
 	}
@@ -301,6 +307,7 @@ func pickWithFreshDiversity(
 	claimerAgentID string,
 	pr models.PipelineResolver,
 	state *models.State,
+	keys agentlaunch.ProviderKeys,
 ) *models.Task {
 	// No diversity preference possible: single candidate, or claimer has no
 	// provider configured (falls back to random selection).
@@ -310,7 +317,7 @@ func pickWithFreshDiversity(
 
 	var preferred, rest []*models.Task
 	for _, t := range tasks {
-		if isDiversitySatisfiable(t, claimerProvider, claimerAgentID, pr, state) {
+		if isDiversitySatisfiable(t, claimerProvider, claimerAgentID, pr, state, keys) {
 			preferred = append(preferred, t)
 		} else {
 			rest = append(rest, t)
@@ -331,6 +338,7 @@ func isDiversitySatisfiable(
 	claimerAgentID string,
 	pr models.PipelineResolver,
 	state *models.State,
+	keys agentlaunch.ProviderKeys,
 ) bool {
 	reviewerRole, err := pr.ReviewerRole(task.RolePair)
 	if err != nil {
@@ -348,7 +356,7 @@ func isDiversitySatisfiable(
 		if !hasReviewerCapacity(agent, reviewerRole, now) || models.ValidationTaskKnownFailed(state, task, agentID, now) {
 			continue
 		}
-		if agent.Provider != claimerProvider {
+		if !keys.Same(agent.Provider, claimerProvider) {
 			return true
 		}
 	}
@@ -382,6 +390,7 @@ func filterDoerProviderDiversity(
 	claimerAgentID string,
 	state *models.State,
 	resolver ReviewerClaimPolicyResolver,
+	keys agentlaunch.ProviderKeys,
 ) []*models.Task {
 	if claimerProvider == "" {
 		return candidates
@@ -389,7 +398,7 @@ func filterDoerProviderDiversity(
 
 	var filtered []*models.Task
 	for _, t := range candidates {
-		if isBlockedByDoerDiversity(t, claimerProvider, claimerAgentID, state, resolver) {
+		if isBlockedByDoerDiversity(t, claimerProvider, claimerAgentID, state, resolver, keys) {
 			continue
 		}
 		filtered = append(filtered, t)
@@ -407,8 +416,9 @@ func isBlockedByDoerDiversity(
 	claimerAgentID string,
 	state *models.State,
 	resolver ReviewerClaimPolicyResolver,
+	keys agentlaunch.ProviderKeys,
 ) bool {
-	return isBlockedByDoerDiversityAt(task, claimerProvider, claimerAgentID, state, resolver, rolemodels.Selection{}, time.Now().UTC())
+	return isBlockedByDoerDiversityAt(task, claimerProvider, claimerAgentID, state, resolver, rolemodels.Selection{}, time.Now().UTC(), keys)
 }
 
 func isBlockedByDoerDiversityAt(
@@ -419,6 +429,7 @@ func isBlockedByDoerDiversityAt(
 	resolver ReviewerClaimPolicyResolver,
 	slots rolemodels.Selection,
 	now time.Time,
+	keys agentlaunch.ProviderKeys,
 ) bool {
 	// Resolve effective impact from task history, then check if provider-diversity
 	// is configured at that impact level (with base-level fallthrough).
@@ -438,7 +449,7 @@ func isBlockedByDoerDiversityAt(
 	}
 
 	// Claimer has a different provider than the doer — no block.
-	if claimerProvider != doerAgent.Provider {
+	if !keys.Same(claimerProvider, doerAgent.Provider) {
 		return false
 	}
 
@@ -456,7 +467,7 @@ func isBlockedByDoerDiversityAt(
 		if !hasReviewerCapacity(agent, reviewerRole, now) || models.ValidationTaskKnownFailed(state, task, agentID, now) {
 			continue
 		}
-		if agent.Provider != doerAgent.Provider && ReviewerSlotAdmits(slots, task, agent) {
+		if !keys.Same(agent.Provider, doerAgent.Provider) && ReviewerSlotAdmits(slots, task, agent) {
 			return true
 		}
 	}

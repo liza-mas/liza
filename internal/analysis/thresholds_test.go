@@ -40,7 +40,7 @@ func TestPatternsStayQuietOneBelowThreshold(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if result := DetectPatterns(tc.anomalies); result.Triggered {
+			if result := DetectPatterns(tc.anomalies, nil); result.Triggered {
 				t.Fatalf("triggered %s below its threshold", result.Pattern)
 			}
 		})
@@ -54,7 +54,7 @@ func TestPlanningReviewChurnNeedsFourRejections(t *testing.T) {
 		Status:            models.TaskStatusMerged,
 		ReviewCyclesTotal: 3,
 	}}}
-	if result, _, _ := DetectUnacknowledgedPatterns(state); result.Pattern == "planning_review_churn" {
+	if result, _, _ := DetectUnacknowledgedPatterns(state, nil); result.Pattern == "planning_review_churn" {
 		t.Fatal("three rejection cycles triggered planning review churn")
 	}
 }

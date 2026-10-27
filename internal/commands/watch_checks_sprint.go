@@ -39,7 +39,7 @@ func checkCircuitBreakerEscalation(state *models.State, cache map[string]time.Ti
 		return nil
 	}
 
-	patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state)
+	patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state, providerKeyFor(state))
 	if !patternResult.Triggered {
 		delete(cache, circuitBreakerAlertKey)
 		return nil

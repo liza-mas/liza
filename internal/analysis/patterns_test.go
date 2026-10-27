@@ -409,10 +409,10 @@ func TestDetectPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DetectPatterns(tt.anomalies)
+			result := DetectPatterns(tt.anomalies, nil)
 
 			if result.Triggered != tt.wantTriggered {
-				t.Errorf("DetectPatterns() triggered = %v, want %v", result.Triggered, tt.wantTriggered)
+				t.Errorf("DetectPatterns(, nil) triggered = %v, want %v", result.Triggered, tt.wantTriggered)
 			}
 
 			if tt.wantPattern == "" {
@@ -420,18 +420,18 @@ func TestDetectPatterns(t *testing.T) {
 			}
 
 			if result.Pattern != tt.wantPattern {
-				t.Errorf("DetectPatterns() pattern = %v, want %v", result.Pattern, tt.wantPattern)
+				t.Errorf("DetectPatterns(, nil) pattern = %v, want %v", result.Pattern, tt.wantPattern)
 			}
 
 			if result.Severity != tt.wantSeverity {
-				t.Errorf("DetectPatterns() severity = %v, want %v", result.Severity, tt.wantSeverity)
+				t.Errorf("DetectPatterns(, nil) severity = %v, want %v", result.Severity, tt.wantSeverity)
 			}
 
 			if tt.wantEvidence != "" && result.Evidence != tt.wantEvidence {
-				t.Errorf("DetectPatterns() evidence = %v, want %v", result.Evidence, tt.wantEvidence)
+				t.Errorf("DetectPatterns(, nil) evidence = %v, want %v", result.Evidence, tt.wantEvidence)
 			}
 			if tt.wantResponse != "" && result.Response != tt.wantResponse {
-				t.Errorf("DetectPatterns() response = %v, want %v", result.Response, tt.wantResponse)
+				t.Errorf("DetectPatterns(, nil) response = %v, want %v", result.Response, tt.wantResponse)
 			}
 		})
 	}
@@ -551,7 +551,7 @@ func TestDetectUnacknowledgedPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, considered, suppressedCount := DetectUnacknowledgedPatterns(tt.state)
+			result, considered, suppressedCount := DetectUnacknowledgedPatterns(tt.state, nil)
 			if result.Triggered != tt.wantTriggered {
 				t.Errorf("Triggered = %v, want %v", result.Triggered, tt.wantTriggered)
 			}
@@ -585,7 +585,7 @@ func TestResolvedProviderResponseDoesNotAcknowledgeRetryEvidence(t *testing.T) {
 		},
 	}
 
-	result, considered, suppressedCount := DetectUnacknowledgedPatterns(state)
+	result, considered, suppressedCount := DetectUnacknowledgedPatterns(state, nil)
 	if result.Pattern != "retry_cluster" || !result.Triggered || result.Response != models.CircuitBreakerResponseHalt {
 		t.Fatalf("result = {pattern:%q triggered:%v response:%q}, want retry_cluster/true/HALT", result.Pattern, result.Triggered, result.Response)
 	}
@@ -608,7 +608,7 @@ func TestProviderAuditEvidenceLifecycle(t *testing.T) {
 	}
 	assertResult := func(t *testing.T, state *models.State, wantClass models.CircuitBreakerEvidenceClass, wantResponse models.CircuitBreakerResponseType, wantTriggered bool) PatternResult {
 		t.Helper()
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if result.Classification != wantClass || result.Response != wantResponse || result.Triggered != wantTriggered {
 			t.Errorf("result = {class:%q response:%q triggered:%v}, want {%q %q %v}", result.Classification, result.Response, result.Triggered, wantClass, wantResponse, wantTriggered)
 		}
@@ -693,7 +693,6 @@ func TestProviderAuditEvidenceLifecycle(t *testing.T) {
 		name  string
 		setup func(*models.State)
 	}{
-		{"alias-only provider registration", func(s *models.State) { setProviderEpoch(s, "codex-acp", "codex-acp", 101, registeredAt) }},
 		{"empty registered provider identity", func(s *models.State) { setProviderEpoch(s, "", "", 101, registeredAt) }},
 		{"missing health record", func(s *models.State) {
 			s.Agents = map[string]models.Agent{"coder-1": providerAgent("codex", 101, registeredAt)}
@@ -749,7 +748,7 @@ func TestProviderAuditSupersededCheckpointDoesNotAcknowledgeEvidence(t *testing.
 		t.Fatalf("latestResolvedResponseWatermark() = %s, true; want zero, false for unresolved superseded checkpoint", watermark)
 	}
 
-	result, _, _ := DetectUnacknowledgedPatterns(state)
+	result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 	if result.Classification != models.CircuitBreakerEvidenceNew || result.Response != models.CircuitBreakerResponseCheckpoint {
 		t.Fatalf("unacknowledged superseded evidence = {classification:%q response:%q}, want NEW/CHECKPOINT", result.Classification, result.Response)
 	}
@@ -774,7 +773,7 @@ func TestDetectPlanningReviewChurn(t *testing.T) {
 	assertPlanningChurn := func(t *testing.T, state *models.State, wantEvidence string) {
 		t.Helper()
 
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if !result.Triggered {
 			t.Fatal("Triggered = false, want true")
 		}
@@ -824,7 +823,7 @@ func TestDetectPlanningReviewChurn(t *testing.T) {
 			ReviewCyclesTotal: 3,
 		}}}
 
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if result.Triggered {
 			t.Errorf("Triggered = true, want false; result = %+v", result)
 		}
@@ -838,7 +837,7 @@ func TestDetectPlanningReviewChurn(t *testing.T) {
 			ReviewCyclesTotal: 4,
 		}}}
 
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if result.Triggered {
 			t.Errorf("Triggered = true, want false; result = %+v", result)
 		}
@@ -861,7 +860,7 @@ func TestDetectPlanningReviewChurn(t *testing.T) {
 			CircuitBreaker: clearedCircuitBreaker(),
 		}
 
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if result.Triggered {
 			t.Errorf("Triggered = true, want false; result = %+v", result)
 		}
@@ -902,7 +901,7 @@ func TestDetectPlanningReviewChurn(t *testing.T) {
 			}},
 		}
 
-		result, _, _ := DetectUnacknowledgedPatterns(state)
+		result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 		if !result.Triggered {
 			t.Fatal("Triggered = false, want true")
 		}
@@ -1228,16 +1227,16 @@ func TestDetectPatterns_PendingMergeStallsDoNotFormRetryCluster(t *testing.T) {
 
 	t.Run("stalls alone never trigger", func(t *testing.T) {
 		anomalies := append(stalls(), retry("connection refused"), retry("timeout"))
-		if result := DetectPatterns(anomalies); result.Triggered {
-			t.Errorf("DetectPatterns() = %s (%s), want no trigger from merge stalls", result.Pattern, result.Evidence)
+		if result := DetectPatterns(anomalies, nil); result.Triggered {
+			t.Errorf("DetectPatterns(, nil) = %s (%s), want no trigger from merge stalls", result.Pattern, result.Evidence)
 		}
 	})
 
 	t.Run("genuine cluster still triggers and counts only retry loops", func(t *testing.T) {
 		anomalies := append(stalls(), retry("connection refused"), retry("connection refused"), retry("timeout"))
-		result := DetectPatterns(anomalies)
+		result := DetectPatterns(anomalies, nil)
 		if result.Pattern != "retry_cluster" {
-			t.Fatalf("DetectPatterns() pattern = %q, want retry_cluster", result.Pattern)
+			t.Fatalf("DetectPatterns(, nil) pattern = %q, want retry_cluster", result.Pattern)
 		}
 		if !strings.HasPrefix(result.Evidence, "3 retry_loop anomalies") {
 			t.Errorf("evidence = %q, want it to count the 3 retry loops and not the stalls", result.Evidence)
@@ -1264,7 +1263,7 @@ func TestDetectBlockedReplacementChain(t *testing.T) {
 		History: []models.TaskHistoryEntry{{Time: blockedAt.Add(time.Hour), Event: models.TaskEventBlocked}}}
 
 	state := &models.State{Tasks: []models.Task{superseded("a", "b"), superseded("b", "c"), head}}
-	result, _, _ := DetectUnacknowledgedPatterns(state)
+	result, _, _ := DetectUnacknowledgedPatterns(state, nil)
 	if result.Pattern != models.BlockedReplacementChainPattern || result.Response != models.CircuitBreakerResponseHalt {
 		t.Fatalf("result = %+v, want a %s halt", result, models.BlockedReplacementChainPattern)
 	}
@@ -1278,7 +1277,7 @@ func TestDetectBlockedReplacementChain(t *testing.T) {
 	}
 
 	below := &models.State{Tasks: []models.Task{superseded("b", "c"), head}}
-	if result, _, _ := DetectUnacknowledgedPatterns(below); result.Pattern != "" {
+	if result, _, _ := DetectUnacknowledgedPatterns(below, nil); result.Pattern != "" {
 		t.Fatalf("one blocked recovery reported %+v", result)
 	}
 }
@@ -1371,7 +1370,7 @@ func TestTaskHaltOutranksNonHaltProviderAudit(t *testing.T) {
 			}
 
 			// WHEN
-			result, considered, suppressedCount := DetectUnacknowledgedPatterns(state)
+			result, considered, suppressedCount := DetectUnacknowledgedPatterns(state, nil)
 
 			// THEN
 			if result.Pattern != tt.wantPattern || result.Response != tt.wantResponse {

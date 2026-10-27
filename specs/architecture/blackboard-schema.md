@@ -1212,7 +1212,7 @@ agents:
     heartbeat: 2025-01-17T14:52:00Z
     liveness_seq: 1737125520000000000  # highest liveness side-record seq folded into this row (ADR-0177); omitted until a fold
     terminal: /dev/pts/2  # For human observation: which terminal window is this agent?
-    provider: claude  # CLI the agent runs; used by provider-diversity policy
+    provider: claude  # CLI (tool name) the agent runs; provider-diversity policy compares its canonical provider key, derived when evaluated (ADR-0229)
     model: claude-opus-5-5  # First-class model it launched with (ADR-0167); omitted for the tool default, read by no policy
     iterations_total: 47  # Total iterations across all tasks this session (agent-level aggregate)
     context_percent: 34  # v1: heuristic estimate, not measured — see task-lifecycle.md#context-tracking

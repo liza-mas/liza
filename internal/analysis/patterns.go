@@ -40,13 +40,32 @@ type PatternResult struct {
 	Subject *models.CircuitBreakerSubject
 }
 
-// DetectPatterns analyzes anomalies and detects circuit breaker patterns.
-// Returns the first matching pattern (checked in priority order), or a non-triggered result if none match.
-func DetectPatterns(anomalies []models.Anomaly) PatternResult {
-	return detectPatterns(anomalies, true)
+// ProviderKeyFunc maps a recorded provider (tool name) to the key provider
+// equality is decided on. Analysis stays pure: the caller resolves identity
+// from the catalog and configuration. A nil func compares recorded values
+// exactly.
+type ProviderKeyFunc func(recorded string) string
+
+// of returns the comparison key of a recorded provider; a recorded value that
+// maps to no key keeps itself.
+func (k ProviderKeyFunc) of(recorded string) string {
+	if k == nil {
+		return recorded
+	}
+	if key := k(recorded); key != "" {
+		return key
+	}
+	return recorded
 }
 
-func detectPatterns(anomalies []models.Anomaly, includeProviderAudit bool) PatternResult {
+// DetectPatterns analyzes anomalies and detects circuit breaker patterns.
+// Returns the first matching pattern (checked in priority order), or a non-triggered result if none match.
+// Provider-audit anomalies group by keys; the anomalies themselves are not rewritten.
+func DetectPatterns(anomalies []models.Anomaly, keys ProviderKeyFunc) PatternResult {
+	return detectPatterns(anomalies, keys, true)
+}
+
+func detectPatterns(anomalies []models.Anomaly, keys ProviderKeyFunc, includeProviderAudit bool) PatternResult {
 	checks := []func([]models.Anomaly) PatternResult{
 		checkRetryCluster,
 		checkDebtAccumulation,
@@ -56,7 +75,7 @@ func detectPatterns(anomalies []models.Anomaly, includeProviderAudit bool) Patte
 		checkExternalServiceOutage,
 	}
 	if includeProviderAudit {
-		checks = append(checks, checkProviderAuditDegradation)
+		checks = append(checks, func(a []models.Anomaly) PatternResult { return checkProviderAuditDegradation(a, keys) })
 	}
 	for _, check := range checks {
 		if result := check(anomalies); result.Pattern != "" {
@@ -82,18 +101,18 @@ func detectPatterns(anomalies []models.Anomaly, includeProviderAudit bool) Patte
 // HALTs (planning churn, then blocked replacement chain), then a provider
 // WARNING or CHECKPOINT. A non-HALT provider result never hides a task HALT:
 // the blocked-recovery cap is released only by resolving its HALT (ADR-0171).
-func DetectUnacknowledgedPatterns(state *models.State) (PatternResult, []models.Anomaly, int) {
+func DetectUnacknowledgedPatterns(state *models.State, keys ProviderKeyFunc) (PatternResult, []models.Anomaly, int) {
 	if state == nil {
-		return DetectPatterns(nil), nil, 0
+		return DetectPatterns(nil, keys), nil, 0
 	}
 
 	considered, suppressedCount := UnacknowledgedAnomalies(state)
-	if result := detectPatterns(considered, false); result.Pattern != "" {
+	if result := detectPatterns(considered, keys, false); result.Pattern != "" {
 		return result, considered, suppressedCount
 	}
 
 	watermark, hasWatermark := latestResolvedResponseWatermark(state)
-	provider, providerEvidence := checkProviderAuditEvidence(state, watermark, hasWatermark)
+	provider, providerEvidence := checkProviderAuditEvidence(state, keys, watermark, hasWatermark)
 	if provider.Response == models.CircuitBreakerResponseHalt {
 		return provider, providerEvidence, suppressedCount
 	}
@@ -373,12 +392,13 @@ func checkExternalServiceOutage(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-func checkProviderAuditDegradation(anomalies []models.Anomaly) PatternResult {
+func checkProviderAuditDegradation(anomalies []models.Anomaly, keys ProviderKeyFunc) PatternResult {
 	auditDegraded := filterByType(anomalies, models.AnomalyTypeProviderAuditDegraded)
-	groups := groupByField(auditDegraded, "provider")
-	for provider, group := range groups {
+	groups := groupByProviderKey(auditDegraded, keys)
+	for _, group := range groups {
 		agentCount, qualifies := providerAuditThreshold(group)
 		if qualifies {
+			provider := providerGroupLabel(group)
 			return PatternResult{
 				Pattern:        "provider_audit_degradation",
 				Severity:       "OBSERVABILITY_DEGRADED",
@@ -392,16 +412,17 @@ func checkProviderAuditDegradation(anomalies []models.Anomaly) PatternResult {
 	return PatternResult{Triggered: false}
 }
 
-func checkProviderAuditEvidence(state *models.State, watermark time.Time, hasWatermark bool) (PatternResult, []models.Anomaly) {
-	groups := groupByField(filterByType(state.Anomalies, models.AnomalyTypeProviderAuditDegraded), "provider")
+func checkProviderAuditEvidence(state *models.State, keys ProviderKeyFunc, watermark time.Time, hasWatermark bool) (PatternResult, []models.Anomaly) {
+	groups := groupByProviderKey(filterByType(state.Anomalies, models.AnomalyTypeProviderAuditDegraded), keys)
 	var selected PatternResult
 	var selectedEvidence []models.Anomaly
 	selectedProvider := ""
-	for provider, group := range groups {
+	for key, group := range groups {
 		agentCount, qualifies := providerAuditThreshold(group)
 		if !qualifies {
 			continue
 		}
+		provider := providerGroupLabel(group)
 
 		hasHistorical := false
 		hasCurrent := !hasWatermark
@@ -424,10 +445,10 @@ func checkProviderAuditEvidence(state *models.State, watermark time.Time, hasWat
 			result.Explanation = fmt.Sprintf("qualifying provider-audit evidence for %s is entirely at or before the resolved response boundary", provider)
 		case hasWatermark && hasHistorical:
 			result.Classification = models.CircuitBreakerEvidenceContinuing
-			selectProviderAuditAction(state, provider, &result)
+			selectProviderAuditAction(state, keys, key, provider, &result)
 		default:
 			result.Classification = models.CircuitBreakerEvidenceNew
-			selectProviderAuditAction(state, provider, &result)
+			selectProviderAuditAction(state, keys, key, provider, &result)
 		}
 
 		priority := providerAuditResponsePriority(result.Response)
@@ -454,8 +475,8 @@ func providerAuditResponsePriority(response models.CircuitBreakerResponseType) i
 	}
 }
 
-func selectProviderAuditAction(state *models.State, provider string, result *PatternResult) {
-	explanation, halt := allExactProviderEpochsDegraded(state, provider)
+func selectProviderAuditAction(state *models.State, keys ProviderKeyFunc, key, provider string, result *PatternResult) {
+	explanation, halt := allExactProviderEpochsDegraded(state, keys, key, provider)
 	if halt {
 		result.Triggered = true
 		result.Response = models.CircuitBreakerResponseHalt
@@ -466,10 +487,15 @@ func selectProviderAuditAction(state *models.State, provider string, result *Pat
 	result.Explanation = explanation
 }
 
-func allExactProviderEpochsDegraded(state *models.State, provider string) (string, bool) {
+// allExactProviderEpochsDegraded reports whether every registered agent whose
+// provider key is key has a degraded health record for its own epoch. Group
+// membership is canonical; the health record must still match the agent's
+// recorded provider, PID and registration time exactly, so no other tool's
+// stale record validates an epoch. provider only labels the group in text.
+func allExactProviderEpochsDegraded(state *models.State, keys ProviderKeyFunc, key, provider string) (string, bool) {
 	exactMatches := 0
 	for agentID, agent := range state.Agents {
-		if agent.Provider != provider {
+		if keys.of(agent.Provider) != key {
 			continue
 		}
 		exactMatches++
@@ -526,6 +552,31 @@ func filterByType(anomalies []models.Anomaly, anomalyType models.AnomalyType) []
 		}
 	}
 	return result
+}
+
+// groupByProviderKey groups anomalies by the key of their recorded provider.
+func groupByProviderKey(anomalies []models.Anomaly, keys ProviderKeyFunc) map[string][]models.Anomaly {
+	groups := make(map[string][]models.Anomaly)
+	for _, a := range anomalies {
+		if value, ok := a.Details["provider"].(string); ok && value != "" {
+			key := keys.of(value)
+			groups[key] = append(groups[key], a)
+		}
+	}
+	return groups
+}
+
+// providerGroupLabel names a provider group in text: its smallest recorded
+// provider, so a single-value group renders as today and a mixed alias group
+// renders deterministically.
+func providerGroupLabel(group []models.Anomaly) string {
+	label := ""
+	for _, a := range group {
+		if value, _ := a.Details["provider"].(string); label == "" || value < label {
+			label = value
+		}
+	}
+	return label
 }
 
 // groupByField groups anomalies by a field value in their Details

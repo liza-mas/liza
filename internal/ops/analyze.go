@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -88,6 +89,9 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 	if testAnalyzeHooks != nil && testAnalyzeHooks.beforeModify != nil {
 		testAnalyzeHooks.beforeModify()
 	}
+	// The catalog is captured once, outside the transaction; the locked state's
+	// config supplies the agent_tools overrides the provider keys apply.
+	catalogTools := agentlaunch.BuiltInAgentTools()
 
 	var committed analysis.PatternResult
 	var committedReportPath string
@@ -100,7 +104,7 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 		rejectionRCA = deriveRejectionRCATelemetry(s.Tasks)
 		var consideredAnomalies []models.Anomaly
 		var suppressedCount int
-		committed, consideredAnomalies, suppressedCount = analysis.DetectUnacknowledgedPatterns(s)
+		committed, consideredAnomalies, suppressedCount = analysis.DetectUnacknowledgedPatterns(s, agentlaunch.NewProviderKeys(catalogTools, s.Config).Key)
 		s.CircuitBreaker.LastCheck = timestamp
 
 		activeResponse := s.CircuitBreaker.CurrentResponse

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/identity"
@@ -75,12 +76,16 @@ func ClaimReviewerTask(input ClaimReviewerTaskInput) (result *ClaimReviewerTaskR
 // (needsPreflight); the final attempt runs under the candidate's worktree lock
 // and assigns.
 type reviewerClaim struct {
-	input        ClaimReviewerTaskInput
-	invocation   *ownershipInvocation
-	role         string
-	bb           *db.Blackboard
-	pb           *pipelineBundle
-	slots        rolemodels.Selection
+	input      ClaimReviewerTaskInput
+	invocation *ownershipInvocation
+	role       string
+	bb         *db.Blackboard
+	pb         *pipelineBundle
+	slots      rolemodels.Selection
+	// catalogTools is the catalog-derived tool registry, captured once before
+	// any transaction; each attempt derives provider keys from it and the
+	// locked state's config.
+	catalogTools map[string]models.AgentToolConfig
 	now          time.Time
 	leaseExpires time.Time
 
@@ -165,6 +170,7 @@ func (c *reviewerClaim) loadPolicy() error {
 		return &PreconditionError{Reason: fmt.Sprintf("cannot read review slots: %v", err)}
 	}
 	c.slots, _ = modelsFile.ReviewSlots(c.role)
+	c.catalogTools = agentlaunch.BuiltInAgentTools()
 	return nil
 }
 
@@ -252,12 +258,13 @@ func (c *reviewerClaim) transaction(state *models.State) error {
 	if err != nil {
 		return err
 	}
-	candidates, err = c.eligibleCandidates(state, candidates)
+	keys := agentlaunch.NewProviderKeys(c.catalogTools, state.Config)
+	candidates, err = c.eligibleCandidates(state, candidates, keys)
 	if err != nil {
 		return err
 	}
 	for len(candidates) > 0 {
-		task := selectBestCandidate(candidates, c.pb.pr, claimingAgent.Provider, c.input.AgentID, state)
+		task := selectBestCandidate(candidates, c.pb.pr, claimingAgent.Provider, c.input.AgentID, state, keys)
 		if task == nil {
 			break
 		}
