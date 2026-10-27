@@ -88,13 +88,58 @@ func c6IsExempt(dir string) bool {
 	return false
 }
 
+// c6EnvNames are the only host variables the go list child inherits: process
+// lookup, scratch and cache locations, and the names Windows requires. Any
+// other variable (GOFLAGS, proxies, credentials) is withheld, so a child error
+// cannot echo it (G1.4).
+var c6EnvNames = []string{
+	"HOME", "PATH", "TMPDIR", "TEMP", "TMP",
+	"GOROOT", "GOPATH", "GOCACHE", "GOMODCACHE",
+	"SYSTEMROOT", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "COMSPEC", "PATHEXT",
+}
+
+// c6Mask is an inherited variable whose value a failure message must not carry.
+type c6Mask struct{ Name, Value string }
+
+// c6ChildEnv builds the go list environment from an explicit list of
+// NAME=value entries: the allowlisted variables plus the configuration. It also
+// returns the retained values, longest first, for masking child output.
+func c6ChildEnv(environ []string, goos string) ([]string, []c6Mask) {
+	var env []string
+	var masks []c6Mask
+	for _, entry := range environ {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		for _, allowed := range c6EnvNames {
+			if strings.EqualFold(name, allowed) {
+				env = append(env, entry)
+				if len(value) >= c6MaskMinLen {
+					masks = append(masks, c6Mask{Name: strings.ToUpper(name), Value: value})
+				}
+				break
+			}
+		}
+	}
+	sort.SliceStable(masks, func(i, j int) bool { return len(masks[i].Value) > len(masks[j].Value) })
+	return append(env, "GOOS="+goos, "GOARCH=amd64", "CGO_ENABLED=0"), masks
+}
+
+// c6MaskMinLen is the shortest retained value masked in child output; shorter
+// values would mangle unrelated text.
+const c6MaskMinLen = 4
+
 // c6List runs go list for one configuration and decodes its package stream.
-// Failures name the configuration and a bounded, root-relative stderr; they
-// never carry an environment value.
-func c6List(root, goos string) ([]c6Listed, error) {
+// The child sees only c6ChildEnv(environ, goos). Failures name the
+// configuration and a bounded stderr in which the root is relative and every
+// retained variable value is replaced by its name; they never carry an
+// environment value.
+func c6List(root, goos string, environ []string) ([]c6Listed, error) {
 	cmd := exec.Command("go", "list", "-e", "-export", "-deps", "-buildvcs=false", "-json", "./cmd/...", "./internal/...")
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH=amd64", "CGO_ENABLED=0")
+	env, masks := c6ChildEnv(environ, goos)
+	cmd.Env = env
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -104,7 +149,7 @@ func c6List(root, goos string) ([]c6Listed, error) {
 		if errors.As(err, &exit) {
 			status = fmt.Sprintf("exit status %d", exit.ExitCode())
 		}
-		return nil, fmt.Errorf("go list (GOOS=%s) %s: %s", goos, status, c6Sanitize(stderr.String(), root))
+		return nil, fmt.Errorf("go list (GOOS=%s) %s: %s", goos, status, c6Sanitize(stderr.String(), root, masks...))
 	}
 	var pkgs []c6Listed
 	dec := json.NewDecoder(&stdout)
@@ -119,9 +164,12 @@ func c6List(root, goos string) ([]c6Listed, error) {
 }
 
 // c6Sanitize makes tool output safe for a failure message: paths under root
-// become relative and the text is bounded.
-func c6Sanitize(text, root string) string {
+// become relative, masked variable values become $NAME and the text is bounded.
+func c6Sanitize(text, root string, masks ...c6Mask) string {
 	text = strings.ReplaceAll(text, root, ".")
+	for _, m := range masks {
+		text = strings.ReplaceAll(text, m.Value, "$"+m.Name)
+	}
 	text = strings.TrimSpace(text)
 	if len(text) > c6StderrLimit {
 		text = text[:c6StderrLimit] + " [truncated]"
@@ -153,7 +201,7 @@ func c6Load(root, module string) (*c6Loaded, error) {
 	root = resolved
 	loaded := &c6Loaded{Module: module, Typed: map[string]map[string]bool{}}
 	for _, goos := range c6GOOS {
-		pkgs, err := c6List(root, goos)
+		pkgs, err := c6List(root, goos, os.Environ())
 		if err != nil {
 			return nil, err
 		}

@@ -60,7 +60,7 @@ aliases, renamed receivers, embedding and handle chains resolve by object identi
 | The guard detects the old sites | the two guard files copied into a `git archive` of `5cf35b326`, same command | `5cf35b326` | 3 violations: `internal/commands/init_mas_state.go:201:15 C6 M1 db.Blackboard.Write`, `internal/commands/migrate.go:77:15 C6 M1 db.Blackboard.Write`, `internal/tui/commands.go:330:13 C6 M1 db.Blackboard.Modify` |
 | Each rule has an effective fixture | rule disabled one at a time (M1, M2, C1, B1 and the windows configuration), `go test -run 'TestC6Fixture\|TestC6Classification'` | `4bd986841` plus the temporary edit | `TestC6FixtureRejectsEveryRuleShape` failed in all five cases; edits reverted, package green |
 | Fixture rejects every rule shape and accepts every legal case | `TestC6FixtureRejectsEveryRuleShape` (exact 16-line list: five mutators, renamed import, method value, method expression, handle chain, promoted method, interface, literal / named variable / variable-held callback API, windows-only file, unknown-tag file), `TestC6FixtureAcceptsEveryLegalCase` (read-only methods, lock callbacks, snapshot predicate, unrelated `Write` and `Modify`, liveness record, ops/db internals, `_test.go`, test support) | `4bd986841` | pass |
-| K1, S1, listing and type failures never pass silently | `TestC6UnclassifiedBlackboardMethodFailsK1`, `TestC6StaleClassificationEntryFailsK1`, `TestC6SelfCheckFailsWhenBlackboardIsUnresolved`, `TestC6ListingFailureNamesConfigurationWithoutAbsolutePaths`, `TestC6TypeErrorFailsTheGuard` | `4bd986841` | pass |
+| K1, S1, listing and type failures never pass silently (listing failure also masks inherited environment values, see Environment) | `TestC6UnclassifiedBlackboardMethodFailsK1`, `TestC6StaleClassificationEntryFailsK1`, `TestC6SelfCheckFailsWhenBlackboardIsUnresolved`, `TestC6ListingFailureNamesConfigurationWithoutAbsolutePaths`, `TestC6TypeErrorFailsTheGuard` | `4bd986841` | pass |
 | Reached by `make lint` | `make -n lint-archguard` runs `go test -count=1 ./internal/testguard/archguard/`, the package holding `TestC6MutationGuard`; no Makefile change | `4bd986841` | the submit receipt records `make lint` (validation index 7) |
 
 ## SI-5, size, N4
@@ -88,3 +88,19 @@ Remaining hits are records not edited by this scope: `architecture-review.md` (r
 All commands ran from disposable fixtures and temporary modules under `env -i`; no provider, live state, install or
 push. Guard diagnostics carry repo-relative paths only (`TestC6FixtureDiagnosticsNameOnlyRelativePaths`, listing
 failure test).
+
+Round-1 finding C6-ENV-1 (the `go list` child inherited the host environment and a failure could echo a value such
+as an invalid `GOFLAGS`): `c6ChildEnv` now builds the child environment from an allowlist (`HOME`, `PATH`, `TMPDIR`,
+`TEMP`, `TMP`, `GOROOT`, `GOPATH`, `GOCACHE`, `GOMODCACHE` and the Windows-required names) plus `GOOS`, `GOARCH` and
+`CGO_ENABLED`; `c6Sanitize` replaces every retained value of at least four characters by `$NAME`, after making the
+root relative. Regressions use an explicitly constructed synthetic environment (`GOROOT=/c6-synthetic-goroot-marker`,
+`GOFLAGS=-c6-synthetic-flags-marker`, `C6_SYNTHETIC_SECRET=c6-synthetic-secret-marker`, no real value):
+
+| Claim | Test | Red when |
+|---|---|---|
+| Child inherits only the allowlist | `TestC6ChildEnvWithholdsEverythingOutsideTheAllowlist` | the allowlist test is bypassed: fails naming `GOFLAGS`, the secret name and both marker values |
+| A failure that echoes a retained value shows its name only, and still names the configuration | `TestC6ListingFailureNeverEchoesInheritedEnvironmentValues` (bad `GOROOT`: message `go list (GOOS=linux) exit status 2: go: cannot find GOROOT directory: $GOROOT`) | masking is disabled: fails with the message carrying `/c6-synthetic-goroot-marker` |
+| A withheld host `GOFLAGS` no longer breaks the listing | `TestC6HostGoflagsDoNotReachTheListing` | n/a (previously the listing failed with the value in the message) |
+
+The reviewer's probe (`go test -exec 'env GOFLAGS=-C6_DIAGNOSTIC_ENV_MARKER' -run '^TestC6MutationGuard$' ./internal/testguard/archguard/`)
+now passes with the marker withheld from the child (0 violations).

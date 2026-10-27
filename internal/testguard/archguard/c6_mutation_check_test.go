@@ -239,3 +239,67 @@ func TestC6TypeErrorFailsTheGuard(t *testing.T) {
 		t.Fatalf("a type error must fail the guard naming the package, got %v", err)
 	}
 }
+
+// c6SyntheticEnviron is an explicitly constructed environment: the variables the
+// child needs, plus synthetic stand-ins for values that must never be echoed.
+func c6SyntheticEnviron() []string {
+	return []string{
+		"HOME=" + os.Getenv("HOME"),
+		"PATH=" + os.Getenv("PATH"),
+		"TMPDIR=/tmp",
+		"GOROOT=/c6-synthetic-goroot-marker",
+		"GOFLAGS=-c6-synthetic-flags-marker",
+		"C6_SYNTHETIC_SECRET=c6-synthetic-secret-marker",
+	}
+}
+
+// The child inherits only the allowlisted variables.
+func TestC6ChildEnvWithholdsEverythingOutsideTheAllowlist(t *testing.T) {
+	env, _ := c6ChildEnv(c6SyntheticEnviron(), "linux")
+	joined := strings.Join(env, "\n")
+	for _, withheld := range []string{"GOFLAGS", "C6_SYNTHETIC_SECRET", "c6-synthetic-secret-marker", "c6-synthetic-flags-marker"} {
+		if strings.Contains(joined, withheld) {
+			t.Errorf("child environment carries %s", withheld)
+		}
+	}
+	for _, kept := range []string{"HOME=", "PATH=", "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0"} {
+		if !strings.Contains(joined, kept) {
+			t.Errorf("child environment lacks %s", kept)
+		}
+	}
+}
+
+// A listing failure that echoes a retained variable's value (a bad GOROOT)
+// reports the variable name, never the value, and still names the configuration.
+func TestC6ListingFailureNeverEchoesInheritedEnvironmentValues(t *testing.T) {
+	root := writeC6Module(t, map[string]string{
+		"go.mod":           "module c6env\n\ngo 1.22\n",
+		"cmd/tool/main.go": "package main\n\nfunc main() {}\n",
+	})
+	_, err := c6List(root, "linux", c6SyntheticEnviron())
+	if err == nil {
+		t.Fatal("a bad GOROOT must fail the listing")
+	}
+	text := err.Error()
+	for _, leaked := range []string{"c6-synthetic-goroot-marker", "c6-synthetic-flags-marker", "c6-synthetic-secret-marker"} {
+		if strings.Contains(text, leaked) {
+			t.Errorf("failure echoes an environment value (%s): %v", leaked, err)
+		}
+	}
+	if !strings.Contains(text, "GOOS=linux") || !strings.Contains(text, "$GOROOT") {
+		t.Errorf("failure lost the configuration or the variable name: %v", err)
+	}
+}
+
+// A withheld variable can no longer break the child: a host GOFLAGS the guard
+// does not read is ignored instead of failing with its value in the message.
+func TestC6HostGoflagsDoNotReachTheListing(t *testing.T) {
+	root := writeC6Module(t, map[string]string{
+		"go.mod":           "module c6env\n\ngo 1.22\n",
+		"cmd/tool/main.go": "package main\n\nfunc main() {}\n",
+	})
+	environ := append(c6SyntheticEnviron()[:3:3], "GOFLAGS=-c6-synthetic-flags-marker")
+	if _, err := c6List(root, "linux", environ); err != nil {
+		t.Fatalf("withheld GOFLAGS still reached go list: %v", err)
+	}
+}
