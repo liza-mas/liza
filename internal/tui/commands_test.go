@@ -653,3 +653,24 @@ func TestSuppressMissingRoleAlertsAfterRepair(t *testing.T) {
 		t.Fatalf("remaining category = %q, want BLOCKED", filtered[0].Category)
 	}
 }
+
+func TestC6ToggleAutoResumeCmdMessagesAndErrorPrefix(t *testing.T) {
+	stateFile, _ := testhelpers.SetupLizaDir(t, t.TempDir())
+	state := testhelpers.CreateValidState()
+	state.Config.AutoResume = false
+	testhelpers.WriteInitialState(t, stateFile, state)
+	bb := db.For(stateFile)
+
+	for _, want := range []string{"Auto-resume: ON", "Auto-resume: OFF"} {
+		result, ok := toggleAutoResumeCmd(bb)().(CmdResultMsg)
+		if !ok || !result.Success || result.Message != want {
+			t.Fatalf("toggle result = %#v, want success %q", result, want)
+		}
+	}
+
+	missing := db.For(filepath.Join(t.TempDir(), "missing", "state.yaml"))
+	result, ok := toggleAutoResumeCmd(missing)().(CmdResultMsg)
+	if !ok || result.Success || !strings.HasPrefix(result.Message, "toggle auto-resume: ") {
+		t.Fatalf("failed toggle result = %#v, want error prefix %q", result, "toggle auto-resume: ")
+	}
+}

@@ -8,22 +8,11 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/termutil"
-)
-
-// Values of the initial state MAS init writes.
-const (
-	initStateVersion         = 1
-	initPipelineVersion      = 3 // always v3: the pipeline is mandatory
-	initSprintID             = "sprint-1"
-	initSprintNumber         = 1
-	initCircuitBreakerStatus = circuitBreakerStatusOK
-	initAlignmentSummary     = "Initial goal. No tasks defined yet."
-	initGoalIDFormat         = "goal-%d"
 )
 
 // resolvePostWorktreeCmd takes --post-worktree-cmd, or auto-suggests one when it
@@ -95,100 +84,24 @@ func (m *masInit) activateIndexing() error {
 	return activateProjectRootIndexing(pairingindex.MASActivationOptions(m.lizaPaths.ProjectRoot(), m.scipSearchConfig.LanguageNames()))
 }
 
-// composeState builds the initial state of the goal at timestamp.
-func (m *masInit) composeState(timestamp time.Time) *models.State {
-	goalID := fmt.Sprintf(initGoalIDFormat, timestamp.Unix())
-	return &models.State{
-		Version:         initStateVersion,
-		PipelineVersion: initPipelineVersion,
-		Goal: models.Goal{
-			ID:          goalID,
-			Description: m.params.Description,
-			SpecRef:     m.specRepoRel,
-			EntryPoint:  m.params.EntryPoint,
-			Created:     timestamp,
-			Status:      models.GoalStatusInProgress,
-			AlignmentHistory: []models.AlignmentHistory{
-				{
-					Timestamp: timestamp,
-					Event:     string(models.TaskEventInitialization),
-					Summary:   initAlignmentSummary,
-				},
-			},
-		},
-		Tasks:       []models.Task{},
-		Agents:      make(map[string]models.Agent),
-		Discovered:  []models.Discovery{},
-		HumanNotes:  []models.HumanNote{},
-		SpecChanges: []models.SpecChange{},
-		Anomalies:   []models.Anomaly{},
-		Sprint:      initialSprint(goalID, timestamp),
-		CircuitBreaker: models.CircuitBreaker{
-			LastCheck:      time.Time{}, // zero value for null
-			Status:         initCircuitBreakerStatus,
-			CurrentTrigger: nil,
-			History:        []models.CircuitBreakerHistory{},
-		},
-		Config: m.composeConfig(),
-	}
-}
-
-func initialSprint(goalID string, timestamp time.Time) models.Sprint {
-	return models.Sprint{
-		ID:      initSprintID,
-		Number:  initSprintNumber,
-		GoalRef: goalID,
-		Scope: models.SprintScope{
-			Planned: []string{},
-			Stretch: []string{},
-		},
-		Timeline: models.SprintTimeline{
-			Started:      timestamp,
-			Deadline:     time.Time{}, // zero value for null
-			CheckpointAt: nil,
-			Ended:        nil,
-		},
-		Status: models.SprintStatusInProgress,
-		Metrics: models.SprintMetrics{
-			TasksDone:         0,
-			TasksInProgress:   0,
-			TasksBlocked:      0,
-			IterationsTotal:   0,
-			ReviewCyclesTotal: 0,
-		},
-		Retrospective: nil,
-	}
-}
-
-// composeConfig builds the initial configuration from the flags, the resolved
-// SCIP languages, the post-worktree command and the validation tools.
-func (m *masInit) composeConfig() models.Config {
+// initialStateInputs maps the resolved initialization inputs for the ops
+// operation; the copy-flag environment read stays here, with input resolution.
+func (m *masInit) initialStateInputs(timestamp time.Time) ops.InitialStateInputs {
 	params := m.params
-	copyWorktreeEnvFiles := params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles)
-	return models.Config{
-		TerminalTaskArchival:            true,
-		MaxCoderIterations:              models.DefaultMaxCoderIterations,
-		MaxReviewCycles:                 models.DefaultMaxReviewCycles,
-		MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(params.MaxGlobalIntegrationGenerations),
-		MaxInstances:                    models.EffectiveMaxInstances(0, params.MaxInstances),
-		HeartbeatInterval:               models.DefaultHeartbeatIntervalSec,
-		LeaseDuration:                   models.DefaultLeaseDurationSeconds,
-		CoderPollInterval:               models.DefaultCoderPollInterval,
-		DoerMaxWait:                     models.DefaultDoerMaxWait,
-		OrchestratorPollInterval:        models.DefaultOrchestratorPollInterval,
-		OrchestratorMaxWait:             models.DefaultOrchestratorMaxWait,
-		ReviewerPollInterval:            models.DefaultReviewerPollInterval,
-		ReviewerMaxWait:                 models.DefaultReviewerMaxWait,
-		AgentProgressTimeout:            models.DefaultAgentProgressTimeoutSec,
+	return ops.InitialStateInputs{
+		Description:                     params.Description,
+		SpecRef:                         m.specRepoRel,
+		EntryPoint:                      params.EntryPoint,
+		Timestamp:                       timestamp,
+		Branch:                          m.branch,
 		DefaultCLI:                      params.DefaultCLI,
-		ScipSearch:                      m.scipSearchConfig.LanguageNames(),
-		IntegrationBranch:               m.branch,
-		EscalationWebhook:               nil,
-		Mode:                            models.SystemModeRunning,
 		AutoResume:                      params.AutoResume,
 		NoFollowUp:                      params.NoFollowUp,
-		PostWorktreeCmd:                 stringPtrOrNil(m.postWorktreeCmd),
-		CopyWorktreeEnvFiles:            copyWorktreeEnvFiles,
+		CopyWorktreeEnvFiles:            params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles),
+		MaxGlobalIntegrationGenerations: params.MaxGlobalIntegrationGenerations,
+		MaxInstances:                    params.MaxInstances,
+		ScipSearch:                      m.scipSearchConfig.LanguageNames(),
+		PostWorktreeCmd:                 m.postWorktreeCmd,
 		AgentEnvDeny:                    m.agentEnvDeny,
 		AgentTools:                      m.validationTools,
 	}
@@ -196,9 +109,8 @@ func (m *masInit) composeConfig() models.Config {
 
 // writeState writes the initial state file; a failure removes the runtime
 // directory.
-func (m *masInit) writeState(state *models.State) error {
-	bb := db.For(m.lizaPaths.StatePath())
-	if err := bb.Write(state); err != nil {
+func (m *masInit) writeState(in ops.InitialStateInputs) error {
+	if err := ops.PublishInitialState(m.lizaPaths.StatePath(), in); err != nil {
 		m.cleanupInit()
 		return fmt.Errorf("failed to write state file: %w", err)
 	}

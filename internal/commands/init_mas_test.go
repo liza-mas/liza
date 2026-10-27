@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/scipsearch"
 )
@@ -37,14 +38,18 @@ func TestMASInitRejectsScipSearchPlansBeforeAnyProjectAccess(t *testing.T) {
 	}
 }
 
-func TestMASInitStateKeepsFormerValues(t *testing.T) {
+// The state values moved to ops (TestC6InitStateKeepsFormerValues); this keeps
+// the input mapping and the copy-flag environment read in the command.
+func TestMASInitStateInputsKeepFormerSources(t *testing.T) {
 	m := &masInit{
 		params: InitParams{
-			Description: "goal text",
-			EntryPoint:  "entry",
-			DefaultCLI:  "codex",
-			AutoResume:  true,
-			NoFollowUp:  true,
+			Description:                     "goal text",
+			EntryPoint:                      "entry",
+			DefaultCLI:                      "codex",
+			AutoResume:                      true,
+			NoFollowUp:                      true,
+			MaxGlobalIntegrationGenerations: 4,
+			MaxInstances:                    2,
 		},
 		branch:           "feature-branch",
 		specRepoRel:      "specs/vision.md",
@@ -55,56 +60,36 @@ func TestMASInitStateKeepsFormerValues(t *testing.T) {
 	}
 	timestamp := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 
-	state := m.composeState(timestamp)
-
-	if state.Version != 1 || state.PipelineVersion != 3 {
-		t.Fatalf("state versions changed: %d, %d", state.Version, state.PipelineVersion)
-	}
-	if want := "goal-1893553445"; state.Goal.ID != want {
-		t.Fatalf("goal id = %q, want %q", state.Goal.ID, want)
-	}
-	if state.Goal.Description != "goal text" || state.Goal.SpecRef != "specs/vision.md" || state.Goal.EntryPoint != "entry" {
-		t.Fatalf("goal fields changed")
-	}
-	if len(state.Goal.AlignmentHistory) != 1 || state.Goal.AlignmentHistory[0].Summary != "Initial goal. No tasks defined yet." ||
-		state.Goal.AlignmentHistory[0].Event != string(models.TaskEventInitialization) {
-		t.Fatalf("alignment history changed")
-	}
-	if state.Sprint.ID != "sprint-1" || state.Sprint.Number != 1 || state.Sprint.GoalRef != state.Goal.ID ||
-		!state.Sprint.Timeline.Started.Equal(timestamp) || state.Sprint.Status != models.SprintStatusInProgress {
-		t.Fatalf("sprint changed")
-	}
-	if state.CircuitBreaker.Status != "OK" || state.CircuitBreaker.CurrentTrigger != nil || len(state.CircuitBreaker.History) != 0 {
-		t.Fatalf("circuit breaker changed")
-	}
-
-	want := models.Config{
-		TerminalTaskArchival:            true,
-		MaxCoderIterations:              10,
-		MaxReviewCycles:                 5,
-		MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(0),
-		MaxInstances:                    models.EffectiveMaxInstances(0, 0),
-		HeartbeatInterval:               60,
-		LeaseDuration:                   1800,
-		CoderPollInterval:               30,
-		DoerMaxWait:                     600,
-		OrchestratorPollInterval:        60,
-		OrchestratorMaxWait:             18000,
-		ReviewerPollInterval:            30,
-		ReviewerMaxWait:                 600,
-		AgentProgressTimeout:            1800,
+	t.Setenv(models.EnvEnableCopyWorktreeEnvFiles, "")
+	got := m.initialStateInputs(timestamp)
+	want := ops.InitialStateInputs{
+		Description:                     "goal text",
+		SpecRef:                         "specs/vision.md",
+		EntryPoint:                      "entry",
+		Timestamp:                       timestamp,
+		Branch:                          "feature-branch",
 		DefaultCLI:                      "codex",
-		ScipSearch:                      m.scipSearchConfig.LanguageNames(),
-		IntegrationBranch:               "feature-branch",
-		Mode:                            models.SystemModeRunning,
 		AutoResume:                      true,
 		NoFollowUp:                      true,
-		PostWorktreeCmd:                 stringPtrOrNil("npm ci"),
+		MaxGlobalIntegrationGenerations: 4,
+		MaxInstances:                    2,
+		ScipSearch:                      m.scipSearchConfig.LanguageNames(),
+		PostWorktreeCmd:                 "npm ci",
 		AgentEnvDeny:                    []string{"SECRET_ONE"},
 		AgentTools:                      m.validationTools,
 	}
-	if !reflect.DeepEqual(state.Config, want) {
-		t.Fatalf("initial config changed:\n got %+v\nwant %+v", state.Config, want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("init inputs changed:\n got %+v\nwant %+v", got, want)
+	}
+
+	t.Setenv(models.EnvEnableCopyWorktreeEnvFiles, "1")
+	if !m.initialStateInputs(timestamp).CopyWorktreeEnvFiles {
+		t.Fatalf("copy-worktree-env-files environment gate no longer enables the flag")
+	}
+	t.Setenv(models.EnvEnableCopyWorktreeEnvFiles, "")
+	m.params.CopyWorktreeEnvFiles = true
+	if !m.initialStateInputs(timestamp).CopyWorktreeEnvFiles {
+		t.Fatalf("copy-worktree-env-files parameter no longer enables the flag")
 	}
 }
 

@@ -1,4 +1,4 @@
-package commands
+package ops
 
 import (
 	"os"
@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestMigrateCommand_NormalizesUnderscoreRoles(t *testing.T) {
+func TestMigrateState_NormalizesUnderscoreRoles(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -44,12 +44,12 @@ func TestMigrateCommand_NormalizesUnderscoreRoles(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Error("MigrateCommand() changed = false, want true")
+		t.Error("MigrateState() changed = false, want true")
 	}
 
 	// Verify the file was updated
@@ -65,7 +65,7 @@ func TestMigrateCommand_NormalizesUnderscoreRoles(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_AlreadyMigratedNoChanges(t *testing.T) {
+func TestMigrateState_AlreadyMigratedNoChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -90,12 +90,12 @@ func TestMigrateCommand_AlreadyMigratedNoChanges(t *testing.T) {
 	// Capture file mod time before migration
 	infoBefore, _ := os.Stat(statePath)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if changed {
-		t.Error("MigrateCommand() changed = true, want false (already migrated)")
+		t.Error("MigrateState() changed = true, want false (already migrated)")
 	}
 
 	// File should not have been modified
@@ -105,7 +105,7 @@ func TestMigrateCommand_AlreadyMigratedNoChanges(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_MultipleUnderscoreRoles(t *testing.T) {
+func TestMigrateState_MultipleUnderscoreRoles(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -133,12 +133,12 @@ func TestMigrateCommand_MultipleUnderscoreRoles(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Error("MigrateCommand() changed = false, want true")
+		t.Error("MigrateState() changed = false, want true")
 	}
 
 	bb := db.New(statePath)
@@ -160,7 +160,7 @@ func TestMigrateCommand_MultipleUnderscoreRoles(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_Idempotent(t *testing.T) {
+func TestMigrateState_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -177,25 +177,25 @@ func TestMigrateCommand_Idempotent(t *testing.T) {
 	testhelpers.WriteInitialState(t, statePath, state)
 
 	// First migration — should change
-	changed1, err := MigrateCommand(statePath)
+	changed1, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("First MigrateCommand() error = %v", err)
+		t.Fatalf("First MigrateState() error = %v", err)
 	}
 	if !changed1 {
-		t.Error("First MigrateCommand() changed = false, want true")
+		t.Error("First MigrateState() changed = false, want true")
 	}
 
 	// Second migration — should report no changes
-	changed2, err := MigrateCommand(statePath)
+	changed2, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("Second MigrateCommand() error = %v", err)
+		t.Fatalf("Second MigrateState() error = %v", err)
 	}
 	if changed2 {
-		t.Error("Second MigrateCommand() changed = true, want false")
+		t.Error("Second MigrateState() changed = true, want false")
 	}
 }
 
-func TestMigrateCommand_UnknownRolePassesThrough(t *testing.T) {
+func TestMigrateState_UnknownRolePassesThrough(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -211,12 +211,12 @@ func TestMigrateCommand_UnknownRolePassesThrough(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if changed {
-		t.Error("MigrateCommand() changed = true, want false (unknown role should not be modified)")
+		t.Error("MigrateState() changed = true, want false (unknown role should not be modified)")
 	}
 
 	// Verify the unknown role was not mutated
@@ -228,7 +228,7 @@ func TestMigrateCommand_UnknownRolePassesThrough(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_NoAgents(t *testing.T) {
+func TestMigrateState_NoAgents(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -236,16 +236,16 @@ func TestMigrateCommand_NoAgents(t *testing.T) {
 	state.Agents = map[string]models.Agent{}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if changed {
-		t.Error("MigrateCommand() changed = true, want false (no agents to migrate)")
+		t.Error("MigrateState() changed = true, want false (no agents to migrate)")
 	}
 }
 
-func TestMigrateCommand_NormalizesLegacyAttempted(t *testing.T) {
+func TestMigrateState_NormalizesLegacyAttempted(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -261,12 +261,12 @@ func TestMigrateCommand_NormalizesLegacyAttempted(t *testing.T) {
 	}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Error("MigrateCommand() changed = false, want true")
+		t.Error("MigrateState() changed = false, want true")
 	}
 
 	// Read raw YAML to verify persisted state
@@ -288,7 +288,7 @@ func TestMigrateCommand_NormalizesLegacyAttempted(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_LegacyAttempted_Idempotent(t *testing.T) {
+func TestMigrateState_LegacyAttempted_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -305,25 +305,25 @@ func TestMigrateCommand_LegacyAttempted_Idempotent(t *testing.T) {
 	testhelpers.WriteInitialState(t, statePath, state)
 
 	// First run — should change
-	changed1, err := MigrateCommand(statePath)
+	changed1, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("First MigrateCommand() error = %v", err)
+		t.Fatalf("First MigrateState() error = %v", err)
 	}
 	if !changed1 {
-		t.Error("First MigrateCommand() changed = false, want true")
+		t.Error("First MigrateState() changed = false, want true")
 	}
 
 	// Second run — should report no changes
-	changed2, err := MigrateCommand(statePath)
+	changed2, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("Second MigrateCommand() error = %v", err)
+		t.Fatalf("Second MigrateState() error = %v", err)
 	}
 	if changed2 {
-		t.Error("Second MigrateCommand() changed = true, want false")
+		t.Error("Second MigrateState() changed = true, want false")
 	}
 }
 
-func TestMigrateCommand_ScrubsRawProviderAuditMessage(t *testing.T) {
+func TestMigrateState_ScrubsRawProviderAuditMessage(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -361,12 +361,12 @@ func TestMigrateCommand_ScrubsRawProviderAuditMessage(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Fatal("MigrateCommand() changed = false, want true")
+		t.Fatal("MigrateState() changed = false, want true")
 	}
 
 	updated, err := db.New(statePath).Read()
@@ -386,7 +386,7 @@ func TestMigrateCommand_ScrubsRawProviderAuditMessage(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_ScrubsOversizedLegacyRejectionReason(t *testing.T) {
+func TestMigrateState_ScrubsOversizedLegacyRejectionReason(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -404,12 +404,12 @@ func TestMigrateCommand_ScrubsOversizedLegacyRejectionReason(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Fatal("MigrateCommand() changed = false, want true")
+		t.Fatal("MigrateState() changed = false, want true")
 	}
 
 	bb := db.New(statePath)
@@ -429,7 +429,7 @@ func TestMigrateCommand_ScrubsOversizedLegacyRejectionReason(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand_ScrubsOversizedAlignmentSummary(t *testing.T) {
+func TestMigrateState_ScrubsOversizedAlignmentSummary(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 	state := testhelpers.CreateValidState()
@@ -450,9 +450,9 @@ func TestMigrateCommand_ScrubsOversizedAlignmentSummary(t *testing.T) {
 	if err := os.WriteFile(statePath, data, 0644); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil || !changed {
-		t.Fatalf("MigrateCommand() = %v, %v, want true, nil", changed, err)
+		t.Fatalf("MigrateState() = %v, %v, want true, nil", changed, err)
 	}
 	bb := db.New(statePath)
 	updated, err := bb.Read()
@@ -475,15 +475,15 @@ func TestMigrateCommand_ScrubsOversizedAlignmentSummary(t *testing.T) {
 	if err := bb.Modify(func(*models.State) error { return nil }); err != nil {
 		t.Fatalf("state remains unwritable after migration: %v", err)
 	}
-	if changed, err := MigrateCommand(statePath); err != nil || changed {
+	if changed, err := MigrateState(statePath); err != nil || changed {
 		t.Fatalf("second migration = %v, %v, want false, nil", changed, err)
 	}
 }
 
-func TestMigrateCommand_InvalidStatePath(t *testing.T) {
-	_, err := MigrateCommand("/nonexistent/path/state.yaml")
+func TestMigrateState_InvalidStatePath(t *testing.T) {
+	_, err := MigrateState("/nonexistent/path/state.yaml")
 	if err == nil {
-		t.Error("MigrateCommand() error = nil, want error for nonexistent file")
+		t.Error("MigrateState() error = nil, want error for nonexistent file")
 	}
 }
 
@@ -491,7 +491,7 @@ func TestMigrateCommand_InvalidStatePath(t *testing.T) {
 // on an unassigned task. The surviving half-tuple fails validation, and because
 // post-mutation validation is global it blocks every later mutation — including
 // the repairs that would clear it — so migration is where it gets normalized.
-func TestMigrateCommand_ClearsLeaseWithoutAssignee(t *testing.T) {
+func TestMigrateState_ClearsLeaseWithoutAssignee(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -509,12 +509,12 @@ func TestMigrateCommand_ClearsLeaseWithoutAssignee(t *testing.T) {
 	state.Tasks = []models.Task{dangling, owned}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Fatal("MigrateCommand() changed = false, want true")
+		t.Fatal("MigrateState() changed = false, want true")
 	}
 
 	bb := db.New(statePath)
@@ -529,20 +529,20 @@ func TestMigrateCommand_ClearsLeaseWithoutAssignee(t *testing.T) {
 		t.Error("owned task lost its lease")
 	}
 
-	again, err := MigrateCommand(statePath)
+	again, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("second MigrateCommand() error = %v", err)
+		t.Fatalf("second MigrateState() error = %v", err)
 	}
 	if again {
-		t.Error("second MigrateCommand() changed = true, want idempotent")
+		t.Error("second MigrateState() changed = true, want idempotent")
 	}
 }
 
-// TestMigrateCommand_RetypesLegacyPendingMergeStall pins the D83 repair: the
+// TestMigrateState_RetypesLegacyPendingMergeStall pins the D83 repair: the
 // stall record an older reviewer wrote as an incomplete retry_loop becomes a
 // pending_merge_stalled record carrying the same evidence, so whole-state
 // validation — and every rejected-task reclaim gated on it — passes again.
-func TestMigrateCommand_RetypesLegacyPendingMergeStall(t *testing.T) {
+func TestMigrateState_RetypesLegacyPendingMergeStall(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
@@ -558,12 +558,12 @@ func TestMigrateCommand_RetypesLegacyPendingMergeStall(t *testing.T) {
 	state.Anomalies = []models.Anomaly{legacy, genuine}
 	testhelpers.WriteInitialState(t, statePath, state)
 
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("MigrateCommand() error = %v", err)
+		t.Fatalf("MigrateState() error = %v", err)
 	}
 	if !changed {
-		t.Fatal("MigrateCommand() changed = false, want true")
+		t.Fatal("MigrateState() changed = false, want true")
 	}
 
 	updated, err := db.New(statePath).Read()
@@ -591,20 +591,20 @@ func TestMigrateCommand_RetypesLegacyPendingMergeStall(t *testing.T) {
 		t.Errorf("migrated anomalies fail validation: %v", err)
 	}
 
-	again, err := MigrateCommand(statePath)
+	again, err := MigrateState(statePath)
 	if err != nil {
-		t.Fatalf("second MigrateCommand() error = %v", err)
+		t.Fatalf("second MigrateState() error = %v", err)
 	}
 	if again {
-		t.Error("second MigrateCommand() changed = true, want idempotent")
+		t.Error("second MigrateState() changed = true, want idempotent")
 	}
 }
 
-// TestMigrateCommand_LeavesUnrecognizedMalformedRetryLoop guards the migration
+// TestMigrateState_LeavesUnrecognizedMalformedRetryLoop guards the migration
 // predicate: only the full legacy stall signature is retyped. A record that
 // matches partly is someone else's malformed evidence and stays for
 // inspection rather than becoming a stall record it cannot vouch for.
-func TestMigrateCommand_LeavesUnrecognizedMalformedRetryLoop(t *testing.T) {
+func TestMigrateState_LeavesUnrecognizedMalformedRetryLoop(t *testing.T) {
 	cases := map[string]func(details map[string]any){
 		"missing agent_id": func(d map[string]any) { delete(d, "agent_id") },
 		"missing role":     func(d map[string]any) { delete(d, "role") },
@@ -625,12 +625,12 @@ func TestMigrateCommand_LeavesUnrecognizedMalformedRetryLoop(t *testing.T) {
 			state.Anomalies = []models.Anomaly{record}
 			testhelpers.WriteInitialState(t, statePath, state)
 
-			changed, err := MigrateCommand(statePath)
+			changed, err := MigrateState(statePath)
 			if err != nil {
-				t.Fatalf("MigrateCommand() error = %v", err)
+				t.Fatalf("MigrateState() error = %v", err)
 			}
 			if changed {
-				t.Error("MigrateCommand() changed = true, want the record left alone")
+				t.Error("MigrateState() changed = true, want the record left alone")
 			}
 			updated, err := db.New(statePath).Read()
 			if err != nil {

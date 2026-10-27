@@ -295,7 +295,7 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 
 	timestamp := time.Now().UTC()
-	if err := m.writeState(m.composeState(timestamp)); err != nil {
+	if err := m.writeState(m.initialStateInputs(timestamp)); err != nil {
 		return err
 	}
 	if err := m.writeLog(timestamp); err != nil {
@@ -306,14 +306,6 @@ func InitCommandWithConfig(params InitParams) error {
 	}
 	m.reportInitialized()
 	return nil
-}
-
-// stringPtrOrNil returns a pointer to s if non-empty, otherwise nil.
-func stringPtrOrNil(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }
 
 // isInteractive returns true if r is connected to a terminal.

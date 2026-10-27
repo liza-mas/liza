@@ -31,10 +31,15 @@ var areaA9 = Area{
 				"every launch and provider-signal capability tui consumes lives in agentlaunch and providersignal",
 		},
 		{
-			Importer:  "internal/agent",
-			Imported:  "internal/db",
-			Owner:     "Scope 21",
-			Rationale: "baseline crossing at the starting commit; resolution owned by Scope 21 per SI-5",
+			Importer: "internal/agent",
+			Imported: "internal/db",
+			Owner:    "Scope 21",
+			Rationale: "the runtime holds the Blackboard handle for non-mutating use only: snapshot, cached and watch reads " +
+				"(ReadSnapshot, ReadCached, WatchForChanges), handle construction and acquisition configuration (db.For, Patient, " +
+				"WithLockRetryContext) passed to named ops operations, and generation-scoped liveness record publication " +
+				"(db.WriteLivenessRecord, ADR-0177), which rewrites no canonical state; every persisted-state mutation lives in ops " +
+				"(C6) and TestC6MutationGuard rejects a Blackboard mutator or mutation callback outside ops and db, so this edge " +
+				"grants no write authority; no forwarding package hides it",
 		},
 	},
 	Ratchet: []RatchetEntry{},

@@ -1,4 +1,4 @@
-package commands
+package ops
 
 import (
 	"os"
@@ -63,7 +63,7 @@ func TestTerminalArchiveMigrationRetainsUnnormalizedLogicalEvidence(t *testing.T
 		t.Fatal(err)
 	}
 	beforeID := models.TaskTransitionID(before.FindTask(task.ID))
-	changed, err := MigrateCommand(statePath)
+	changed, err := MigrateState(statePath)
 	if err != nil || !changed {
 		t.Fatalf("migration = changed %v, %v", changed, err)
 	}

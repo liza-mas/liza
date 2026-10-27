@@ -1,4 +1,4 @@
-package commands
+package ops
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/statehygiene"
 )
 
-// MigrateCommand normalizes legacy state.yaml records written by an older
+// MigrateState normalizes legacy state.yaml records written by an older
 // binary: underscore-form role names, legacy attempted fields, ownership
 // tuples left half-populated, pending-merge stall anomalies filed as
 // incomplete retry_loop records, and oversized or raw transcript text. Returns
@@ -16,7 +16,7 @@ import (
 //
 // Uses ReadRaw + archive-aware unnormalized decode so legacy normalization
 // remains detectable without treating physical terminal stubs as whole tasks.
-func MigrateCommand(statePath string) (bool, error) {
+func MigrateState(statePath string) (bool, error) {
 	bb := db.For(statePath)
 	raw, err := bb.ReadRaw()
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/liza-mas/liza/internal/interactive"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	providercatalog "github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/scipsearch"
@@ -480,7 +481,7 @@ Reports whether any changes were made.`,
 			statePath = filepath.Join(paths.ProjectDirName(), paths.StateFileName)
 		}
 
-		changed, err := commands.MigrateCommand(statePath)
+		changed, err := ops.MigrateState(statePath)
 		if err != nil {
 			return err
 		}

@@ -326,12 +326,7 @@ func checkpointCmd(projectRoot string) tea.Cmd {
 // Returns CmdResultMsg with the new value displayed for 3s.
 func toggleAutoResumeCmd(bb *db.Blackboard) tea.Cmd {
 	return func() tea.Msg {
-		var newVal bool
-		err := bb.Modify(func(s *models.State) error {
-			s.Config.AutoResume = !s.Config.AutoResume
-			newVal = s.Config.AutoResume
-			return nil
-		})
+		newVal, err := ops.ToggleAutoResume(bb)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("toggle auto-resume: %v", err)}
 		}
