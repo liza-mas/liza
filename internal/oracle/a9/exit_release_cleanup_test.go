@@ -151,6 +151,11 @@ func TestOracleA9ExitReleaseCleanupProbe(t *testing.T) {
 	if os.Getenv(exitReleaseProbeVar) == "" {
 		t.Skip("probe of TestOracleA9ExitReleaseCleanup")
 	}
+	// The probe owns its descendants from its first process start. The CLI build
+	// runs `go build`, whose once-a-day telemetry child is detached (setsid) and
+	// outlives it; without this, the parent test, already a subreaper, adopts that
+	// child and counts it as a probe leak.
+	orchGuard(t)
 	for _, mode := range []string{"failed", "cancelled", "deadline"} {
 		t.Run(mode, func(t *testing.T) {
 			p := newScenario(t, "i05-block-doer-stale")
