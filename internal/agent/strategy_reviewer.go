@@ -375,7 +375,11 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 	if err != nil {
 		return "", "", err
 	}
-	result, err := claimReviewerTaskForRoleWithOptionalAuthority(config.ProjectRoot, config.Authority.ID, s.role, config.InitialTask, 1800, &config.Authority, bb, session)
+	state, err := bb.ReadSnapshot()
+	if err != nil {
+		return "", "", err
+	}
+	result, err := claimReviewerTaskForRoleWithOptionalAuthority(config.ProjectRoot, config.Authority.ID, s.role, config.InitialTask, ops.LeaseDurationSeconds(state.Config), &config.Authority, bb, session)
 	if err != nil {
 		return "", "", err
 	}

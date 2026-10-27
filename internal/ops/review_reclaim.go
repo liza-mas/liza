@@ -11,10 +11,6 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
-// reclaimReviewLeaseDuration is the fresh lease set when reclaiming the task
-// for re-review after a resubmission.
-const reclaimReviewLeaseDuration = 30 * time.Minute
-
 // reclaimTransaction is one reclaim of a resubmitted task for re-review: the
 // candidate observed before the transaction, the inputs the transaction applies
 // and what it reports back.
@@ -27,6 +23,7 @@ type reclaimTransaction struct {
 	reservation *reviewReservation
 	reviewing   models.TaskStatus
 	transitions map[models.TaskStatus][]models.TaskStatus
+	now         time.Time // read before the snapshot; the fresh lease counts from it
 	freshLease  time.Time
 
 	candidate *models.Task
@@ -57,7 +54,7 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 		reservation: reservation,
 		reviewing:   reviewing,
 		transitions: BuildPipelineTransitions(resolver),
-		freshLease:  time.Now().Add(reclaimReviewLeaseDuration),
+		now:         time.Now(),
 	}
 	if err := r.snapshotCandidate(); err != nil {
 		return finishAwaitResubmission(bb, agentID, taskID, authority, reservation, nil, err)
@@ -69,11 +66,12 @@ func reclaimForReview(projectRoot string, bb *db.Blackboard, taskID, agentID str
 // validation context, both outside the transaction. The snapshot never
 // authorizes the write: apply revalidates it.
 func (r *reclaimTransaction) snapshotCandidate() error {
-	_, candidate, err := readTaskState(r.bb, r.taskID)
+	state, candidate, err := readTaskState(r.bb, r.taskID)
 	if err != nil {
 		return err
 	}
 	r.candidate = candidate
+	r.freshLease = r.now.Add(time.Duration(LeaseDurationSeconds(state.Config)) * time.Second)
 	if len(candidate.ValidationPrerequisites) == 0 {
 		return nil
 	}

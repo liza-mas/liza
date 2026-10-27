@@ -16,6 +16,10 @@ import (
 // with the snapshot, so a persistent disagreement cannot spin.
 const surplusRetryDelay = 5 * time.Second
 
+// terminalPlaceholder is the terminal recorded for every supervisor
+// registration. It is not derived from a TTY, agent ID or provider.
+const terminalPlaceholder = "terminal-1"
+
 // supervisorLifetime is RunSupervisor's private, unpersisted record of one
 // supervisor lifetime: the context, authority, strategy, trackers and cleanup
 // state its setup, turns and shutdown share. It confers no authority; every
@@ -35,7 +39,11 @@ type supervisorLifetime struct {
 	// deferred unregister would then fail its authority check on the missing row.
 	retired        bool
 	heartbeatErrCh chan error
+	heartbeat      *Heartbeat
 	stopHeartbeat  func()
+	// leaseSeconds is the effective lease duration resolved once at
+	// registration; the heartbeat reuses it so both agree.
+	leaseSeconds int
 	// turnCleanups cancel the bounded cleanup contexts that replaced bb after
 	// the supervisor context ended; they run when the lifetime ends.
 	turnCleanups []context.CancelFunc
@@ -126,7 +134,12 @@ func (lt *supervisorLifetime) selectStrategy() error {
 // register records the agent and adopts its authority.
 func (lt *supervisorLifetime) register() error {
 	config := lt.config
-	authority, err := registerAgentWithAuthority(lt.bb, config.ProjectRoot, config.AgentID, config.Role, "terminal-1", 1800, config.CLIName, config.Model, lt.resolver)
+	startupState, err := lt.bb.ReadSnapshot()
+	if err != nil {
+		return fmt.Errorf("failed to read state: %w", err)
+	}
+	lt.leaseSeconds = ops.LeaseDurationSeconds(startupState.Config)
+	authority, err := registerAgentWithAuthority(lt.bb, config.ProjectRoot, config.AgentID, config.Role, terminalPlaceholder, lt.leaseSeconds, config.CLIName, config.Model, lt.resolver)
 	if err != nil {
 		return err
 	}
@@ -172,13 +185,14 @@ func (lt *supervisorLifetime) start() error {
 	lt.heartbeatErrCh = make(chan error, 1)
 	lt.config.sessionActivity = &providerSessionActivity{}
 
-	hb := NewHeartbeat(HeartbeatConfig{
+	lt.heartbeat = NewHeartbeat(HeartbeatConfig{
 		Authority:          lt.config.Authority,
 		StatePath:          lt.config.StatePath,
 		State:              state,
+		LeaseDuration:      time.Duration(lt.leaseSeconds) * time.Second,
 		ActiveProviderTask: lt.config.sessionActivity.currentTask,
 	})
-	lt.stopHeartbeat = startSupervisorHeartbeat(lt.supervisorCtx, hb.Start, func(err error) {
+	lt.stopHeartbeat = startSupervisorHeartbeat(lt.supervisorCtx, lt.heartbeat.Start, func(err error) {
 		GetLogger().Error("Heartbeat error", "error", err, "agent_id", lt.config.AgentID)
 		select {
 		case lt.heartbeatErrCh <- err:

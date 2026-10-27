@@ -6,6 +6,17 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
+// LeaseDurationSeconds is the effective agent and review lease length in
+// seconds: the configured lease_duration, or models.DefaultLeaseDurationSeconds
+// when it is not positive. Convert to time.Duration only where a duration is
+// taken, so the unit stays visible.
+func LeaseDurationSeconds(cfg models.Config) int {
+	if cfg.LeaseDuration <= 0 {
+		return models.DefaultLeaseDurationSeconds
+	}
+	return cfg.LeaseDuration
+}
+
 // renewLease sets a fresh lease expiry on task based on the configured duration.
 //
 // A lease is one half of the ownership tuple: `assigned_to` and `lease_expires`

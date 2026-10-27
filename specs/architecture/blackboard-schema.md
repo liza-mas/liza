@@ -1434,7 +1434,7 @@ config:
   high_churn_rejection_threshold: 4  # Durable rejections per RCA cycle; non-positive uses default 4
   max_instances: 3              # Live agents per non-orchestrator role without its own max-instances; non-positive uses default 3
   heartbeat_interval: 60        # Seconds
-  lease_duration: 1800          # Seconds (30 minutes)
+  lease_duration: 1800          # Seconds (default 1800 = 30 minutes; non-positive uses the default)
   coder_poll_interval: 30       # Seconds between work availability checks
   doer_max_wait: 600            # Max idle seconds before a doer supervisor exits the pool
   orchestrator_poll_interval: 60 # Seconds between orchestrator work checks
@@ -1692,7 +1692,8 @@ agents:
 ```
 
 **Lease rules:**
-- On claim: set `lease_expires` to now + lease_duration (default: 30 minutes)
+- On claim: set `lease_expires` to now + lease_duration (configured `config.lease_duration`; default: 1800 s, 30 minutes)
+- Agent registration, the supervisor heartbeat (agent, assigned-task and active-review renewals), reviewer claims, re-review reclaims and agent-pool repair's reviewer-start projection all use this one configured duration, sampled from the state each operation reads; a running heartbeat is not reconfigured live
 - Heartbeat extends lease by lease_duration, through a liveness side record rather than a state write (see [Locking](#locking))
 - Task reclaimable only after lease expires
 - If original agent returns after expiry → must self-abort immediately
@@ -1733,7 +1734,7 @@ supervisor PID remains alive; missing, unusable, dead, mismatched, or
 non-observing reviewer process/agent evidence makes the claim stale.
 
 **Heartbeat interval:** 60 seconds
-**Lease duration:** 1800 seconds (30 minutes)
+**Lease duration:** `config.lease_duration` (default 1800 seconds, 30 minutes)
 **Stale threshold:** lease_expires in the past
 
 This resolves "slow but alive" ambiguity cleanly.

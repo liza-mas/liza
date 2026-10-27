@@ -46,12 +46,10 @@ func TestAwaitResubmissionResultKeepsStringFields(t *testing.T) {
 	}
 }
 
-// The reclaim lease is the C1 site of this concern: its name and value are
-// fixed until C1, and the ownership margin stays beside the reservation it sizes.
+// The reclaim lease follows the configured lease_duration since C1 (see
+// c1_lease_duration_test.go); the ownership margin stays beside the reservation
+// it sizes.
 func TestReviewLeaseDurationsKeepTheirValues(t *testing.T) {
-	if reclaimReviewLeaseDuration != 30*time.Minute {
-		t.Errorf("reclaimReviewLeaseDuration = %v, want 30m", reclaimReviewLeaseDuration)
-	}
 	if reviewOwnershipLeaseMargin != 5*time.Minute {
 		t.Errorf("reviewOwnershipLeaseMargin = %v, want 5m", reviewOwnershipLeaseMargin)
 	}

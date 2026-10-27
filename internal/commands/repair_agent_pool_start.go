@@ -155,7 +155,7 @@ func newReviewerStartPlanner(state *models.State, pr models.PipelineResolver, re
 	if projection.Agents == nil {
 		projection.Agents = make(map[string]models.Agent)
 	}
-	leaseExpires := now.Add(time.Duration(models.DefaultLeaseDurationSeconds) * time.Second)
+	leaseExpires := now.Add(time.Duration(ops.LeaseDurationSeconds(state.Config)) * time.Second)
 	row := models.Agent{
 		Role:         reviewerRole,
 		Status:       models.AgentStatusIdle,
