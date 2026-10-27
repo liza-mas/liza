@@ -61,6 +61,11 @@ func TestC2AnalyzeAliasAnomaliesHaltOnlyWhenEveryKeyGroupMemberIsDegraded(t *tes
 		{"custom tools sharing a provider_key", c2SharedKeyConfig(), []string{"zz-one", "zz-two"},
 			map[string]string{"coder-1": "zz-one", "coder-2": "zz-two"},
 			map[string]models.AgentHealthState{"coder-1": degraded, "coder-2": degraded}, models.CircuitBreakerResponseHalt},
+		{"tools with whitespace-only provider_key overrides share the empty key", models.Config{AgentTools: map[string]models.AgentToolConfig{
+			"zz-one": {Executable: "one", ProviderKey: "   "}, "zz-two": {Executable: "two", ProviderKey: "\t"},
+		}}, []string{"zz-one", "zz-two"},
+			map[string]string{"coder-1": "zz-one", "coder-2": "zz-two"},
+			map[string]models.AgentHealthState{"coder-1": degraded, "coder-2": degraded}, models.CircuitBreakerResponseHalt},
 		{"keyless distinct tools never combine", models.Config{}, []string{"keyless-a", "keyless-b"},
 			map[string]string{"coder-1": "keyless-a", "coder-2": "keyless-b"},
 			map[string]models.AgentHealthState{"coder-1": degraded, "coder-2": degraded}, ""},

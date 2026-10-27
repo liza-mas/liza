@@ -68,6 +68,7 @@ after each).
 | M15 | `matchIdleReviewer` `Keys` dropped | `TestC2CapacityDemandMatchesIdleReviewersByCanonicalKey` |
 | M16 | `FindMissingRolesWithClaimableWork` keys zeroed | `TestC2PoolRepairProjectsCanonicalDoerDiversity` |
 | M17 | `selectBestCandidate` keys zeroed in the claim | `TestC2ClaimPrefersCanonicallyDiverseSecondReview` |
+| M18 | `ProviderKeyFunc.of` falls back to the recorded value when the query returns an empty key (the reviewed defect; fixed so only a nil func falls back, and an agent with no recorded provider is never a group member) | `TestC2ProviderAuditHonoursEmptyCanonicalKey`, `TestC2AnalyzeAliasAnomaliesHaltOnlyWhenEveryKeyGroupMemberIsDegraded` (whitespace-only overrides) |
 
 The first run left M4 and M17 green, which added the alias-of-the-doer case and the end-to-end second-review test;
 M9 and M16 first failed to build (unused variable) and were redone with compiling mutations.

@@ -215,3 +215,45 @@ func TestC2ProviderAuditKeepsOriginalEvidence(t *testing.T) {
 		}
 	}
 }
+
+// A non-nil key func owns its result, even when it is empty: tools whose
+// provider_key override is whitespace-only share the empty key, as in launch.
+func TestC2ProviderAuditHonoursEmptyCanonicalKey(t *testing.T) {
+	emptyKeys := func(recorded string) string {
+		if recorded == "custom-a" || recorded == "custom-b" {
+			return ""
+		}
+		return recorded
+	}
+	base := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	registeredAt := base.Add(-time.Hour)
+	anomalies := c2Anomalies(base, "custom-a", "custom-b")
+
+	for entry, got := range map[string]PatternResult{
+		"DetectPatterns": DetectPatterns(anomalies, emptyKeys),
+		"DetectUnacknowledgedPatterns": func() PatternResult {
+			result, _, _ := DetectUnacknowledgedPatterns(&models.State{Anomalies: anomalies}, emptyKeys)
+			return result
+		}(),
+	} {
+		if got.Pattern != "provider_audit_degradation" {
+			t.Errorf("%s: pattern = %q, want the empty-key tools grouped as one provider", entry, got.Pattern)
+		}
+	}
+	if got := DetectPatterns(anomalies, nil); got.Pattern != "" {
+		t.Errorf("a nil key func compares recorded values exactly: pattern = %q, want none", got.Pattern)
+	}
+
+	state := &models.State{
+		Anomalies: anomalies,
+		Agents: map[string]models.Agent{
+			"coder-1": providerAgent("custom-a", 101, registeredAt),
+			"coder-2": providerAgent("", 102, registeredAt),
+		},
+		AgentHealth: map[string]models.AgentHealth{"coder-1": degradedProviderHealth("custom-a", 101, registeredAt)},
+	}
+	got, _, _ := DetectUnacknowledgedPatterns(state, emptyKeys)
+	if got.Response != models.CircuitBreakerResponseHalt || !strings.Contains(got.Explanation, "all 1 currently registered agents") {
+		t.Fatalf("result = {response:%q explanation:%q}, want HALT with the empty-key member only: an agent with no recorded provider is never a member", got.Response, got.Explanation)
+	}
+}

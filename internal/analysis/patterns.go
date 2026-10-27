@@ -46,16 +46,14 @@ type PatternResult struct {
 // exactly.
 type ProviderKeyFunc func(recorded string) string
 
-// of returns the comparison key of a recorded provider; a recorded value that
-// maps to no key keeps itself.
+// of returns the comparison key of a recorded provider. A non-nil func owns
+// the result, including an empty key (a whitespace-only provider_key override
+// keys its tool to ""); only a nil func falls back to the recorded value.
 func (k ProviderKeyFunc) of(recorded string) string {
 	if k == nil {
 		return recorded
 	}
-	if key := k(recorded); key != "" {
-		return key
-	}
-	return recorded
+	return k(recorded)
 }
 
 // DetectPatterns analyzes anomalies and detects circuit breaker patterns.
@@ -495,7 +493,7 @@ func selectProviderAuditAction(state *models.State, keys ProviderKeyFunc, key, p
 func allExactProviderEpochsDegraded(state *models.State, keys ProviderKeyFunc, key, provider string) (string, bool) {
 	exactMatches := 0
 	for agentID, agent := range state.Agents {
-		if keys.of(agent.Provider) != key {
+		if agent.Provider == "" || keys.of(agent.Provider) != key {
 			continue
 		}
 		exactMatches++
