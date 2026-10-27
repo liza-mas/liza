@@ -73,7 +73,7 @@ var atomicGenerationFenceInventory = []atomicFenceInventoryEntry{
 	{name: "clear-claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "clearDegradedAfterClaim", call: "ops.ClearAgentDegradedWithAuthority", authorityBinding: "*authority"},
 	{name: "claim-reviewer", sourceFile: "internal/agent/claiming.go", declaration: "claimReviewerTaskForRoleWithOptionalAuthority", call: "ops.ClaimReviewerTask", authorityField: "Authority", authorityBinding: "authority"},
 	{name: "release-reviewer-claim", sourceFile: "internal/agent/claiming.go", declaration: "releaseReviewerClaimQuietly", call: "ops.ReleaseClaimWithAuthority", authorityBinding: "authority"},
-	{name: "watchdog-block", sourceFile: "internal/agent/supervisor_block.go", declaration: "transitionSupervisorBlock", call: "ops.ModifyWithAgentAuthority", authorityBinding: "authority"},
+	{name: "watchdog-block", sourceFile: "internal/agent/supervisor_block.go", declaration: "applySupervisorBlock", call: "ops.BlockSupervisorTask", authorityBinding: "authority"},
 	{name: "approved-merge-dispatch", sourceFile: "internal/agent/claiming_merge.go", declaration: "mergeApprovedTask", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "*authority"},
 }
 

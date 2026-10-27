@@ -270,7 +270,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		{
 			name: "orchestrator status",
 			mutate: func(bb *db.Blackboard, _, _ string) error {
-				return setAgentToOrchestratingStatus(bb, stale)
+				return ops.EnterOrchestration(bb, stale)
 			},
 		},
 		{
@@ -360,7 +360,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 	fences := map[string][]string{
 		"heartbeat.go":             {"CheckAgentAuthoritySnapshot", "db.WriteLivenessRecord"},
 		"supervisor.go":            {}, // still barred from direct .Modify(
-		"supervisor_restart.go":    {"ModifyWithAgentAuthority"},
+		"supervisor_restart.go":    {"ops.PersistExit42Restart"},
 		"claiming.go":              {"ModifyWithAgentAuthority"},
 		"strategy_orchestrator.go": {"ModifyWithAgentAuthority"},
 		"provider_audit.go":        {"ModifyWithAgentAuthority"},

@@ -90,10 +90,10 @@ func TestReleaseIfSurplusRetiresSubmittedDoerWithoutClaiming(t *testing.T) {
 	agents["coder-1"] = waiting
 	bb := writeSurplusState(t, 2, agents, []models.Task{submitted, next})
 
-	released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), testResolver(t))
+	released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), testResolver(t))
 
 	if err != nil || !released {
-		t.Fatalf("releaseIfSurplus() = (%v, %v), want (true, nil)", released, err)
+		t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (true, nil)", released, err)
 	}
 	state := readSurplusState(t, bb)
 	if _, exists := state.Agents["coder-1"]; exists {
@@ -129,10 +129,10 @@ func TestReleaseIfSurplusRetainedMergedAttributionDoesNotPin(t *testing.T) {
 	merged.AssignedTo = &self
 	bb := writeSurplusState(t, 2, threeCoders(now), []models.Task{merged})
 
-	released, err := releaseIfSurplus(bb, surplusAuthority(self), testResolver(t))
+	released, err := ops.RetireSurplusAgent(bb, surplusAuthority(self), testResolver(t))
 
 	if err != nil || !released {
-		t.Fatalf("releaseIfSurplus() = (%v, %v), want (true, nil)", released, err)
+		t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (true, nil)", released, err)
 	}
 	state := readSurplusState(t, bb)
 	if _, exists := state.Agents[self]; exists {
@@ -229,10 +229,10 @@ func TestReleaseIfSurplusInFlightOwnershipPins(t *testing.T) {
 			bb := writeSurplusState(t, 2, agents, tasks)
 			before := readSurplusState(t, bb)
 
-			released, err := releaseIfSurplus(bb, surplusAuthority(tc.self), testResolver(t))
+			released, err := ops.RetireSurplusAgent(bb, surplusAuthority(tc.self), testResolver(t))
 
 			if err != nil || released != tc.wantReleased {
-				t.Fatalf("releaseIfSurplus() = (%v, %v), want (%v, nil)", released, err, tc.wantReleased)
+				t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (%v, nil)", released, err, tc.wantReleased)
 			}
 			after := readSurplusState(t, bb)
 			if _, exists := after.Agents[tc.self]; exists == tc.wantReleased {
@@ -265,10 +265,10 @@ func TestReleaseIfSurplusCapBoundary(t *testing.T) {
 	now := time.Now().UTC()
 	bb := writeSurplusState(t, 3, threeCoders(now), nil)
 
-	released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), testResolver(t))
+	released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), testResolver(t))
 
 	if err != nil || released {
-		t.Fatalf("releaseIfSurplus() at the cap = (%v, %v), want (false, nil)", released, err)
+		t.Fatalf("ops.RetireSurplusAgent() at the cap = (%v, %v), want (false, nil)", released, err)
 	}
 	if _, ok := readSurplusState(t, bb).Agents["coder-1"]; !ok {
 		t.Fatal("coder-1 removed while the role was at, not over, its cap")
@@ -289,10 +289,10 @@ func TestReleaseIfSurplusRoleMaxInstancesOverridesProjectCap(t *testing.T) {
 	}
 	bb := writeSurplusState(t, 1, threeCoders(now), nil)
 
-	released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), pipeline.NewResolver(cfg))
+	released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), pipeline.NewResolver(cfg))
 
 	if err != nil || released {
-		t.Fatalf("releaseIfSurplus() = (%v, %v), want the role cap of 3 to keep coder-1", released, err)
+		t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want the role cap of 3 to keep coder-1", released, err)
 	}
 }
 
@@ -305,10 +305,10 @@ func TestReleaseIfSurplusNeverRetiresOrchestrator(t *testing.T) {
 		"orchestrator-2": liveSurplusAgent("orchestrator", now),
 	}, nil)
 
-	released, err := releaseIfSurplus(bb, surplusAuthority("orchestrator-1"), testResolver(t))
+	released, err := ops.RetireSurplusAgent(bb, surplusAuthority("orchestrator-1"), testResolver(t))
 
 	if err != nil || released {
-		t.Fatalf("releaseIfSurplus(orchestrator) = (%v, %v), want (false, nil)", released, err)
+		t.Fatalf("ops.RetireSurplusAgent(orchestrator) = (%v, %v), want (false, nil)", released, err)
 	}
 }
 
@@ -336,10 +336,10 @@ func TestReleaseIfSurplusCountsLeasedPeerWithDeadProcess(t *testing.T) {
 			agents["coder-3"] = dead
 			bb := writeSurplusState(t, 2, agents, nil)
 
-			released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), testResolver(t))
+			released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), testResolver(t))
 
 			if err != nil || released != tc.wantReleased {
-				t.Fatalf("releaseIfSurplus() = (%v, %v), want (%v, nil)", released, err, tc.wantReleased)
+				t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (%v, nil)", released, err, tc.wantReleased)
 			}
 		})
 	}
@@ -361,9 +361,9 @@ func TestReleaseIfSurplusConcurrentRetirementsStopAtCap(t *testing.T) {
 		go func(id string) {
 			defer wg.Done()
 			<-start
-			released, err := releaseIfSurplus(bb, surplusAuthority(id), resolver)
+			released, err := ops.RetireSurplusAgent(bb, surplusAuthority(id), resolver)
 			if err != nil {
-				t.Errorf("releaseIfSurplus(%s) error = %v", id, err)
+				t.Errorf("ops.RetireSurplusAgent(%s) error = %v", id, err)
 			}
 			results <- released
 		}(id)
@@ -401,17 +401,17 @@ func TestReleaseIfSurplusLockedRecheckDeclines(t *testing.T) {
 			now := time.Now().UTC()
 			bb := writeSurplusState(t, 2, threeCoders(now), nil)
 			resolver := testResolver(t)
-			if !poolSurplus(readSurplusState(t, bb), resolver, "coder-1", now) {
+			if !ops.PoolSurplus(readSurplusState(t, bb), resolver, "coder-1", now) {
 				t.Fatal("fixture: snapshot does not report coder-1 as surplus")
 			}
 			if err := bb.Modify(func(s *models.State) error { tc.change(s); return nil }); err != nil {
 				t.Fatal(err)
 			}
 
-			released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), resolver)
+			released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), resolver)
 
 			if err != nil || released {
-				t.Fatalf("releaseIfSurplus() = (%v, %v), want (false, nil)", released, err)
+				t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (false, nil)", released, err)
 			}
 			if _, ok := readSurplusState(t, bb).Agents["coder-1"]; !ok {
 				t.Fatal("coder-1 removed although the locked state no longer had it surplus")
@@ -427,10 +427,10 @@ func TestReleaseIfSurplusRefusesStaleAuthority(t *testing.T) {
 	now := time.Now().UTC()
 	bb := writeSurplusState(t, 2, threeCoders(now), nil)
 
-	released, err := releaseIfSurplus(bb, models.AgentAuthority{ID: "coder-1", Generation: "replaced"}, testResolver(t))
+	released, err := ops.RetireSurplusAgent(bb, models.AgentAuthority{ID: "coder-1", Generation: "replaced"}, testResolver(t))
 
 	if released || !ops.IsAgentAuthorityError(err) {
-		t.Fatalf("releaseIfSurplus(stale) = (%v, %v), want an authority error and no release", released, err)
+		t.Fatalf("ops.RetireSurplusAgent(stale) = (%v, %v), want an authority error and no release", released, err)
 	}
 	if _, ok := readSurplusState(t, bb).Agents["coder-1"]; !ok {
 		t.Fatal("stale caller removed the current registration")
@@ -733,7 +733,7 @@ func TestReleaseIfSurplusIgnoresPeerExpiredWhileWaitingForLock(t *testing.T) {
 	agents["coder-3"] = expiring
 	bb := writeSurplusState(t, 2, agents, nil)
 	resolver := testResolver(t)
-	if !poolSurplus(readSurplusState(t, bb), resolver, "coder-1", now) {
+	if !ops.PoolSurplus(readSurplusState(t, bb), resolver, "coder-1", now) {
 		t.Fatal("fixture: coder-1 is not surplus while coder-3's lease is live")
 	}
 
@@ -755,7 +755,7 @@ func TestReleaseIfSurplusIgnoresPeerExpiredWhileWaitingForLock(t *testing.T) {
 	}
 	retire := make(chan outcome, 1)
 	go func() {
-		released, err := releaseIfSurplus(bb, surplusAuthority("coder-1"), resolver)
+		released, err := ops.RetireSurplusAgent(bb, surplusAuthority("coder-1"), resolver)
 		retire <- outcome{released, err}
 	}()
 	<-time.After(time.Until(leaseEnd) + 100*time.Millisecond)
@@ -771,7 +771,7 @@ func TestReleaseIfSurplusIgnoresPeerExpiredWhileWaitingForLock(t *testing.T) {
 		t.Fatal("releaseIfSurplus did not return after the lock was released")
 	}
 	if got.err != nil || got.released {
-		t.Fatalf("releaseIfSurplus() = (%v, %v), want (false, nil): only coder-2 still occupies beside coder-1", got.released, got.err)
+		t.Fatalf("ops.RetireSurplusAgent() = (%v, %v), want (false, nil): only coder-2 still occupies beside coder-1", got.released, got.err)
 	}
 	if _, ok := readSurplusState(t, bb).Agents["coder-1"]; !ok {
 		t.Fatal("coder-1 retired although its expired peer no longer held a slot")

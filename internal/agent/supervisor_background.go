@@ -8,6 +8,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/providersignal"
 )
 
@@ -123,7 +124,7 @@ func handleAbandonedBackgroundTaskRetry(
 	taskID string,
 	runtimeConfig models.Config,
 	abandoned abandonedBackgroundTask,
-	released releasedTaskClaim,
+	released ops.ReleasedTaskClaim,
 	backgroundTracker *runtimeFailureTracker,
 	spinTracker *spinningTracker,
 ) bool {
@@ -191,7 +192,7 @@ func preserveClaimForBackgroundJob(
 	taskID string,
 	runtimeConfig models.Config,
 	output string,
-	released releasedTaskClaim,
+	released ops.ReleasedTaskClaim,
 	backgroundTracker *runtimeFailureTracker,
 	spinTracker *spinningTracker,
 ) bool {

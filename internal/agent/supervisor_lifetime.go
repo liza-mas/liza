@@ -138,7 +138,7 @@ func (lt *supervisorLifetime) register() error {
 		ensureProjectRootIndexActivation(lt.bb, config.ProjectRoot)
 	} else {
 		lt.config.poolSurplus = func(state *models.State) bool {
-			return poolSurplus(state, lt.resolver, authority.ID, time.Now().UTC())
+			return ops.PoolSurplus(state, lt.resolver, authority.ID, time.Now().UTC())
 		}
 	}
 	return nil
@@ -252,7 +252,7 @@ func (lt *supervisorLifetime) retireIfSurplus() bool {
 	if lt.config.poolSurplus == nil {
 		return false
 	}
-	released, err := releaseIfSurplus(lt.bb, lt.authority, lt.resolver)
+	released, err := ops.RetireSurplusAgent(lt.bb, lt.authority, lt.resolver)
 	if err != nil {
 		GetLogger().Warn("Surplus retirement check failed; staying in pool", "error", err, "agent_id", lt.config.AgentID)
 		return false

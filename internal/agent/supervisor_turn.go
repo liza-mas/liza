@@ -30,7 +30,7 @@ type supervisorTurn struct {
 	prompt        string
 	exitCode      int
 	output        string
-	released      releasedTaskClaim
+	released      ops.ReleasedTaskClaim
 }
 
 // exit42TaskID is the task a graceful-abort restart is charged to.

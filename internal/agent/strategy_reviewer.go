@@ -186,7 +186,7 @@ func (s *reviewerStrategy) parkPendingMerges(bb *db.Blackboard, agentID string, 
 	if err != nil {
 		return // Unparked: the wait re-runs merge handling once, which is safe.
 	}
-	s.parkedMergeFingerprint = ownedPendingMergeFingerprint(state, agentID, pr)
+	s.parkedMergeFingerprint = ops.OwnedPendingMergeFingerprint(state, agentID, pr)
 }
 
 // errPreWorkWake declines the claim step after a wait that ended for merge
@@ -265,7 +265,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			// Merges run only in PreWork, and an owned merge is not reviewable
 			// work: without this, a reviewer that inherits a merge sleeps for
 			// reviewer_max_wait while downstream work waits on it.
-			if fingerprint := ownedPendingMergeFingerprint(state, config.AgentID, pr); fingerprint != "" && fingerprint != s.parkedMergeFingerprint {
+			if fingerprint := ops.OwnedPendingMergeFingerprint(state, config.AgentID, pr); fingerprint != "" && fingerprint != s.parkedMergeFingerprint {
 				s.preWorkWake = true
 				return true, "Owned pending merge changed; returning to merge handling"
 			}

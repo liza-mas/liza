@@ -551,7 +551,7 @@ func TestSupervisorBlockLeavesALifecycleMovedDuringTheSave(t *testing.T) {
 // A released-continuation block acts only on the exact continuation the exit
 // released (R4).
 func TestReleasedSupervisorBlockActsOnlyOnTheReleasedContinuation(t *testing.T) {
-	release := func(t *testing.T, f *watchdogFixture) (models.AgentAuthority, releasedTaskClaim) {
+	release := func(t *testing.T, f *watchdogFixture) (models.AgentAuthority, ops.ReleasedTaskClaim) {
 		t.Helper()
 		authority := testSupervisorAuthority(t, f.bb, f.agentID)
 		released, err := releaseAgentAfterExit(f.bb, authority, f.projectRoot)
@@ -616,11 +616,11 @@ func TestReleasedSupervisorBlockActsOnlyOnTheReleasedContinuation(t *testing.T) 
 
 	for _, tc := range []struct {
 		name     string
-		released releasedTaskClaim
+		released ops.ReleasedTaskClaim
 	}{
-		{name: "nothing released", released: releasedTaskClaim{}},
-		{name: "another task released", released: releasedTaskClaim{TaskID: "task-other", TransitionID: "x"}},
-		{name: "token missing", released: releasedTaskClaim{TaskID: "task-1"}},
+		{name: "nothing released", released: ops.ReleasedTaskClaim{}},
+		{name: "another task released", released: ops.ReleasedTaskClaim{TaskID: "task-other", TransitionID: "x"}},
+		{name: "token missing", released: ops.ReleasedTaskClaim{TaskID: "task-1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newWatchdogFixture(t)

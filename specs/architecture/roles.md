@@ -677,7 +677,7 @@ agents:
 
 ### Collision Prevention
 
-Implemented by `liza agent` (see `internal/agent/registration.go`). The supervisor:
+Implemented by `liza agent` (the supervisor calls `ops.RegisterAgent`, `internal/ops/agent_registration.go`, from `internal/agent/registration.go`). The supervisor:
 1. Acquires file lock on `state.yaml`
 2. Checks if agent ID exists with active (non-expired) lease
 3. If active lease found: exits with `COLLISION` error
@@ -686,12 +686,12 @@ Implemented by `liza agent` (see `internal/agent/registration.go`). The supervis
 
 ### Agent Exit and Claim Release
 
-When an agent exits (signal, crash, or graceful shutdown), `unregisterAgent()` atomically releases any active task claim and deletes the agent entry in a single `Modify` transaction. This prevents orphaned claims:
+When an agent exits (signal, crash, or graceful shutdown), the supervisor calls `ops.UnregisterAgent` (`internal/ops/agent_exit_release.go`), which atomically releases any active task claim and deletes the agent entry in a single `Modify` transaction. This prevents orphaned claims:
 
 - **Coder exit:** Task transitions from IMPLEMENTING back to READY; `assigned_to` and `lease_expires` are cleared
 - **Reviewer exit:** Task transitions from REVIEWING back to READY_FOR_REVIEW; `reviewing_by` and `review_lease_expires` are cleared
 
-The supervisor defers `unregisterAgent` immediately after registration, ensuring cleanup runs regardless of how the agent exits.
+The supervisor defers that unregistration immediately after registration, ensuring cleanup runs regardless of how the agent exits.
 
 ### Identity Validation
 

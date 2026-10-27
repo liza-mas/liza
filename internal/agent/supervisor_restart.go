@@ -48,7 +48,7 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 	key := exit42TrackerKey(taskID, role, authority.ID)
 	prev, outcome := advanceExit42Restart(t.byKey[key], exit42CurrentSignature(state, taskID), effectiveExit42MaxBackoff(state.Config))
 
-	blockedTask, err := persistExit42Restart(bb, projectRoot, authority, taskID, outcome.RestartCount, effectiveExit42RestartLimit(state.Config))
+	blockedTask, err := ops.PersistExit42Restart(bb, authority, projectRoot, taskID, outcome.RestartCount, effectiveExit42RestartLimit(state.Config))
 	if err != nil {
 		return exit42RestartOutcome{}, fmt.Errorf("persist exit-42 tracking state: %w", err)
 	}
@@ -91,86 +91,6 @@ func advanceExit42Restart(prev exit42RestartState, signature string, maxBackoff 
 		Delay:        computeExit42BackoffDelay(prev.RestartCount, maxBackoff),
 		RestartCount: prev.RestartCount,
 	}
-}
-
-// persistExit42Restart is the fenced half of a restart: it records the count on
-// the task and, once the count passes restartLimit, blocks a task this agent
-// owns in an active state. It reports whether the task was blocked.
-func persistExit42Restart(bb *db.Blackboard, projectRoot string, authority models.AgentAuthority, taskID string, restartCount, restartLimit int) (bool, error) {
-	blockedTask := false
-	err := ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
-		if taskID == "" {
-			return nil
-		}
-
-		task := s.FindTask(taskID)
-		if task == nil {
-			return nil
-		}
-
-		task.Exit42RestartCount = restartCount
-
-		if restartCount <= restartLimit {
-			return nil
-		}
-		blocked, err := blockExit42RestartLoop(task, projectRoot, authority.ID, restartCount, restartLimit)
-		blockedTask = blocked
-		return err
-	})
-	return blockedTask, err
-}
-
-// blockExit42RestartLoop blocks a task that restarted past the limit. Only an
-// active task owned by agentID is blocked; it reports whether it was.
-func blockExit42RestartLoop(task *models.Task, projectRoot, agentID string, restartCount, restartLimit int) (bool, error) {
-	// Check if task is in an active state owned by this agent.
-	pr, prErr := ops.LoadResolverForModels(projectRoot)
-	if prErr != nil {
-		return false, prErr
-	}
-	isActive := models.IsExecutingStatus(task, pr) || isReviewingStatus(task, pr)
-	if !isActive {
-		return false, nil
-	}
-	ownedByAgent := (task.AssignedTo != nil && *task.AssignedTo == agentID) ||
-		(task.ReviewingBy != nil && *task.ReviewingBy == agentID)
-	if !ownedByAgent {
-		return false, nil
-	}
-
-	reason := fmt.Sprintf(
-		"exit code 42 restart loop detected: %d consecutive restarts without progress (threshold=%d)",
-		restartCount,
-		restartLimit,
-	)
-	questions := []string{
-		"What task/environment issue is causing repeated exit code 42 without progress?",
-		"Should this task be decomposed or the spec clarified before retrying?",
-	}
-
-	pipelineTransitions, ptErr := ops.LoadPipelineTransitions(projectRoot)
-	if ptErr != nil {
-		return false, ptErr
-	}
-	if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
-		return false, err
-	}
-
-	now := time.Now().UTC()
-	task.BlockedReason = &reason
-	task.BlockedQuestions = questions
-	task.AssignedTo = nil
-	task.LeaseExpires = nil
-	models.AdvanceLifecycle(task)
-	task.ReviewingBy = nil
-	task.ReviewLeaseExpires = nil
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:   now,
-		Event:  models.TaskEventBlocked,
-		Agent:  &agentID,
-		Reason: &reason,
-	})
-	return true, nil
 }
 
 func exit42TrackerKey(taskID, role, agentID string) string {
@@ -271,15 +191,6 @@ func successfulTurnTaskProgressSignature(task *models.Task) string {
 		return fmt.Sprintf("%s|%t|%d", task.Status, task.HandoffPending, len(task.Output))
 	}
 	return string(payload)
-}
-
-// isReviewingStatus checks if a task is in a reviewing state.
-func isReviewingStatus(task *models.Task, pr models.PipelineResolver) bool {
-	if task.RolePair == "" || pr == nil {
-		return false
-	}
-	reviewing, err := pr.ReviewingStatus(task.RolePair)
-	return err == nil && task.Status == reviewing
 }
 
 // --- Crash restart tracker ---

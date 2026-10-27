@@ -215,7 +215,7 @@ func (s *orchestratorStrategy) ClaimTask(_ SupervisorConfig, _ *db.Blackboard) (
 }
 
 func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config SupervisorConfig) error {
-	if err := setAgentToOrchestratingStatus(bb, config.Authority); err != nil {
+	if err := ops.EnterOrchestration(bb, config.Authority); err != nil {
 		return err
 	}
 	if orchestratorPreExecutionHook != nil {
