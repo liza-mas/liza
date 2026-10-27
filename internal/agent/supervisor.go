@@ -122,17 +122,17 @@ func RunSupervisor(ctx context.Context, config SupervisorConfig) error {
 
 // providerKeysOfConfig derives the provider keys policy compares from the
 // catalog-derived tool registry under cfg, outside any blackboard transaction.
-func providerKeysOfConfig(cfg models.Config) func() agentlaunch.ProviderKeys {
-	return func() agentlaunch.ProviderKeys {
-		return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), cfg)
+func providerKeysOfConfig(cfg models.Config) func() providersignal.MatchKeys {
+	return func() providersignal.MatchKeys {
+		return providersignal.NewMatchKeys(agentlaunch.BuiltInAgentTools(), cfg)
 	}
 }
 
 // providerKeysOfSnapshot is providerKeysOfConfig for the configuration of the
 // last published state, read only when the keys are needed. An unreadable
 // snapshot compares under the catalog alone.
-func providerKeysOfSnapshot(ctx context.Context, bb *db.Blackboard) func() agentlaunch.ProviderKeys {
-	return func() agentlaunch.ProviderKeys {
+func providerKeysOfSnapshot(ctx context.Context, bb *db.Blackboard) func() providersignal.MatchKeys {
+	return func() providersignal.MatchKeys {
 		var cfg models.Config
 		if bb != nil {
 			if state, err := readStateSnapshot(ctx, bb); err == nil && state != nil {
@@ -157,7 +157,7 @@ func handleQuotaSignal(config SupervisorConfig) bool {
 // handleProviderUnavailableSignal reports whether a provider-unavailable record
 // names a tool sharing this supervisor's provider key; keys is read only when a
 // record exists.
-func handleProviderUnavailableSignal(config SupervisorConfig, keys func() agentlaunch.ProviderKeys) bool {
+func handleProviderUnavailableSignal(config SupervisorConfig, keys func() providersignal.MatchKeys) bool {
 	if !providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName, keys) {
 		return false
 	}

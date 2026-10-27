@@ -27,9 +27,9 @@ func c3Project(t *testing.T) string {
 	return root
 }
 
-func c3Keys(config models.Config) func() agentlaunch.ProviderKeys {
-	return func() agentlaunch.ProviderKeys {
-		return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), config)
+func c3Keys(config models.Config) func() MatchKeys {
+	return func() MatchKeys {
+		return NewMatchKeys(agentlaunch.BuiltInAgentTools(), config)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestC3MatchLegacyRecords(t *testing.T) {
 func TestC3CheckReadsKeysOnlyWhenARecordExists(t *testing.T) {
 	root := c3Project(t)
 	calls := 0
-	keys := func() agentlaunch.ProviderKeys { calls++; return c3Keys(models.Config{})() }
+	keys := func() MatchKeys { calls++; return c3Keys(models.Config{})() }
 	if CheckProviderUnavailableSignal(root, "codex", keys) || calls != 0 {
 		t.Fatalf("no record: stopped or derived keys (calls=%d)", calls)
 	}
@@ -359,6 +359,39 @@ func TestC3FailUnlistableDirectoryKeepsStatVisibleSignal(t *testing.T) {
 	}
 	if CheckProviderUnavailableSignal(root, "claude", c3Keys(models.Config{})) {
 		t.Fatal("an unrelated provider has no visible record and must not stop")
+	}
+}
+
+func TestC3FailUnlistableDirectoryStopsBothWaysOnActualRaise(t *testing.T) {
+	for _, tc := range []struct{ raiser, stopped string }{{"codex-acp", "codex"}, {"codex", "codex-acp"}} {
+		t.Run(tc.raiser+" raise stops "+tc.stopped, func(t *testing.T) {
+			root := c3Project(t)
+			c3Raise(t, root, c3CodexFailure, tc.raiser)
+			c3Unlistable(t, root)
+			if !CheckProviderUnavailableSignal(root, tc.stopped, c3Keys(models.Config{})) {
+				t.Fatalf("%s must stop on the %s record that can still be stat'ed", tc.stopped, tc.raiser)
+			}
+			if CheckProviderUnavailableSignal(root, tc.stopped, c3Keys(c3SplitAlias)) {
+				t.Fatal("an override-separated alias stays unrelated, as with a listable directory")
+			}
+		})
+	}
+}
+
+func TestC3FailUnlistableDirectoryFindsSiblingCustomKeyRecord(t *testing.T) {
+	root := c3Project(t)
+	if err := WriteProviderUnavailableSignal(root, &ProviderUnavailable{Provider: "foo", Message: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	c3Unlistable(t, root)
+	config := models.Config{AgentTools: map[string]models.AgentToolConfig{
+		"foo": {ProviderKey: "shared"}, "bar": {ProviderKey: "shared"}, "baz": {ProviderKey: "other"},
+	}}
+	if !CheckProviderUnavailableSignal(root, "bar", c3Keys(config)) {
+		t.Fatal("a configured sibling sharing the key must be stopped by foo's visible record")
+	}
+	if CheckProviderUnavailableSignal(root, "baz", c3Keys(config)) {
+		t.Fatal("an unrelated key stays running")
 	}
 }
 

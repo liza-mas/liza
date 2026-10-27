@@ -14,8 +14,8 @@ import (
 
 // defaultKeys are the provider keys of the embedded catalog under an empty
 // configuration.
-func defaultKeys() agentlaunch.ProviderKeys {
-	return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), models.Config{})
+func defaultKeys() MatchKeys {
+	return NewMatchKeys(agentlaunch.BuiltInAgentTools(), models.Config{})
 }
 
 func TestDetectProviderUnavailable_CodexSessionAccess(t *testing.T) {

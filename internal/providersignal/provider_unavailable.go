@@ -11,6 +11,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
 
@@ -199,26 +200,55 @@ func WriteProviderUnavailableSignal(projectRoot string, pu *ProviderUnavailable)
 	return os.WriteFile(ProviderUnavailableSignalPath(projectRoot, tool), []byte(content), signalFileMode)
 }
 
+// MatchKeys is the provider-key view a check decides under: the C2 keys plus the
+// names of the tools of the registry they were derived from, which locate the
+// records of sibling tools when the signal directory cannot be listed. It is
+// built from the same catalog-derived base and configuration, derives nothing
+// beyond them and is never stored.
+type MatchKeys struct {
+	agentlaunch.ProviderKeys
+	tools []string
+}
+
+// NewMatchKeys derives the view for base (as BuiltInAgentTools returns it)
+// under config.
+func NewMatchKeys(base map[string]models.AgentToolConfig, config models.Config) MatchKeys {
+	seen := map[string]bool{}
+	var tools []string
+	add := func(name string) {
+		if name = strings.TrimSpace(name); name != "" && !seen[name] {
+			seen[name] = true
+			tools = append(tools, name)
+		}
+	}
+	for name := range base {
+		add(name)
+	}
+	for name := range config.AgentTools {
+		add(name)
+	}
+	sort.Strings(tools)
+	return MatchKeys{ProviderKeys: agentlaunch.NewProviderKeys(base, config), tools: tools}
+}
+
 // CheckProviderUnavailableSignal reports whether a signal record names a tool
 // sharing tool's provider key. keys is called at most once, and only when a
-// record exists, so a caller with no signal pays no catalog or state read.
-// When the signal directory cannot be listed, the records earlier versions
-// would have found for tool are checked directly, so a record that can still
-// be stat'ed keeps stopping the provider.
-func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() agentlaunch.ProviderKeys) bool {
+// record exists or the signal directory cannot be listed, so a caller with no
+// signal pays no catalog or state read. When the directory cannot be listed, the records visible by name are
+// compared instead (see knownUnavailableSignals), so a record that can still be
+// stat'ed keeps stopping the tools a listing would stop it for.
+func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() MatchKeys) bool {
 	signals, err := listUnavailableSignals(projectRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-		signals = knownUnavailableSignals(projectRoot, tool)
-	}
-	if len(signals) == 0 {
+	if os.IsNotExist(err) || (err == nil && len(signals) == 0) {
 		return false
 	}
-	provider := keys()
+	view := keys()
+	if err != nil {
+		// The candidates come from the registry, so the view is needed first.
+		signals = knownUnavailableSignals(projectRoot, tool, view)
+	}
 	for _, signal := range signals {
-		if provider.Same(signal.Tool, tool) {
+		if view.Same(signal.Tool, tool) {
 			return true
 		}
 	}
@@ -226,15 +256,22 @@ func CheckProviderUnavailableSignal(projectRoot, tool string, keys func() agentl
 }
 
 // knownUnavailableSignals returns the records visible by name when the signal
-// directory cannot be listed: the ones earlier versions would have stat'ed for
-// tool (its own and its alias-normalised name), under the literal legacy file
-// name and the encoded one. Their identity is read as for a listing, so the
-// caller compares them through the same keys.
-func knownUnavailableSignals(projectRoot, tool string) []UnavailableSignal {
+// directory cannot be listed. Candidates are the tools of the registry that
+// share tool's provider key, since a sibling may have raised the record, plus
+// tool and its alias-normalised name, which earlier versions stat'ed; each
+// is probed under its literal legacy file name and its encoded one. Identity is
+// read as for a listing, so the caller compares them through the same keys.
+func knownUnavailableSignals(projectRoot, tool string, view MatchKeys) []UnavailableSignal {
 	dir := paths.New(projectRoot).LizaDir()
+	candidates := []string{tool, agentlaunch.ACPXAgentName(tool)}
+	for _, name := range view.tools {
+		if view.Same(name, tool) {
+			candidates = append(candidates, name)
+		}
+	}
 	var signals []UnavailableSignal
 	seen := map[string]bool{}
-	for _, candidate := range []string{tool, agentlaunch.ACPXAgentName(tool)} {
+	for _, candidate := range candidates {
 		for _, name := range []string{candidate, encodeSignalName(candidate)} {
 			if strings.ContainsAny(name, "/\\\x00") || seen[name] {
 				continue

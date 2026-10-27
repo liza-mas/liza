@@ -151,8 +151,8 @@ func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string
 		return nil, err
 	}
 	runtimeConfig := readRuntimeConfig(projectRoot)
-	keys := func() agentlaunch.ProviderKeys {
-		return agentlaunch.NewProviderKeys(agentlaunch.BuiltInAgentTools(), runtimeConfig)
+	keys := func() providersignal.MatchKeys {
+		return providersignal.NewMatchKeys(agentlaunch.BuiltInAgentTools(), runtimeConfig)
 	}
 	if providersignal.CheckProviderUnavailableSignal(projectRoot, cli, keys) {
 		err := fmt.Errorf("provider unavailable for %s; refusing to spawn %s", cli, role)

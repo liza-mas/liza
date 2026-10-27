@@ -34,10 +34,15 @@ now takes the record path. No shim or alias was added. Quota code is untouched.
 - Row order is the pre-C3 order: records sort by the file name their display provider had before C3 (alias-normalised
   label), not by physical name (`TestC3PresentKeepsPreC3RowOrderForAliasTools`: `acpx-codex` plus `claude` lists
   `claude`, `codex`).
-- Unlistable directory (mode 0111): the stat-visible records of the tool or its alias-normalised name, under the
-  literal and the encoded file name, are read and compared through the current keys, not by existence
-  (`TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, `...MissingRecordDoesNotStop`, `...StillComparesCanonicalKeys`,
-  `...FindsLegacyLiteralName`). Records of other tools cannot be discovered without a listing.
+- Unlistable directory (mode 0111): the stat-visible records of the registry tools sharing the checking tool's key, of
+  the tool and of its alias-normalised name, under the literal and the encoded file name, are read and compared through
+  the current keys, not by existence (`TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, `...MissingRecordDoesNotStop`,
+  `...StillComparesCanonicalKeys`, `...FindsLegacyLiteralName`, `...StopsBothWaysOnActualRaise`,
+  `...FindsSiblingCustomKeyRecord`). The registry tool names come from `providersignal.MatchKeys`, built from the same
+  base and configuration as the C2 keys (`agentlaunch` untouched). A record of an unregistered, unrelated tool cannot be
+  discovered without a listing.
+- Catalog capture: for an unlistable directory the keys view is built when the check starts (its candidates come from
+  the registry); for a listable one only when a record exists.
 - Distinct effective keys are not conflated: one file per encoded launch tool (`TestC3StoreRecordsDoNotConflateDistinctTools`).
 - Filesystem addressing is separate from configured text: `encodeSignalName` percent-encodes every byte outside
   `[A-Za-z0-9_-]` and a leading dot, is injective and cannot yield a separator or dot segment
@@ -70,6 +75,7 @@ records, `TestC3CheckReadsKeysOnlyWhenARecordExists`); no refresh or cache was a
 
 | M6 | the unlistable-directory fallback decides by existence, ignoring the keys | `TestC3FailUnlistableDirectoryKeepsStatVisibleSignal`, `...MissingRecordDoesNotStop`, `...StillComparesCanonicalKeys`, `...FindsLegacyLiteralName` |
 | M6b | the fallback probes encoded names only | `TestC3FailUnlistableDirectoryFindsLegacyLiteralName` |
+| M6c | the fallback omits sibling registry tools | `TestC3FailUnlistableDirectoryStopsBothWaysOnActualRaise`, `TestC3FailUnlistableDirectoryFindsSiblingCustomKeyRecord` |
 | M7 | rows ordered by physical tool file name | `TestC3PresentKeepsPreC3RowOrderForAliasTools` |
 | M8 | no `tool:` line for escaped names | `TestC3StoreToolNamesStayInsideSignalDirectory` |
 
