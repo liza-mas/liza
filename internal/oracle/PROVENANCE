@@ -19,3 +19,4 @@ changed internal/oracle/a9/exit_release_cleanup_test.go determinism
 changed internal/oracle/a9/exit_release_test.go determinism
 changed internal/oracle/a9/kit_test.go determinism
 changed internal/oracle/a9/exit_release_cleanup_test.go determinism
+changed internal/oracle/a9/testdata/golden/state/i14-decided/state.yaml fix

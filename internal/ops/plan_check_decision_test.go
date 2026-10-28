@@ -3,6 +3,7 @@ package ops
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
@@ -80,6 +81,37 @@ func TestDecidePlanCheck_ReadSideDoesNotPersist(t *testing.T) {
 	}
 }
 
+func TestPersistPlanCheck_DispositionAndHistoryShareEventTime(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2001, time.January, 2, 3, 4, 5, 6, time.UTC)
+	for _, verdict := range []models.PlanCheckVerdict{
+		models.PlanCheckPassed, models.PlanCheckHeld, models.PlanCheckRetired, models.PlanCheckReplaced,
+	} {
+		t.Run(string(verdict), func(t *testing.T) {
+			plan := handoffPlan("p", "code-planning-pair")
+			check := &models.PlanCheck{Verdict: verdict, By: "operator", At: at}
+			persistPlanCheck(&plan, planCheckChange{check: check, note: "decision", changed: true}, "operator")
+			if len(plan.History) != 1 || !plan.History[0].Time.Equal(at) {
+				t.Fatalf("disposition history must use the event timestamp: %+v", plan.History)
+			}
+		})
+	}
+}
+
+func TestPersistPlanCheck_ClearRecordsCurrentEventTime(t *testing.T) {
+	t.Parallel()
+	plan := withPlanCheck(handoffPlan("p", "code-planning-pair"), models.PlanCheckHeld, "provision")
+	before := time.Now().UTC()
+	persistPlanCheck(&plan, planCheckChange{note: "cleared held", changed: true}, "operator")
+	after := time.Now().UTC()
+	if plan.PlanCheck != nil || len(plan.History) != 1 {
+		t.Fatalf("clear must remove the disposition and append history: %+v", plan)
+	}
+	if at := plan.History[0].Time; at.Before(before) || at.After(after) {
+		t.Fatal("clear history must record the clearing event time")
+	}
+}
+
 func TestPersistPlanCheck_ReplayWritesNothing(t *testing.T) {
 	t.Parallel()
 	plan := withPlanCheck(handoffPlan("p", "code-planning-pair"), models.PlanCheckHeld, "provision")
@@ -113,7 +145,8 @@ func TestDecidePlanCheck_ClearOfHoldOnExpandedPlanDropsOnlyTheDisposition(t *tes
 func TestDecidePlanCheck_RestoresDroppedRetirementRuling(t *testing.T) {
 	t.Parallel()
 	plan := handoffPlan("p", "code-planning-pair")
-	plan.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckRetired, By: "operator-1"}
+	retiredAt := time.Date(2001, time.January, 2, 3, 4, 5, 6, time.UTC)
+	plan.PlanCheck = &models.PlanCheck{Verdict: models.PlanCheckRetired, By: "operator-1", At: retiredAt}
 	state, resolver, domain := planCheckStepFixture(t, plan)
 	task := state.FindTask("p")
 	class, blocker := domain.Classify(state, task)
@@ -128,6 +161,15 @@ func TestDecidePlanCheck_RestoresDroppedRetirementRuling(t *testing.T) {
 	}
 	if task.PlanCheck.Ruling != "" {
 		t.Fatal("deciding must not write the restored ruling")
+	}
+	before := time.Now().UTC()
+	persistPlanCheck(task, next, "operator-2")
+	after := time.Now().UTC()
+	if !task.PlanCheck.At.Equal(retiredAt) || task.PlanCheck.By != "operator-1" || len(task.History) != 1 {
+		t.Fatalf("restoring the ruling must preserve the retirement attribution: %+v", task)
+	}
+	if at := task.History[0].Time; at.Before(before) || at.After(after) {
+		t.Fatal("restoration history must record the new event time")
 	}
 }
 

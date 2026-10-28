@@ -141,10 +141,16 @@ func persistPlanCheck(task *models.Task, next planCheckChange, actor string) {
 	if !next.changed {
 		return
 	}
+	// A disposition and its history are one event. Restoring a retirement
+	// ruling keeps the old disposition time and records the restoration now.
+	historyAt := time.Now().UTC()
+	if next.check != nil && !task.PlanHandoffRetired() {
+		historyAt = next.check.At
+	}
 	task.PlanCheck = next.check
 	note := next.note
 	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  time.Now().UTC(),
+		Time:  historyAt,
 		Event: models.TaskEventPlanCheck,
 		Agent: &actor,
 		Note:  &note,

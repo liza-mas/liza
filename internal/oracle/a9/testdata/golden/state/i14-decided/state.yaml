@@ -108,7 +108,7 @@ tasks:
           trigger: completion
       created: <T1:sZ>
       history:
-        - time: <T4:fZ>
+        - time: <T3:fZ>
           event: plan_check
           agent: orchestrator-1
           note: 'held: A9 oracle: operator review first'
@@ -163,5 +163,5 @@ config:
     reviewer_max_wait: 0
     integration_branch: integration
     mode: STOPPED
-    mode_changed_at: <T5:fO>
+    mode_changed_at: <T4:fO>
     mode_changed_by: orchestrator-1
