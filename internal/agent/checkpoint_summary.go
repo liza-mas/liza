@@ -261,7 +261,7 @@ func runCheckpointSummaryCLI(parent context.Context, projectRoot, cliName, promp
 		return fmt.Errorf("failed to prepare checkpoint-summary directory: %w", err)
 	}
 
-	env := filterAPIKeyEnv(os.Environ())
+	env := systemPromptContractsEnv(filterAPIKeyEnv(os.Environ()), false) // never injected: keep the gate
 
 	// Derived from the supervisor's context so a stopping supervisor kills the
 	// CLI instead of orphaning it without its timeout.

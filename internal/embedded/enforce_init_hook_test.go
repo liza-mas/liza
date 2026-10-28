@@ -934,9 +934,18 @@ func resolveBashForScripts(t *testing.T) string {
 
 func runHook(t *testing.T, hookPath, payload string, wantCode int) string {
 	t.Helper()
+	return runHookEnv(t, hookPath, payload, nil, wantCode)
+}
+
+// runHookEnv runs the hook with extraEnv on top of the test's environment,
+// minus the system-prompt bypass: a test run inside an injected agent session
+// inherits it and would otherwise never see the gate.
+func runHookEnv(t *testing.T, hookPath, payload string, extraEnv []string, wantCode int) string {
+	t.Helper()
 	// Git Bash treats backslashes as escapes, so pass the hook path in
 	// forward-slash form for it to be found on Windows as well as Unix.
 	cmd := exec.Command(resolveBashForScripts(t), filepath.ToSlash(hookPath))
+	cmd.Env = append(append(os.Environ(), brand.EnvName("SYSTEM_PROMPT_CONTRACTS")+"="), extraEnv...)
 	cmd.Stdin = strings.NewReader(payload)
 	var output bytes.Buffer
 	cmd.Stdout = &output

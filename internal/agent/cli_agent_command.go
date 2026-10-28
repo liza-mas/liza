@@ -40,7 +40,7 @@ func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) 
 		cleanup()
 		return nil, nil, err
 	}
-	cmdEnv = agentTaskEnv(cmdEnv, req.TaskID)
+	cmdEnv = systemPromptContractsEnv(agentTaskEnv(cmdEnv, req.TaskID), plan.SystemPromptContracts)
 	if d.masker != nil {
 		d.masker.AddEntries(cmdEnv)
 	}

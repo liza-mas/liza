@@ -120,4 +120,8 @@ in logs).
 
 In every case the spawn-time bootstrap prompt (`internal/prompts/templates/base_prompt.tmpl`)
 demands the contract reads before any other work; the per-provider hooks /
-extensions make that demand *mechanically enforced*.
+extensions make that demand *mechanically enforced*. Opt-in exception: in a
+project that ran `liza use-system-prompt` (ADR-0236), Claude and Codex lane
+agents (Codex not on Windows) get the contracts in their system prompt instead;
+their launcher sets `LIZA_SYSTEM_PROMPT_CONTRACTS=1`, the bootstrap prompt drops
+the read demand and `enforce-init.sh` lets them through.

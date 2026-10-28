@@ -23,6 +23,9 @@ type BasePromptConfig struct {
 	GoalDesc         string
 	GoalSpecRef      string
 	HasMandatoryDocs bool
+	// SystemPromptMode: the launcher injects the contracts into the system
+	// prompt, so the bootstrap must not tell the agent to read them.
+	SystemPromptMode bool
 
 	ScipSearchIndexes  []ScipSearchIndex
 	StacklitIndexes    []StacklitIndex

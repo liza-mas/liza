@@ -199,6 +199,16 @@ if is_windows_shell; then
   project_dir="${project_dir//\\//}"
 fi
 
+brand_system_prompt_contracts_var="LIZA""_SYSTEM_PROMPT_CONTRACTS"
+# Set by the launcher (or a pairing user) only when the contracts were injected
+# into the system prompt (`liza use-system-prompt`); reading them again would waste the cache.
+if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
+  if [[ -n "$agent_id_value" ]]; then
+    context="The Liza contracts (CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md, GUARDRAILS.md) are in your system prompt. Treat them as read; do not re-read those files."
+  else
+    context="The Liza contracts (CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md, REPOSITORY.md, docs/USAGE.md) are in your system prompt. Treat them as read; do not re-read those files."
+  fi
+else
 context="MANDATORY: Read ~/.liza/CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
 if [[ -n "$agent_id_value" ]]; then
   context+="~/.liza/MULTI_AGENT_MODE.md"
@@ -221,6 +231,7 @@ if [[ -z "$agent_id_value" ]]; then
   done
 fi
 context+=". Only after those reads, answer the user."
+fi
 
 hook_path=$(repo_brand_index_hook_path)
 

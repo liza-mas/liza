@@ -162,6 +162,9 @@ The contract isn't optional. Two complementary mechanisms ensure agents read it:
 **Mechanical gate (Claude Code):** A PreToolUse hook (`enforce-init.sh`) blocks all state-modifying
 tool calls until the agent has read the mode-specific contract, `AGENT_TOOLS.md`, and `GUARDRAILS.md`.
 Session state tracked via `${TMPDIR:-/tmp}/liza-init-gate-${session_id}`. Once cleared, the gate is transparent.
+Opt-in exception (`liza use-system-prompt`, ADR-0236): a Claude or Codex lane session whose launcher
+injected the contracts into its system prompt runs with `LIZA_SYSTEM_PROMPT_CONTRACTS=1`, and the
+gate lets it through because the reads it forces are already done. Every other session stays gated.
 
 **Canary test (all providers):** Four "secret words" are embedded across four contract files.
 The contract instructs agents to display them at session start — a

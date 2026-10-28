@@ -109,6 +109,7 @@ func sessionStartEnv(projectDir string) []string {
 	blocked := []string{
 		"CLAUDE_PROJECT_DIR",
 		"LIZA_AGENT_ID",
+		"LIZA_SYSTEM_PROMPT_CONTRACTS", // set inside an injected agent session
 		stacklit.EnvEnableStacklit,
 		scipsearch.EnvEnableScipSearch,
 		functionalclusters.EnvEnableFunctionalClusters,

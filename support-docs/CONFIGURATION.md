@@ -83,7 +83,8 @@ inactive, init exits nonzero before deploying new provider hooks/settings and
 leaves existing activation metadata unchanged. Skipping placement succeeds only
 when a supported contract link is already active. Session startup names
 `~/§BRAND_GLOBAL_DIRNAME§/CORE.md`, and the init gate requires its read alongside
-the other mandatory documents.
+the other mandatory documents, except for lane sessions whose launcher put the
+contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236).
 
 Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes or updates:
 

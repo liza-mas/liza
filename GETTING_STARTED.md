@@ -218,6 +218,59 @@ Liza never overwrites user-owned contract files. If a preferred global path is
 occupied, initialization retains or creates the provider's repo contract. A
 managed repo link is removed only after the active global link is verified.
 
+### Optional: contracts in the system prompt
+
+By default every agent session reads the contracts (about 70 KB) with tool
+calls before it can work, and the `enforce-init.sh` hook enforces it. A project
+can opt into putting them in the CLI system prompt instead: sessions skip the
+read turns, and multi-agent sessions share an identical, cacheable prompt
+prefix. See [ADR-0236](specs/architecture/ADR/0236-opt-in-contracts-in-the-cli-system-prompt.md).
+
+Enable it once per project (re-run to refresh, `--dry-run` to preview):
+
+```bash
+liza use-system-prompt
+liza use-system-prompt --revert   # back to forced reads
+```
+
+What changes depends on the session:
+
+| Session | After enabling |
+|---------|----------------|
+| Multi-agent on `claude` | `liza` injects the contracts; nothing to do |
+| Multi-agent on `codex` (Linux, macOS) | `liza` injects the contracts; nothing to do (see Codex limits) |
+| Multi-agent on `codex` (Windows), ACPX, other providers | Unchanged: forced reads |
+| Pairing on `claude` | Unchanged unless you start the session as shown below |
+| Pairing on `codex` | Unchanged: forced reads |
+
+**Pairing on Claude.** Claude has no settings key that appends to the system
+prompt, so start the session yourself:
+
+```bash
+LIZA_SYSTEM_PROMPT_CONTRACTS=1 claude --append-system-prompt-file .liza/system-prompts/pairing.md
+```
+
+The variable tells the hooks the contracts are already loaded; `liza` sets it
+for the agents it launches. Set it on that command line only, never export it:
+a session that has it without `pairing.md` skips the reads and runs without the
+pairing contract. Re-run `liza use-system-prompt` after editing `GUARDRAILS.md`,
+`REPOSITORY.md` or `docs/USAGE.md`: unlike the multi-agent file, `pairing.md` is
+not rebuilt at launch.
+
+**Codex limits.** The contracts travel as one command-line argument. A launch
+fails with a clear error past the 128 KiB Linux argument limit (keep
+`GUARDRAILS.md` lean, or revert), and the value replaces any
+`developer_instructions` from your Codex config for those sessions.
+
+**What the command writes.** `.liza/system-prompts/{multi_agent,pairing,subagent}.md`,
+built verbatim from the installed contracts and the project `GUARDRAILS.md`
+(plus `REPOSITORY.md`/`docs/USAGE.md` for pairing), and the marker
+`.liza/system-prompt-mode.json`. It does not edit `.claude/settings.json` or
+`.codex/hooks.json`; it refreshes installed `enforce-init.sh`/`session-context.sh`
+scripts that predate the bypass. Each file's header gives the contracts the
+weight of files read at session start: they do not outrank your own
+`CLAUDE.md`/`AGENTS.md`.
+
 ## Manual Provider Notes
 
 Claude and Codex are the recommended providers. OpenCode is supported through

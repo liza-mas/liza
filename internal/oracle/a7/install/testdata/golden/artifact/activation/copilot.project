@@ -1,9 +1,9 @@
 + .copilot directory 0755 -
 + .copilot/hooks directory 0755 -
-+ .copilot/hooks/enforce-init.sh file 0755 e2b64dd591326238a4dccf78a13481a471bf5c79ae23a46801cae3db14c01950
++ .copilot/hooks/enforce-init.sh file 0755 c4000aef715b5f1ddf16b3c6d6024457f175f6132d01192391bc8b78abeedd2c
 + .copilot/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
 + .copilot/hooks/rtk-guard.sh file 0755 602000939876fb901511e44636c0320d20540eb1e5a69a7c5f4309f8a42bbcd4
-+ .copilot/hooks/session-context.sh file 0755 79caabcec2bdf6e25bface168f4b5db7878b3693ee6b2176adcc1da0d7652767
++ .copilot/hooks/session-context.sh file 0755 d1e29f4e9b211e1ddd8f1388f04c156fd8fbba4bcde397189615a94937c5f904
 + .copilot/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393
 + .github directory 0755 -
 + .github/hooks directory 0755 -

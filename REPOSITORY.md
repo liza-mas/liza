@@ -140,7 +140,7 @@ TaskOutput — ending the turn while it runs abandons the task. Without the sync
 
 Key command groups:
 
-**Initialization & validation subcommands:** `init`, `cleanup`, `validate`
+**Initialization & validation subcommands:** `init`, `cleanup`, `validate`, `use-system-prompt` (opt-in contracts in the CLI system prompt, [ADR-0236](specs/architecture/ADR/0236-opt-in-contracts-in-the-cli-system-prompt.md))
 
 **Agent supervision:** `liza agent`, `liza tui`, `liza analyze`, `liza sprint-checkpoint`, `liza handoff`, `liza delete`
 

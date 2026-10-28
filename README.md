@@ -258,7 +258,9 @@ overhead when the work needs those stages.
 Start with [GETTING_STARTED.md](GETTING_STARTED.md) for the installation and
 setup path: install the `liza` binary, run `liza setup`, customize
 `AGENT_TOOLS.md`, initialize a project with `liza init`, and choose Pairing or
-Multi-Agent mode.
+Multi-Agent mode. Optionally, `liza use-system-prompt` puts the contracts in the
+agents' system prompt instead of forced reads
+([details](GETTING_STARTED.md#optional-contracts-in-the-system-prompt)).
 
 Mode-specific guides:
 

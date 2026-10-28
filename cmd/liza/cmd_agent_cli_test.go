@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -192,6 +193,60 @@ func TestAgentCmd_ExplainLaunchUsesConfiguredToolProfile(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("explain output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestAgentCmd_ExplainLaunchShowsSystemPromptInjection(t *testing.T) {
+	t.Setenv("LIZA_DEFAULT_CLI", "")
+	t.Setenv("LIZA_DEFAULT_DOER_CLI", "")
+	t.Setenv("LIZA_DEFAULT_REVIEWER_CLI", "")
+	projectRoot := setupAgentTestProject(t, "")
+	globalDir, err := paths.GlobalLizaDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := embedded.WriteGlobalFiles(globalDir, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := embedded.EnableSystemPromptMode(projectRoot, false); err != nil {
+		t.Fatal(err)
+	}
+	promptFile := embedded.SystemPromptFilePath(projectRoot, embedded.SystemPromptModeMultiAgent)
+	if err := os.Remove(promptFile); err != nil {
+		t.Fatal(err)
+	}
+	// The CLI prints the canonical root (Windows expands 8.3 temp names).
+	canonicalRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oldDir, _ := os.Getwd()
+	defer func() { _ = os.Chdir(oldDir) }()
+	_ = os.Chdir(projectRoot)
+
+	explain := func(cli string) string {
+		t.Helper()
+		resetRootCmdForTest(t)
+		var out bytes.Buffer
+		rootCmd.SetOut(&out)
+		rootCmd.SetArgs([]string{"agent", "coder", "--cli", cli, "--explain-launch", "--no-log"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("agent --cli %s --explain-launch error: %v", cli, err)
+		}
+		return out.String()
+	}
+	if output := explain("claude"); !strings.Contains(output, "--append-system-prompt-file "+embedded.SystemPromptFilePath(canonicalRoot, embedded.SystemPromptModeMultiAgent)+" --exclude-dynamic-system-prompt-sections") {
+		t.Fatalf("explain output misses the injection:\n%s", output)
+	}
+	if _, err := os.Stat(promptFile); !os.IsNotExist(err) {
+		t.Fatalf("explain wrote %s (stat err=%v)", promptFile, err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if output := explain("codex"); !strings.Contains(output, "-c developer_instructions=") || !strings.Contains(output, " bytes)") || len(output) > 2048 {
+		t.Fatalf("explain must abbreviate codex's injected contracts (%d bytes):\n%.2048s", len(output), output)
 	}
 }
 

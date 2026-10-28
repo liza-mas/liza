@@ -101,7 +101,17 @@ func sampleClone(t *testing.T) *scenario {
 		}
 	}
 	s.put("regen-test-marker.txt", "commit current oracle overlay")
-	s.commit("test oracle overlay")
+	// The proofs exercise regeneration, not this repository's history: a fresh
+	// root without the ledger, then the ledger created with that root as start,
+	// so H1 compares with today's production code and the ledger stays append-only.
+	ledger := s.read(ledgerPath)
+	s.git("checkout", "--quiet", "--orphan", "regen-test")
+	if err := os.Remove(filepath.Join(clone, filepath.FromSlash(ledgerPath))); err != nil {
+		t.Fatal(err)
+	}
+	root := s.commit("test oracle overlay")
+	s.put(ledgerPath, "start "+root+ledger[strings.Index(ledger, "\n"):])
+	s.commit("test ledger")
 	return s
 }
 
