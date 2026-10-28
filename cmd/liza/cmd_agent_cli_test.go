@@ -215,6 +215,11 @@ func TestAgentCmd_ExplainLaunchShowsSystemPromptInjection(t *testing.T) {
 	if err := os.Remove(promptFile); err != nil {
 		t.Fatal(err)
 	}
+	// The CLI prints the canonical root (Windows expands 8.3 temp names).
+	canonicalRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	oldDir, _ := os.Getwd()
 	defer func() { _ = os.Chdir(oldDir) }()
@@ -231,7 +236,7 @@ func TestAgentCmd_ExplainLaunchShowsSystemPromptInjection(t *testing.T) {
 		}
 		return out.String()
 	}
-	if output := explain("claude"); !strings.Contains(output, "--append-system-prompt-file "+promptFile+" --exclude-dynamic-system-prompt-sections") {
+	if output := explain("claude"); !strings.Contains(output, "--append-system-prompt-file "+embedded.SystemPromptFilePath(canonicalRoot, embedded.SystemPromptModeMultiAgent)+" --exclude-dynamic-system-prompt-sections") {
 		t.Fatalf("explain output misses the injection:\n%s", output)
 	}
 	if _, err := os.Stat(promptFile); !os.IsNotExist(err) {
