@@ -10,6 +10,7 @@ import (
 	lizagit "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 type executionProgressCallbackKey struct{}
@@ -150,7 +151,7 @@ func runExecutionProgressWatchdog(
 
 			reason := fmt.Sprintf("agent execution progress timeout: task %s had no observable state, worktree, or provider-output progress for %s", taskID, timeout)
 			GetLogger().Error("Execution progress timeout, blocking task", "task_id", taskID, "agent_id", agentID, "timeout", timeout)
-			if alertErr := LogAlert(projectRoot, "🚨", "EXECUTION PROGRESS TIMEOUT", reason); alertErr != nil {
+			if alertErr := providersignal.LogAlert(projectRoot, alertLevelCritical, alertCategoryProgressTimeout, reason); alertErr != nil {
 				GetLogger().Warn("Failed to write execution progress alert", "error", alertErr)
 			}
 			cancelExec()
@@ -219,13 +220,21 @@ func findExecutingTaskForAgent(state *models.State, taskID string, agentID strin
 	return task, true
 }
 
+// The watchdog polls a quarter of the progress timeout, kept between a floor
+// that bounds its read rate and a ceiling that bounds its reaction time.
+const (
+	progressPollDivisor     = 4
+	minProgressPollInterval = 100 * time.Millisecond
+	maxProgressPollInterval = 15 * time.Second
+)
+
 func progressPollInterval(timeout time.Duration) time.Duration {
-	interval := timeout / 4
-	if interval < 100*time.Millisecond {
-		return 100 * time.Millisecond
+	interval := timeout / progressPollDivisor
+	if interval < minProgressPollInterval {
+		return minProgressPollInterval
 	}
-	if interval > 15*time.Second {
-		return 15 * time.Second
+	if interval > maxProgressPollInterval {
+		return maxProgressPollInterval
 	}
 	return interval
 }

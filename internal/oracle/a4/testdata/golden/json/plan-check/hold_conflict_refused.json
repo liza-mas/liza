@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task cp-1 is already held for \"Confirm scope\"; an operator must clear it before a different hold"
+    },
+    "ok": false,
+    "result": null
+  }
+}

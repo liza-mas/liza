@@ -1,0 +1,15 @@
+{
+  "executables": {
+    "cursor-agent": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    }
+  ]
+}

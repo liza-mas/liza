@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "state_schema",
+    "details": {
+      "operation": "fixture"
+    },
+    "message": "state schema validation failed: fixture schema"
+  },
+  "ok": false,
+  "result": null
+}

@@ -327,3 +327,102 @@ func setTaskSpecRefs(state *models.State) {
 		state.Tasks[i].SpecRef = state.Goal.SpecRef
 	}
 }
+
+// Each refusal carries the lifecycle decision of the stage that reached it and
+// has committed no effect: a non-SUPERSEDED task is malformed input, a
+// SUPERSEDED task with nothing to prune is a changed state to requery.
+func TestRepairSupersededDependencies_LifecycleDecisions(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		status     models.TaskStatus
+		deps       []string
+		wantOutput string
+		wantAction string
+		wantErr    string
+	}{
+		{"not superseded", models.TaskStatusBlocked, []string{"coding-a"}, models.LifecycleInvalidInput, "correct_input", "must be SUPERSEDED"},
+		{"nothing to prune", models.TaskStatusSuperseded, []string{"legal-plan"}, models.LifecycleStateChanged, "requery", "has no illegal downstream dependencies"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+			now := time.Now().UTC()
+			target := testhelpers.BuildTaskByStatus("plan-old", tc.status, now)
+			target.RolePair = "code-planning-pair"
+			target.DependsOn = tc.deps
+			if tc.status == models.TaskStatusSuperseded {
+				target.RescopeReason = testhelpers.StringPtr("Already replaced")
+			}
+			state := testhelpers.CreateValidState()
+			state.Tasks = []models.Task{
+				target,
+				testhelpers.BuildTaskByStatus("coding-a", models.TaskStatusReady, now),
+				testhelpers.BuildTaskByStatus("legal-plan", models.TaskStatusDraftCodingPlan, now),
+			}
+			setTaskSpecRefs(state)
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			_, err := RepairSupersededDependencies(tmpDir, "plan-old", "Repair", "orchestrator-1")
+			testhelpers.RequireErrorContains(t, err, tc.wantErr)
+			requireLifecycleError(t, err, tc.wantOutput, tc.wantAction, string(LifecycleEffectsNone))
+		})
+	}
+}
+
+// An identified repair completes once; its exact repeat returns the original
+// completion without a second history entry.
+func TestRepairSupersededDependencies_IdentifiedRequestReplaysOriginalCompletion(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.CreateSpecFile(t, tmpDir, "vision.md", "# Vision\n")
+	now := time.Now().UTC()
+	target := testhelpers.BuildTaskByStatus("plan-old", models.TaskStatusSuperseded, now)
+	target.RolePair = "code-planning-pair"
+	target.DependsOn = []string{"coding-a", "legal-plan"}
+	target.RescopeReason = testhelpers.StringPtr("Replaced invalid plan")
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{
+		target,
+		testhelpers.BuildTaskByStatus("coding-a", models.TaskStatusReady, now),
+		testhelpers.BuildTaskByStatus("legal-plan", models.TaskStatusDraftCodingPlan, now),
+	}
+	setTaskSpecRefs(state)
+	testhelpers.WriteInitialState(t, stateFile, state)
+	stored, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := LifecycleRequestOptions{RequestID: "repair-replay", ExpectedTransition: models.TaskTransitionID(stored.FindTask("plan-old"))}
+
+	first, err := RepairSupersededDependenciesWithOptions(tmpDir, "plan-old", "Repair", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Outcome != models.LifecycleCompleted || first.SafeAction != string(LifecycleSafeActionContinue) || first.Effects != string(LifecycleEffectsCommitted) {
+		t.Fatalf("first outcome = %+v, want committed COMPLETED/continue", first.LifecycleOutcome)
+	}
+	afterFirst, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	historyLen := len(afterFirst.FindTask("plan-old").History)
+
+	replay, err := RepairSupersededDependenciesWithOptions(tmpDir, "plan-old", "Repair", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.Outcome != models.LifecycleAlreadyCompleted || replay.SafeAction != string(LifecycleSafeActionStop) || replay.Changed == nil || *replay.Changed {
+		t.Fatalf("replay outcome = %+v, want ALREADY_COMPLETED/stop with changed=false", replay.LifecycleOutcome)
+	}
+	afterReplay, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(afterReplay.FindTask("plan-old").History); got != historyLen {
+		t.Fatalf("replay appended history: %d entries, want %d", got, historyLen)
+	}
+}

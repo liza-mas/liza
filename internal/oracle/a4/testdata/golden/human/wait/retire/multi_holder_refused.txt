@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: SUPERSEDED
+effects: none
+task_id: cp-p
+transition_id: <DIGEST 1>
+Error: supersede task: supersede-task: INVALID_INPUT (safe_action=correct_input): failed to supersede task: modification function failed: validation failed: cannot retire provider cp-p while cx-1 descendant_dependencies, cx-2 descendant_dependencies have live provider_dependencies declarations; replace or retire those consumer declarations first

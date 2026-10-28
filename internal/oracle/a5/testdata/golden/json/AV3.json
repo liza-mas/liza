@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "agent coder-2 is not the last submitter of task task-1"
+    },
+    "ok": false,
+    "result": null
+  }
+}

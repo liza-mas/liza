@@ -1,0 +1,15 @@
+{
+  "exit": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "project_root",
+      "details": {
+        "operation": "liza"
+      },
+      "message": "liza: failed to detect project root"
+    },
+    "ok": false,
+    "result": null
+  }
+}

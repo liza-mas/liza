@@ -1,4 +1,5 @@
 .liza/
+.omni-ee/
 .worktrees/
 stacklit.json
 *.scip

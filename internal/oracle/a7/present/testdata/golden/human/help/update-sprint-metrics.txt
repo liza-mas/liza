@@ -1,0 +1,30 @@
+exit 0
+--- stdout
+Recompute sprint metrics by aggregating data from task and agent state.
+Metrics computed:
+- tasks_done: Count of terminal tasks (MERGED, ABANDONED, SUPERSEDED)
+- tasks_in_progress: Count of active tasks (executing, submitted, rejected, INTEGRATION_FAILED)
+- tasks_blocked: Count of BLOCKED tasks
+- iterations_total: Sum of iterations_total from all agents
+- review_cycles_total: Sum of review_cycles_total from all tasks
+- review_verdict_approvals: Count of approval verdicts in task history
+- review_verdict_rejections: Count of rejection verdicts in task history
+- review_verdict_count: Total review verdicts
+- review_verdict_approval_rate_percent: Percentage of approvals
+- task_submitted_for_review_count: Count of tasks that have been submitted
+- task_outcome_approval_rate_percent: Percentage of submitted tasks that ended up approved/merged
+Warnings:
+- Alerts if review verdict approval rate >95% (suspiciously high)
+- Alerts if task outcome approval rate >95% (suspiciously high)
+The metrics are used to track sprint progress and detect quality issues.
+Usage:
+liza update-sprint-metrics [flags]
+Flags:
+-h, --help help for update-sprint-metrics
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

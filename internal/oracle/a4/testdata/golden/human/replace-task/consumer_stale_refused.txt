@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: DRAFT_CODE
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+Error: replace task: replace-task: STATE_CHANGED (safe_action=requery): modification function failed: replace-task: STATE_CHANGED (safe_action=requery): validation failed: task t2 dependencies changed since the repair request was created: got [t1], expected [t3]

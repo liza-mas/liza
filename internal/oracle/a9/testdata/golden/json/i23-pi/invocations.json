@@ -1,0 +1,19 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "-p",
+        "--mode",
+        "json",
+        "-e",
+        "<HOME>/.liza/extensions/init-gate.ts"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "pi",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "pi"
+}

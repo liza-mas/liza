@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: cannot delete task t1: task t2 references it via parent_task (use --force to override)

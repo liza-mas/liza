@@ -1,0 +1,82 @@
+exit 0
+--- stdout
+--- stderr
+--- invocations
+== cmux
+arg 1: new-workspace
+arg 2: --name
+arg 3: liza-adversarial
+arg 4: --cwd
+arg 5: <PROJECT>
+arg 6: --command
+arg 7: 'claude'
+== cmux
+arg 1: list-pane-surfaces
+arg 2: --workspace
+arg 3: workspace:42
+== cmux
+arg 1: new-pane
+arg 2: --type
+arg 3: terminal
+arg 4: --direction
+arg 5: right
+arg 6: --workspace
+arg 7: workspace:42
+== cmux
+arg 1: send
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: 'codex'
+== cmux
+arg 1: send-key
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: enter
+== cmux
+arg 1: read-screen
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: --lines
+arg 7: 80
+== cmux
+arg 1: send
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:5
+arg 6: $adversarial-pairing doer <PROJECT>/board.md
+== cmux
+arg 1: send-key
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:5
+arg 6: enter
+== cmux
+arg 1: send
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: $adversarial-pairing reviewer-codex <PROJECT>/board.md
+== cmux
+arg 1: send-key
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: enter
+== cmux
+arg 1: read-screen
+arg 2: --workspace
+arg 3: workspace:42
+arg 4: --surface
+arg 5: surface:7
+arg 6: --lines
+arg 7: 80

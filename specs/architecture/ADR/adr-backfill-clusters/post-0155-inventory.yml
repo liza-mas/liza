@@ -3,11 +3,11 @@ baseline_exclusive: "d12866d8b"
 head_inclusive: "97ccf330c"
 scan_date: "2026-10-25"
 commit_count: 285
-numbering_policy: "Keep existing IDs; selected candidates numbered compactly from 0218 by earliest author timestamp."
+numbering_policy: "Keep existing IDs; selected candidates numbered compactly by earliest author timestamp, first from 0218, renumbered 0231-0235 when main merged into global-refactoring (its consolidation ADRs hold 0218-0230)."
 status: "selected_adrs_generated"
 selection_approved: "2026-10-25"
 user_intent_received: "2026-10-25"
-selected_ids: [218, 219, 220, 221, 222]
+selected_ids: [231, 232, 233, 234, 235]
 amended_existing: [151]
 coverage_limits:
   - "62 commits added ADR-0156..0217 in-session and 89 amended existing ADRs; these were not re-derived."
@@ -15,14 +15,14 @@ coverage_limits:
   - "ADR-0156 coverage of the index-refresh coordinator and post-merge refresh was checked by grep only."
 in_session_adrs: "0156-0217 (each added by its implementing commit)"
 candidates:
-  - {id: 218, title: "Submission refuses what reference consumers would refuse", first: "e0cbc16eb", last: "4a715e0d0", tier: A, status: selected}
+  - {id: 231, title: "Submission refuses what reference consumers would refuse", first: "e0cbc16eb", last: "4a715e0d0", tier: A, status: selected}
   - {provisional: "pi/Copilot providers", commits: ["6aca8a8a1", "9ad0c936d"], tier: B, status: not_selected, note: "Likely catalog entries under ADR-0121."}
-  - {id: 219, title: "Provider-native tool-result budgets", first: "997ae78a2", last: "5049f50a0", tier: A, status: selected}
+  - {id: 232, title: "Provider-native tool-result budgets", first: "997ae78a2", last: "5049f50a0", tier: A, status: selected}
   - {amendment: 151, title: "Observation reads use lock-free snapshots", commits: ["309594e94", "32dff6d2d", "69865939c", "94810936d"], tier: B, status: selected_as_amendment}
   - {provisional: "Claude Stop hook holds turns while background jobs run", commits: ["16971d7fd", "293574d13"], tier: B, status: not_selected, note: "Close to the background-job candidate declined 2026-09-21."}
-  - {id: 220, title: "Bounds, not benchmarks", first: "c1619f04f", last: "5704e5c83", tier: A, status: selected}
-  - {id: 221, title: "Skill invocation as a standing delegation", first: "0f0180404", last: "0f0180404", tier: A, status: selected}
-  - {id: 222, title: "Shared CI core merged upstream, and CI-gated releases", first: "8e117e1fa", last: "63596d743", context: ["bc82b2757"], tier: A, status: selected}
+  - {id: 233, title: "Bounds, not benchmarks", first: "c1619f04f", last: "5704e5c83", tier: A, status: selected}
+  - {id: 234, title: "Skill invocation as a standing delegation", first: "0f0180404", last: "0f0180404", tier: A, status: selected}
+  - {id: 235, title: "Shared CI core merged upstream, and CI-gated releases", first: "8e117e1fa", last: "63596d743", context: ["bc82b2757"], tier: A, status: selected}
 not_recommended:
   "review reservation fencing (56d37e5ba, ad435d2c3, b1be2c4d1, dc50bbb00, 46dd2d937)": "Fixes within ADR-0130/ADR-0174."
   "294ee6055 terminal acceptance-receipt archive": "Superseded by ADR-0183."

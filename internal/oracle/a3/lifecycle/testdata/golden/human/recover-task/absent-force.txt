@@ -1,0 +1,9 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: UNKNOWN
+effects: committed
+task_id: task-9
+Task task-9: nothing to recover (not in state, no git artifacts)
+stderr:

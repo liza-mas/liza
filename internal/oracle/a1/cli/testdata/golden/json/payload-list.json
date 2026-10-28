@@ -1,0 +1,51 @@
+{
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "schemas": [
+        {
+          "operation": "add-task",
+          "version": 1
+        },
+        {
+          "operation": "assess-blocked",
+          "version": 1
+        },
+        {
+          "operation": "handoff",
+          "version": 1
+        },
+        {
+          "operation": "mark-blocked",
+          "version": 1
+        },
+        {
+          "operation": "record-rejection-rca",
+          "version": 1
+        },
+        {
+          "operation": "replace-task",
+          "version": 1
+        },
+        {
+          "operation": "resume-rejection-rca",
+          "version": 1
+        },
+        {
+          "operation": "set-task-output",
+          "version": 1
+        },
+        {
+          "operation": "submit-for-review",
+          "version": 1
+        },
+        {
+          "operation": "submit-verdict",
+          "version": 1
+        }
+      ]
+    }
+  }
+}

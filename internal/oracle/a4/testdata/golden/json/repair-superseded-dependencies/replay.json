@@ -1,0 +1,20 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": false,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "repair-superseded-dependencies",
+      "outcome": "ALREADY_COMPLETED",
+      "removed_dependencies": null,
+      "request_id": "replay-1",
+      "retained_dependencies": null,
+      "safe_action": "stop",
+      "task_id": "p1",
+      "task_status": "SUPERSEDED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

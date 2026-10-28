@@ -15,8 +15,16 @@ type ArchiveLimit struct {
 	MaxBytes int
 }
 
+const (
+	defaultArchiveMaxTasks = 8
+	defaultArchiveMaxBytes = 4 << 20
+	// archiveAcceptanceReceiptsLockOperation labels the shared project lifecycle
+	// lock the archive holds.
+	archiveAcceptanceReceiptsLockOperation = "archive-acceptance-receipts"
+)
+
 // DefaultArchiveLimit bounds the work done under one state lock.
-var DefaultArchiveLimit = ArchiveLimit{MaxTasks: 8, MaxBytes: 4 << 20}
+var DefaultArchiveLimit = ArchiveLimit{MaxTasks: defaultArchiveMaxTasks, MaxBytes: defaultArchiveMaxBytes}
 
 // ArchiveResult reports one archival transaction.
 type ArchiveResult struct {
@@ -47,7 +55,7 @@ func archivableReceipt(task *models.Task) bool {
 // the project lifecycle lock so it cannot race project reset.
 func ArchiveTerminalAcceptanceReceipts(projectRoot string, authority *models.AgentAuthority, limit ArchiveLimit) (ArchiveResult, error) {
 	var result ArchiveResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "archive-acceptance-receipts", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, archiveAcceptanceReceiptsLockOperation, func() error {
 		var err error
 		result, err = archiveTerminalAcceptanceReceipts(projectRoot, authority, limit)
 		return err

@@ -8,9 +8,12 @@ import (
 	"time"
 )
 
+// defaultSubmitHeartbeatInterval initialises submitHeartbeatInterval.
+const defaultSubmitHeartbeatInterval = 5 * time.Minute
+
 // submitHeartbeatInterval is how often a long submit repeats its progress
 // line on stderr (D-188); tests shorten it.
-var submitHeartbeatInterval = 5 * time.Minute
+var submitHeartbeatInterval = defaultSubmitHeartbeatInterval
 
 // submitProgressOutput is read at each write, so the line follows whatever
 // stderr is then. Never stdout, which carries the lifecycle result alone.

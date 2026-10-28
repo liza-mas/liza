@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "bytes": 26,
+      "target": "all",
+      "timestamp": "<INSTANT Z>"
+    }
+  }
+}

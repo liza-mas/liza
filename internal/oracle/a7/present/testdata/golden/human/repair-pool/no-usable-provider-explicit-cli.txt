@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Task validation capacity (last observation):
+coder-1 (coder), task task-validated: unverified
+hint: Let this session run fresh validation preflight; successful observations are not reusable launch authorization.
+Degraded agent capacity:
+coder-9 (coder): fixture degraded capacity
+hint: fixture recover hint
+Roles with claimable work not covered by idle agents:
+code-reviewer: 1 task(s) (task-review); starting 1 agent(s)
+coder: 3 task(s) (task-doer-a, task-doer-b, task-validated); starting 2 agent(s)
+Missing orchestrator: orchestrator (no live orchestrator while goal is IN_PROGRESS)
+Dry run; would spawn:
+liza agent code-reviewer --cli codex --agent-id code-reviewer-1
+liza agent coder --cli codex
+liza agent coder --cli codex
+liza agent orchestrator --cli codex
+--- stderr

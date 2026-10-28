@@ -8,6 +8,11 @@ import (
 	"github.com/liza-mas/liza/internal/providers"
 )
 
+// catalogContractPolicyVersion is the first catalog schema version that declares
+// each provider's contract policy itself; older catalogs get it backfilled from
+// the embedded built-ins.
+const catalogContractPolicyVersion = 2
+
 func loadProviderCatalog(homeDir string) providers.Catalog {
 	cat, _ := providers.Load(context.Background(), providers.LoadOptions{HomeDir: homeDir})
 	return cat
@@ -46,10 +51,10 @@ func resolveCatalogProviders(cat providers.Catalog, ids []string) ([]providers.P
 			return nil, fmt.Errorf("unknown provider: %s", id)
 		}
 		if embedded, builtIn := embeddedCatalog.Resolve(provider.ID); builtIn {
-			if cat.Version < 2 {
+			if cat.Version < catalogContractPolicyVersion {
 				provider.Setup.Contract = backfillLegacyContractPolicy(provider.ID, provider.Setup.Contract, embedded.Setup.Contract)
 			}
-			if cat.Version >= 2 && (provider.ID == "devin" || provider.ID == "devin-acp") {
+			if cat.Version >= catalogContractPolicyVersion && (provider.ID == "devin" || provider.ID == "devin-acp") {
 				// The Devin repo filename identifies the active build's brand.
 				// Published catalogs use the canonical brand, so the rendered
 				// embedded value remains authoritative for this built-in.

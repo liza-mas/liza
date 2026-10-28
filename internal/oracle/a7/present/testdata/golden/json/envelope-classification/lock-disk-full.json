@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "filesystem",
+    "message": "lock failed: no space left on device"
+  },
+  "ok": false,
+  "result": null
+}

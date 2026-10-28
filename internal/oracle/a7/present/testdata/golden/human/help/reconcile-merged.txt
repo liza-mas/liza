@@ -1,0 +1,26 @@
+exit 0
+--- stdout
+Mark an INTEGRATION_FAILED task as MERGED after verifying it was completed outside Liza.
+This is intended for recovery from stale integration-failure state, such as when
+a GitHub PR was merged manually and the task worktree is already gone.
+Example:
+liza reconcile-merged task-3 --merge-commit abc123 --pr-url https://github.com/org/repo/pull/17 --reason "PR merged externally"
+Without an agent identity (no LIZA_AGENT_ID, no --agent-id) it runs as the
+operator: no registration generation is needed, no role permission applies,
+and --changed-by (default "human") is the audit actor.
+Usage:
+liza reconcile-merged <task-id> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for reconcile-merged
+--json output result as structured JSON
+--merge-commit string merge commit that completed the task externally (required)
+--pr-url string pull request URL for the external merge
+--reason string reason for reconciliation (required)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

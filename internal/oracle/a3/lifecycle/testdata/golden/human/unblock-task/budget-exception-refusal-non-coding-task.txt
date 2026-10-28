@@ -1,0 +1,8 @@
+exit 1
+stdout:
+stderr:
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: UNKNOWN
+effects: none
+Error: unblock task: unblock-task: INVALID_INPUT (safe_action=correct_input): validation failed: budget exceptions apply to coding tasks only; task task-1 has doer role "epic-planner"

@@ -1,0 +1,31 @@
+exit 0
+--- stdout
+Retarget one non-terminal task's direct depends_on edge.
+This is a metadata repair operation for cases where one task
+has the wrong scheduler dependency but neither the dependent task nor the old
+dependency should be superseded. It replaces exactly one old dependency with one
+or more comma-separated new dependencies, canonicalizes the resulting dependency
+list, validates the full candidate state, records audit history, and leaves task
+status unchanged.
+Examples:
+liza retarget-dependency task-3 old-task replacement-task --reason "Correct dependency after planning repair"
+liza retarget-dependency task-3 old-task repl-a,repl-b --reason "Split dependency into two prerequisites"
+Without an agent identity (no LIZA_AGENT_ID, no --agent-id) it runs as the
+operator: no registration generation is needed, no role permission applies,
+and --changed-by (default "human") is the audit actor.
+Usage:
+liza retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason <reason> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for retarget-dependency
+--json output result as structured JSON
+--reason string reason for retargeting this dependency (required)
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

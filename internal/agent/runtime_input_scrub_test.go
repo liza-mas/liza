@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -48,7 +49,7 @@ func TestResolveLaunchEnvironmentRefusesAnEnvFileRuntimeInputCollision(t *testin
 	if err := os.WriteFile(filepath.Join(root, "agent.env"), []byte("PROVIDER_API_KEY=agent-key-value\nOTHER=kept\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := resolveLaunchEnvironment(LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
+	_, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
 	if err == nil || !strings.Contains(err.Error(), "runtime_input_provider_collision:PROVIDER_API_KEY") || strings.Contains(err.Error(), "agent-key-value") {
 		t.Fatalf("err = %v, want a named collision without the value", err)
 	}
@@ -56,7 +57,7 @@ func TestResolveLaunchEnvironmentRefusesAnEnvFileRuntimeInputCollision(t *testin
 		t.Fatal(err)
 	}
 	t.Setenv("PROVIDER_API_KEY", "ambient-value")
-	env, err := resolveLaunchEnvironment(LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
+	env, err := resolveLaunchEnvironment(agentlaunch.LaunchPlan{EnvFiles: []string{"agent.env"}}, root, "coder-1", "gen-1", nil)
 	if err != nil || strings.Contains(strings.Join(env, "\n"), "PROVIDER_API_KEY") || !strings.Contains(strings.Join(env, "\n"), "OTHER=kept") {
 		t.Fatalf("env = %v, %v; want the ambient copy stripped and the overlay kept", env, err)
 	}

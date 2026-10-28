@@ -35,7 +35,7 @@ func claudeMCPPostToolResult(store *Store, hook ClaudeHookInput, metadata Result
 	if err != nil {
 		return nil, err
 	}
-	metadata.Tool, metadata.Command, metadata.SessionID, metadata.Content = hook.Tool, string(command), hook.SessionID, string(encoded)
+	metadata.Tool, metadata.Command, metadata.SessionID, metadata.Content = string(hook.Tool), string(command), hook.SessionID, string(encoded)
 	metadata.ContentJSON = true
 	processed, err := store.Process(metadata)
 	if err != nil {
@@ -60,7 +60,7 @@ func claudeMCPPostToolResult(store *Store, hook ClaudeHookInput, metadata Result
 			replacement = append(replacement, block)
 		}
 	}
-	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PostToolUse", "updatedToolOutput": replacement}}, nil
+	return map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": string(HookEventPostToolUse), "updatedToolOutput": replacement}}, nil
 }
 
 // Failed provider tools do not support output replacement. Externalize the
@@ -74,7 +74,7 @@ func claudeFailureResult(store *Store, hook ClaudeHookInput, metadata Result) (m
 	if err != nil {
 		return nil, err
 	}
-	metadata.Tool, metadata.Command, metadata.SessionID, metadata.Content = hook.Tool, string(command), hook.SessionID, hook.Error
+	metadata.Tool, metadata.Command, metadata.SessionID, metadata.Content = string(hook.Tool), string(command), hook.SessionID, hook.Error
 	metadata.Truncated = strings.Contains(hook.Error, "characters truncated")
 	processed, err := store.Process(metadata)
 	if err != nil {
@@ -95,8 +95,8 @@ func claudeFailureResult(store *Store, hook ClaudeHookInput, metadata Result) (m
 // PostToolUse: the size check applies to MCP only, sanitization to both.
 func claudeBatchGuard(store *Store, hook ClaudeHookInput, metadata Result) (map[string]any, error) {
 	for _, call := range hook.ToolCalls {
-		native := call.Tool == "Read" || call.Tool == "Grep" || call.Tool == "Glob"
-		if !native && !strings.HasPrefix(call.Tool, "mcp__") {
+		native := call.Tool == HookToolRead || call.Tool == HookToolGrep || call.Tool == HookToolGlob
+		if !native && !strings.HasPrefix(string(call.Tool), "mcp__") {
 			continue
 		}
 		content, ok := call.Response.(string)
@@ -111,7 +111,7 @@ func claudeBatchGuard(store *Store, hook ClaudeHookInput, metadata Result) (map[
 		if !oversized && store.sanitizeContent(content, !ok) == content {
 			continue
 		}
-		call.Event, call.Error, call.SessionID = "PostToolUseFailure", content, hook.SessionID
+		call.Event, call.Error, call.SessionID = HookEventPostToolUseFailure, content, hook.SessionID
 		metadata.ContentJSON = !ok
 		return claudeFailureResult(store, call, metadata)
 	}

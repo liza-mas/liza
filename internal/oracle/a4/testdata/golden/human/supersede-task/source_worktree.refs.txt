@@ -1,0 +1,7 @@
+branches:
+<SHA base> integration
+<SHA state> main
+<SHA base> task/t1
+worktrees:
+worktree <FIXTURE>
+branch refs/heads/main

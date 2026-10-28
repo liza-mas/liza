@@ -1,0 +1,11 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: IMPLEMENTING_CODE
+effects: none
+task_id: consumer
+transition_id: <DIGEST 1>
+current_assignee: coder-1
+Error: retarget dependency: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): failed to retarget dependency: modification function failed: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task consumer is executing (IMPLEMENTING_CODE): a dependency update cannot add unmet dependencies pending; wait until it leaves execution or block it first

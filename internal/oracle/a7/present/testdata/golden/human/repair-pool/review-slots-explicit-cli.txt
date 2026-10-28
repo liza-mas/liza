@@ -1,0 +1,6 @@
+exit 0
+--- stdout
+Reviewer work a new agent could not claim (not started):
+code-reviewer with --cli codex: 2 task(s) (task-fresh, task-second)
+hint: no reviewer this CLI could start would be allowed to claim these tasks (provider diversity, claim cooldown or models.yaml slot); they wait for an eligible reviewer
+--- stderr

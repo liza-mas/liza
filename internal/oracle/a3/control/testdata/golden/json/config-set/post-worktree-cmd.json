@@ -1,0 +1,11 @@
+{
+  "exit": 0,
+  "stderr": [],
+  "stdout": {
+    "ok": true,
+    "result": {
+      "key": "config.post_worktree_cmd",
+      "outcome": "set"
+    }
+  }
+}

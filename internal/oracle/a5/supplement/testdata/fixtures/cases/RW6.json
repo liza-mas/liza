@@ -1,0 +1,64 @@
+{
+  "id": "RW6",
+  "base": "review",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "CODE_REJECTED",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "submitted_for_review",
+            "agent": "coder-1",
+            "commit": "{{commit:candidate}}",
+            "submission_input_commit": "{{commit:candidate}}",
+            "submission_attempt": 1
+          },
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "rejected",
+            "agent": "code-reviewer-1",
+            "commit": "{{commit:candidate}}",
+            "reason": "A5 defect"
+          }
+        ],
+        "review_commit": "{{commit:candidate}}",
+        "rejection_reason": "A5 defect"
+      }
+    ]
+  },
+  "step": {
+    "agent": "code-reviewer-1",
+    "adapter": "await-resubmission-change",
+    "params": {
+      "change": "paused"
+    },
+    "exit": 0
+  },
+  "modes": [
+    "state",
+    "result"
+  ]
+}

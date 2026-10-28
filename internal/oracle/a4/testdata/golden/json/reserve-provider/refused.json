@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "writer m1 is terminal (MERGED); there is nothing left to place"
+    },
+    "ok": false,
+    "result": null
+  }
+}

@@ -1,0 +1,84 @@
+version: 1
+goal:
+    id: goal-oracle
+    description: Oracle installation fixture
+    spec_ref: specs/vision.md
+    created: 2000-01-01T00:00:00Z
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      description: Synthetic migration task
+      status: DRAFT_CODE
+      priority: 1
+      created: 2000-01-01T00:00:00Z
+      iteration: 0
+      review_cycles: 0
+      attempted: [coder-1]
+      lease_expires: 2099-01-01T00:00:00Z
+agents:
+    code-reviewer-1:
+        role: code_reviewer
+        provider: codex
+        status: IDLE
+        generation: fixture-generation
+        lease_expires: 2099-01-01T00:00:00Z
+        heartbeat: 2000-01-01T00:00:00Z
+        registered_at: 2000-01-01T00:00:00Z
+        terminal: terminal-1
+        iterations_total: 0
+        context_percent: 0
+        pid: 99999999
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+    - timestamp: 2000-01-01T00:00:00Z
+      reporter: code-reviewer-1
+      type: retry_loop
+      details:
+          agent_id: code-reviewer-1
+          role: code-reviewer
+          rounds: 21
+          impact: an approved task this reviewer owns has not merged; downstream work stays gated until it does
+    - timestamp: 2000-01-01T00:00:00Z
+      reporter: code-reviewer-1
+      type: provider_audit_degraded
+      details:
+          provider: codex
+          agent_id: code-reviewer-1
+          message: '{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"synthetic transcript"}}'
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: 2000-01-01T00:00:00Z
+        deadline: 0001-01-01T00:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+circuit_breaker:
+    last_check: 0001-01-01T00:00:00Z
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    integration_branch: integration
+    mode: RUNNING

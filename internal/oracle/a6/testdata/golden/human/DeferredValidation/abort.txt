@@ -1,0 +1,6 @@
+exit_code: 0
+stdout:
+action: abort
+outcome: requested
+command: ""
+stderr:

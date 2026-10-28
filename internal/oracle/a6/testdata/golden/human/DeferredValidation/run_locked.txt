@@ -1,0 +1,6 @@
+exit_code: 0
+stdout:
+outcome: skipped
+reason: runner_active
+batches: []
+stderr:

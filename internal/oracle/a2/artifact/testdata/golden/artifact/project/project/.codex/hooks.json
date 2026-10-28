@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "root=$(git rev-parse --show-toplevel 2\u003e/dev/null) || exit 0; bash \"$root/.codex/hooks/enforce-init.sh\"",
+            "statusMessage": "Checking Liza session initialization",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "root=$(git rev-parse --show-toplevel 2\u003e/dev/null) || exit 0; bash \"$root/.codex/hooks/git-guard.sh\"",
+            "statusMessage": "Checking git command",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "^Bash$"
+      },
+      {
+        "hooks": [
+          {
+            "command": "root=$(git rev-parse --show-toplevel 2\u003e/dev/null) || exit 0; bash \"$root/.codex/hooks/worktree-path-guard.sh\"",
+            "statusMessage": "Checking worktree paths",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "^apply_patch$|^mcp__filesystem__|^mcp__morph-mcp__edit_file$"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "root=$(git rev-parse --show-toplevel 2\u003e/dev/null) || exit 0; bash \"$root/.codex/hooks/session-context.sh\"",
+            "statusMessage": "Loading Liza repository indexes",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "^startup$"
+      }
+    ]
+  }
+}

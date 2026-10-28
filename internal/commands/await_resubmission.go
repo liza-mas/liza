@@ -75,13 +75,15 @@ func awaitResubmissionWithBudget(
 		remaining,
 		maxInterval,
 		await,
-		func(result *ops.AwaitResubmissionResult) bool { return result.Verdict == ops.ResubmissionTimeout },
-		func(result *ops.AwaitResubmissionResult) { result.Verdict = ops.ResubmissionPoll },
+		func(result *ops.AwaitResubmissionResult) bool {
+			return result.Verdict == string(ops.ResubmissionTimeout)
+		},
+		func(result *ops.AwaitResubmissionResult) { result.Verdict = string(ops.ResubmissionPoll) },
 	)
 	if err != nil {
 		return nil, err
 	}
-	if result.Verdict != ops.ResubmissionPoll {
+	if result.Verdict != string(ops.ResubmissionPoll) {
 		timeoutSeconds = 0
 	}
 	return &AwaitResubmissionResult{AwaitResubmissionResult: result, TimeoutSeconds: timeoutSeconds}, nil

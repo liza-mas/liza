@@ -1,0 +1,78 @@
+# .claudeignore — default template installed by liza init
+# Claude Code reads all files on disk, not just git-tracked ones.
+# This file keeps irrelevant content out of the context budget.
+# Same syntax as .gitignore. Review and adapt to your project.
+
+# === Untracked local files ===
+claude.env
+.mcp.json
+.codex
+.envrc
+
+# === Lock files (tracked but useless to Claude) ===
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+go.sum
+Cargo.lock
+Pipfile.lock
+poetry.lock
+uv.lock
+composer.lock
+Gemfile.lock
+
+# === Caches and virtual environments ===
+.venv/
+venv/
+env/
+node_modules/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+.pytest_cache/
+.tox/
+.nox/
+.gradle/
+.m2/
+target/classes/
+target/test-classes/
+
+# === Build output ===
+dist/
+build/
+out/
+coverage.out
+.coverage
+*.lcov
+htmlcov/
+
+# === Generated documentation ===
+# Uncomment if your project has auto-generated docs that duplicate source
+# docs/api/
+# javadoc/
+# godoc/
+
+# === Large test fixtures ===
+# Uncomment patterns that match your project's bulk test data
+# fixtures/**/*.json
+# fixtures/**/*.csv
+# testdata/**/*.json
+# testdata/**/*.csv
+
+# === Database migrations (historical) ===
+# Uncomment if you have a large migration history Claude doesn't need
+# migrations/
+# db/migrate/
+
+# === Git submodules ===
+# Uncomment to exclude external dependencies
+# vendor/
+# third_party/
+
+# === IDE and OS ===
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

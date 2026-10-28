@@ -204,7 +204,7 @@ func TestAwaitResubmission_Resubmitted(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionResubmitted {
+	if result.Verdict != string(ResubmissionResubmitted) {
 		t.Errorf("Verdict = %q, want RESUBMITTED", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusReviewing {
@@ -280,7 +280,7 @@ func TestAwaitResubmission_Terminal_Blocked(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionTerminal {
+	if result.Verdict != string(ResubmissionTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusBlocked {
@@ -336,7 +336,7 @@ func TestAwaitResubmission_Terminal_Superseded(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionTerminal {
+	if result.Verdict != string(ResubmissionTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusSuperseded {
@@ -390,7 +390,7 @@ func TestAwaitResubmission_Terminal_Approved(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionTerminal {
+	if result.Verdict != string(ResubmissionTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusApproved {
@@ -442,7 +442,7 @@ func TestAwaitResubmission_TaskDisappears(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionTerminal {
+	if result.Verdict != string(ResubmissionTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.Reason == "" {
@@ -484,7 +484,7 @@ func TestAwaitResubmission_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitResubmission error: %v", err)
 	}
-	if result.Verdict != ResubmissionTimeout {
+	if result.Verdict != string(ResubmissionTimeout) {
 		t.Errorf("Verdict = %q, want TIMEOUT", result.Verdict)
 	}
 
@@ -534,7 +534,7 @@ func TestAwaitResubmission_DelayedWatcherErrorUsesOriginalDeadline(t *testing.T)
 	if err != nil {
 		t.Fatalf("AwaitResubmission error: %v", err)
 	}
-	if result.Verdict != ResubmissionTimeout {
+	if result.Verdict != string(ResubmissionTimeout) {
 		t.Errorf("Verdict = %q, want TIMEOUT", result.Verdict)
 	}
 	if elapsed < 400*time.Millisecond {
@@ -596,7 +596,7 @@ func TestAwaitResubmission_Aborted(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionAborted {
+	if result.Verdict != string(ResubmissionAborted) {
 		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
 	}
 
@@ -640,7 +640,7 @@ func TestAwaitResubmission_AlreadyBlocked_RejectingReviewer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitResubmission error: %v", err)
 	}
-	if result.Verdict != ResubmissionAborted {
+	if result.Verdict != string(ResubmissionAborted) {
 		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusBlocked {
@@ -686,7 +686,7 @@ func TestAwaitResubmission_AlreadyTerminal_RejectingReviewer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitResubmission error: %v", err)
 	}
-	if result.Verdict != ResubmissionAborted {
+	if result.Verdict != string(ResubmissionAborted) {
 		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusSuperseded {
@@ -756,7 +756,7 @@ func TestAwaitResubmission_EarlyResubmission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitResubmission error: %v", err)
 	}
-	if result.Verdict != ResubmissionResubmitted {
+	if result.Verdict != string(ResubmissionResubmitted) {
 		t.Errorf("Verdict = %q, want RESUBMITTED", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusReviewing {
@@ -983,7 +983,7 @@ func TestAwaitResubmission_ReviewLeaseExpires(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitResubmission error: %v", awaitErr)
 	}
-	if result.Verdict != ResubmissionResubmitted {
+	if result.Verdict != string(ResubmissionResubmitted) {
 		t.Fatalf("Verdict = %q, want RESUBMITTED", result.Verdict)
 	}
 

@@ -2,11 +2,9 @@ package ops
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
-	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
@@ -142,82 +140,21 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 	// Pre-side-effect validation (before worktree deletion to avoid
 	// orphaning worktree on validation failure)
 	if !force {
-		if err := validateDeletePreconditions(task, taskID); err != nil {
+		if err := checkDeleteBlockers(state, task, taskID); err != nil {
 			return nil, err
 		}
-		if deps := findDependentTasks(state.Tasks, taskID); len(deps) > 0 {
-			return nil, fmt.Errorf("cannot delete task %s: task %s depends on it (use --force to override)", taskID, deps[0])
-		}
-		if parentRefs := findParentReferencingTasks(state.Tasks, taskID); len(parentRefs) > 0 {
-			return nil, fmt.Errorf("cannot delete task %s: task %s references it via parent_task (use --force to override)", taskID, parentRefs[0])
-		}
 	}
-
-	taskStatus := task.Status
-	taskHasWorktree := task.Worktree != nil
 
 	// Build result early; destructive side effects happen only after commit succeeds.
 	result := &DeleteTaskResult{
 		TaskID:         taskID,
-		PreviousStatus: taskStatus,
+		PreviousStatus: task.Status,
 	}
+	taskHasWorktree := task.Worktree != nil
 
-	// Atomic state update
 	err = bb.Modify(func(state *models.State) error {
-		taskIndex := state.FindTaskIndex(taskID)
-		if taskIndex == -1 {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-
-		// Re-check preconditions under lock (race prevention)
-		currentTask := &state.Tasks[taskIndex]
-		if !force {
-			if err := validateDeletePreconditions(currentTask, taskID); err != nil {
-				return err
-			}
-			if deps := findDependentTasks(state.Tasks, taskID); len(deps) > 0 {
-				return fmt.Errorf("cannot delete task %s: task %s depends on it (use --force to override)", taskID, deps[0])
-			}
-			if parentRefs := findParentReferencingTasks(state.Tasks, taskID); len(parentRefs) > 0 {
-				return fmt.Errorf("cannot delete task %s: task %s references it via parent_task (use --force to override)", taskID, parentRefs[0])
-			}
-		}
-
-		// Clear agent state if task was assigned
-		if currentTask.AssignedTo != nil {
-			if agent, ok := state.Agents[*currentTask.AssignedTo]; ok {
-				if agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-					state.ReleaseAgent(*currentTask.AssignedTo)
-				}
-			}
-		}
-
-		// Remove task from state.Tasks slice
-		state.Tasks = append(state.Tasks[:taskIndex], state.Tasks[taskIndex+1:]...)
-
-		// Remove task from sprint scope
-		state.Sprint.Scope.Planned = slices.DeleteFunc(state.Sprint.Scope.Planned, func(id string) bool { return id == taskID })
-		state.Sprint.Scope.Stretch = slices.DeleteFunc(state.Sprint.Scope.Stretch, func(id string) bool { return id == taskID })
-
-		// Explicit task deletion also removes its evidence and reconciliation
-		// audit; orphaned findings would invalidate all remaining task operations.
-		state.QuarantinedVerdicts = slices.DeleteFunc(state.QuarantinedVerdicts, func(finding models.QuarantinedVerdict) bool {
-			return finding.TaskID == taskID
-		})
-
-		// Add HumanNote for audit trail
-		now := time.Now().UTC()
-		humanNote := models.HumanNote{
-			Timestamp: now,
-			Message:   fmt.Sprintf("Task %s deleted (was %s): %s", taskID, currentTask.Status, reason),
-			For:       "all",
-		}
-		humanNote.MarkSeenByOrchestrator(now) // audit record, not a request
-		state.HumanNotes = append(state.HumanNotes, humanNote)
-
-		return nil
+		return removeTaskInState(state, taskID, force, reason)
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete task: %w", err)
 	}
@@ -225,22 +162,7 @@ func DeleteTask(projectRoot, taskID string, force, deleteWorktree bool, reason s
 	// Handle worktree cleanup after successful state mutation to avoid
 	// state/filesystem drift when commit fails.
 	if taskHasWorktree {
-		gitWrapper := git.New(lp.ProjectRoot())
-		result.WorktreePath = gitWrapper.GetWorktreePath(taskID)
-
-		if deleteWorktree {
-			if err := gitWrapper.RemoveWorktree(taskID); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to remove worktree: %v", err))
-			} else {
-				result.WorktreeDeleted = true
-			}
-
-			// Delete branch (ignore errors if branch doesn't exist)
-			branchName := paths.TaskBranchPrefix + taskID
-			_ = gitWrapper.DeleteBranch(branchName)
-		} else {
-			result.WorktreePreserved = true
-		}
+		cleanupDeletedTaskWorktree(lp.ProjectRoot(), taskID, deleteWorktree, result)
 	}
 
 	return result, nil

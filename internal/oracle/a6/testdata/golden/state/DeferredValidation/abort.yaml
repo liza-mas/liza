@@ -1,0 +1,157 @@
+# before
+agents: {}
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    integration:
+        deferred_validation:
+            deferrals:
+                - before_commit: '<SHA:BASE>'
+                  commands:
+                    - authority: contract
+                      command: "true"
+                      command_sha256: <ID>
+                      timeout_seconds: 30
+                  merge_commit: '<SHA:BASE>'
+                  recorded_at: <TIME:Z>
+                  task_id: historical-coding
+            runner:
+                commit: '<SHA:BASE>'
+                pid: <PID>
+                started_at: <TIME:Z>
+                token: oracle-runner
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned: []
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks: []
+version: 1
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: oracle
+    description: Oracle fixture
+    spec_ref: README.md
+    integration:
+        deferred_validation:
+            deferrals:
+                - task_id: historical-coding
+                  merge_commit: <SHA:BASE>
+                  before_commit: <SHA:BASE>
+                  recorded_at: <TIME:Z>
+                  commands:
+                    - command: "true"
+                      command_sha256: <ID>
+                      timeout_seconds: 30
+                      authority: contract
+            runner:
+                token: oracle-runner
+                pid: <PID>
+                commit: <SHA:BASE>
+                started_at: <TIME:Z>
+                abort:
+                    ruling: oracle abort ruling
+                    requested_at: <TIME:Z>
+    created: <TIME:Z>
+    status: IN_PROGRESS
+    alignment_history:
+        - timestamp: <TIME:Z>
+          event: initialization
+          summary: Oracle fixture
+tasks: []
+agents: {}
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME:Z>
+        deadline: <TIME:Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME:Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    agent_progress_timeout: 600
+    integration_branch: integration
+    mode: RUNNING

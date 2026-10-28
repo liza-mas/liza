@@ -1,0 +1,27 @@
+[
+  {
+    "desc": "Close A4 at its area boundary, then separate A5 review and acceptance by concern in ordered coding units",
+    "done_when": "boundary-a4.md records G1-G7 passing at a checked integration SHA and the maintainer's green G8; then all 6 file and 12 function A5 ratchet keys are removed, no shim remains, the K1 exception count has not grown, K7 is reconciled, and E1 plus ops race pass with oracle goldens unchanged except reviewed exceptions.",
+    "scope": "A4 boundary record and A4 issue closures; the 32 A5 ops files, new private A5 files, tests, additive oracle coverage, A5 guard data, X2 caller conversions, A5 doc references, one ADR. Out: behaviour changes, C1-C6 edits, cross-area or out-of-ops moves, A4 repair, A5 issue closures.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-232424-arm-1-ar-14.md#Scope 1: A4 boundary and A5 review and acceptance consolidation",
+    "rca_required": false,
+    "decomposition": {
+      "owned_files": [
+        "specs/architecture/consolidation-run/boundary-a4.md",
+        "internal/testguard/archguard/area_a5_test.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A5 file list)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "Area-Boundary Checkpoint Contract",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning. Coding unit 0 is the A4 boundary unit; the five concern units each depend on it and form a serial chain, because they share the A5 guard literal, the chain-serialized docs and the ops namespace. Default inheritance retains the A4-refactor and A5-oracle coding holds. D33 (k1-ruling): the K1 inherited exceptions K1-E1 to K1-E9 stay in their transactions, and their count must not grow. The chain-serialized docs are edited only during A5's period."
+    }
+  }
+]

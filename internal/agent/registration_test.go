@@ -919,9 +919,9 @@ func TestOrchestratorStatusTransitions(t *testing.T) {
 	}
 
 	// Simulate orchestrator starting work - set PLANNING status
-	err = setAgentToOrchestratingStatus(bb, testAgentAuthority(t, bb, agentID))
+	err = ops.EnterOrchestration(bb, testAgentAuthority(t, bb, agentID))
 	if err != nil {
-		t.Fatalf("setAgentToOrchestratingStatus() error = %v", err)
+		t.Fatalf("ops.EnterOrchestration() error = %v", err)
 	}
 
 	// Verify status is now PLANNING
@@ -941,9 +941,9 @@ func TestOrchestratorStatusTransitions(t *testing.T) {
 	}
 
 	// Simulate orchestrator completing work - reset to IDLE
-	err = resetAgentToIdle(bb, testAgentAuthority(t, bb, agentID))
+	err = ops.ResetAgentToIdle(bb, testAgentAuthority(t, bb, agentID))
 	if err != nil {
-		t.Fatalf("resetAgentToIdle() error = %v", err)
+		t.Fatalf("ops.ResetAgentToIdle() error = %v", err)
 	}
 
 	// Verify status is back to IDLE
@@ -970,9 +970,9 @@ func TestSetAgentToPlanningStatusNonExistent(t *testing.T) {
 	bb := db.New(statePath)
 
 	// Try to set status for non-existent agent
-	err := setAgentToOrchestratingStatus(bb, models.AgentAuthority{ID: "orchestrator-999", Generation: "test-generation"})
+	err := ops.EnterOrchestration(bb, models.AgentAuthority{ID: "orchestrator-999", Generation: "test-generation"})
 	if err == nil {
-		t.Error("setAgentToOrchestratingStatus() should return error for non-existent agent")
+		t.Error("ops.EnterOrchestration() should return error for non-existent agent")
 	}
 
 	assertSupervisorAuthorityError(t, err, "orchestrator-999", "test-generation")
@@ -992,7 +992,7 @@ func TestResetAgentToIdle_NotFound(t *testing.T) {
 
 	bb := db.New(statePath)
 
-	err := resetAgentToIdle(bb, models.AgentAuthority{ID: "nonexistent", Generation: "test-generation"})
+	err := ops.ResetAgentToIdle(bb, models.AgentAuthority{ID: "nonexistent", Generation: "test-generation"})
 	if err == nil {
 		t.Fatal("Expected error for nonexistent agent")
 	}
@@ -2041,5 +2041,71 @@ func TestRegisterAgentRecordsLaunchModel(t *testing.T) {
 	}
 	if got := state.Agents[authority.ID]; got.Provider != "codex" || got.Model != "gpt-model" {
 		t.Fatalf("agent = provider %q model %q, want codex gpt-model", got.Provider, got.Model)
+	}
+}
+
+// TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration pins that the
+// stale-review cleanup follows the registration transaction and runs only for a
+// reviewer-type role: a review claim whose holder has no live registration is
+// released when a reviewer registers, and left alone when a doer does.
+func TestRegisterReviewerClearsStaleReviewClaimsAfterRegistration(t *testing.T) {
+	for _, tc := range []struct {
+		name, agentID, role string
+		wantReleased        bool
+	}{
+		{name: "reviewer registration clears", agentID: "code-reviewer-1", role: "code-reviewer", wantReleased: true},
+		{name: "doer registration leaves it", agentID: "coder-1", role: "coder", wantReleased: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+			projectRoot := t.TempDir()
+			statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+			testhelpers.SetupPipelineConfig(t, projectRoot)
+			state := testhelpers.CreateValidState()
+			stale := testhelpers.BuildTaskByStatus("task-stale", models.TaskStatusReviewing, time.Now().UTC())
+			stale.ReviewingBy = testhelpers.StringPtr("code-reviewer-9")
+			expired := time.Now().UTC().Add(-time.Hour)
+			stale.ReviewLeaseExpires = &expired
+			state.Tasks = []models.Task{stale}
+			bb := testhelpers.WriteInitialState(t, statePath, state)
+
+			if err := registerAgent(bb, projectRoot, tc.agentID, tc.role, "terminal-1", 1800, "claude", testResolver(t)); err != nil {
+				t.Fatalf("registerAgent: %v", err)
+			}
+			after, err := bb.Read()
+			if err != nil {
+				t.Fatalf("read state: %v", err)
+			}
+			task := after.FindTask("task-stale")
+			released := task.ReviewingBy == nil
+			if released != tc.wantReleased {
+				t.Fatalf("stale review claim released = %v (status %s, reviewing_by %v), want %v", released, task.Status, task.ReviewingBy, tc.wantReleased)
+			}
+			if tc.wantReleased && task.Status != models.TaskStatusReadyForReview {
+				t.Fatalf("released task status = %s, want READY_FOR_REVIEW", task.Status)
+			}
+		})
+	}
+}
+
+// TestRegisterAgentSweepsOrphanLivenessRecordInTransaction pins the sweep that
+// registration runs under the state lock (ADR-0177): a published liveness
+// record owned by no registered (ID, generation) is removed with the new row.
+func TestRegisterAgentSweepsOrphanLivenessRecordInTransaction(t *testing.T) {
+	t.Cleanup(ops.SetAgentProcessProcRootForTest(filepath.Join(t.TempDir(), "missing-proc")))
+	projectRoot := t.TempDir()
+	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	testhelpers.SetupPipelineConfig(t, projectRoot)
+	bb := testhelpers.WriteInitialState(t, statePath, testhelpers.CreateValidState())
+	orphan := statePath + ".liveness-0123456789abcdef"
+	if err := os.WriteFile(orphan, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("write orphan liveness record: %v", err)
+	}
+
+	if err := registerAgent(bb, projectRoot, "coder-1", "coder", "terminal-1", 1800, "claude", testResolver(t)); err != nil {
+		t.Fatalf("registerAgent: %v", err)
+	}
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("orphan liveness record survived registration: %v", err)
 	}
 }

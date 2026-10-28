@@ -1,0 +1,21 @@
+exit 0
+--- stdout
+claude
+codex
+codex-acp
+copilot
+cursor
+cursor-acp
+devin
+devin-acp
+gemini
+kimi
+mistral
+opencode
+opencode-acp
+pi
+qwen
+qwen-acp
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

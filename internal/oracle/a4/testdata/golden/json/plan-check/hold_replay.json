@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "action": "hold",
+      "blocker": "Confirm scope",
+      "changed": false,
+      "class": "held",
+      "task_id": "cp-1",
+      "verdict": "held"
+    }
+  }
+}

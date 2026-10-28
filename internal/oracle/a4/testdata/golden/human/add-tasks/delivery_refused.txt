@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Failed task us-1: failed to add task: modification function failed: validation failed: task us-1 (role_pair us-writing-pair) cannot be delivered on its own: its only onward transition (us-to-coding) is many-to-one and needs a cohort parent that an added task does not have; commission it with liza add-tasks in one request together with a architecture-main-pair task that depends on it
+Added task t3
+--- stderr

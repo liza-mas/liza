@@ -111,8 +111,8 @@ func TestRejectionRCACommands(t *testing.T) {
 		}
 		requireRenderedOutcome(t, stdout, models.LifecycleCompleted, "continue")
 		for _, want := range []string{
-			"recovery_path " + models.RecoveryCapabilityReroute,
-			"restore_mode " + models.RestoreModeAssign,
+			"recovery_path " + string(models.RecoveryCapabilityReroute),
+			"restore_mode " + string(models.RestoreModeAssign),
 			"Task stays BLOCKED",
 		} {
 			if !strings.Contains(stdout, want) {

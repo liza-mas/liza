@@ -159,7 +159,7 @@ func TestDeferredValidationCarryRequiresCertifiedLatestExecution(t *testing.T) {
 		f.modify(func(state *models.State) {
 			now := time.Now().UTC()
 			state.Goal.Integration.DeferredValidation.AppendBatch(models.DeferredValidationBatch{
-				Commit: pass, StartedAt: now, FinishedAt: now, Status: models.DeferredValidationBatchAborted, Reason: deferredValidationReasonUnstoppable,
+				Commit: pass, StartedAt: now, FinishedAt: now, Status: models.DeferredValidationBatchAborted, Reason: string(deferredValidationReasonUnstoppable),
 				Results: []models.DeferredValidationResult{{Command: check.Command, CommandSHA256: check.CommandSHA256, Status: models.DeferredValidationResultPassed}},
 			})
 		})
@@ -226,7 +226,7 @@ func TestDeferredValidationForceRecoversFromWrongScope(t *testing.T) {
 		t.Fatalf("the forced batch did not execute the command: %d runs", runs())
 	}
 	state, _ = f.bb.Read()
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredFailed {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredFailed) {
 		t.Fatalf("gate after the forced failure = %#v", blocked)
 	}
 	if again := f.run(false); again.Outcome != "skipped" || again.Reason != "failed_at_head" {

@@ -1,0 +1,20 @@
+exit 0
+--- stdout
+--- stderr
+Tasks Done: 2
+Tasks In Progress: 2
+Tasks Blocked: 1
+Iterations Total: 4
+Review Cycles Total: 1
+Review Verdict Approvals: 0
+Review Verdict Rejections: 0
+Review Verdict Count: 0
+Review Verdict Approval Rate: 0%
+Task Submitted For Review Count: 0
+Task Outcome Approval Rate: 0%
+Planning changes (UTC creation day):
+Unknown attribution: 0; missing creation date: 0
+Lifecycle outcomes: unavailable
+Usage: unavailable
+Warning: usage store unavailable: no records directory
+Warning: lifecycle counters unavailable

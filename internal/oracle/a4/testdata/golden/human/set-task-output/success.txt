@@ -1,0 +1,12 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: ARCHITECTING
+effects: committed
+task_id: arch-1
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+current_assignee: architect-1
+Output set on task arch-1 (1 entries)
+--- stderr

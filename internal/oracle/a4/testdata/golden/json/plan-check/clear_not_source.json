@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "action": "clear",
+      "changed": true,
+      "class": "",
+      "task_id": "cp-1"
+    }
+  }
+}

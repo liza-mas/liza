@@ -104,7 +104,7 @@ func init() {
 	usageReportCmd.Long = usageReportLong()
 	rootCmd.AddCommand(usageCmd)
 	usageCmd.AddCommand(usageReportCmd)
-	usageReportCmd.Flags().String("format", "table", "output format: json, yaml, table, or value")
+	usageReportCmd.Flags().String("format", commands.InspectFormatTable, "output format: json, yaml, table, or value")
 	usageReportCmd.Flags().String("since", "", "window start (RFC 3339 or YYYY-MM-DD); defaults to the sprint start")
 	usageReportCmd.Flags().String("until", "", "window end (RFC 3339 or YYYY-MM-DD); defaults to the sprint end or now")
 	usageReportCmd.Flags().String("as-of", "", "read task outcomes as of this time; defaults to --until")

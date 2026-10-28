@@ -35,7 +35,7 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 			if decision.PlanningSettled || decision.FreezeContributingSet || decision.ContributingSet != nil || decision.GlobalRequest != nil {
 				t.Fatalf("pending decomposition decision = %#v, want unsettled with no cohort or global request", decision)
 			}
-			if decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingPlanning {
+			if decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingPlanning) {
 				t.Fatalf("pending decomposition waiting = %#v, want %q", decision.Waiting, integrationProgressWaitingPlanning)
 			}
 		}
@@ -277,7 +277,7 @@ func TestEvaluateIntegrationProgress(t *testing.T) {
 		if got := scopePlanIDs(decision.ContributingSet); !reflect.DeepEqual(got, []string{"plan-a", "plan-b"}) {
 			t.Fatalf("contributing plans = %v, want escalation excluded", got)
 		}
-		if slices.ContainsFunc(decision.SliceRequests, func(request IntegrationAnalysisRequest) bool {
+		if slices.ContainsFunc(decision.SliceRequests, func(request models.IntegrationAnalysisRequest) bool {
 			return request.OriginatingPlanTaskID == "escalated-plan"
 		}) {
 			t.Fatalf("escalation created a slice request: %#v", decision.SliceRequests)
@@ -479,7 +479,7 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 			}
 		},
 		"unsettled runner": func(l *models.DeferredValidationLedger) {
-			l.Runner = &models.DeferredValidationRunner{Token: "t", Commit: head, Unsettled: deferredValidationReasonUnstoppable}
+			l.Runner = &models.DeferredValidationRunner{Token: "t", Commit: head, Unsettled: string(deferredValidationReasonUnstoppable)}
 		},
 		"covering pass": func(l *models.DeferredValidationLedger) {
 			l.Batches = []models.DeferredValidationBatch{{ID: 1, Commit: head, Status: models.DeferredValidationBatchPassed,
@@ -488,9 +488,9 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 	}
 	completion := map[string]struct{ waiting, blocked string }{
 		"no batch":           {waiting: IntegrationProgressWaitingDeferredValidation},
-		"failed":             {blocked: integrationProgressBlockedDeferredFailed},
-		"attempts exhausted": {blocked: integrationProgressBlockedDeferredInfra},
-		"unsettled runner":   {blocked: integrationProgressBlockedDeferredUnsettled},
+		"failed":             {blocked: string(integrationProgressBlockedDeferredFailed)},
+		"attempts exhausted": {blocked: string(integrationProgressBlockedDeferredInfra)},
+		"unsettled runner":   {blocked: string(integrationProgressBlockedDeferredUnsettled)},
 		"covering pass":      {},
 	}
 	withLedger := func(name string) *models.State {
@@ -517,7 +517,7 @@ func TestDeferredValidationGateBindsOnlyCompletion(t *testing.T) {
 			inFlight := withLedger(name)
 			inFlight.Tasks = append(inFlight.Tasks, progressAnalysis("global-1", "global:1", models.IntegrationAnalysisPhaseGlobal, 1, head))
 			decision = evaluateProgress(t, inFlight, available, head)
-			if decision.Blocked != nil || decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingGlobalAnalysis || decision.DeferredValidationRequest != requested {
+			if decision.Blocked != nil || decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingGlobalAnalysis) || decision.DeferredValidationRequest != requested {
 				t.Fatalf("in-flight analysis decision = %#v, want global analysis wait with batch request %q", decision, requested)
 			}
 
@@ -688,7 +688,7 @@ func addGlobalClean(state *models.State, generation int, source string) {
 	})
 }
 
-func evaluateProgress(t *testing.T, state *models.State, capability pipeline.SlicedIntegrationCapability, head string) IntegrationProgressDecision {
+func evaluateProgress(t *testing.T, state *models.State, capability pipeline.SlicedIntegrationCapability, head string) models.IntegrationProgressDecision {
 	t.Helper()
 	decision, err := EvaluateIntegrationProgress(state, capability, head)
 	if err != nil {
@@ -757,7 +757,7 @@ func cloneProgressBoolMap(values map[string]bool) map[string]bool {
 	return clone
 }
 
-func progressCoverageByPlan(t *testing.T, coverage []IntegrationScopeCoverage, planID string) IntegrationScopeCoverage {
+func progressCoverageByPlan(t *testing.T, coverage []models.IntegrationScopeCoverage, planID string) models.IntegrationScopeCoverage {
 	t.Helper()
 	for _, record := range coverage {
 		if record.PlanTaskID == planID {
@@ -765,7 +765,7 @@ func progressCoverageByPlan(t *testing.T, coverage []IntegrationScopeCoverage, p
 		}
 	}
 	t.Fatalf("coverage for plan %q not found in %#v", planID, coverage)
-	return IntegrationScopeCoverage{}
+	return models.IntegrationScopeCoverage{}
 }
 
 func progressReviewedTaskIDs(attestations []models.IntegrationApprovalAttestation) []string {

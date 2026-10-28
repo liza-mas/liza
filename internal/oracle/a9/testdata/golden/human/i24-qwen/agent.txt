@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: qwen
+source: flag
+backend: cli
+executable: qwen
+args: -p --output-format stream-json
+prompt_transport: stdin
+contract_key: qwen
+[stderr]
+Warning: no Liza contract symlink found for qwen. Agents may not find the behavioral contract.
+Run 'liza init --provider qwen' to create one.

@@ -69,7 +69,7 @@ func TestInspectionQueryCLI(t *testing.T) {
 			result = row["history"]
 		}
 		entry := result.([]any)[0].(map[string]any)
-		if len(entry) != 3 || entry["time"] != now.Format(time.RFC3339) || entry["event"] != models.TaskEventRejected || entry["reason"] != reason {
+		if len(entry) != 3 || entry["time"] != now.Format(time.RFC3339) || entry["event"] != string(models.TaskEventRejected) || entry["reason"] != reason {
 			t.Fatalf("history JSON uses unexpected keys: %s", output)
 		}
 	}

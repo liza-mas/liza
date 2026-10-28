@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "liza deferred-validation rule is operator-only; agent sessions cannot change deferred-validation authority"
+    },
+    "ok": false,
+    "result": null
+  }
+}

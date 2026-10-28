@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: BLOCKED
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+Error: supersede task: supersede-task: INVALID_INPUT (safe_action=correct_input): failed to supersede task: modification function failed: validation failed: replacing BLOCKED task t1 requires stating what changed since it blocked (supersede-task --changed, or field changed in a replace-task payload or plan output); blocked_reason: "Approach needs a different decomposition"

@@ -1,0 +1,14 @@
+[PLANNED] ast-grep :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[PLANNED] gh :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[PLANNED] jq :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[PLANNED] mdq :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[PLANNED] mdtoc :: bash -c curl -fsSL "$LIZA_TOOL_INSTALL_URL" | bash
+[PLANNED] pre-commit :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[PLANNED] rg :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"
+[SKIPPED] rtk — already installed at <BIN>/rtk
+[PLANNED] scip-go :: go install github.com/scip-code/scip-go/cmd/scip-go@latest
+[PLANNED] scip-python :: npm install -g @sourcegraph/scip-python
+[PLANNED] scip-search :: bash -c curl -fsSL "$LIZA_TOOL_INSTALL_URL" | bash
+[PLANNED] scip-typescript :: npm install -g @sourcegraph/scip-typescript
+[PLANNED] stacklit :: bash -c curl -fsSL "$LIZA_TOOL_INSTALL_URL" | bash
+[PLANNED] yq :: sh -c sudo apt-get update && sudo apt-get install -y "$LIZA_TOOL_PACKAGE"

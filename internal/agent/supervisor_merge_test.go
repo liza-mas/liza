@@ -154,6 +154,14 @@ func TestRunSupervisor_FinalPlanningQuorumApprovalAutoMergesSingleProvider(t *te
 
 func runSupervisorFinalPlanningQuorumApprovalAutoMerges(t *testing.T, firstReviewerProvider string) *models.Task {
 	t.Helper()
+	return runSupervisorFinalPlanningQuorumApprovalAutoMergesWith(t, firstReviewerProvider, "codex", nil)
+}
+
+// runSupervisorFinalPlanningQuorumApprovalAutoMergesWith runs the final-approval
+// merge with the second reviewer on secondReviewerCLI; configure adjusts the
+// project config before the supervisor starts.
+func runSupervisorFinalPlanningQuorumApprovalAutoMergesWith(t *testing.T, firstReviewerProvider, secondReviewerCLI string, configure func(*models.Config)) *models.Task {
+	t.Helper()
 	projectRoot, statePath, taskID := setupAgentMergeRepo(t)
 	supervisorLogPath := filepath.Join(t.TempDir(), "supervisor.log")
 	supervisorLog, err := os.Create(supervisorLogPath)
@@ -183,6 +191,9 @@ func runSupervisorFinalPlanningQuorumApprovalAutoMerges(t *testing.T, firstRevie
 		state.Config.ReviewerPollInterval = 1
 		state.Config.ReviewerMaxWait = 1
 		state.Sprint.Scope.Planned = []string{taskID}
+		if configure != nil {
+			configure(&state.Config)
+		}
 
 		task := state.FindTask(taskID)
 		task.RolePair = "code-planning-main-pair"
@@ -228,7 +239,7 @@ func runSupervisorFinalPlanningQuorumApprovalAutoMerges(t *testing.T, firstRevie
 		StatePath:        statePath,
 		LogPath:          filepath.Join(projectRoot, paths.ProjectDirName(), "log.yaml"),
 		SpecsDir:         filepath.Join(projectRoot, "specs"),
-		CLIName:          "codex",
+		CLIName:          secondReviewerCLI,
 		InitialTask:      taskID,
 		LLMAgent:         mock,
 		ExecutionTimeout: 10 * time.Second,

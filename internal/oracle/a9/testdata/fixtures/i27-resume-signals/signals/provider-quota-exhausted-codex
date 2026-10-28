@@ -1,0 +1,5 @@
+provider: codex
+detected: 2019-12-31T23:00:00Z
+message: You've hit your usage limit
+resets_at: 2099-01-01T00:00:00Z
+expires: 2099-01-01T00:01:00Z

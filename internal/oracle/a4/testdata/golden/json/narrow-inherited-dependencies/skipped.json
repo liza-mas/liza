@@ -1,0 +1,38 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "children": [
+        {
+          "action": "skipped",
+          "output_index": 0,
+          "skip_reason": "status IMPLEMENTING_CODE is not the initial status DRAFT_CODE",
+          "status": "IMPLEMENTING_CODE",
+          "task_id": "cp-b-code-0"
+        },
+        {
+          "action": "skipped",
+          "output_index": 1,
+          "skip_reason": "terminal status MERGED",
+          "status": "MERGED",
+          "task_id": "cp-b-code-1"
+        }
+      ],
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "narrowed": 0,
+      "operation": "narrow-inherited-dependencies",
+      "outcome": "COMPLETED",
+      "producer_id": "cp-b",
+      "safe_action": "continue",
+      "skipped": 2,
+      "task_id": "cp-b",
+      "task_status": "MERGED",
+      "transition": "code-plan-to-coding",
+      "transition_id": "<DIGEST 1>",
+      "unchanged": 0
+    }
+  }
+}

@@ -95,7 +95,7 @@ func TestInspectQueryHistoryAndRejectionFields(t *testing.T) {
 			t.Fatal(err)
 		}
 		var got []map[string]any
-		want := []map[string]any{{"time": now.Format(time.RFC3339), "event": models.TaskEventRejected, "reason": reason}}
+		want := []map[string]any{{"time": now.Format(time.RFC3339), "event": string(models.TaskEventRejected), "reason": reason}}
 		if err := json.Unmarshal([]byte(output), &got); err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("history JSON = %#v, %v; want %#v", got, err, want)
 		}
@@ -105,7 +105,7 @@ func TestInspectQueryHistoryAndRejectionFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	var projection map[string][]map[string]any
-	want := map[string][]map[string]any{"history": {{"time": now.Format(time.RFC3339), "event": models.TaskEventRejected, "reason": reason}}}
+	want := map[string][]map[string]any{"history": {{"time": now.Format(time.RFC3339), "event": string(models.TaskEventRejected), "reason": reason}}}
 	if err := json.Unmarshal([]byte(output), &projection); err != nil || !reflect.DeepEqual(projection, want) {
 		t.Fatalf("history projection JSON = %#v, %v; want %#v", projection, err, want)
 	}

@@ -54,7 +54,7 @@ func ValidateLifecycleRequestOptions(opts LifecycleRequestOptions) error {
 // checked inside the existing state transaction before using these helpers.
 func NewLifecycleRequest(operation string, task *models.Task, actor string, authority *models.AgentAuthority, opts LifecycleRequestOptions, normalizedPayload any) (LifecycleRequest, error) {
 	invalid := func(err error) (LifecycleRequest, error) {
-		return LifecycleRequest{}, &LifecycleError{Outcome: NewLifecycleOutcome(operation, task, models.LifecycleInvalidInput, "correct_input", "none"), Err: err}
+		return LifecycleRequest{}, &LifecycleError{Outcome: NewLifecycleOutcome(operation, task, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone), Err: err}
 	}
 	if err := ValidateLifecycleRequestOptions(opts); err != nil {
 		return invalid(err)
@@ -92,7 +92,7 @@ func lifecycleDigest(data []byte) string {
 }
 
 func lifecycleDigestValid(value string) bool {
-	if len(value) != 64 {
+	if len(value) != hex.EncodedLen(sha256.Size) {
 		return false
 	}
 	decoded, err := hex.DecodeString(value)
@@ -109,7 +109,7 @@ func sameLifecycleRequest(a, b models.LifecycleIdentity) bool {
 	return sameLifecycleKey(a, b) && a.PayloadDigest == b.PayloadDigest
 }
 
-func lifecycleRequestError(task *models.Task, request LifecycleRequest, outcome, action, effects, reason string) error {
+func lifecycleRequestError(task *models.Task, request LifecycleRequest, outcome string, action LifecycleSafeAction, effects LifecycleEffects, reason string) error {
 	o := NewLifecycleOutcome(request.Operation, task, outcome, action, effects)
 	o.RequestID = request.RequestID
 	return &LifecycleError{Outcome: o, Err: fmt.Errorf("%s", reason)}
@@ -165,7 +165,7 @@ func lifecycleGenerationSuperseded(prepared, current models.LifecycleIdentity) b
 // Obsolete preparations do not block an authorized fresh boundary/generation.
 func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents map[string]models.Agent) (*models.LifecycleReceipt, error) {
 	if task == nil {
-		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "none", "task state is unavailable")
+		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone, "task state is unavailable")
 	}
 	if task.Lifecycle != nil && request.RequestID != "" {
 		for _, receipt := range task.Lifecycle.Receipts {
@@ -173,7 +173,7 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents m
 				continue
 			}
 			if receipt.PayloadDigest != request.PayloadDigest {
-				outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, "correct_input", "none")
+				outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 				outcome.RequestID = request.RequestID
 				return nil, &LifecycleError{Outcome: outcome, Err: fmt.Errorf("request identity was already used with a different payload: %w", ErrLifecycleIdentityReused)}
 			}
@@ -184,16 +184,16 @@ func CheckLifecycleRequest(task *models.Task, request LifecycleRequest, agents m
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil {
 		p := task.Lifecycle.Preparation
 		if request.RequestID != "" && sameLifecycleKey(p.LifecycleIdentity, request) && p.PayloadDigest != request.PayloadDigest {
-			outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, "correct_input", "none")
+			outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 			outcome.RequestID = request.RequestID
 			return nil, &LifecycleError{Outcome: outcome, Err: fmt.Errorf("prepared request identity has a different payload: %w", ErrLifecycleIdentityReused)}
 		}
 	}
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil && preparationStillCurrent(task, request, agents) {
-		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "an unresolved preparation remains at this ownership boundary")
+		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown, "an unresolved preparation remains at this ownership boundary")
 	}
 	if request.ExpectedTransition != models.TaskTransitionID(task) {
-		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "none", "original task transition no longer matches; inspect before choosing a new request")
+		return nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone, "original task transition no longer matches; inspect before choosing a new request")
 	}
 	return nil, nil
 }
@@ -216,7 +216,7 @@ func PrepareLifecycleRequest(task *models.Task, request LifecycleRequest, agents
 	}
 	copy.Lifecycle.Preparation = &models.LifecyclePreparation{LifecycleIdentity: request, Boundary: models.TaskTransitionID(&copy)}
 	if err := statevalidate.ValidateTaskLifecycle(&copy); err != nil {
-		return lifecycleRequestError(task, request, models.LifecycleInvalidInput, "correct_input", "none", err.Error())
+		return lifecycleRequestError(task, request, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone, err.Error())
 	}
 	task.Lifecycle = copy.Lifecycle
 	return nil
@@ -229,7 +229,7 @@ func ValidateLifecyclePreparation(task *models.Task, request LifecycleRequest) e
 	if task == nil || task.Lifecycle == nil || task.Lifecycle.Preparation == nil ||
 		!sameLifecycleRequest(task.Lifecycle.Preparation.LifecycleIdentity, request) ||
 		task.Lifecycle.Preparation.Boundary != models.TaskTransitionID(task) {
-		return lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "preparation or task boundary changed before finalization")
+		return lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown, "preparation or task boundary changed before finalization")
 	}
 	return nil
 }
@@ -239,14 +239,14 @@ func ValidateLifecyclePreparation(task *models.Task, request LifecycleRequest) e
 // first; external-effect calls use ValidateLifecyclePreparation before mutation.
 func CompleteLifecycleRequest(task *models.Task, request LifecycleRequest, projection models.LifecycleProjection, agents map[string]models.Agent) (models.LifecycleOutcome, error) {
 	if task == nil {
-		return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "task disappeared before completion")
+		return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown, "task disappeared before completion")
 	}
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil {
 		p := task.Lifecycle.Preparation
 		// CheckLifecycleRequest established the original boundary before the
 		// caller's metadata-only mutation. Do not compare the changed task here.
 		if !sameLifecycleRequest(p.LifecycleIdentity, request) && p.Boundary == request.ExpectedTransition && !preparationRetired(p.LifecycleIdentity, request, agents) {
-			return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, "requery", "unknown", "another request owns the preparation")
+			return models.LifecycleOutcome{}, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown, "another request owns the preparation")
 		}
 	}
 	copy := *task
@@ -257,10 +257,10 @@ func CompleteLifecycleRequest(task *models.Task, request LifecycleRequest, proje
 	copy.Lifecycle.Receipts = append(copy.Lifecycle.Receipts, receipt)
 	copy.Lifecycle.Receipts = pruneLifecycleReceipts(copy.Lifecycle.Receipts, copy.Lifecycle.CompletionSequence)
 	if err := statevalidate.ValidateTaskLifecycle(&copy); err != nil {
-		return models.LifecycleOutcome{}, lifecycleRequestError(nil, request, models.LifecycleInvalidInput, "correct_input", "unknown", err.Error())
+		return models.LifecycleOutcome{}, lifecycleRequestError(nil, request, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsUnknown, err.Error())
 	}
 	task.Lifecycle = copy.Lifecycle
-	outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleCompleted, "continue", "committed")
+	outcome := NewLifecycleOutcome(request.Operation, task, models.LifecycleCompleted, LifecycleSafeActionContinue, LifecycleEffectsCommitted)
 	outcome.CompletedTransitionID = receipt.TransitionID
 	outcome.RequestID = request.RequestID
 	return outcome, nil
@@ -310,7 +310,7 @@ func (e *retirementUncommittedError) Unwrap() error { return e.err }
 // nor rollback. Crashes and callers with uncertain unfinished effects retain it.
 // The project lock remains held; the exact identity and boundary are compared
 // under the blackboard lock, so a concurrent or replacement request is untouched.
-func retireFailedLifecyclePreparation(bb *db.Blackboard, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects string) error {
+func retireFailedLifecyclePreparation(bb *db.Blackboard, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects LifecycleEffects) error {
 	if originalErr == nil || preparation == nil {
 		return originalErr
 	}
@@ -332,19 +332,19 @@ func retireFailedLifecyclePreparation(bb *db.Blackboard, taskID string, authorit
 	if errors.Is(cleanupErr, errLifecycleReplay) {
 		return originalErr
 	}
-	outcome, action := models.LifecycleStateChanged, "requery"
+	outcome, action := models.LifecycleStateChanged, LifecycleSafeActionRequery
 	var existing *LifecycleError
 	if errors.As(originalErr, &existing) {
-		outcome, action = existing.Outcome.Outcome, existing.Outcome.SafeAction
+		outcome, action = existing.Outcome.Outcome, LifecycleSafeAction(existing.Outcome.SafeAction)
 	}
 	if cleanupErr != nil {
 		observed = nil // A failed write's candidate is not committed evidence.
-		effects = "unknown"
+		effects = LifecycleEffectsUnknown
 		originalErr = errors.Join(originalErr, &retirementUncommittedError{err: cleanupErr})
 	}
 	if IsAgentAuthorityError(originalErr) {
 		observed = nil
-		outcome, action = models.LifecycleStaleCaller, "stop"
+		outcome, action = models.LifecycleStaleCaller, LifecycleSafeActionStop
 	}
 	result := NewLifecycleOutcome(preparation.Operation, observed, outcome, action, effects)
 	result.RequestID = preparation.RequestID

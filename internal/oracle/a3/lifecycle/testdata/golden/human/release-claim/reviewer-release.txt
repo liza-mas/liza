@@ -1,0 +1,12 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: CODE_TO_REVIEW
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+current_assignee: coder-1
+Released review claim for task-1
+stderr:

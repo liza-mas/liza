@@ -24,8 +24,16 @@ func TestProxyRealChildFilesystemResponseBoundary(t *testing.T) {
 	defer inW.Close()
 	defer outR.Close()
 	defer outW.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The child is a race-instrumented test binary: under a loaded host its start
+	// alone can exceed a few seconds. Expiry closes the host pipes so a late child
+	// fails the decodes instead of hanging them.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	go func() {
+		<-ctx.Done()
+		_ = outR.Close()
+		_ = inW.Close()
+	}()
 	done := make(chan error, 1)
 	go func() {
 		done <- Run(ctx, Config{Command: []string{os.Args[0], "-test.run=^TestACPAdapterHelper$"}, Store: store, Metadata: toolresult.Result{TaskID: "DEV-778"}, In: inR, Out: outW, Dir: t.TempDir()})
@@ -106,4 +114,10 @@ func TestACPAdapterHelper(t *testing.T) {
 	_ = enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "probe/observed", "params": map[string]string{"observed": reply.Result.Content}})
 	// Avoid test-runner PASS on protocol stdout.
 	os.Exit(0)
+}
+
+func TestFrameAndPartialUTF8BoundsKeepValues(t *testing.T) {
+	if initialFrameBytes != 64*1024 || maxFrameBytes != 64*1024*1024 || maxPartialUTF8Bytes != 3 {
+		t.Fatalf("bounds = %d, %d, %d; want 65536, 67108864, 3", initialFrameBytes, maxFrameBytes, maxPartialUTF8Bytes)
+	}
 }

@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Added task us-1
+Added task arch-1
+--- stderr

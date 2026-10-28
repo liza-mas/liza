@@ -1,0 +1,4 @@
+{
+  "decision": "block",
+  "reason": "{\"tool\":\"Read\",\"command\":\"{\\n    \\\"file_path\\\": \\\"fixture.txt\\\"\\n  }\",\"exit_code\":null,\"original_bytes\":6100,\"stored_bytes\":6100,\"truncated\":true,\"source_truncated\":false,\"duplicate\":false,\"artifact_id\":\"<ID>\",\"artifact_path\":\"<STORE>/<ID>.txt\",\"content_hash\":\"<ID>\",\"excerpt\":\"fixture line 001: complete retained evidence for the oracle.\\nfixture line 002: complete retained evidence for the oracle.\\nfixture line 003: complete retained evidence for the oracle.\\nfixture line 004: complete retained evidence for the oracle.\\nfixture line 005: complete retained evidence for the oracle.\\nfixture line 0\"}\n"
+}

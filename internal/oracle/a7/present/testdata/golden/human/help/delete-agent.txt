@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Remove an agent from the state database.
+Useful when an agent has crashed or shutdown uncleanly and needs to be removed
+from the system. By default, refuses to delete agents with active leases or
+current tasks.
+Usage:
+liza delete agent <agent-id> [flags]
+Flags:
+--force force deletion even if agent has active lease or current task
+-h, --help help for agent
+--reason string reason for deleting the agent (default "manual deletion")
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

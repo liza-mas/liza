@@ -64,29 +64,29 @@ func TestAwaitVerdictCLI_BudgetAndOutput(t *testing.T) {
 			name: "json poll uses default remaining budget",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--json"},
 			result: &commands.AwaitVerdictResult{
-				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: ops.VerdictPoll, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: string(ops.VerdictPoll), TaskStatus: models.TaskStatusReadyForReview},
 				TimeoutSeconds:     1700,
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.VerdictPoll,
+			wantJSONVerdict: string(ops.VerdictPoll),
 			wantJSONTimeout: 1700,
 		},
 		{
 			name: "json timeout uses caller remaining budget",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--timeout-seconds", "80", "--json"},
 			result: &commands.AwaitVerdictResult{
-				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: ops.VerdictTimeout, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: string(ops.VerdictTimeout), TaskStatus: models.TaskStatusReadyForReview},
 				TimeoutSeconds:     0,
 			},
 			wantBudget:      80 * time.Second,
-			wantJSONVerdict: ops.VerdictTimeout,
+			wantJSONVerdict: string(ops.VerdictTimeout),
 			wantJSONTimeout: 0,
 		},
 		{
 			name: "human poll uses default remaining budget",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1"},
 			result: &commands.AwaitVerdictResult{
-				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: ops.VerdictPoll, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: string(ops.VerdictPoll), TaskStatus: models.TaskStatusReadyForReview},
 				TimeoutSeconds:     1700,
 			},
 			wantBudget:      1800 * time.Second,
@@ -96,7 +96,7 @@ func TestAwaitVerdictCLI_BudgetAndOutput(t *testing.T) {
 			name: "human timeout uses caller remaining budget",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--timeout-seconds", "80"},
 			result: &commands.AwaitVerdictResult{
-				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: ops.VerdictTimeout, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: string(ops.VerdictTimeout), TaskStatus: models.TaskStatusReadyForReview},
 				TimeoutSeconds:     0,
 			},
 			wantBudget:      80 * time.Second,
@@ -106,23 +106,23 @@ func TestAwaitVerdictCLI_BudgetAndOutput(t *testing.T) {
 			name: "json immediate verdict omits wait-only budget",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--json"},
 			result: &commands.AwaitVerdictResult{
-				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: ops.VerdictApproved, TaskStatus: models.TaskStatusApproved},
+				AwaitVerdictResult: &ops.AwaitVerdictResult{Verdict: string(ops.VerdictApproved), TaskStatus: models.TaskStatusApproved},
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.VerdictApproved,
+			wantJSONVerdict: string(ops.VerdictApproved),
 		},
 		{
 			name: "json paused verdict has stop guidance",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1", "--json"},
 			result: &commands.AwaitVerdictResult{AwaitVerdictResult: &ops.AwaitVerdictResult{
-				Verdict: ops.VerdictPaused, TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
-			wantBudget: 1800 * time.Second, wantJSONVerdict: ops.VerdictPaused,
+				Verdict: string(ops.VerdictPaused), TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
+			wantBudget: 1800 * time.Second, wantJSONVerdict: string(ops.VerdictPaused),
 		},
 		{
 			name: "human paused verdict has stop guidance",
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1"},
 			result: &commands.AwaitVerdictResult{AwaitVerdictResult: &ops.AwaitVerdictResult{
-				Verdict: ops.VerdictPaused, TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+				Verdict: string(ops.VerdictPaused), TaskStatus: models.TaskStatusReadyForReview, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
 			wantBudget:      1800 * time.Second,
 			wantHumanOutput: "Verdict: PAUSED\nStatus: CODE_TO_REVIEW\nReason: operator can resume\nSafe action: stop\n",
 		},
@@ -131,13 +131,13 @@ func TestAwaitVerdictCLI_BudgetAndOutput(t *testing.T) {
 			args: []string{"await-verdict", "task-await", "--agent-id", "coder-1"},
 			result: &commands.AwaitVerdictResult{
 				AwaitVerdictResult: &ops.AwaitVerdictResult{
-					Verdict:         ops.VerdictRejected,
+					Verdict:         string(ops.VerdictRejected),
 					TaskStatus:      models.TaskStatusRejected,
 					Reason:          "changes requested",
 					ReviewerAgent:   "reviewer-1",
 					ReviewCommit:    "review-commit",
 					CurrentAssignee: "coder-1",
-					SafeAction:      ops.SafeActionRevise,
+					SafeAction:      string(ops.SafeActionRevise),
 					Guidance:        "Revise and resubmit.",
 				},
 			},
@@ -192,29 +192,29 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "json poll uses default remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionPoll, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionPoll), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          1700,
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.ResubmissionPoll,
+			wantJSONVerdict: string(ops.ResubmissionPoll),
 			wantJSONTimeout: 1700,
 		},
 		{
 			name: "json timeout uses caller remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--timeout-seconds", "80", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionTimeout, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionTimeout), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          0,
 			},
 			wantBudget:      80 * time.Second,
-			wantJSONVerdict: ops.ResubmissionTimeout,
+			wantJSONVerdict: string(ops.ResubmissionTimeout),
 			wantJSONTimeout: 0,
 		},
 		{
 			name: "human poll uses default remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionPoll, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionPoll), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          1700,
 			},
 			wantBudget:      1800 * time.Second,
@@ -224,7 +224,7 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "human timeout uses caller remaining budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--timeout-seconds", "80"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionTimeout, TaskStatus: models.TaskStatusRejected},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionTimeout), TaskStatus: models.TaskStatusRejected},
 				TimeoutSeconds:          0,
 			},
 			wantBudget:      80 * time.Second,
@@ -234,23 +234,23 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			name: "json immediate resubmission omits wait-only budget",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{
-				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: ops.ResubmissionResubmitted, TaskStatus: models.TaskStatusReadyForReview},
+				AwaitResubmissionResult: &ops.AwaitResubmissionResult{Verdict: string(ops.ResubmissionResubmitted), TaskStatus: models.TaskStatusReadyForReview},
 			},
 			wantBudget:      1800 * time.Second,
-			wantJSONVerdict: ops.ResubmissionResubmitted,
+			wantJSONVerdict: string(ops.ResubmissionResubmitted),
 		},
 		{
 			name: "json paused resubmission has stop guidance",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1", "--json"},
 			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
-			wantBudget: 1800 * time.Second, wantJSONVerdict: ops.ResubmissionPaused,
+				Verdict: string(ops.ResubmissionPaused), TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
+			wantBudget: 1800 * time.Second, wantJSONVerdict: string(ops.ResubmissionPaused),
 		},
 		{
 			name: "human paused resubmission has stop guidance",
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-				Verdict: ops.ResubmissionPaused, TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: ops.SafeActionStop}},
+				Verdict: string(ops.ResubmissionPaused), TaskStatus: models.TaskStatusRejected, Reason: "operator can resume", SafeAction: string(ops.SafeActionStop)}},
 			wantBudget:      1800 * time.Second,
 			wantHumanOutput: "Verdict: PAUSED\nStatus: CODE_REJECTED\nReason: operator can resume\nSafe action: stop\n",
 		},
@@ -259,7 +259,7 @@ func TestAwaitResubmissionCLI_BudgetAndOutput(t *testing.T) {
 			args: []string{"await-resubmission", "task-await", "--agent-id", "code-reviewer-1"},
 			result: &commands.AwaitResubmissionResult{
 				AwaitResubmissionResult: &ops.AwaitResubmissionResult{
-					Verdict:      ops.ResubmissionResubmitted,
+					Verdict:      string(ops.ResubmissionResubmitted),
 					TaskStatus:   models.TaskStatusReadyForReview,
 					BaseCommit:   "base-commit",
 					ReviewCommit: "review-commit",
@@ -313,13 +313,13 @@ func assertAwaitJSONResult(t *testing.T, stdout, wantVerdict string, wantTimeout
 	if result["verdict"] != wantVerdict {
 		t.Errorf("verdict = %#v, want %q", result["verdict"], wantVerdict)
 	}
-	if wantVerdict == ops.VerdictPaused || wantVerdict == ops.ResubmissionPaused {
-		if result["safe_action"] != ops.SafeActionStop || !strings.Contains(fmt.Sprint(result["reason"]), "resume") {
+	if wantVerdict == string(ops.VerdictPaused) || wantVerdict == string(ops.ResubmissionPaused) {
+		if result["safe_action"] != string(ops.SafeActionStop) || !strings.Contains(fmt.Sprint(result["reason"]), "resume") {
 			t.Error("PAUSED JSON result omitted stop/resume guidance")
 		}
 	}
 	gotTimeout, hasTimeout := result["timeout_seconds"]
-	if wantVerdict == ops.VerdictPoll || wantVerdict == ops.ResubmissionPoll {
+	if wantVerdict == string(ops.VerdictPoll) || wantVerdict == string(ops.ResubmissionPoll) {
 		if !hasTimeout || gotTimeout != wantTimeout {
 			t.Errorf("timeout_seconds = %#v, want %v", gotTimeout, wantTimeout)
 		}

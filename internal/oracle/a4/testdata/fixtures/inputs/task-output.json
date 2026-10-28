@@ -1,0 +1,9 @@
+[
+  {
+    "desc": "One",
+    "done_when": "One completed",
+    "scope": "One bounded unit",
+    "spec_ref": "specs/vision.md",
+    "arch_ref": "specs/architecture/a.md#Scope 1: One"
+  }
+]

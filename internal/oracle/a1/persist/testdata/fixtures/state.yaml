@@ -1,0 +1,109 @@
+# Committed A1 input: every persisted status in the starting model, including
+# legacy review, code-planning and quorum states. No sidecars or expiry checks.
+# Fixed UTC/+02:00/-05:00 fractional times include both C5 merge fields below.
+# Unknown keys at top/task level record actual baseline persistence behaviour.
+version: 1
+pipeline_version: 1
+goal:
+  id: persistence-oracle
+  description: Fixed persistence fixture
+  spec_ref: specs/example.md
+  created: 2026-10-01T08:00:00.123456Z
+  status: IN_PROGRESS
+tasks:
+  - id: draft
+    status: DRAFT
+    summary: bounded fixture summary
+    future_task_key: {nested: [first, second], enabled: true}
+    created: 2026-10-01T10:00:00.321+02:00
+  - {id: code, status: DRAFT_CODE}
+  - {id: implementing, status: IMPLEMENTING_CODE, assigned_to: coder-1, attempt: 2}
+  - {id: to-review, status: CODE_TO_REVIEW}
+  - {id: legacy-review, status: CODE_READY_FOR_REVIEW}
+  - {id: reviewing, status: REVIEWING_CODE}
+  - {id: rejected, status: CODE_REJECTED, rejection_reason: bounded rejection}
+  - {id: approved, status: CODE_APPROVED}
+  - id: merged
+    status: MERGED
+    merge_commit: 0123456789abcdef0123456789abcdef01234567
+    handoff_events:
+      - timestamp: 2026-10-01T12:30:00.123+02:00
+        agent: coder-1
+        trigger: completion
+        succeeded: [persisted output]
+    history:
+      - time: 2026-10-01T05:30:00.456789-05:00
+        event: merged
+        agent: code-reviewer-1
+        commit: 0123456789abcdef0123456789abcdef01234567
+  - id: blocked
+    status: BLOCKED
+    blocked_reason: fixed dependency
+    history:
+      - {time: "2026-10-01T10:00:00.123Z", event: blocked, reason: fixed dependency}
+  - {id: abandoned, status: ABANDONED}
+  - {id: superseded, status: SUPERSEDED, superseded_by: [code]}
+  - {id: integration-failed, status: INTEGRATION_FAILED}
+  - {id: plan-draft, status: DRAFT_CODING_PLAN}
+  - {id: planning, status: CODE_PLANNING}
+  - {id: plan-to-review, status: CODING_PLAN_TO_REVIEW}
+  - {id: plan-reviewing, status: REVIEWING_CODING_PLAN}
+  - {id: plan-approved, status: CODING_PLAN_APPROVED}
+  - {id: plan-rejected, status: CODING_PLAN_REJECTED}
+  - {id: partial, status: CODE_PARTIALLY_APPROVED}
+  - {id: quorum, status: REVIEWING_CODE_2}
+agents:
+  coder-1:
+    role: coder
+    status: WORKING
+    generation: fixed-generation
+    current_task: implementing
+    heartbeat: 2026-10-01T05:15:00.222-05:00
+    registered_at: 2026-10-01T09:00:00Z
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 2
+    context_percent: 35
+  code-reviewer-1:
+    role: code-reviewer
+    status: IDLE
+    heartbeat: 2026-10-01T10:20:00.111Z
+    terminal: terminal-2
+    iterations_total: 1
+    context_percent: 10
+anomalies:
+  - timestamp: 2026-10-01T10:10:00.333Z
+    task: blocked
+    reporter: coder-1
+    type: retry_loop
+    details: {count: 3, error_pattern: fixed error}
+circuit_breaker:
+  last_check: 2026-10-01T12:00:00.444+02:00
+  status: OK
+  history:
+    - timestamp: 2026-10-01T10:11:00.555Z
+      pattern: retry_cluster
+      severity: warning
+      result: TRIGGERED
+      response: WARNING
+      classification: ACKNOWLEDGED_HISTORICAL
+      resolution: fixture resolved
+      resolved_at: 2026-10-01T05:12:00.666-05:00
+sprint:
+  id: sprint-fixed
+  number: 1
+  goal_ref: persistence-oracle
+  scope: {planned: [draft, merged], stretch: [code]}
+  timeline:
+    started: 2026-10-01T09:00:00Z
+    deadline: 2026-10-02T09:00:00Z
+  status: IN_PROGRESS
+  metrics: {tasks_done: 1}
+config:
+  lease_duration: 600
+  max_coder_iterations: 3
+  max_review_cycles: 3
+  future_config_key: fixed-config
+future_top_level:
+  labels: [alpha, beta]
+  count: 7

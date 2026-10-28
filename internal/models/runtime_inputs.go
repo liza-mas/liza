@@ -37,7 +37,7 @@ const (
 // writes when a declared runtime input has no usable instance. It is a
 // provisioning request, not an agent failure pattern: the circuit breaker does
 // not count it.
-const AnomalyTypeRuntimeInputUnavailable = "runtime_input_unavailable"
+const AnomalyTypeRuntimeInputUnavailable AnomalyType = "runtime_input_unavailable"
 
 // RuntimeInput declares one live-validation input a task's canonical commands
 // read (ADR-0169). Env holds variable names only; values come from an
@@ -68,6 +68,12 @@ var runtimeInputIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 var RuntimeInputRecipePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)*$`)
 
 const runtimeInputLimit = 64
+
+// Length bounds of runtime-input identities.
+const (
+	maxRuntimeInputIDLen     = 128
+	maxRuntimeInputRecipeLen = 256
+)
 
 // Runtime-input names are stripped from every session and gate, so they must
 // never name what processes or the engine itself depend on (ADR-0169).
@@ -110,7 +116,7 @@ func RuntimeInputViolations(commands []string, inputs []RuntimeInput) []error {
 	}
 	ids := make(map[string]int, len(inputs))
 	for i, input := range inputs {
-		if !runtimeInputIDPattern.MatchString(input.ID) || len(input.ID) > 128 {
+		if !runtimeInputIDPattern.MatchString(input.ID) || len(input.ID) > maxRuntimeInputIDLen {
 			errs = append(errs, fmt.Errorf("runtime_inputs[%d].id must match [a-z0-9][a-z0-9._-]* (at most 128 bytes)", i))
 		} else if _, dup := ids[input.ID]; dup {
 			errs = append(errs, fmt.Errorf("runtime_inputs[%d].id duplicates another declaration", i))
@@ -133,7 +139,7 @@ func RuntimeInputViolations(commands []string, inputs []RuntimeInput) []error {
 			}
 			seenCommands[command] = true
 		}
-		if len(input.Recipe) > 256 || !RuntimeInputRecipePattern.MatchString(input.Recipe) {
+		if len(input.Recipe) > maxRuntimeInputRecipeLen || !RuntimeInputRecipePattern.MatchString(input.Recipe) {
 			errs = append(errs, fmt.Errorf("runtime_inputs[%d].recipe must be a dotted registry name", i))
 		}
 		if input.Consumption != RuntimeInputSingleUse && input.Consumption != RuntimeInputReusable {
@@ -144,7 +150,7 @@ func RuntimeInputViolations(commands []string, inputs []RuntimeInput) []error {
 		}
 		own := make(map[string]bool, len(input.Env))
 		for j, name := range input.Env {
-			if len(name) > 256 || !prerequisiteEnvName.MatchString(name) {
+			if len(name) > maxEnvNameLen || !prerequisiteEnvName.MatchString(name) {
 				errs = append(errs, fmt.Errorf("runtime_inputs[%d].env[%d] must be a variable identifier of at most 256 bytes", i, j))
 				continue
 			}

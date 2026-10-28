@@ -587,7 +587,7 @@ func TestInspectAgent_TimeOnTaskUsesCurrentTaskMatchingAssignment(t *testing.T) 
 	for _, tt := range tests {
 		for _, format := range formats {
 			t.Run(tt.agentID+"/"+format, func(t *testing.T) {
-				result, err := inspectAgent(state, tt.agentID, inspectAgentsOptions{Format: format})
+				result, err := inspectAgent(state, tt.agentID, inspectAgentsOptions{Format: inspectFormat(format)})
 				if err != nil {
 					t.Fatalf("inspectAgent() error = %v", err)
 				}

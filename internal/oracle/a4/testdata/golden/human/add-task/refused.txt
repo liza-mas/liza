@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: add task: failed to add task: modification function failed: validation failed: task 't1' already exists

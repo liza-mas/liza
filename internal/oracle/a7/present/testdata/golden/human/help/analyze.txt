@@ -1,0 +1,32 @@
+exit 0
+--- stdout
+Analyze anomalies and planning task review evidence in the blackboard to detect systemic failure patterns.
+Detects the following patterns:
+- retry_cluster: 3+ retry_loops with similar error patterns (ARCHITECTURE_FLAW)
+- debt_accumulation: 3+ trade_offs creating technical debt (SCOPE_FLAW)
+- assumption_cascade: 2+ assumption violations with same assumption (SPEC_FLAW)
+- spec_gap_cluster: 2+ spec ambiguities hitting same spec reference (SPEC_FLAW)
+- workaround_pattern: 2+ workarounds/trade-offs with similar root causes (ARCHITECTURE_FLAW)
+- external_service_outage: 2+ external blockers from same service (EXTERNAL_DEPENDENCY)
+- provider_audit_degradation: 2+ agents or 3+ hits for same provider (OBSERVABILITY_DEGRADED)
+- planning_review_churn: four or more durable planning rejection cycles; `MERGED` tasks remain eligible (PLANNING_CONVERGENCE_DEGRADED)
+Every detected pattern generates .liza/circuit_breaker_report.md with its evidence class, response, and explanation.
+Provider-audit evidence receives a proportional response:
+- WARNING: acknowledged historical evidence remains visible with no state action
+- CHECKPOINT: new or continuing OBSERVABILITY_DEGRADED evidence pauses at a sprint checkpoint when current health proof is unknown; run 'liza resume' after review
+- HALT: a circuit-breaker trigger only when exact current provider and agent epoch health proves execution compromise; sets circuit_breaker.status to TRIGGERED
+Other systemic failure patterns use HALT. Only HALT is a circuit-breaker trigger.
+If no patterns are detected and no active HALT exists:
+- Updates circuit_breaker.status to OK
+- Continues normal operation
+Usage:
+liza analyze [flags]
+Flags:
+-h, --help help for analyze
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,50 @@
+=== tick 1: reviewer starts bound to models.yaml slots
+--- start requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=true models_item=1
+2: role=code-reviewer cli=codex agent_id=code-reviewer-2 from_config=true models_item=2
+--- outcome
+attempted: [code-reviewer]
+suppressed: []
+blocked: []
+spawned: role=code-reviewer agent_id=code-reviewer-1 cli=claude models_item=1 pid=5100001 command=liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1
+spawned: role=code-reviewer agent_id=code-reviewer-2 cli=codex models_item=2 pid=5100002 command=liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100001:code-reviewer-1:1
+auto-repair-agent-pool-pending:code-reviewer:5100002:code-reviewer-2:2
+auto-repair-agent-pool:code-reviewer
+=== tick 2: same condition: no repeat alerts
+--- start requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=true models_item=1
+2: role=code-reviewer cli=codex agent_id=code-reviewer-2 from_config=true models_item=2
+--- outcome
+attempted: [code-reviewer]
+suppressed: []
+blocked: []
+spawned: role=code-reviewer agent_id=code-reviewer-1 cli=claude models_item=1 pid=5100003 command=liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1
+spawned: role=code-reviewer agent_id=code-reviewer-2 cli=codex models_item=2 pid=5100004 command=liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100003:code-reviewer-1:1
+auto-repair-agent-pool-pending:code-reviewer:5100004:code-reviewer-2:2
+auto-repair-agent-pool-start-count:code-reviewer=2
+auto-repair-agent-pool:code-reviewer
+=== spawn log
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1 pid=5100001
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2 pid=5100002
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1 pid=5100003
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2 pid=5100004

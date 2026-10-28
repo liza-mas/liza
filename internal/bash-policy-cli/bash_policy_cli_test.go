@@ -262,3 +262,13 @@ func TestInitHooksActivationFailureDiagnosticIncludesCapturedOutput(t *testing.T
 		}
 	}
 }
+
+func TestInitHooksStdinAutoConfirmSuppliesSixteenAnswers(t *testing.T) {
+	data, err := io.ReadAll(initHooksStdin(strings.NewReader("ignored"), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "yes\n"); got != 16 || hookConfirmationAnswers != 16 {
+		t.Fatalf("auto-confirm answers = %d (const %d), want 16", got, hookConfirmationAnswers)
+	}
+}

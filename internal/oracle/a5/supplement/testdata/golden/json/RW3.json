@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "internal",
+      "message": "internal error"
+    },
+    "ok": false,
+    "result": null
+  }
+}

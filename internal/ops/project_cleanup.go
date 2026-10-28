@@ -13,6 +13,9 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// projectCleanupLockOperation labels the exclusive lock a cleanup holds.
+const projectCleanupLockOperation = "project-cleanup"
+
 // ProjectCleanupWorktree is a registered task worktree owned by the project.
 type ProjectCleanupWorktree struct {
 	TaskID string
@@ -134,7 +137,7 @@ func ExecuteProjectCleanup(approved ProjectCleanupPlan) error {
 }
 
 func executeProjectCleanup(approved ProjectCleanupPlan, afterRevalidation func()) error {
-	return WithProjectLifecycleExclusiveLock(approved.ProjectRoot, "project-cleanup", func() error {
+	return WithProjectLifecycleExclusiveLock(approved.ProjectRoot, projectCleanupLockOperation, func() error {
 		current, err := PlanProjectCleanup(approved.ProjectRoot)
 		if err != nil {
 			return err

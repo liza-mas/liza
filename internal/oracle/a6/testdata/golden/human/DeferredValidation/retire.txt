@@ -1,0 +1,6 @@
+exit_code: 0
+stdout:
+action: retire
+outcome: retired
+command: "true"
+stderr:

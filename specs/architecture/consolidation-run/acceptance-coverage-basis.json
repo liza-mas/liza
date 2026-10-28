@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-coverpkg-flag", "file": "Makefile", "assertion": "coverage recipe go test line reads go test -coverpkg=./... -coverprofile=", "command_index": 0},
+    {"obligation_id": "AC-headless-run", "file": "Makefile", "assertion": "make coverage exits 0 headless under env -i with BROWSER=true, every package ok", "command_index": 1},
+    {"obligation_id": "AC-recipe-only", "approved_reference_id": "arch-scope1"},
+    {"obligation_id": "AC-doc-basis", "approved_reference_id": "arch-scope1"},
+    {"obligation_id": "AC-lint-green", "file": "Makefile", "assertion": "make lint passes", "command_index": 2},
+    {"obligation_id": "AC-test-green", "file": "Makefile", "assertion": "make test passes", "command_index": 3}
+  ]
+}

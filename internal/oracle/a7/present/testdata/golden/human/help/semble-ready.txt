@@ -1,0 +1,13 @@
+exit 0
+--- stdout
+Check offline Semble corpus readiness (session hook backend)
+Usage:
+liza semble-ready <project-root> [flags]
+Flags:
+-h, --help help for semble-ready
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

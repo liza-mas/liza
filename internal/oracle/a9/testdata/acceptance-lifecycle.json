@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-kit-env", "file": "internal/oracle/a9/kit_test.go", "assertion": "TestOracleA9Kit: exact runner environment names, empty HOME, single-directory PATH, actual stub excludes unrelated parent sentinel; no unstubbed provider reachable", "command_index": 0},
+    {"obligation_id": "AC-kit-stub", "file": "internal/oracle/a9/stub_test.go", "assertion": "TestOracleA9Stub: version probe, invocation argv/cwd, first/per-call snapshots, bounded wait refusal, output, CLI stop, file edit, fixed-date commit, exit and prompt equality/redaction", "command_index": 0},
+    {"obligation_id": "AC-kit-norm", "file": "internal/oracle/a9/normalise_test.go", "assertion": "TestOracleA9Normaliser: zone equality, +1800s, lowest prior token, trimmed fraction precision, volatile equality, filename patterns and fixed SHA isolation through harness kinds", "command_index": 0},
+    {"obligation_id": "AC-kit-fixtures", "file": "internal/oracle/a9/kit_test.go", "assertion": "TestOracleA9Kit: fixed committed recipe materialises pinned SHA, refuses one-digit recipe mismatch, default heartbeat and lease, HOME starts empty", "command_index": 0},
+    {"obligation_id": "AC-kit-sha", "file": "internal/oracle/a9/kit_test.go", "assertion": "TestOracleA9Kit: registered SHA set equals fixed recipe commits; A9 then KeepSHA-configured StateForm/Form retain literal recipe SHA and tokenise one-digit altered SHA", "command_index": 0},
+    {"obligation_id": "AC-kit-inventory", "approved_reference_id": "a9-scope"},
+    {"obligation_id": "AC-I01", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9Registration (raw at-launch agent and claim leases equal heartbeat +1800 s, TestOracleA9LeaseAssertion rejects shortened leases) and TestOracleA9RegistrationCollision: live peer collision with unchanged state and no provider launch", "command_index": 0},
+    {"obligation_id": "AC-I02", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9AutoAssignID: live coder-1 yields coder-2, cap 1 refuses without state mutation", "command_index": 0},
+    {"obligation_id": "AC-I04", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9DoerClaim and TestOracleA9DoerClaimRefused: at-launch assignment, receipt, fixed base SHA and task, receipt and agent leases equal claim instant +1800 s; unclaimable named architecture task leaves the supervisor idle, never claimed or launched, ended by liza stop", "command_index": 0},
+    {"obligation_id": "AC-I05", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9DoerClaim: exit release/unregister; TestOracleA9AuthorityLost: forced registration deletion of a canonically named supervisor during a held session stops it before the default heartbeat and releases the claim", "command_index": 0},
+    {"obligation_id": "AC-I06", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9Restart42 and TestOracleA9Restart42Limit: one restart/re-claim; per decision D40 (aaac7a4a1) two plain exit-42 calls at threshold 1 pin the starting outcome (claim released, restart count 2, no restart-loop block); the BLOCKED branch stays unpinned", "command_index": 0},
+    {"obligation_id": "AC-I07", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9SpinBlock: default threshold blocks the 11th no-progress execution before launch after ten provider calls; TestOracleA9Restart42 remains unblocked at two executions", "command_index": 0},
+    {"obligation_id": "AC-I16", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "TestOracleA9SurplusRetire: lowered cap retires idle coder-2 but preserves its held claim until explicit stub release", "command_index": 0},
+    {"obligation_id": "AC-I26-1", "file": "internal/oracle/a9/kit_snapshots_test.go", "assertion": "scenario.check invoked by every allocated row: before/launch/after state, sorted prompt/output name listings, each signal/alert/liveness/usage file with a committed artifact absent from the run rejected (TestOracleA9ArtifactSet), exit and non-log human output; stub prompt boundary proven separately", "command_index": 0},
+    {"obligation_id": "AC-reproduce-1", "file": "internal/oracle/a9/lifecycle_test.go", "assertion": "regen check filtered to ./internal/oracle/a9/... reproduces every lifecycle golden from provenance start 96c9ad69aee983ce2b929dd681b6ba43bf920535", "command_index": 2},
+    {"obligation_id": "AC-additive-1", "approved_reference_id": "a9-scope"},
+    {"obligation_id": "AC-immutability", "approved_reference_id": "goal-tests"},
+    {"obligation_id": "AC-budget", "approved_reference_id": "arch-oracle"}
+  ]
+}

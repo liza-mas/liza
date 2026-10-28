@@ -38,18 +38,18 @@ func TestLifecycleErrorPreservesCauseAndFieldDiagnostics(t *testing.T) {
 
 func TestWrapLifecycleErrorRespectsEffectBoundary(t *testing.T) {
 	t.Parallel()
-	for _, effects := range []string{"none", "unknown", "committed"} {
-		t.Run(effects, func(t *testing.T) {
+	for _, effects := range []LifecycleEffects{LifecycleEffectsNone, LifecycleEffectsUnknown, LifecycleEffectsCommitted} {
+		t.Run(string(effects), func(t *testing.T) {
 			err := WrapLifecycleError("wt-merge", nil, filelock.NewLockTimeout(errors.New("busy")), models.LifecycleStateChanged, "requery", effects)
 			var lifecycle *LifecycleError
 			if !errors.As(err, &lifecycle) {
 				t.Fatal("missing lifecycle result")
 			}
 			wantOutcome, wantAction := models.LifecycleStateChanged, "requery"
-			if effects == "none" {
+			if effects == LifecycleEffectsNone {
 				wantOutcome, wantAction = models.LifecycleRetryable, "retry"
 			}
-			if lifecycle.Outcome.Outcome != wantOutcome || lifecycle.Outcome.SafeAction != wantAction || lifecycle.Outcome.Effects != effects {
+			if lifecycle.Outcome.Outcome != wantOutcome || lifecycle.Outcome.SafeAction != wantAction || lifecycle.Outcome.Effects != string(effects) {
 				t.Fatalf("unsafe lock recovery result: %+v", lifecycle.Outcome)
 			}
 		})
@@ -175,7 +175,11 @@ func TestLifecycleDiagnosticsHelpers(t *testing.T) {
 	if replay.Outcome != models.LifecycleAlreadyCompleted || replay.Changed == nil || *replay.Changed {
 		t.Fatalf("replay changed = %v: %+v", replay.Changed, replay)
 	}
-	existing := []struct{ outcome, action, effects string }{
+	existing := []struct {
+		outcome string
+		action  LifecycleSafeAction
+		effects LifecycleEffects
+	}{
 		{models.LifecycleCompleted, "continue", "committed"},
 		{models.LifecycleAlreadyTransitioned, "stop", "none"},
 		{models.LifecycleStaleCaller, "stop", "none"},
@@ -186,8 +190,8 @@ func TestLifecycleDiagnosticsHelpers(t *testing.T) {
 	}
 	for _, pair := range existing {
 		got := NewLifecycleOutcome("submit-for-review", task, pair.outcome, pair.action, pair.effects)
-		want := models.LifecycleOutcome{Operation: "submit-for-review", TaskID: task.ID, Outcome: pair.outcome, SafeAction: pair.action,
-			TaskStatus: task.Status, CurrentAssignee: owner, CurrentReviewer: reviewer, TransitionID: models.TaskTransitionID(task), Effects: pair.effects}
+		want := models.LifecycleOutcome{Operation: "submit-for-review", TaskID: task.ID, Outcome: pair.outcome, SafeAction: string(pair.action),
+			TaskStatus: task.Status, CurrentAssignee: owner, CurrentReviewer: reviewer, TransitionID: models.TaskTransitionID(task), Effects: string(pair.effects)}
 		if pair.outcome == models.LifecycleCompleted {
 			changed := true
 			want.Changed = &changed
@@ -259,5 +263,87 @@ func TestLifecycleDiagnosticsSafeDetails(t *testing.T) {
 	}
 	if envelope.Result.Outcome != models.LifecycleInvalidInput || !reflect.DeepEqual(envelope.Result.Diagnostics, diagnostics) || envelope.Result.Changed != nil {
 		t.Fatalf("envelope result: %s", data)
+	}
+}
+
+// The expectations below are literals on purpose: they pin the spelling the
+// wire carries today independently of the constants under test.
+func TestLifecycleDecisionConstantsKeepWireSpelling(t *testing.T) {
+	t.Parallel()
+	for literal, got := range map[string]string{
+		"continue":      string(LifecycleSafeActionContinue),
+		"stop":          string(LifecycleSafeActionStop),
+		"requery":       string(LifecycleSafeActionRequery),
+		"retry":         string(LifecycleSafeActionRetry),
+		"correct_input": string(LifecycleSafeActionCorrectInput),
+		"none":          string(LifecycleEffectsNone),
+		"unknown":       string(LifecycleEffectsUnknown),
+		"committed":     string(LifecycleEffectsCommitted),
+	} {
+		if got != literal {
+			t.Errorf("constant spells %q, want %q", got, literal)
+		}
+	}
+	if string(LifecycleSafeActionCorrectInput) != models.FieldDiagnosticCorrectInput ||
+		string(LifecycleSafeActionRequery) != models.FieldDiagnosticRequery {
+		t.Error("field-diagnostic safe actions drifted from the model constants")
+	}
+}
+
+func TestLifecycleRefusalKeepsTextAndStringSafeDetails(t *testing.T) {
+	t.Parallel()
+	err := WrapLifecycleError("mark-blocked", nil, errors.New("lost race"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsUnknown)
+	var wrapped *LifecycleError
+	if !errors.As(err, &wrapped) {
+		t.Fatalf("not a lifecycle error: %v", err)
+	}
+	if want := "mark-blocked: STATE_CHANGED (safe_action=requery): lost race"; err.Error() != want {
+		t.Fatalf("refusal text = %q, want %q", err.Error(), want)
+	}
+	details := wrapped.SafeDetails()
+	for key, want := range map[string]string{"safe_action": "requery", "effects": "unknown", "outcome": "STATE_CHANGED"} {
+		got, ok := details[key].(string)
+		if !ok || got != want {
+			t.Fatalf("SafeDetails[%s] = %#v, want plain string %q", key, details[key], want)
+		}
+	}
+	payload, marshalErr := json.Marshal(wrapped.Outcome)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	var wire map[string]any
+	if marshalErr := json.Unmarshal(payload, &wire); marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if wire["safe_action"] != "requery" || wire["effects"] != "unknown" {
+		t.Fatalf("wire fields changed: %v", wire)
+	}
+
+	invalid := NewLifecycleInvalidInputError("mark-blocked", nil, []models.FieldDiagnostic{{SchemaVersion: 1, Field: "/note", Constraint: "required", ValueClass: models.FieldValueClassMissing, SafeAction: models.FieldDiagnosticCorrectInput}}, errors.New("note required"))
+	if want := "mark-blocked: INVALID_INPUT (safe_action=correct_input): note required"; invalid.Error() != want {
+		t.Fatalf("invalid-input text = %q, want %q", invalid.Error(), want)
+	}
+	if got, ok := invalid.SafeDetails()["effects"].(string); !ok || got != "none" {
+		t.Fatalf("invalid-input effects = %#v", invalid.SafeDetails()["effects"])
+	}
+}
+
+// Values placed in `any` maps must stay plain strings: a boxed defined type
+// would fail the string assertions that consumers apply to SafeDetails.
+func TestKernelSafeDetailsCarryPlainStrings(t *testing.T) {
+	t.Parallel()
+	for name, details := range map[string]map[string]any{
+		"authority":      (&AgentAuthorityError{AgentID: "coder-1"}).SafeDetails(),
+		"sprint changed": (&LifecycleSprintChangedError{}).SafeDetails(),
+	} {
+		want := map[string]string{"safe_action": "stop", "effects": "none"}
+		if name == "sprint changed" {
+			want["safe_action"] = "requery"
+		}
+		for key, value := range want {
+			if got, ok := details[key].(string); !ok || got != value {
+				t.Errorf("%s SafeDetails[%s] = %#v, want plain string %q", name, key, details[key], value)
+			}
+		}
 	}
 }

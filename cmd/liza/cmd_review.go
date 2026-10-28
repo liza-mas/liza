@@ -20,6 +20,13 @@ import (
 
 // awaitBudgetSecondsDefault and awaitBudgetFlagUsage derive from the single
 // ops-side ceiling so the flag default and the enforced maximum cannot drift.
+// Spellings of two command arguments: the git ref a review commit defaults to and
+// the file argument that names standard input.
+const (
+	headRef      = "HEAD"
+	stdinFileArg = "-"
+)
+
 var awaitBudgetSecondsDefault = int(ops.DefaultAwaitBudget.Seconds())
 
 var awaitBudgetFlagUsage = fmt.Sprintf(
@@ -69,7 +76,7 @@ Updates:
 		}
 
 		taskID := args[0]
-		commitRef := "HEAD"
+		commitRef := headRef
 		if len(args) == 2 {
 			commitRef = args[1]
 		}
@@ -298,7 +305,7 @@ func verdictReason(cmd *cobra.Command, args []string) (string, error) {
 
 	reader := cmd.InOrStdin()
 	var file *os.File
-	if reasonFile != "-" {
+	if reasonFile != stdinFileArg {
 		var err error
 		file, err = os.Open(reasonFile)
 		if err != nil {
@@ -368,7 +375,7 @@ Agent ID for audit trail:
 		full, _ := cmd.Flags().GetBool("full")
 
 		if full { // --full is an alias for --role both
-			role = roles.ClaimBoth
+			role = string(roles.ClaimBoth)
 		}
 
 		agentID := resolveChangedBy(cmd)
@@ -681,9 +688,9 @@ func init() {
 	submitVerdictCmd.Flags().String("reason-file", "", "read rejection reason from a file, or - for stdin (mutually exclusive with --reason and positional argument)")
 
 	// Release-claim command flags
-	releaseClaimCmd.Flags().String("role", roles.ClaimReviewer, "claim type to release (doer, reviewer, both)")
+	releaseClaimCmd.Flags().String("role", string(roles.ClaimReviewer), "claim type to release (doer, reviewer, both)")
 	releaseClaimCmd.Flags().Bool("full", false, "release both doer and reviewer claims (alias for --role both)")
-	registerCompletion(releaseClaimCmd, "role", completeValues(roles.ClaimDoer, roles.ClaimReviewer, roles.ClaimBoth))
+	registerCompletion(releaseClaimCmd, "role", completeValues(string(roles.ClaimDoer), string(roles.ClaimReviewer), string(roles.ClaimBoth)))
 	releaseClaimCmd.Flags().Bool("force", false, "force release even if lease is still valid")
 	releaseClaimCmd.Flags().String("reason", "manual release", "reason for releasing the claim")
 

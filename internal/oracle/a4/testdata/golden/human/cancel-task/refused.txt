@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: MERGED
+effects: none
+task_id: m1
+transition_id: <DIGEST 1>
+Error: cancel task: cancel-task: ALREADY_TRANSITIONED (safe_action=stop): failed to cancel task: modification function failed: cancel-task: ALREADY_TRANSITIONED (safe_action=stop): task is already terminal

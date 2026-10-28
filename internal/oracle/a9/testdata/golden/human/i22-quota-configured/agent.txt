@@ -1,0 +1,5 @@
+exit_code: 0
+[stdout]
+started: false
+error: provider quota exhausted for claude; refusing to spawn coder
+[stderr]

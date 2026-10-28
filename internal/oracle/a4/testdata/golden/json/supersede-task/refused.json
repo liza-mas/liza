@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "effects": "none",
+        "operation": "supersede-task",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "m1",
+        "task_status": "MERGED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "supersede-task: ALREADY_TRANSITIONED (safe_action=stop): validation failed: cannot supersede task m1 in status MERGED (must be initial, rejected, or BLOCKED)"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "supersede-task",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "m1",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

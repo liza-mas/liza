@@ -11,67 +11,29 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
-const (
-	integrationProgressWaitingPlanning       = "planning_unsettled"
-	integrationProgressWaitingSliceCoverage  = "slice_coverage_pending"
-	integrationProgressWaitingCoding         = "coding_work_pending"
-	integrationProgressWaitingRepairs        = "integration_repairs_pending"
-	integrationProgressWaitingGlobalAnalysis = "global_analysis_pending"
-	integrationProgressWaitingClosure        = "closure_projection_pending"
+// integrationProgressCode is the finite set of wait and block reasons the
+// evaluator emits. models.IntegrationProgressReason.Code stays a string;
+// constants convert where assigned.
+type integrationProgressCode string
 
-	integrationProgressBlockedRepair     = "integration_repair_blocked"
-	integrationProgressBlockedAnalysis   = "integration_analysis_blocked"
-	integrationProgressBlockedExhausted  = "global_generations_exhausted"
-	integrationProgressBlockedCapability = pipeline.SlicedIntegrationUpgradeRequired
+const (
+	integrationProgressWaitingPlanning       integrationProgressCode = "planning_unsettled"
+	integrationProgressWaitingSliceCoverage  integrationProgressCode = "slice_coverage_pending"
+	integrationProgressWaitingCoding         integrationProgressCode = "coding_work_pending"
+	integrationProgressWaitingRepairs        integrationProgressCode = "integration_repairs_pending"
+	integrationProgressWaitingGlobalAnalysis integrationProgressCode = "global_analysis_pending"
+	integrationProgressWaitingClosure        integrationProgressCode = "closure_projection_pending"
+
+	integrationProgressBlockedRepair     integrationProgressCode = "integration_repair_blocked"
+	integrationProgressBlockedAnalysis   integrationProgressCode = "integration_analysis_blocked"
+	integrationProgressBlockedExhausted  integrationProgressCode = "global_generations_exhausted"
+	integrationProgressBlockedCapability integrationProgressCode = pipeline.SlicedIntegrationUpgradeRequired
 )
 
-// IntegrationProgressDecision is the pure projection consumed by integration
-// reconciliation and completion gates.
-type IntegrationProgressDecision struct {
-	PlanningSettled       bool
-	FreezeContributingSet bool
-	ContributingSet       *models.IntegrationContributingSet
-	Coverage              []IntegrationScopeCoverage
-	SliceRequests         []IntegrationAnalysisRequest
-	GlobalReady           bool
-	GlobalRequest         *IntegrationAnalysisRequest
-	IntegrationComplete   bool
-	Exhausted             bool
-	Waiting               *IntegrationProgressReason
-	Blocked               *IntegrationProgressReason
-	// DeferredValidationRequest is the integration HEAD at which integration
-	// needs a deferred-validation batch verdict (ADR-0204); empty otherwise.
-	DeferredValidationRequest string
-}
-
-// IntegrationScopeCoverage projects the bounded evidence required for one
-// frozen contributing scope.
-type IntegrationScopeCoverage struct {
-	PlanTaskID           string
-	RootTaskIDs          []string
-	Kind                 models.IntegrationCoverageKind
-	AnalysisKey          string
-	ApprovalAttestations []models.IntegrationApprovalAttestation
-	Effective            bool
-	Resolved             bool
-}
-
-// IntegrationAnalysisRequest identifies one missing immutable analysis.
-type IntegrationAnalysisRequest struct {
-	Key                   string
-	Phase                 models.IntegrationAnalysisPhase
-	Generation            int
-	OriginatingPlanTaskID string
-	RootTaskIDs           []string
-	SourceCommit          string
-}
-
-// IntegrationProgressReason is a stable machine-readable wait or stop reason.
-type IntegrationProgressReason struct {
-	Code     string
-	TaskIDs  []string
-	Guidance string
-}
+// slicedCohortMinScopes is how many scopes a contributing set needs before its
+// scopes are covered by slice evidence: a smaller set needs no coverage, and
+// its global analysis takes the scopes' root tasks as parents.
+const slicedCohortMinScopes = 2
 
 // EvaluateIntegrationProgress derives integration lifecycle progress without
 // mutating state, creating tasks, reading prompts, or inspecting Git.
@@ -79,10 +41,10 @@ func EvaluateIntegrationProgress(
 	state *models.State,
 	capability pipeline.SlicedIntegrationCapability,
 	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
+) (models.IntegrationProgressDecision, error) {
 	evaluator, err := newIntegrationProgressEvaluator(state)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	return evaluator.evaluate(capability, integrationHEAD)
 }
@@ -101,18 +63,18 @@ func UnsettledPreIntegrationPlanningTasks(state *models.State, capability pipeli
 
 // EvaluateLiveIntegrationProgress loads the frozen pipeline capability and
 // current integration branch HEAD before evaluating integration progress.
-func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (IntegrationProgressDecision, error) {
+func EvaluateLiveIntegrationProgress(state *models.State, projectRoot string) (models.IntegrationProgressDecision, error) {
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("load frozen pipeline: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("load frozen pipeline: %w", err)
 	}
 	capability, err := pipeline.NewResolver(cfg).SlicedIntegrationCapability()
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("resolve sliced integration capability: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("resolve sliced integration capability: %w", err)
 	}
 	integrationHEAD, err := ResolveIntegrationHEAD(projectRoot, state.Config.IntegrationBranch)
 	if err != nil {
-		return IntegrationProgressDecision{}, fmt.Errorf("read integration HEAD: %w", err)
+		return models.IntegrationProgressDecision{}, fmt.Errorf("read integration HEAD: %w", err)
 	}
 	return EvaluateIntegrationProgress(state, capability, integrationHEAD)
 }
@@ -236,8 +198,8 @@ func (e *integrationProgressEvaluator) sortedTaskIDs() []string {
 func (e *integrationProgressEvaluator) evaluate(
 	capability pipeline.SlicedIntegrationCapability,
 	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
-	decision := IntegrationProgressDecision{}
+) (models.IntegrationProgressDecision, error) {
+	decision := models.IntegrationProgressDecision{}
 	lifecycle := e.state.Goal.Integration
 	if lifecycle == nil {
 		lifecycle = &models.IntegrationLifecycle{}
@@ -261,7 +223,7 @@ func (e *integrationProgressEvaluator) evaluate(
 
 	coverageReady, err := e.evaluateCoverage(&decision, lifecycle, capability)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	if decision.Blocked != nil || !coverageReady {
 		return decision, nil
@@ -269,7 +231,7 @@ func (e *integrationProgressEvaluator) evaluate(
 
 	codingReady, err := e.evaluateCodingBarrier(&decision)
 	if err != nil {
-		return IntegrationProgressDecision{}, err
+		return models.IntegrationProgressDecision{}, err
 	}
 	if decision.Blocked != nil || !codingReady {
 		return decision, nil
@@ -361,7 +323,7 @@ func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capa
 		}
 		if capability.PreIntegrationPlanningTransitions == nil {
 			// Preserve the legacy pure evaluator input when no topology is supplied.
-			upstream = task.RolePair == "code-planning-pair" ||
+			upstream = task.RolePair == codePlanningRolePair ||
 				(capability.PreIntegrationDecompositionRoot != "" && task.RolePair == capability.PreIntegrationDecompositionRoot)
 		}
 		if !upstream || task.IntegrationAnalysis != nil {
@@ -399,7 +361,7 @@ func (e *integrationProgressEvaluator) unsettledPreIntegrationPlanningTasks(capa
 			if e.state.Config.NoFollowUp && capability.PreIntegrationFollowUpTransitions[transition.Name] {
 				continue
 			}
-			if transition.Cardinality == "per-subtask" && len(task.Output) == 0 {
+			if transition.Cardinality == models.CardinalityPerSubtask && len(task.Output) == 0 {
 				continue
 			}
 			if !task.TransitionsExecuted[transition.Name] {
@@ -420,7 +382,7 @@ func (e *integrationProgressEvaluator) preIntegrationPlans() ([]*models.Task, er
 	plans := make([]*models.Task, 0)
 	for i := range e.state.Tasks {
 		task := &e.state.Tasks[i]
-		if task.RolePair != "code-planning-pair" {
+		if task.RolePair != codePlanningRolePair {
 			continue
 		}
 		repair, err := e.hasAnalysisAncestor(task.ID)
@@ -479,7 +441,7 @@ func (e *integrationProgressEvaluator) directCodingRoots(planID string) []string
 	roots := make([]string, 0)
 	for i := range e.state.Tasks {
 		task := &e.state.Tasks[i]
-		if task.RolePair == "coding-pair" &&
+		if task.RolePair == codingRolePair &&
 			slices.Contains(task.EffectiveParentTasks(), planID) &&
 			!replacementIDs[task.ID] {
 			roots = append(roots, task.ID)
@@ -515,200 +477,7 @@ func (e *integrationProgressEvaluator) validateCohort(cohort *models.Integration
 	return nil
 }
 
-func (e *integrationProgressEvaluator) evaluateCoverage(
-	decision *IntegrationProgressDecision,
-	lifecycle *models.IntegrationLifecycle,
-	capability pipeline.SlicedIntegrationCapability,
-) (bool, error) {
-	if decision.ContributingSet == nil || len(decision.ContributingSet.Scopes) < 2 {
-		return true, nil
-	}
-	records := make(map[string]*models.IntegrationCoverageRecord, len(lifecycle.Coverage))
-	for i := range lifecycle.Coverage {
-		record := &lifecycle.Coverage[i]
-		if records[record.PlanTaskID] != nil {
-			return false, fmt.Errorf("integration progress: duplicate coverage for plan %q", record.PlanTaskID)
-		}
-		records[record.PlanTaskID] = record
-	}
-	cohortPlans := make(map[string]bool, len(decision.ContributingSet.Scopes))
-	allReady := true
-	for _, scope := range decision.ContributingSet.Scopes {
-		cohortPlans[scope.PlanTaskID] = true
-		coverage := IntegrationScopeCoverage{
-			PlanTaskID: scope.PlanTaskID, RootTaskIDs: append([]string(nil), scope.RootTaskIDs...),
-		}
-		record := records[scope.PlanTaskID]
-		if len(scope.RootTaskIDs) == 1 {
-			attestations, err := e.approvalAttestations(scope.RootTaskIDs[0], record)
-			if err != nil {
-				return false, err
-			}
-			coverage.Kind = models.IntegrationCoverageApprovalAttestation
-			coverage.ApprovalAttestations = attestations
-			coverage.Effective = true
-			coverage.Resolved = true
-			decision.Coverage = append(decision.Coverage, coverage)
-			continue
-		}
-
-		key := sliceAnalysisKey(scope.PlanTaskID)
-		coverage.Kind = models.IntegrationCoverageSliceReport
-		coverage.AnalysisKey = key
-		if record == nil {
-			allReady = false
-			if analysis := e.analysisKeys[key]; analysis != nil {
-				if analysis.Status == models.TaskStatusBlocked || analysis.Status == models.TaskStatusAbandoned {
-					decision.Blocked = progressReasonWithTasks(integrationProgressBlockedAnalysis, analysis.ID)
-				}
-			} else {
-				decision.SliceRequests = append(decision.SliceRequests, IntegrationAnalysisRequest{
-					Key: key, Phase: models.IntegrationAnalysisPhaseSlice,
-					OriginatingPlanTaskID: scope.PlanTaskID,
-					RootTaskIDs:           append([]string(nil), scope.RootTaskIDs...),
-				})
-			}
-			decision.Coverage = append(decision.Coverage, coverage)
-			continue
-		}
-		if record.Kind != models.IntegrationCoverageSliceReport || record.SliceReport == nil {
-			return false, fmt.Errorf("integration progress: plan %q requires slice coverage", scope.PlanTaskID)
-		}
-		if err := e.validateSliceReport(scope, record.SliceReport, key); err != nil {
-			return false, err
-		}
-		coverage.Effective = true
-		switch record.SliceReport.Verdict {
-		case models.IntegrationAnalysisVerdictClean:
-			coverage.Resolved = true
-		case models.IntegrationAnalysisVerdictFindings:
-			resolution, err := e.resolveAnalysisRepairs(record.SliceReport.AnalysisTaskID)
-			if err != nil {
-				return false, err
-			}
-			if resolution.blocked {
-				decision.Blocked = progressReasonWithTasks(integrationProgressBlockedRepair, resolution.taskIDs...)
-				allReady = false
-			} else if !resolution.settled {
-				decision.Waiting = progressReasonWithTasks(integrationProgressWaitingRepairs, resolution.taskIDs...)
-				allReady = false
-			} else {
-				coverage.Resolved = true
-			}
-		default:
-			return false, fmt.Errorf("integration progress: slice %q has invalid verdict %q", key, record.SliceReport.Verdict)
-		}
-		decision.Coverage = append(decision.Coverage, coverage)
-	}
-	extraCoveragePlans := make([]string, 0)
-	for planID := range records {
-		if !cohortPlans[planID] {
-			extraCoveragePlans = append(extraCoveragePlans, planID)
-		}
-	}
-	if len(extraCoveragePlans) > 0 {
-		sort.Strings(extraCoveragePlans)
-		return false, fmt.Errorf("integration progress: coverage references non-contributing plan %q", extraCoveragePlans[0])
-	}
-	if len(decision.SliceRequests) > 0 && !capability.Available {
-		code := capability.Code
-		if code == "" {
-			code = integrationProgressBlockedCapability
-		}
-		decision.Blocked = &IntegrationProgressReason{Code: code, Guidance: capability.Guidance}
-		return false, nil
-	}
-	if !allReady && decision.Blocked == nil && decision.Waiting == nil {
-		ids := make([]string, 0, len(decision.SliceRequests))
-		for _, request := range decision.SliceRequests {
-			ids = append(ids, request.Key)
-		}
-		decision.Waiting = progressReasonWithTasks(integrationProgressWaitingSliceCoverage, ids...)
-	}
-	return allReady, nil
-}
-
-func (e *integrationProgressEvaluator) approvalAttestations(
-	rootID string,
-	record *models.IntegrationCoverageRecord,
-) ([]models.IntegrationApprovalAttestation, error) {
-	mergedLeaves, err := e.mergedLineageLeaves(rootID)
-	if err != nil {
-		return nil, err
-	}
-	if len(mergedLeaves) == 0 {
-		return nil, fmt.Errorf("integration progress: root lineage %q has no merged leaves", rootID)
-	}
-
-	if record != nil {
-		if record.Kind != models.IntegrationCoverageApprovalAttestation || len(record.ApprovalAttestations) == 0 {
-			return nil, fmt.Errorf("integration progress: root %q requires approval attestation coverage", rootID)
-		}
-		reviewedTaskIDs := make([]string, 0, len(record.ApprovalAttestations))
-		for _, attestation := range record.ApprovalAttestations {
-			reviewedID := attestation.ReviewedTaskID
-			task := e.tasks[reviewedID]
-			if task == nil || task.Status != models.TaskStatusMerged || !e.lineageContains(rootID, reviewedID) {
-				return nil, fmt.Errorf("integration progress: approval attestation task %q is outside merged root lineage %q", reviewedID, rootID)
-			}
-			reviewedTaskIDs = append(reviewedTaskIDs, reviewedID)
-		}
-		if len(uniqueSortedStrings(reviewedTaskIDs)) != len(reviewedTaskIDs) || !equalStringSets(reviewedTaskIDs, mergedLeaves) {
-			return nil, fmt.Errorf("integration progress: approval attestation tasks %v do not exactly cover merged root lineage %q leaves %v", reviewedTaskIDs, rootID, mergedLeaves)
-		}
-		attestations := cloneApprovalAttestations(record.ApprovalAttestations)
-		sort.Slice(attestations, func(i, j int) bool {
-			return attestations[i].ReviewedTaskID < attestations[j].ReviewedTaskID
-		})
-		return attestations, nil
-	}
-
-	attestations := make([]models.IntegrationApprovalAttestation, 0, len(mergedLeaves))
-	for _, leafID := range mergedLeaves {
-		attestation, err := approvalAttestationFor(e.tasks[leafID])
-		if err != nil {
-			return nil, err
-		}
-		attestations = append(attestations, attestation)
-	}
-	return attestations, nil
-}
-
-// approvalAttestationFor reads the immutable approval facts of one merged task.
-func approvalAttestationFor(task *models.Task) (models.IntegrationApprovalAttestation, error) {
-	if task.ReviewCommit == nil || *task.ReviewCommit == "" || task.ApprovedBy == nil || *task.ApprovedBy == "" || task.MergeCommit == nil || *task.MergeCommit == "" || task.DoneWhen == "" {
-		return models.IntegrationApprovalAttestation{}, fmt.Errorf("integration progress: merged task %q lacks approval attestation facts", task.ID)
-	}
-	return models.IntegrationApprovalAttestation{
-		ReviewedTaskID:     task.ID,
-		AcceptanceCriteria: task.DoneWhen,
-		ReviewedCommit:     *task.ReviewCommit,
-		Approver:           *task.ApprovedBy,
-		Validation:         append([]string(nil), task.Validation...),
-		MergeCommit:        *task.MergeCommit,
-	}, nil
-}
-
-func (e *integrationProgressEvaluator) validateSliceReport(
-	scope models.IntegrationScopeSnapshot,
-	report *models.IntegrationSliceReport,
-	key string,
-) error {
-	if report.AnalysisKey != key {
-		return fmt.Errorf("integration progress: slice report key %q does not match %q", report.AnalysisKey, key)
-	}
-	analysis := e.tasks[report.AnalysisTaskID]
-	if analysis == nil || analysis.IntegrationAnalysis == nil {
-		return fmt.Errorf("integration progress: slice report %q references missing analysis task %q", key, report.AnalysisTaskID)
-	}
-	metadata := analysis.IntegrationAnalysis
-	if metadata.Key != key || metadata.Phase != models.IntegrationAnalysisPhaseSlice || metadata.OriginatingPlanTaskID != scope.PlanTaskID || !equalStringSets(metadata.RootTaskIDs, scope.RootTaskIDs) || metadata.SourceCommit != report.SourceCommit {
-		return fmt.Errorf("integration progress: slice report %q contradicts analysis metadata", key)
-	}
-	return nil
-}
-
-func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *IntegrationProgressDecision) (bool, error) {
+func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *models.IntegrationProgressDecision) (bool, error) {
 	pending := make([]string, 0)
 	repairPending := make([]string, 0)
 	blocked := make([]string, 0)
@@ -721,7 +490,7 @@ func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *Integrati
 		if err != nil {
 			return false, err
 		}
-		if task.RolePair != "coding-pair" && !(repair && task.RolePair == "code-planning-pair") {
+		if task.RolePair != codingRolePair && !(repair && task.RolePair == codePlanningRolePair) {
 			continue
 		}
 		resolution, err := e.resolveLineage(task.ID, repair)
@@ -753,350 +522,36 @@ func (e *integrationProgressEvaluator) evaluateCodingBarrier(decision *Integrati
 	return true, nil
 }
 
-func (e *integrationProgressEvaluator) evaluateGlobal(
-	decision IntegrationProgressDecision,
-	lifecycle *models.IntegrationLifecycle,
-	integrationHEAD string,
-) (IntegrationProgressDecision, error) {
-	if err := e.validateGlobalGenerations(lifecycle.GlobalGenerations, lifecycle.FirstGlobalGeneration()); err != nil {
-		return IntegrationProgressDecision{}, err
-	}
-	if len(lifecycle.GlobalGenerations) > 0 {
-		latest := lifecycle.GlobalGenerations[len(lifecycle.GlobalGenerations)-1]
-		if latest.Verdict == models.IntegrationAnalysisVerdictFindings {
-			resolution, err := e.resolveAnalysisRepairs(latest.AnalysisTaskID)
-			if err != nil {
-				return IntegrationProgressDecision{}, err
-			}
-			if resolution.blocked {
-				decision.Blocked = progressReasonWithTasks(integrationProgressBlockedRepair, resolution.taskIDs...)
-				return decision, nil
-			}
-			if !resolution.settled {
-				decision.Waiting = progressReasonWithTasks(integrationProgressWaitingRepairs, resolution.taskIDs...)
-				return decision, nil
-			}
-		}
-	}
-
-	// Deferred commands bind only completion: they must pass at the final
-	// HEAD before closure counts, while a generation may be requested and the
-	// batch runs alongside it (ADR-0204, D-230).
-	deferredWaiting, deferredBlocked := deferredValidationGate(e.state, integrationHEAD)
-	if deferredWaiting != nil {
-		decision.DeferredValidationRequest = integrationHEAD
-	}
-
-	decision.GlobalReady = true
-	if len(lifecycle.GlobalGenerations) > 0 {
-		latest := lifecycle.GlobalGenerations[len(lifecycle.GlobalGenerations)-1]
-		if latest.Verdict == models.IntegrationAnalysisVerdictClean && latest.SourceCommit == integrationHEAD {
-			if deferredBlocked != nil {
-				decision.Blocked = deferredBlocked
-				return decision, nil
-			}
-			if deferredWaiting != nil {
-				decision.Waiting = deferredWaiting
-				return decision, nil
-			}
-			closure := lifecycle.Closure
-			decision.IntegrationComplete = closure != nil &&
-				closure.Status == models.IntegrationClosureStatusClean &&
-				closure.Generation == latest.Generation &&
-				closure.AnalysisKey == latest.AnalysisKey &&
-				closure.SourceCommit == integrationHEAD
-			if !decision.IntegrationComplete {
-				decision.Waiting = progressReason(integrationProgressWaitingClosure)
-			}
-			return decision, nil
-		}
-	}
-
-	limit := models.NormalizeGlobalIntegrationGenerationLimit(e.state.Config.MaxGlobalIntegrationGenerations)
-	nextGeneration := len(lifecycle.GlobalGenerations) + lifecycle.FirstGlobalGeneration()
-	if len(lifecycle.GlobalGenerations)+1 > limit {
-		decision.Exhausted = true
-		decision.Blocked = &IntegrationProgressReason{
-			Code:     integrationProgressBlockedExhausted,
-			Guidance: fmt.Sprintf("global integration generation limit %d reached", limit),
-		}
-		return decision, nil
-	}
-	if integrationHEAD == "" {
-		return IntegrationProgressDecision{}, fmt.Errorf("integration progress: live integration HEAD is empty for global generation %d", nextGeneration)
-	}
-	key := globalAnalysisKey(nextGeneration)
-	if analysis := e.analysisKeys[key]; analysis != nil {
-		if analysis.Status == models.TaskStatusBlocked || analysis.Status == models.TaskStatusAbandoned {
-			decision.Blocked = progressReasonWithTasks(integrationProgressBlockedAnalysis, analysis.ID)
-		} else {
-			decision.Waiting = progressReasonWithTasks(integrationProgressWaitingGlobalAnalysis, analysis.ID)
-		}
-		return decision, nil
-	}
-	decision.GlobalRequest = &IntegrationAnalysisRequest{
-		Key: key, Phase: models.IntegrationAnalysisPhaseGlobal,
-		Generation: nextGeneration, SourceCommit: integrationHEAD,
-	}
-	return decision, nil
-}
-
-func (e *integrationProgressEvaluator) validateGlobalGenerations(generations []models.IntegrationGlobalGeneration, firstGeneration int) error {
-	for i, generation := range generations {
-		wantGeneration := i + firstGeneration
-		wantKey := globalAnalysisKey(wantGeneration)
-		if generation.Generation != wantGeneration || generation.AnalysisKey != wantKey || generation.SourceCommit == "" {
-			return fmt.Errorf("integration progress: malformed global generation at index %d", i)
-		}
-		analysis := e.tasks[generation.AnalysisTaskID]
-		if analysis == nil || analysis.IntegrationAnalysis == nil {
-			return fmt.Errorf("integration progress: global generation %d references missing analysis task %q", wantGeneration, generation.AnalysisTaskID)
-		}
-		metadata := analysis.IntegrationAnalysis
-		if metadata.Key != wantKey || metadata.Phase != models.IntegrationAnalysisPhaseGlobal || metadata.Generation != wantGeneration || metadata.SourceCommit != generation.SourceCommit {
-			return fmt.Errorf("integration progress: global generation %d contradicts analysis metadata", wantGeneration)
-		}
-		if !generation.Verdict.IsValid() {
-			return fmt.Errorf("integration progress: global generation %d has invalid verdict %q", wantGeneration, generation.Verdict)
-		}
-	}
-	return nil
-}
-
-type lineageResolution struct {
-	settled bool
-	merged  bool
-	blocked bool
-	taskIDs []string
-}
-
-func (e *integrationProgressEvaluator) resolveLineage(rootID string, abandonedBlocks bool) (lineageResolution, error) {
-	return e.resolveLineageWithStack(rootID, abandonedBlocks, make(map[string]bool))
-}
-
-func (e *integrationProgressEvaluator) resolveLineageWithStack(
-	taskID string,
-	abandonedBlocks bool,
-	visiting map[string]bool,
-) (lineageResolution, error) {
-	if visiting[taskID] {
-		return lineageResolution{}, fmt.Errorf("integration progress: replacement cycle includes %q", taskID)
-	}
-	task := e.tasks[taskID]
-	if task == nil {
-		return lineageResolution{}, fmt.Errorf("integration progress: replacement task %q is missing", taskID)
-	}
-	switch task.Status {
-	case models.TaskStatusMerged:
-		return lineageResolution{settled: true, merged: true}, nil
-	case models.TaskStatusAbandoned:
-		if abandonedBlocks {
-			return lineageResolution{settled: true, blocked: true, taskIDs: []string{taskID}}, nil
-		}
-		return lineageResolution{settled: true}, nil
-	case models.TaskStatusBlocked:
-		if abandonedBlocks {
-			return lineageResolution{settled: true, blocked: true, taskIDs: []string{taskID}}, nil
-		}
-		return lineageResolution{taskIDs: []string{taskID}}, nil
-	case models.TaskStatusSuperseded:
-		if len(task.SupersededBy) == 0 {
-			// supersede-task allows no replacements (work done elsewhere, with a recorded
-			// recoverability command): the lineage settles as an abandoned one does.
-			if abandonedBlocks {
-				return lineageResolution{settled: true, blocked: true, taskIDs: []string{taskID}}, nil
-			}
-			return lineageResolution{settled: true}, nil
-		}
-		visiting[taskID] = true
-		defer delete(visiting, taskID)
-		combined := lineageResolution{settled: true}
-		for _, replacementID := range uniqueSortedStrings(task.SupersededBy) {
-			resolution, err := e.resolveLineageWithStack(replacementID, abandonedBlocks, visiting)
-			if err != nil {
-				return lineageResolution{}, err
-			}
-			combined.settled = combined.settled && resolution.settled
-			combined.merged = combined.merged || resolution.merged
-			combined.blocked = combined.blocked || resolution.blocked
-			combined.taskIDs = append(combined.taskIDs, resolution.taskIDs...)
-		}
-		combined.taskIDs = uniqueSortedStrings(combined.taskIDs)
-		return combined, nil
-	default:
-		return lineageResolution{taskIDs: []string{taskID}}, nil
-	}
-}
-
-func (e *integrationProgressEvaluator) resolveAnalysisRepairs(analysisTaskID string) (lineageResolution, error) {
-	children := make([]string, 0)
-	for _, childID := range e.children[analysisTaskID] {
-		if e.tasks[childID].IntegrationAnalysis == nil {
-			children = append(children, childID)
-		}
-	}
-	children = uniqueSortedStrings(children)
-	if len(children) == 0 {
-		return lineageResolution{taskIDs: []string{analysisTaskID}}, nil
-	}
-
-	leaves, err := e.repairLeaves(children)
-	if err != nil {
-		return lineageResolution{}, err
-	}
-	result := lineageResolution{settled: true, merged: true}
-	for _, leafID := range leaves {
-		leaf := e.tasks[leafID]
-		if leaf.RolePair == "code-planning-pair" && len(leaf.Output) > 0 {
-			result.settled = false
-			result.merged = false
-			result.taskIDs = append(result.taskIDs, leafID)
-			continue
-		}
-		switch leaf.Status {
-		case models.TaskStatusMerged:
-		case models.TaskStatusBlocked, models.TaskStatusAbandoned:
-			result.blocked = true
-			result.taskIDs = append(result.taskIDs, leafID)
-		default:
-			result.settled = false
-			result.merged = false
-			result.taskIDs = append(result.taskIDs, leafID)
-		}
-	}
-	result.taskIDs = uniqueSortedStrings(result.taskIDs)
-	return result, nil
-}
-
-func (e *integrationProgressEvaluator) repairLeaves(roots []string) ([]string, error) {
-	leaves := make([]string, 0)
-	visiting := make(map[string]bool)
-	visited := make(map[string]bool)
-	var walk func(string) error
-	walk = func(taskID string) error {
-		if visiting[taskID] {
-			return fmt.Errorf("integration progress: repair lineage cycle includes %q", taskID)
-		}
-		if visited[taskID] {
-			return nil
-		}
-		visiting[taskID] = true
-		defer delete(visiting, taskID)
-		children := make([]string, 0)
-		for _, childID := range e.children[taskID] {
-			if e.tasks[childID].IntegrationAnalysis == nil {
-				children = append(children, childID)
-			}
-		}
-		children = uniqueSortedStrings(children)
-		if len(children) == 0 {
-			if task := e.tasks[taskID]; task.Status == models.TaskStatusSuperseded {
-				return fmt.Errorf("integration progress: superseded repair %q has no replacement leaves", taskID)
-			}
-			leaves = append(leaves, taskID)
-		} else {
-			for _, childID := range children {
-				if err := walk(childID); err != nil {
-					return err
-				}
-			}
-		}
-		visited[taskID] = true
-		return nil
-	}
-	for _, rootID := range roots {
-		if err := walk(rootID); err != nil {
-			return nil, err
-		}
-	}
-	return uniqueSortedStrings(leaves), nil
-}
-
-func (e *integrationProgressEvaluator) mergedLineageLeaves(rootID string) ([]string, error) {
-	leaves := make([]string, 0)
-	var walk func(string, map[string]bool) error
-	walk = func(taskID string, visiting map[string]bool) error {
-		if visiting[taskID] {
-			return fmt.Errorf("integration progress: replacement cycle includes %q", taskID)
-		}
-		task := e.tasks[taskID]
-		if task == nil {
-			return fmt.Errorf("integration progress: replacement task %q is missing", taskID)
-		}
-		if task.Status != models.TaskStatusSuperseded {
-			if task.Status == models.TaskStatusMerged {
-				leaves = append(leaves, taskID)
-			}
-			return nil
-		}
-		if len(task.SupersededBy) == 0 {
-			// Superseded without replacements: no merged leaf on this branch.
-			return nil
-		}
-		visiting[taskID] = true
-		defer delete(visiting, taskID)
-		for _, replacementID := range uniqueSortedStrings(task.SupersededBy) {
-			if err := walk(replacementID, visiting); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	if err := walk(rootID, make(map[string]bool)); err != nil {
-		return nil, err
-	}
-	return uniqueSortedStrings(leaves), nil
-}
-
-func (e *integrationProgressEvaluator) lineageContains(rootID, candidateID string) bool {
-	if rootID == candidateID {
-		return true
-	}
-	visited := make(map[string]bool)
-	queue := []string{rootID}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		if visited[current] {
-			continue
-		}
-		visited[current] = true
-		for _, childID := range e.children[current] {
-			if !slices.Contains(e.tasks[current].SupersededBy, childID) {
-				continue
-			}
-			if childID == candidateID {
-				return true
-			}
-			queue = append(queue, childID)
-		}
-	}
-	return false
-}
-
 func hasExecutedOutputTransition(transitions map[string]bool) bool {
 	for name, executed := range transitions {
-		if executed && name != "replanned" {
+		if executed && name != models.ReplannedTransition {
 			return true
 		}
 	}
 	return false
 }
 
+// Analysis keys identify one immutable analysis: one per frozen plan slice and
+// one per global generation.
+const (
+	sliceAnalysisKeyPrefix  = "slice:"
+	globalAnalysisKeyPrefix = "global:"
+)
+
 func sliceAnalysisKey(planTaskID string) string {
-	return "slice:" + planTaskID
+	return sliceAnalysisKeyPrefix + planTaskID
 }
 
 func globalAnalysisKey(generation int) string {
-	return "global:" + strconv.Itoa(generation)
+	return globalAnalysisKeyPrefix + strconv.Itoa(generation)
 }
 
-func progressReason(code string) *IntegrationProgressReason {
-	return &IntegrationProgressReason{Code: code}
+func progressReason(code integrationProgressCode) *models.IntegrationProgressReason {
+	return &models.IntegrationProgressReason{Code: string(code)}
 }
 
-func progressReasonWithTasks(code string, taskIDs ...string) *IntegrationProgressReason {
-	return &IntegrationProgressReason{Code: code, TaskIDs: uniqueSortedStrings(taskIDs)}
+func progressReasonWithTasks(code integrationProgressCode, taskIDs ...string) *models.IntegrationProgressReason {
+	return &models.IntegrationProgressReason{Code: string(code), TaskIDs: uniqueSortedStrings(taskIDs)}
 }
 
 func uniqueSortedStrings(values []string) []string {

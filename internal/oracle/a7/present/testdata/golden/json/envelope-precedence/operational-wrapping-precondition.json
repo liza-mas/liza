@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "fixture precondition"
+  },
+  "ok": false,
+  "result": null
+}

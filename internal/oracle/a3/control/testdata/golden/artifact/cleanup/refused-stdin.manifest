@@ -1,0 +1,22 @@
+.liza d 0755 -
+.liza/pipeline.yaml f 0644 4fe3c7c5b49dc6815d885cfb3efeba57179f0599ded9388e4e87078b8aa328a9
+.liza/state.yaml f 0644 6a7c23faf4e856064f1fbd699b9bb34dc50941b157591664bfefb88aacd7b550
+.worktrees d 0755 -
+.worktrees/task-1 d 0755 -
+.worktrees/task-1/.git f 0644 4a93ac9e4cd53f6c41a7cb95cb266483d9f15f06cba33ab91c6ec96c3e8f9603
+.worktrees/task-1/specs d 0755 -
+.worktrees/task-1/specs/vision.md f 0644 3f2993f9e412b902d8091edccda378bad472f53f24767b731ad494e151a1d811
+specs d 0755 -
+specs/vision.md f 0644 3f2993f9e412b902d8091edccda378bad472f53f24767b731ad494e151a1d811
+# git
+
+
+HEAD <commit:fixture>
+HEAD <commit:fixture>
+branch refs/heads/main
+branch refs/heads/task/task-1
+refs/heads/integration <commit:fixture>
+refs/heads/main <commit:fixture>
+refs/heads/task/task-1 <commit:fixture>
+worktree <PROJECT>
+worktree <PROJECT>/.worktrees/task-1

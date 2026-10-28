@@ -1,0 +1,13 @@
+[
+  {
+    "desc": "Close A9 at its boundary, then reconcile architecture documentation and final consolidation evidence",
+    "done_when": "A9 G1-G8 passes before documentation coding; overview covers layers, placement and every S2 exception; all active ratchets are empty; K4/C6 pass; registry closures and current code references are verified; final N3/N4 evidence has explicit dispositions.",
+    "scope": "Boundary and run-close records, overview, issue registry, G1.2 architecture documents, protocol/lesson code references and acceptance manifests. Retain per-area guard groups and empty ratchets. Exclude production fixes, guard algorithms, historical ADRs, baseline, oracle, contract and skill content.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-032630-arm-1-ar-25.md#Scope 1: A9 boundary and documentation closure",
+    "rca_required": false,
+    "inherit_inputs": {
+      "mode": "all"
+    }
+  }
+]

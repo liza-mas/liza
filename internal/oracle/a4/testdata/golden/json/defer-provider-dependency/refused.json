@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task m1 is not unstarted (assigned, leased, holding a worktree or hand-off, claimed before, or past its initial status); defer-provider-dependency only moves a declaration of a task nobody has started"
+    },
+    "ok": false,
+    "result": null
+  }
+}

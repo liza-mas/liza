@@ -228,7 +228,7 @@ state lock ([ADR-0177](../architecture/ADR/0177-liveness-side-records.md)):
 Every heartbeat_interval (default 60 seconds):
 1. Check the registration generation against a lock-free state snapshot
 2. Publish this generation's liveness record: heartbeat now,
-   lease_expires now + lease_duration (default 30 minutes)
+   lease_expires now + lease_duration (`config.lease_duration`, default 30 minutes)
 3. Reads overlay the record; the next state mutation folds it into state.yaml
 ```
 

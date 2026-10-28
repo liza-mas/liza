@@ -1,0 +1,126 @@
+add-human-note
+add-task
+add-tasks
+admission-limit
+admission-limit remove
+admission-limit set
+admit
+agent
+amend-plan
+analyze
+apply-dependency-repair
+archive-acceptance-receipts
+archive-terminal-tasks
+assess-blocked
+assess-hypothesis-exhausted
+await-resubmission
+await-verdict
+cancel-task
+check-commit-allowed
+claim-task
+cleanup
+clear-agent-degraded
+clear-stale-review-claims
+completion
+completion bash
+completion fish
+completion powershell
+completion zsh
+config
+config get
+config set
+defer-provider-dependency
+deferred-validation
+deferred-validation abort
+deferred-validation retire
+deferred-validation rule
+deferred-validation run
+deferred-validation settle
+deferred-validation status
+deferred-validation unrule
+delete
+delete agent
+delete task
+get
+get-tasks
+handoff
+help
+hook-stop-guard
+index-refresh
+init
+launch
+launch cmux
+launch cmux adversarial-pairing
+launch cmux mas
+launch wezterm
+launch wezterm adversarial-pairing
+launch wezterm mas
+mark-agent-degraded
+mark-blocked
+migrate
+narrow-inherited-dependencies
+pause
+plan-check
+proceed
+providers
+providers detect
+providers list
+providers refresh
+provision
+reaffirm-proof
+reconcile-merged
+reconcile-verdict
+record-rejection-rca
+recover-agent
+recover-integration
+recover-task
+release-blocked-chain
+release-claim
+repair-acceptance-commits
+repair-agent-pool
+repair-arch-ref
+repair-superseded-dependencies
+replace-task
+replan
+reserve-provider
+resume
+resume-rejection-rca
+retarget-dependency
+run-live
+semble-ready
+set-discovery-disposition
+set-task-output
+setup
+sprint-checkpoint
+start
+status
+stop
+submit-for-review
+submit-verdict
+supersede-task
+tool-result
+tool-result acp-proxy
+tool-result claude-hook
+tool-result codex-hook
+tool-result filter
+tool-result read
+tool-result run
+tool-result stats
+toolchain
+toolchain configure
+toolchain doctor
+toolchain install
+toolchain list
+tui
+unblock-task
+update-review-commit
+update-sprint-metrics
+usage
+usage report
+validate
+validate-payload
+version
+write-checkpoint
+wt-create
+wt-delete
+wt-merge

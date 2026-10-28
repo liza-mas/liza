@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: validation failed: merge commit "oracle-missing-ref" could not be resolved locally; fetch the merged PR first

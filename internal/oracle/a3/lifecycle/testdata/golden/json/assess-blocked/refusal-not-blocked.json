@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "already_transitioned",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "assess-blocked",
+            "outcome": "ALREADY_TRANSITIONED",
+            "safe_action": "stop",
+            "task_id": "task-1",
+            "task_status": "IMPLEMENTING_CODE",
+            "transition_id": "<id-1>"
+          },
+          "message": "assess-blocked: ALREADY_TRANSITIONED (safe_action=stop): failed to assess blocked task: modification function failed: assess-blocked: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task must be in BLOCKED status to assess, current status: IMPLEMENTING_CODE"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "assess-blocked",
+          "outcome": "ALREADY_TRANSITIONED",
+          "safe_action": "stop",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

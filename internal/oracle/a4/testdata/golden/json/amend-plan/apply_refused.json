@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "apply must name the exact pending correction"
+    },
+    "ok": false,
+    "result": null
+  }
+}

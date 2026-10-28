@@ -1,0 +1,13 @@
+# exit_code
+1
+# stdout
+# stderr
+submit-for-review task-1: preparing the submission (rebase, index refresh); <elapsed> since the submit started. Still working: do not interrupt it or submit again.
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: IMPLEMENTING_CODE
+effects: none
+task_id: task-1
+transition_id: <ID>
+current_assignee: coder-1
+Error: submit for review: submit-for-review: INVALID_INPUT (safe_action=correct_input): task task-1 acceptance.source: adopted source is missing from integration — correct the evidence and submit, or run liza update-review-commit task-1 for a submitted task

@@ -326,7 +326,7 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED", result.Verdict)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
@@ -335,8 +335,8 @@ func TestAwaitVerdict_Approved(t *testing.T) {
 	if result.TaskStatus != models.TaskStatusApproved {
 		t.Errorf("TaskStatus = %q, want %s", result.TaskStatus, models.TaskStatusApproved)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -406,7 +406,7 @@ func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED; reason=%q", result.Verdict, result.Reason)
 	}
 	if result.Reason == "" {
@@ -517,7 +517,7 @@ func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED; reason=%q", result.Verdict, result.Reason)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
@@ -528,145 +528,223 @@ func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	}
 }
 
+// The rejection is written only after the real watcher has registered, so an
+// event exists whatever the set-up duration. A sleep cannot order that: a
+// rejection landing between AwaitVerdict's initial read and the registration
+// leaves only the 10s fallback tick, which equals the test budget. This test
+// swaps a package seam, so neither it nor its subtests run in parallel.
 func TestAwaitVerdict_Rejected_NewAttempt(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmpDir)
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range []struct {
+		name       string
+		setupDelay time.Duration
+	}{
+		{name: "prompt setup"},
+		{name: "slow setup", setupDelay: time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	state.Config.MaxCoderIterations = 10
-	state.Config.MaxReviewCycles = 5
+			watcherReady := make(chan struct{})
+			originalWatcher := newAwaitVerdictWatcher
+			newAwaitVerdictWatcher = func(bb *db.Blackboard) (awaitVerdictWatcher, error) {
+				if tc.setupDelay > 0 {
+					<-time.After(tc.setupDelay)
+				}
+				watcher, err := originalWatcher(bb)
+				close(watcherReady)
+				return watcher, err
+			}
+			t.Cleanup(func() { newAwaitVerdictWatcher = originalWatcher })
 
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.Iteration = 1
-	task.Attempt = 1
-	task.ReviewCyclesCurrent = 4 // one below limit — budget gate passes
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			state.Config.MaxCoderIterations = 10
+			state.Config.MaxReviewCycles = 5
 
-	var result *AwaitVerdictResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.Iteration = 1
+			task.Attempt = 1
+			task.ReviewCyclesCurrent = 4 // one below limit — budget gate passes
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	testhelpers.WaitForAsyncSetup()
-	// Simulate reviewer rejection: increment ReviewCyclesCurrent (as submit_verdict does).
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusRejected
-		reason := "Missing tests"
-		tk.RejectionReason = &reason
-		tk.ReviewCyclesCurrent = 5 // now at limit — ClaimTask triggers new attempt
-		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
-		tk.LeaseExpires = &leaseExpires
-		reviewer := "code-reviewer-1"
-		tk.History = append(tk.History, models.TaskHistoryEntry{
-			Time:  time.Now().UTC(),
-			Event: models.TaskEventRejected,
-			Agent: &reviewer,
+			var result *AwaitVerdictResult
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
+
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			// Simulate reviewer rejection: increment ReviewCyclesCurrent (as submit_verdict does).
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusRejected
+				reason := "Missing tests"
+				tk.RejectionReason = &reason
+				tk.ReviewCyclesCurrent = 5 // now at limit — ClaimTask triggers new attempt
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				tk.LeaseExpires = &leaseExpires
+				reviewer := "code-reviewer-1"
+				tk.History = append(tk.History, models.TaskHistoryEntry{
+					Time:  time.Now().UTC(),
+					Event: models.TaskEventRejected,
+					Agent: &reviewer,
+				})
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
+
+			<-done
+			if awaitErr != nil {
+				t.Fatalf("AwaitVerdict error: %v", awaitErr)
+			}
+			if result.Verdict != string(VerdictNewAttempt) {
+				t.Errorf("Verdict = %q, want NEW_ATTEMPT; reason=%q", result.Verdict, result.Reason)
+			}
+
+			// Verify ownership released.
+			s, readErr := db.For(stateFile).Read()
+			if readErr != nil {
+				t.Fatalf("Failed to read state: %v", readErr)
+			}
+			agent := s.Agents["coder-1"]
+			if agent.CurrentTask != nil {
+				t.Errorf("expected CurrentTask=nil after NEW_ATTEMPT, got %q", *agent.CurrentTask)
+			}
 		})
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
-
-	<-done
-	if awaitErr != nil {
-		t.Fatalf("AwaitVerdict error: %v", awaitErr)
-	}
-	if result.Verdict != VerdictNewAttempt {
-		t.Errorf("Verdict = %q, want NEW_ATTEMPT; reason=%q", result.Verdict, result.Reason)
-	}
-
-	// Verify ownership released.
-	s, readErr := db.For(stateFile).Read()
-	if readErr != nil {
-		t.Fatalf("Failed to read state: %v", readErr)
-	}
-	agent := s.Agents["coder-1"]
-	if agent.CurrentTask != nil {
-		t.Errorf("expected CurrentTask=nil after NEW_ATTEMPT, got %q", *agent.CurrentTask)
 	}
 }
 
+// awaitSetupCases are the watcher set-up durations the seam-swapping await
+// tests run under: a prompt set-up, and a slow one that a sleep cannot order.
+var awaitSetupCases = []struct {
+	name       string
+	setupDelay time.Duration
+}{
+	{name: "prompt setup"},
+	{name: "slow setup", setupDelay: time.Second},
+}
+
+// installReadyAwaitVerdictWatcher swaps newAwaitVerdictWatcher for a wrapper
+// that waits setupDelay, builds the real watcher and then closes the returned
+// channel, so a test writes state only once the watcher has registered. The
+// seam is restored on cleanup; callers register their await-goroutine wait
+// after this call so it runs before the restore.
+func installReadyAwaitVerdictWatcher(t *testing.T, setupDelay time.Duration) <-chan struct{} {
+	t.Helper()
+	ready := make(chan struct{})
+	original := newAwaitVerdictWatcher
+	newAwaitVerdictWatcher = func(bb *db.Blackboard) (awaitVerdictWatcher, error) {
+		if setupDelay > 0 {
+			<-time.After(setupDelay)
+		}
+		watcher, err := original(bb)
+		close(ready)
+		return watcher, err
+	}
+	t.Cleanup(func() { newAwaitVerdictWatcher = original })
+	return ready
+}
+
+// The block is written only after the real watcher has registered, so an event
+// exists whatever the set-up duration. This test swaps a package seam, so
+// neither it nor its subtests run in parallel.
 func TestAwaitVerdict_Terminal(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range awaitSetupCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			watcherReady := installReadyAwaitVerdictWatcher(t, tc.setupDelay)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = models.Agent{
-		Role:   "coder",
-		Status: models.AgentStatusWaiting,
-	}
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = models.Agent{
+				Role:   "coder",
+				Status: models.AgentStatusWaiting,
+			}
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var result *AwaitVerdictResult
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			var result *AwaitVerdictResult
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
 
-	testhelpers.WaitForAsyncSetup()
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusBlocked
-		reason := "Spec ambiguity"
-		tk.BlockedReason = &reason
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusBlocked
+				reason := "Spec ambiguity"
+				tk.BlockedReason = &reason
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
 
-	<-done
-	if awaitErr != nil {
-		t.Fatalf("AwaitVerdict error: %v", awaitErr)
-	}
-	if result.Verdict != VerdictTerminal {
-		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
-	}
-	if !strings.Contains(result.Reason, "non-awaitable status") {
-		t.Errorf("Reason = %q, want to contain 'non-awaitable status'", result.Reason)
-	}
-	if result.TaskStatus != models.TaskStatusBlocked {
-		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
-	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
-	}
-	if !strings.Contains(result.Guidance, "Stop this session") {
-		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
-	}
+			<-done
+			if awaitErr != nil {
+				t.Fatalf("AwaitVerdict error: %v", awaitErr)
+			}
+			if result.Verdict != string(VerdictTerminal) {
+				t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
+			}
+			if !strings.Contains(result.Reason, "non-awaitable status") {
+				t.Errorf("Reason = %q, want to contain 'non-awaitable status'", result.Reason)
+			}
+			if result.TaskStatus != models.TaskStatusBlocked {
+				t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
+			}
+			if result.SafeAction != string(SafeActionStop) {
+				t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
+			}
+			if !strings.Contains(result.Guidance, "Stop this session") {
+				t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
+			}
 
-	// Verify ownership released.
-	s, readErr := bb.Read()
-	if readErr != nil {
-		t.Fatalf("Failed to read state: %v", readErr)
-	}
-	agent := s.Agents["coder-1"]
-	if agent.CurrentTask != nil {
-		t.Errorf("expected CurrentTask=nil after terminal, got %q", *agent.CurrentTask)
+			// Verify ownership released.
+			s, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatalf("Failed to read state: %v", readErr)
+			}
+			agent := s.Agents["coder-1"]
+			if agent.CurrentTask != nil {
+				t.Errorf("expected CurrentTask=nil after terminal, got %q", *agent.CurrentTask)
+			}
+		})
 	}
 }
 
@@ -695,7 +773,7 @@ func TestAwaitVerdict_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTimeout {
+	if result.Verdict != string(VerdictTimeout) {
 		t.Errorf("Verdict = %q, want TIMEOUT", result.Verdict)
 	}
 
@@ -831,7 +909,7 @@ func TestAwaitVerdict_Aborted(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictAborted {
+	if result.Verdict != string(VerdictAborted) {
 		t.Errorf("Verdict = %q, want ABORTED", result.Verdict)
 	}
 
@@ -870,14 +948,14 @@ func TestAwaitVerdict_AlreadyBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTerminal {
+	if result.Verdict != string(VerdictTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusBlocked {
 		t.Errorf("TaskStatus = %q, want BLOCKED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -919,14 +997,14 @@ func TestAwaitVerdict_AlreadyTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictTerminal {
+	if result.Verdict != string(VerdictTerminal) {
 		t.Errorf("Verdict = %q, want TERMINAL", result.Verdict)
 	}
 	if result.TaskStatus != models.TaskStatusSuperseded {
 		t.Errorf("TaskStatus = %q, want SUPERSEDED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -963,14 +1041,14 @@ func TestAwaitVerdict_AlreadyApproved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED", result.Verdict)
 	}
 	if result.ReviewerAgent != "code-reviewer-1" {
 		t.Errorf("ReviewerAgent = %q, want code-reviewer-1", result.ReviewerAgent)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "Stop this session") {
 		t.Errorf("Guidance = %q, want stop-session guidance", result.Guidance)
@@ -1013,14 +1091,14 @@ func TestAwaitVerdict_AlreadyMergedWithApprovalHistoryStopsWorktreeCommands(t *t
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.TaskStatus != models.TaskStatusMerged {
 		t.Errorf("TaskStatus = %q, want MERGED", result.TaskStatus)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 	if !strings.Contains(result.Guidance, "do not retry await-verdict or run more worktree commands") {
 		t.Errorf("Guidance = %q, want no-worktree-command guidance", result.Guidance)
@@ -1150,7 +1228,7 @@ func TestAwaitVerdict_PartiallyApproved(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictApproved {
+	if result.Verdict != string(VerdictApproved) {
 		t.Errorf("Verdict = %q, want APPROVED (after partial)", result.Verdict)
 	}
 }
@@ -1217,7 +1295,7 @@ func TestAwaitVerdict_RaceGuard(t *testing.T) {
 	if awaitErr != nil {
 		t.Fatalf("AwaitVerdict error: %v", awaitErr)
 	}
-	if result.Verdict != VerdictRejected {
+	if result.Verdict != string(VerdictRejected) {
 		t.Errorf("Verdict = %q, want REJECTED", result.Verdict)
 	}
 
@@ -1297,8 +1375,8 @@ func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1315,8 +1393,8 @@ func TestAwaitVerdict_RejectedAlreadyReassigned_ReturnsVerdict(t *testing.T) {
 	if result.ReviewCommit != reviewCommit {
 		t.Errorf("ReviewCommit = %q, want %q", result.ReviewCommit, reviewCommit)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 }
 
@@ -1378,8 +1456,8 @@ func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *test
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1390,8 +1468,8 @@ func TestAwaitVerdict_RejectedBeforeLaterSubmission_ReturnsCallerVerdict(t *test
 	if result.CurrentAssignee != "coder-2" {
 		t.Errorf("CurrentAssignee = %q, want coder-2", result.CurrentAssignee)
 	}
-	if result.SafeAction != SafeActionStop {
-		t.Errorf("SafeAction = %q, want %q", result.SafeAction, SafeActionStop)
+	if result.SafeAction != string(SafeActionStop) {
+		t.Errorf("SafeAction = %q, want %q", result.SafeAction, string(SafeActionStop))
 	}
 }
 
@@ -1458,8 +1536,8 @@ func TestAwaitVerdict_RejectedAfterReviewCommitUpdate_ReturnsUpdatedVerdict(t *t
 	if err != nil {
 		t.Fatalf("AwaitVerdict error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1522,8 +1600,8 @@ func TestHandleVerdictResult_NonAwaitableStatusRecoversVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handleVerdictResult error: %v", err)
 	}
-	if result.Verdict != VerdictAlreadyTransitioned {
-		t.Errorf("Verdict = %q, want %q", result.Verdict, VerdictAlreadyTransitioned)
+	if result.Verdict != string(VerdictAlreadyTransitioned) {
+		t.Errorf("Verdict = %q, want %q", result.Verdict, string(VerdictAlreadyTransitioned))
 	}
 	if result.Reason != reason {
 		t.Errorf("Reason = %q, want %q", result.Reason, reason)
@@ -1580,78 +1658,89 @@ func (*delayedErrorWatcher) Close() error { return nil }
 // command must degrade the agent there too — otherwise this path retries the
 // failing worktree without a bound (ADR-0117).
 func TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	testhelpers.SetupTestGitRepo(t, tmpDir)
-	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	for _, tc := range awaitSetupCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			watcherReady := installReadyAwaitVerdictWatcher(t, tc.setupDelay)
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	state.Config.MaxCoderIterations = 10
-	state.Config.MaxReviewCycles = 5
-	postCmd := "exit 1"
-	state.Config.PostWorktreeCmd = &postCmd
+			now := time.Now().UTC()
+			state := testhelpers.CreateValidState()
+			state.Config.MaxCoderIterations = 10
+			state.Config.MaxReviewCycles = 5
+			postCmd := "exit 1"
+			state.Config.PostWorktreeCmd = &postCmd
 
-	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
-	task.Iteration = 1
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:  now,
-		Event: models.TaskEventSubmittedForReview,
-		Agent: strPtr("coder-1"),
-	})
-	state.Tasks = []models.Task{task}
-	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
-	bb := testhelpers.WriteInitialState(t, stateFile, state)
+			task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+			task.Iteration = 1
+			task.History = append(task.History, models.TaskHistoryEntry{
+				Time:  now,
+				Event: models.TaskEventSubmittedForReview,
+				Agent: strPtr("coder-1"),
+			})
+			state.Tasks = []models.Task{task}
+			state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+			bb := testhelpers.WriteInitialState(t, stateFile, state)
 
-	var awaitErr error
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
-	}()
+			var awaitErr error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 10*time.Second)
+			}()
+			// Registered after the seam restore, so it runs first: the await
+			// goroutine reads the seam and must be gone before it is restored.
+			t.Cleanup(func() { <-done })
 
-	testhelpers.WaitForAsyncSetup()
-	if err := bb.Modify(func(s *models.State) error {
-		tk := s.FindTask("task-1")
-		tk.Status = models.TaskStatusRejected
-		reason := "Missing error handling"
-		tk.RejectionReason = &reason
-		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
-		tk.LeaseExpires = &leaseExpires
-		reviewer := "code-reviewer-1"
-		tk.History = append(tk.History, models.TaskHistoryEntry{
-			Time:  time.Now().UTC(),
-			Event: models.TaskEventRejected,
-			Agent: &reviewer,
+			select {
+			case <-watcherReady:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for watcher registration")
+			}
+			if err := bb.Modify(func(s *models.State) error {
+				tk := s.FindTask("task-1")
+				tk.Status = models.TaskStatusRejected
+				reason := "Missing error handling"
+				tk.RejectionReason = &reason
+				leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+				tk.LeaseExpires = &leaseExpires
+				reviewer := "code-reviewer-1"
+				tk.History = append(tk.History, models.TaskHistoryEntry{
+					Time:  time.Now().UTC(),
+					Event: models.TaskEventRejected,
+					Agent: &reviewer,
+				})
+				return nil
+			}); err != nil {
+				t.Fatalf("Failed to modify state: %v", err)
+			}
+
+			<-done
+
+			if awaitErr == nil {
+				t.Fatal("AwaitVerdict() error = nil, want the setup failure surfaced")
+			}
+			// Bounded: the caller can distinguish "stop, health recorded" from an
+			// ordinary retryable reclaim failure.
+			if !stderrors.Is(awaitErr, ErrAgentDegraded) {
+				t.Fatalf("AwaitVerdict() error = %v, want ErrAgentDegraded", awaitErr)
+			}
+
+			after, readErr := bb.Read()
+			if readErr != nil {
+				t.Fatalf("Read() error = %v", readErr)
+			}
+			health, ok := after.AgentHealth["coder-1"]
+			if !ok {
+				t.Fatal("AgentHealth missing entry, want degraded record for the auto-reclaim failure")
+			}
+			if health.Reason != string(AgentDegradedWorktreeSetupFailed) {
+				t.Errorf("health.Reason = %q, want %q", health.Reason, AgentDegradedWorktreeSetupFailed)
+			}
+			if strings.Contains(health.LastError, "\n") {
+				t.Errorf("health.LastError = %q, want a single-line persisted diagnostic", health.LastError)
+			}
 		})
-		return nil
-	}); err != nil {
-		t.Fatalf("Failed to modify state: %v", err)
-	}
-
-	<-done
-
-	if awaitErr == nil {
-		t.Fatal("AwaitVerdict() error = nil, want the setup failure surfaced")
-	}
-	// Bounded: the caller can distinguish "stop, health recorded" from an
-	// ordinary retryable reclaim failure.
-	if !stderrors.Is(awaitErr, ErrAgentDegraded) {
-		t.Fatalf("AwaitVerdict() error = %v, want ErrAgentDegraded", awaitErr)
-	}
-
-	after, readErr := bb.Read()
-	if readErr != nil {
-		t.Fatalf("Read() error = %v", readErr)
-	}
-	health, ok := after.AgentHealth["coder-1"]
-	if !ok {
-		t.Fatal("AgentHealth missing entry, want degraded record for the auto-reclaim failure")
-	}
-	if health.Reason != AgentDegradedWorktreeSetupFailed {
-		t.Errorf("health.Reason = %q, want %q", health.Reason, AgentDegradedWorktreeSetupFailed)
-	}
-	if strings.Contains(health.LastError, "\n") {
-		t.Errorf("health.LastError = %q, want a single-line persisted diagnostic", health.LastError)
 	}
 }

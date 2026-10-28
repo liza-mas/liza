@@ -1,0 +1,19 @@
+{
+  "exit_code": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "cause": "file_not_found",
+        "field": "spec_ref",
+        "path": "README.md",
+        "task_id": "task-1",
+        "value": "README.md"
+      },
+      "message": "spec_ref file not found: README.md (task: task-1)"
+    },
+    "ok": false,
+    "result": null
+  }
+}

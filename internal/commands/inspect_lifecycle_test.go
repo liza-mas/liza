@@ -129,7 +129,7 @@ func TestLifecycleInspection_RawTaskFieldsRedactWithoutMutation(t *testing.T) {
 	single := normalizeFieldValue(reflect.ValueOf(&state.Tasks[0]))
 	for _, value := range []any{raw, single} {
 		for _, format := range []string{"json", "yaml", "value"} {
-			output, err := formatOutput(value, format)
+			output, err := formatOutput(value, inspectFormat(format))
 			if err != nil {
 				t.Fatal(err)
 			}

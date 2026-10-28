@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 func TestTaskReadinessConfiguredRoles(t *testing.T) {
@@ -176,12 +178,12 @@ type taskReadinessTestResolver struct {
 	pairs     map[string]taskReadinessTestPair
 }
 
-func (r *taskReadinessTestResolver) RoleType(role string) (string, error) {
+func (r *taskReadinessTestResolver) RoleType(role string) (roles.RoleType, error) {
 	roleType, ok := r.roleTypes[role]
 	if !ok {
 		return "", fmt.Errorf("unknown role %q", role)
 	}
-	return roleType, nil
+	return roles.RoleType(roleType), nil
 }
 
 func (r *taskReadinessTestResolver) AllRoleNames() []string {

@@ -30,7 +30,7 @@ Use --dry-run to inspect eligibility without changing Git or state.`,
 			}
 		}()
 		if brand.LookupEnv(os.Getenv, "AGENT_ID").Value != "" {
-			return ops.WrapLifecycleError("recover-integration", nil, fmt.Errorf("recover-integration is an operator-only command; agent sessions cannot retire integration evidence"), models.LifecycleForbidden, "stop", "none")
+			return ops.WrapLifecycleError("recover-integration", nil, fmt.Errorf("recover-integration is an operator-only command; agent sessions cannot retire integration evidence"), models.LifecycleForbidden, ops.LifecycleSafeActionStop, ops.LifecycleEffectsNone)
 		}
 		root, err := requireProjectRoot()
 		if err != nil {

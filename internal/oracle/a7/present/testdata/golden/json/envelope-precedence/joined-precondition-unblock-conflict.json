@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": "validation",
+    "details": {
+      "repair_request": true,
+      "target_ref": "integration",
+      "target_sha": "<ID>",
+      "task_id": "task-blocked",
+      "task_status": "BLOCKED"
+    },
+    "message": "fixture precondition"
+  },
+  "ok": false,
+  "result": null
+}

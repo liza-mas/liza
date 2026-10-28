@@ -33,11 +33,28 @@ func ClaudeToolResultSettings(executable, projectRoot string) (string, error) {
 	quote := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\"'\"'") + "'" }
 	command := quote(executable) + " tool-result --root " + quote(filepath.Join(projectRoot, paths.ProjectDirName(), "tool-results")) + " claude-hook"
 	hook := func(matcher string) []any {
-		return []any{map[string]any{"matcher": matcher, "hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 60}}}}
+		return []any{map[string]any{"matcher": matcher, "hooks": []any{map[string]any{"type": "command", "command": command, "timeout": claudeToolResultHookTimeoutSeconds}}}}
 	}
-	payload, err := json.Marshal(map[string]any{"hooks": map[string]any{"PostToolUse": hook("Read|Grep|Glob|mcp__.*"), "PostToolBatch": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 60}}}}}})
+	payload, err := json.Marshal(map[string]any{"hooks": map[string]any{"PostToolUse": hook("Read|Grep|Glob|mcp__.*"), "PostToolBatch": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": claudeToolResultHookTimeoutSeconds}}}}}})
 	return string(payload), err
 }
+
+// The tool-result boundary relies on Claude Code hooks that exist from this
+// version on (the error message below names it), and on a version probe bounded
+// by toolResultVersionProbeTimeout. The hook timeout is in seconds, as Claude's
+// settings expect.
+const (
+	claudeToolResultMinMajor           = 2
+	claudeToolResultMinMinor           = 1
+	claudeToolResultMinPatch           = 267
+	claudeToolResultHookTimeoutSeconds = 60
+	// claudeVersionMatchLen is the whole match plus the three version parts.
+	claudeVersionMatchLen = 4
+)
+
+// toolResultVersionProbeTimeout bounds the --version probe of a provider whose
+// tool-result hooks the runtime depends on.
+const toolResultVersionProbeTimeout = 5 * time.Second
 
 // validateClaudeToolResultBoundary refuses versions that silently ignore native
 // rewrites and startup settings that would suppress the mandatory hook overlay.
@@ -47,20 +64,20 @@ func validateClaudeToolResultBoundary(ctx context.Context, executable, projectRo
 			return fmt.Errorf("claude tool-result boundary cannot safely combine with startup hook-overriding settings")
 		}
 	}
-	versionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	versionCtx, cancel := context.WithTimeout(ctx, toolResultVersionProbeTimeout)
 	defer cancel()
 	output, err := exec.CommandContext(versionCtx, executable, "--version").Output()
 	if err != nil {
 		return fmt.Errorf("cannot verify Claude tool-result hook support")
 	}
 	match := regexp.MustCompile(`(?:^|\s)([0-9]+)\.([0-9]+)\.([0-9]+)(?:\s|$)`).FindStringSubmatch(string(output))
-	if len(match) != 4 {
+	if len(match) != claudeVersionMatchLen {
 		return fmt.Errorf("cannot identify Claude version for tool-result hooks")
 	}
 	major, _ := strconv.Atoi(match[1])
 	minor, _ := strconv.Atoi(match[2])
 	patch, _ := strconv.Atoi(match[3])
-	if major < 2 || major == 2 && (minor < 1 || minor == 1 && patch < 267) {
+	if major < claudeToolResultMinMajor || major == claudeToolResultMinMajor && (minor < claudeToolResultMinMinor || minor == claudeToolResultMinMinor && patch < claudeToolResultMinPatch) {
 		return fmt.Errorf("native Claude tool-result hooks require Claude Code 2.1.267 or newer")
 	}
 	settings := []string{filepath.Join(projectRoot, ".claude", "settings.json"), filepath.Join(projectRoot, ".claude", "settings.local.json")}

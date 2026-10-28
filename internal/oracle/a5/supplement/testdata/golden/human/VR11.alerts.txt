@@ -1,0 +1,1 @@
+[<TIME>] ⚠️ VALIDATION PREFLIGHT FAILED: task-1 — agent coder-1 failed validation preflight: prerequisite_failed (command=0 check=0); repair that prerequisite in the agent's launch environment, then let it retry (liza repair-agent-pool --dry-run)

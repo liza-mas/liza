@@ -445,7 +445,7 @@ Required:
 
 Optional:
 - `plan_ref` (`string`): Path to the plan artifact (repo-relative). Set by doer via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped).
-- `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `proceed.go` during transitions.
+- `arch_ref` (`string`): Path to the architecture document (repo-relative). Set by architect via `set-task-output`. Normalized by `NormalizeSpecRef` (worktree prefixes stripped). Propagated to child tasks by `transition_children.go` during transitions.
 - `epic_ref` (`string`): Path to a concrete epic artifact (repo-relative). Specialized `epic-planning-pair` outputs use this for `us-writing-pair` children; epic master framework refs use `plan_ref`, not `epic_ref`.
 - `validation` (`[]string`): Ordered canonical validation commands for the generated child task. Commands are stored exactly as declared, must be single-line, non-empty, and must not have leading or trailing whitespace. Newly declared validation commands must be single-purpose and agent-executable. Forbidden validation command shapes: `cd ... &&`, command substitution/backticks, polling or tail pipelines, and task artifact paths outside the worktree. Existing stored commands that violate this shape remain visible as task-declared executable guidance and are translated by consumers rather than edited in place. This field is distinct from `repair_request.validation`, which records validation for an orchestrator repair request.
 - `destructive_db` (`bool`): Optional safety marker for validation commands that may reset, drop, or otherwise destroy DB state. Defaults to false and is inert when omitted. When true, `validation` must be non-empty and every command must start with `LIZA_ALLOW_DESTRUCTIVE_DB=1 ` or `env LIZA_ALLOW_DESTRUCTIVE_DB=1 `. The marker is part of the canonical command and must not be translated away.
@@ -537,8 +537,8 @@ review/failure metadata; the doer updates output if repair changes the deliverab
 
 | Hop | Source | Target | Mechanism |
 |-----|--------|--------|-----------|
-| First | Architect's `output[]` entry `.arch_ref` | Code-planning child task `.arch_ref` | `proceed.go` `buildChildTask` copies `entry.ArchRef` |
-| Second | Parent code-planning task `.arch_ref` | Coding child task `.arch_ref` | `proceed.go` `buildOneToOneChild` / `buildChildTask` inherits `parent.ArchRef` as fallback when entry has no `arch_ref` |
+| First | Architect's `output[]` entry `.arch_ref` | Code-planning child task `.arch_ref` | `transition_children.go` `buildChildTask` copies `entry.ArchRef` |
+| Second | Parent code-planning task `.arch_ref` | Coding child task `.arch_ref` | `transition_children.go` `buildOneToOneChild` / `buildChildTask` inherits `parent.ArchRef` as fallback when entry has no `arch_ref` |
 
 Precedence: entry-level `arch_ref` takes priority over parent task `arch_ref`. This allows an output entry to override the inherited architecture document if needed.
 
@@ -624,7 +624,7 @@ circular `depends_on` prevents topological ordering. Semantics:
 - Does NOT satisfy downstream dependencies
 - True cycle members are excluded from orchestrator wake detection and planning-complete prompt rendering via `IsPlanningCompleteEligible`
 - Tasks transitively downstream of those cycle members are also excluded from `PLANNING_COMPLETE` by the same predicate, but do not get a durable `transition_cycle_blocked` event
-- Checkpoint auto-trigger (`sprint_checkpoint.go`) still uses `IsUnconsumedPlanningOutput` today
+- Checkpoint auto-trigger (`resolveCheckpointTrigger` in `sprint_checkpoint.go`) evaluates `PlanHandoffDomain.HasUnfailedHandoff` (`plan_handoff.go`), which applies no cycle-blocked exclusion (cycle admission is evaluated separately, by `PlanningCompleteEligible`); outside the plan-hand-off domain it reduces to `IsUnconsumedPlanningOutput`
 - Idempotent per (taskID, transitionName, sorted cycle member IDs)
 - Cycle members stored in `Extra["cycle_members"]` (sorted task ID list)
 
@@ -1212,7 +1212,7 @@ agents:
     heartbeat: 2025-01-17T14:52:00Z
     liveness_seq: 1737125520000000000  # highest liveness side-record seq folded into this row (ADR-0177); omitted until a fold
     terminal: /dev/pts/2  # For human observation: which terminal window is this agent?
-    provider: claude  # CLI the agent runs; used by provider-diversity policy
+    provider: claude  # CLI (tool name) the agent runs; provider-diversity policy compares its canonical provider key, derived when evaluated (ADR-0229)
     model: claude-opus-5-5  # First-class model it launched with (ADR-0167); omitted for the tool default, read by no policy
     iterations_total: 47  # Total iterations across all tasks this session (agent-level aggregate)
     context_percent: 34  # v1: heuristic estimate, not measured — see task-lifecycle.md#context-tracking
@@ -1434,7 +1434,7 @@ config:
   high_churn_rejection_threshold: 4  # Durable rejections per RCA cycle; non-positive uses default 4
   max_instances: 3              # Live agents per non-orchestrator role without its own max-instances; non-positive uses default 3
   heartbeat_interval: 60        # Seconds
-  lease_duration: 1800          # Seconds (30 minutes)
+  lease_duration: 1800          # Seconds (default 1800 = 30 minutes; non-positive uses the default)
   coder_poll_interval: 30       # Seconds between work availability checks
   doer_max_wait: 600            # Max idle seconds before a doer supervisor exits the pool
   orchestrator_poll_interval: 60 # Seconds between orchestrator work checks
@@ -1692,7 +1692,8 @@ agents:
 ```
 
 **Lease rules:**
-- On claim: set `lease_expires` to now + lease_duration (default: 30 minutes)
+- On claim: set `lease_expires` to now + lease_duration (configured `config.lease_duration`; default: 1800 s, 30 minutes)
+- Agent registration, the supervisor heartbeat (agent, assigned-task and active-review renewals), reviewer claims, re-review reclaims and agent-pool repair's reviewer-start projection all use this one configured duration, sampled from the state each operation reads; a running heartbeat is not reconfigured live
 - Heartbeat extends lease by lease_duration, through a liveness side record rather than a state write (see [Locking](#locking))
 - Task reclaimable only after lease expires
 - If original agent returns after expiry → must self-abort immediately
@@ -1733,7 +1734,7 @@ supervisor PID remains alive; missing, unusable, dead, mismatched, or
 non-observing reviewer process/agent evidence makes the claim stale.
 
 **Heartbeat interval:** 60 seconds
-**Lease duration:** 1800 seconds (30 minutes)
+**Lease duration:** `config.lease_duration` (default 1800 seconds, 30 minutes)
 **Stale threshold:** lease_expires in the past
 
 This resolves "slow but alive" ambiguity cleanly.

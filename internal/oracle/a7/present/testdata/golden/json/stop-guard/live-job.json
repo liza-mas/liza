@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "decision": "block",
+    "reason": "Background job(s) you started are still running: job-1 (go test ./...). Ending the turn now kills them. Wait for each to exit as AGENT_TOOLS.md describes, then act on its result before ending the turn."
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-a1-render-default", "file": "internal/oracle/a2/artifact/render_test.go", "assertion": "TestOracleA2EmbeddedRenderDefault compares the rendered tree path, mode, size and SHA-256 manifest", "command_index": 1},
+    {"obligation_id": "AC-a2-render-fixture-brand", "file": "internal/oracle/a2/artifact/render_test.go", "assertion": "TestOracleA2EmbeddedRenderFixtureBrand compares the explicit acme-oracle fixture render manifest", "command_index": 1},
+    {"obligation_id": "AC-a3-global-install", "file": "internal/oracle/a2/artifact/render_test.go", "assertion": "TestOracleA2GlobalInstall compares every installed file including frontmatter by manifest", "command_index": 1},
+    {"obligation_id": "AC-a4-project-artifacts", "file": "internal/oracle/a2/artifact/project_test.go", "assertion": "TestOracleA2ProjectArtifacts compares written paths and modes plus every project and home file byte for byte", "command_index": 1},
+    {"obligation_id": "AC-a5-home-worktree-hooks", "file": "internal/oracle/a2/artifact/project_test.go", "assertion": "TestOracleA2HomeAndWorktreeHooks compares the single home pi init gate and fixed worktree pre-commit renderer", "command_index": 1},
+    {"obligation_id": "AC-a6-index-activation", "file": "internal/oracle/a2/artifact/index_test.go", "assertion": "TestOracleA2IndexActivation compares the installed path/mode set and bytes after planning and installation on the committed Go-module fixture", "command_index": 1},
+    {"obligation_id": "AC-a7-activation-collision", "file": "internal/oracle/a2/artifact/index_test.go", "assertion": "TestOracleA2IndexActivationCollision rejects nil error, checks foreign post-commit bytes unchanged and compares refusal message", "command_index": 1},
+    {"obligation_id": "AC-a8-worktree-exclude", "file": "internal/oracle/a2/artifact/exclude_test.go", "assertion": "TestOracleA2WorktreeExclude applies both writers twice and compares the repository and private exclude bytes", "command_index": 1},
+    {"obligation_id": "AC-start-provenance", "file": "internal/testhelpers/oracle/cmd/regen/main.go", "assertion": "regen -mode check -pkg ./internal/oracle/a2/artifact/... reproduces every package golden from the starting production tree", "command_index": 5},
+    {"obligation_id": "AC-adapter-rule", "approved_reference_id": "harness"},
+    {"obligation_id": "AC-env-safe", "approved_reference_id": "arch-a2-constraints"},
+    {"obligation_id": "AC-additive", "approved_reference_id": "arch-a2-scope1"},
+    {"obligation_id": "AC-e1", "file": "Makefile", "assertion": "make test under env -i discovers the artifact oracle package through ./...", "command_index": 3}
+  ]
+}

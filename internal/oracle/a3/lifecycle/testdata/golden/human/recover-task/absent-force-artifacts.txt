@@ -1,0 +1,12 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: UNKNOWN
+effects: committed
+task_id: task-9
+Recovered task task-9
+In state: no (git-only cleanup)
+Worktree removed: yes
+Branch removed: yes
+stderr:

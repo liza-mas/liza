@@ -1,0 +1,36 @@
+[
+  {
+    "desc": "Close A7 including C4 at its boundary, then consolidate A8 prompt assembly around resolved inputs and remove prompts -> ops",
+    "done_when": "boundary-a7.md records G1-G7 and green G8; A8 ratchet and prompts->ops allowlist are empty, only justified S2 exceptions remain, no shims remain, K7 and reference audits complete, and E1/scoped race, prompt oracles and unchanged role budget pass with reviewed oracle exceptions only.",
+    "scope": "A7 boundary record and issue closures; A8 production/templates, A8 guard data, X3 result/class types into models, X2 callers, tests and acceptance manifests, additive oracles, one ADR and affected chain-serialized code references. Out: behavior changes, mutation moves, other-area refactors, Makefile, baseline, overview, historical ADR edits, A8 issue closure.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-012851-arm-1-ar-19.md#Scope 1: A7 boundary and A8 prompt consolidation",
+    "rca_required": false,
+    "decomposition": {
+      "owned_files": [
+        "specs/architecture/consolidation-run/boundary-a7.md",
+        "internal/testguard/archguard/area_a8_test.go",
+        "internal/agent/prompt.go",
+        "internal/agent/prompt_planner_context.go",
+        "internal/agent/reference_context.go",
+        "internal/agent/prompt_corrective_context.go"
+      ],
+      "owned_modules": [
+        "internal/prompts",
+        "internal/prompts/templates",
+        "internal/prompts/rolebudget"
+      ],
+      "interfaces_owned": [
+        "SI-5 prompts->ops",
+        "template structure"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "Area-Boundary Checkpoint Contract"
+      ],
+      "coverage_notes": "Must; ordinary code planning. The first coding unit closes A7 with C4; all A8 coding depends on it. Default inheritance preserves the A7/C4 implementation and A8 oracle holds from arm-1-ar-17, arm-1-ar-18 and arm-1-ar-8 through their code plans. Later A8 units are serialized where they share prompt.go, A8 guard data or chain-serialized docs. X2/X3 edits, associated tests and manifests are allowed as specified in Scope 1. No optional prerequisite or direct coding allocation."
+    }
+  }
+]

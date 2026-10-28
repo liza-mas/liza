@@ -1,0 +1,13 @@
+#!/bin/sh
+printf '%s\n' "$1" >> index-invocations.txt
+output=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    shift
+    output=$1
+  fi
+  shift
+done
+if [ -n "$output" ]; then
+  printf '{"fixture":true}\n' > "$output"
+fi

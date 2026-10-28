@@ -1016,6 +1016,9 @@ rules:
     identity: Bash(liza:*)
     status: resolved
   - kind: permission-family
+    identity: Bash(omni-ee:*)
+    status: resolved
+  - kind: permission-family
     identity: Bash(make:*)
     status: resolved
   - kind: permission-family

@@ -13,6 +13,17 @@ import (
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
+// Minimum value lengths below which a value is not treated as a credential.
+const (
+	// minEnvSecretLength stays aligned with secretmask: shorter environment
+	// values are common words.
+	minEnvSecretLength = 8
+	// minLongTokenLength applies to tokens matched by the assignment-free pattern.
+	minLongTokenLength = 12
+	// minCredentialTokenLength applies to unquoted assignment values.
+	minCredentialTokenLength = 6
+)
+
 // A credential key name: a credential word, optionally behind a namespace or
 // camelCase prefix (`DB_PASSWORD`, `PGPASSWORD`, `clientSecret`) and followed
 // only by a key/base/value/string suffix (`SECRET_KEY_BASE`, `secretKey`,
@@ -57,7 +68,7 @@ func newSanitizer(secrets []string) func(string) string {
 		key, value, ok := strings.Cut(entry, "=")
 		// Keep the threshold aligned with secretmask: very short environment
 		// values are common words and redacting them corrupts ordinary output.
-		if ok && len(value) >= 8 && secretmask.IsSecretKey(key) {
+		if ok && len(value) >= minEnvSecretLength && secretmask.IsSecretKey(key) {
 			values = append(values, value)
 		}
 	}
@@ -101,7 +112,7 @@ func redactBearerValues(text string) string {
 		match := text[start:end]
 		value := match[strings.LastIndex(match, " ")+1:]
 		out.WriteString(text[last:start])
-		if len(value) >= 12 && credentialShapedToken(value) {
+		if len(value) >= minLongTokenLength && credentialShapedToken(value) {
 			out.WriteString("[REDACTED]")
 		} else {
 			out.WriteString(match)
@@ -536,7 +547,7 @@ func redactFlags(text string) string {
 			if quoted != "empty" {
 				keep = text[start:m[4]] + "[REDACTED]"
 			}
-		} else if len(value) >= 6 && credentialShapedToken(value) {
+		} else if len(value) >= minCredentialTokenLength && credentialShapedToken(value) {
 			keep = text[start:m[4]] + "[REDACTED]"
 		}
 		out.WriteString(keep)
@@ -566,7 +577,7 @@ func isQuotedLiteral(value string) string {
 // sign. All-lowercase words and pure numbers (telemetry, placeholders) are
 // preserved.
 func credentialShapedToken(value string) bool {
-	if len(value) < 6 {
+	if len(value) < minCredentialTokenLength {
 		return false
 	}
 	hasLetter, hasEntropy := false, false

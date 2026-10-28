@@ -1,0 +1,62 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "agent_id": "coder-1",
+          "base_commit": "<commit:base>",
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "integration_fix": false,
+          "lease_expires": "<now+30m Z>",
+          "operation": "claim-task",
+          "outcome": "COMPLETED",
+          "previous_assignee": "",
+          "request_id": "req-1",
+          "safe_action": "continue",
+          "source_status": "DRAFT_CODE",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>",
+          "warnings": [],
+          "worktree_recreated": false,
+          "worktree_rel": ".worktrees/task-1"
+        }
+      }
+    },
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "agent_id": "coder-1",
+          "base_commit": "<commit:base>",
+          "changed": false,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "integration_fix": false,
+          "lease_expires": "<now+30m Z>",
+          "operation": "claim-task",
+          "outcome": "ALREADY_COMPLETED",
+          "previous_assignee": "",
+          "request_id": "req-1",
+          "safe_action": "continue",
+          "source_status": "DRAFT_CODE",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>",
+          "warnings": null,
+          "worktree_recreated": false,
+          "worktree_rel": ".worktrees/task-1"
+        }
+      }
+    }
+  ]
+}

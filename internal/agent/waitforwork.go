@@ -75,8 +75,6 @@ func waitForWorkEventDriven(
 	checkWork workCheckFunc,
 	surplus surplusCheckFunc,
 ) (bool, error) {
-	logger := GetLogger()
-
 	// Check context cancellation before doing any work.
 	// If we skip this check, and work is available, we'd return true immediately
 	// even if the context was already cancelled, causing the supervisor to
@@ -89,28 +87,8 @@ func waitForWorkEventDriven(
 
 	deadline := time.Now().Add(maxWait)
 
-	state, err := bb.ReadCached()
-	if err != nil {
-		return false, fmt.Errorf("failed to read state: %w", err)
-	}
-
-	// Check for ABORT before checking for work
-	if stopped, reason := isSystemStopped(state); stopped {
-		logger.Info("ABORT detected", "reason", reason)
-		return false, nil
-	}
-	if surplus != nil && surplus(state) {
-		return false, errPoolSurplus
-	}
-
-	if hasWork, logMsg := checkWork(state); hasWork {
-		if logMsg != "" {
-			logger.Info(logMsg)
-		}
-		return true, nil
-	} else if state.Config.DiagnosticLogging && logMsg != "" {
-		// Only show "no work" diagnostics if enabled
-		logger.Info(logMsg)
+	if done, hasWork, err := observeWaitState(bb.ReadCached, checkWork, surplus, true); done {
+		return hasWork, err
 	}
 
 	// Try to set up event-driven watching
@@ -121,6 +99,22 @@ func waitForWorkEventDriven(
 	}
 	defer watcher.Close()
 
+	return watchForWork(ctx, bb, projectRoot, pollInterval, maxWait, deadline, watcher, checkWork, surplus)
+}
+
+// watchForWork is the watcher and timer lifetime of the event-driven wait: it
+// re-evaluates state on every watcher event and on the fallback tick until the
+// deadline, falling back to polling when the watcher reports an error.
+func watchForWork(
+	ctx context.Context,
+	bb *db.Blackboard,
+	projectRoot string,
+	pollInterval, maxWait time.Duration,
+	deadline time.Time,
+	watcher stateWatcher,
+	checkWork workCheckFunc,
+	surplus surplusCheckFunc,
+) (bool, error) {
 	// Add ticker for periodic ABORT checks (file-based fallback).
 	// Keep this well below typical maxWait to avoid racing with context deadlines.
 	abortTicker := time.NewTicker(abortTickInterval)
@@ -136,61 +130,26 @@ func waitForWorkEventDriven(
 			return false, ctx.Err()
 
 		case <-abortTicker.C:
-			state, err := bb.ReadCached()
-			if err != nil {
-				return false, fmt.Errorf("failed to read state: %w", err)
-			}
-			if stopped, reason := isSystemStopped(state); stopped {
-				logger.Info("ABORT detected", "reason", reason)
-				return false, nil
-			}
-			if surplus != nil && surplus(state) {
-				return false, errPoolSurplus
-			}
 			// Also check for work: covers the TOCTOU race where state
 			// changed between the initial check and watcher setup.
-			if hasWork, logMsg := checkWork(state); hasWork {
-				if logMsg != "" {
-					logger.Info(logMsg)
-				}
-				return true, nil
+			if done, hasWork, err := observeWaitState(bb.ReadCached, checkWork, surplus, false); done {
+				return hasWork, err
 			}
 			if time.Now().After(deadline) {
 				return false, nil
 			}
 
 		case <-watcher.Events():
-			state, err := bb.ReadCached()
-			if err != nil {
-				return false, fmt.Errorf("failed to read state: %w", err)
+			if done, hasWork, err := observeWaitState(bb.ReadCached, checkWork, surplus, true); done {
+				return hasWork, err
 			}
-
-			// Check for ABORT before checking for work
-			if stopped, reason := isSystemStopped(state); stopped {
-				logger.Info("ABORT detected", "reason", reason)
-				return false, nil
-			}
-			if surplus != nil && surplus(state) {
-				return false, errPoolSurplus
-			}
-
-			if hasWork, logMsg := checkWork(state); hasWork {
-				if logMsg != "" {
-					logger.Info(logMsg)
-				}
-				return true, nil
-			} else if state.Config.DiagnosticLogging && logMsg != "" {
-				// Only show "no work" diagnostics if enabled
-				logger.Info(logMsg)
-			}
-
 			if time.Now().After(deadline) {
 				return false, nil
 			}
 
 		case err := <-watcher.Errors():
 			// Watcher error, fallback to polling
-			logger.Warn("Watcher error, falling back to polling", "error", err)
+			GetLogger().Warn("Watcher error, falling back to polling", "error", err)
 			watcher.Close()
 			return waitForWorkPolling(ctx, bb, projectRoot, pollInterval, maxWait, checkWork, surplus)
 
@@ -198,6 +157,47 @@ func waitForWorkEventDriven(
 			return false, nil
 		}
 	}
+}
+
+// observeWaitState reads one state snapshot with read and evaluates it. done
+// reports that the wait ends with hasWork and err.
+func observeWaitState(read func() (*models.State, error), checkWork workCheckFunc, surplus surplusCheckFunc, diagnoseIdle bool) (done, hasWork bool, err error) {
+	state, err := read()
+	if err != nil {
+		return true, false, fmt.Errorf("failed to read state: %w", err)
+	}
+	return evaluateWaitState(state, checkWork, surplus, diagnoseIdle)
+}
+
+// evaluateWaitState is the snapshot predicate of every wait. Precedence: a
+// stopped system ends the wait without work, then a surplus agent ends it with
+// errPoolSurplus, then available work ends it with work. A snapshot with none
+// of them keeps the wait going; when diagnoseIdle is set and diagnostic logging
+// is on, the work check's message is logged for it.
+func evaluateWaitState(state *models.State, checkWork workCheckFunc, surplus surplusCheckFunc, diagnoseIdle bool) (done, hasWork bool, err error) {
+	logger := GetLogger()
+
+	// Check for ABORT before checking for work
+	if stopped, reason := isSystemStopped(state); stopped {
+		logger.Info("ABORT detected", "reason", reason)
+		return true, false, nil
+	}
+	if surplus != nil && surplus(state) {
+		return true, false, errPoolSurplus
+	}
+
+	hasWork, logMsg := checkWork(state)
+	if hasWork {
+		if logMsg != "" {
+			logger.Info(logMsg)
+		}
+		return true, true, nil
+	}
+	if diagnoseIdle && state.Config.DiagnosticLogging && logMsg != "" {
+		// Only show "no work" diagnostics if enabled
+		logger.Info(logMsg)
+	}
+	return false, false, nil
 }
 
 // waitForWorkPolling is a generic polling wait implementation for all agent roles.
@@ -210,7 +210,6 @@ func waitForWorkPolling(
 	checkWork workCheckFunc,
 	surplus surplusCheckFunc,
 ) (bool, error) {
-	logger := GetLogger()
 	deadline := time.Now().Add(maxWait)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -220,30 +219,9 @@ func waitForWorkPolling(
 		case <-ctx.Done():
 			return false, ctx.Err()
 		case <-ticker.C:
-			state, err := bb.ReadSnapshot()
-			if err != nil {
-				return false, fmt.Errorf("failed to read state: %w", err)
+			if done, hasWork, err := observeWaitState(bb.ReadSnapshot, checkWork, surplus, true); done {
+				return hasWork, err
 			}
-
-			// Check for ABORT before checking for work
-			if stopped, reason := isSystemStopped(state); stopped {
-				logger.Info("ABORT detected", "reason", reason)
-				return false, nil
-			}
-			if surplus != nil && surplus(state) {
-				return false, errPoolSurplus
-			}
-
-			if hasWork, logMsg := checkWork(state); hasWork {
-				if logMsg != "" {
-					logger.Info(logMsg)
-				}
-				return true, nil
-			} else if state.Config.DiagnosticLogging && logMsg != "" {
-				// Only show "no work" diagnostics if enabled
-				logger.Info(logMsg)
-			}
-
 			if time.Now().After(deadline) {
 				return false, nil
 			}

@@ -17,12 +17,25 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/secretmask"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 var errVerdictEvidenceUnchanged = errors.New("verdict evidence unchanged")
+
+const (
+	reconcileVerdictOperation = "reconcile-verdict"
+	// taskReviewLockKeyFormat and quarantinedVerdictIDFormat take the hex of a
+	// SHA-256 digest; their spelling names the lock file and the persisted ID.
+	taskReviewLockKeyFormat    = "task-review-%x"
+	quarantinedVerdictIDFormat = "qv-%x"
+	// models.IsVerdictDisposition owns the reconciliation judgments but names no
+	// constant; these are the two that release a hold.
+	reconcileDispositionRefuted    = "refuted"
+	reconcileDispositionSuperseded = "superseded"
+)
 
 // withTaskReviewLock orders evidence capture, approval, reconciliation and the
 // entire merge/finalization across processes. Acquire only at public entries:
@@ -34,7 +47,7 @@ func withTaskReviewLock(projectRoot, taskID, operation string, fn func() error) 
 	if strings.TrimSpace(taskID) == "" {
 		return &PreconditionError{Reason: "task ID is required"}
 	}
-	key := fmt.Sprintf("task-review-%x", sha256.Sum256([]byte(taskID)))
+	key := fmt.Sprintf(taskReviewLockKeyFormat, sha256.Sum256([]byte(taskID)))
 	lock, err := projectFileLock(projectRoot, key)
 	if errors.Is(err, os.ErrNotExist) {
 		// Focused non-Git callers still require cross-process serialization.
@@ -63,7 +76,7 @@ type QuarantinedVerdictError struct {
 }
 
 func (e *QuarantinedVerdictError) Error() string {
-	message := fmt.Sprintf("%v; evidence saved as quarantined verdict %s; an authorized orchestrator can use %s to record a judgment", e.Authority, e.FindingID, brand.Command("reconcile-verdict"))
+	message := fmt.Sprintf("%v; evidence saved as quarantined verdict %s; an authorized orchestrator can use %s to record a judgment", e.Authority, e.FindingID, brand.Command(reconcileVerdictOperation))
 	if !e.Matched {
 		message += "; unmatched review boundary: retained for diagnosis, does not gate merges"
 	}
@@ -120,7 +133,7 @@ func sanitizeVerdictReason(reason string, state *models.State, authority models.
 	slices.SortFunc(values, func(a, b string) int { return len(b) - len(a) })
 	for _, value := range values {
 		if value != "" {
-			reason = strings.ReplaceAll(reason, value, "***")
+			reason = strings.ReplaceAll(reason, value, acceptanceMaskedValue)
 		}
 	}
 	reason = strings.TrimSpace(secretmask.New().MaskText(reason))
@@ -157,7 +170,7 @@ func quarantineFencedVerdict(bb *db.Blackboard, taskID, verdict, reason, reviewC
 		}
 		safeReason := sanitizeVerdictReason(reason, state, authority)
 		key, _ := json.Marshal([]string{taskID, reviewCommit, authority.ID, verdict, safeReason})
-		id := fmt.Sprintf("qv-%x", sha256.Sum256(key))
+		id := fmt.Sprintf(quarantinedVerdictIDFormat, sha256.Sum256(key))
 		fingerprint := generationFingerprint(authority.Generation)
 		rejection = &QuarantinedVerdictError{Authority: fenced, FindingID: id, PostMerge: task.Status == models.TaskStatusMerged}
 		for i := range state.QuarantinedVerdicts {
@@ -200,7 +213,7 @@ func taskHasReviewBoundary(task *models.Task, commit string) bool {
 			if entry.Commit != nil && strings.EqualFold(*entry.Commit, commit) {
 				return true
 			}
-			if entry.Event == models.TaskEventReviewCommitUpdated && strings.EqualFold(reviewCommitValue(entry.Extra["old_review_commit"]), commit) {
+			if entry.Event == models.TaskEventReviewCommitUpdated && strings.EqualFold(reviewCommitValue(entry.Extra[oldReviewCommitExtraKey]), commit) {
 				return true
 			}
 		}
@@ -231,8 +244,8 @@ func reviewLineage(task *models.Task, from, to string) (related, ambiguous bool)
 		if entry.Event != models.TaskEventReviewCommitUpdated {
 			continue
 		}
-		old := reviewCommitValue(entry.Extra["old_review_commit"])
-		next := reviewCommitValue(entry.Extra["new_review_commit"])
+		old := reviewCommitValue(entry.Extra[oldReviewCommitExtraKey])
+		next := reviewCommitValue(entry.Extra[newReviewCommitExtraKey])
 		if models.IsFullReviewCommit(old) && models.IsFullReviewCommit(next) {
 			edges[old] = append(edges[old], next)
 		}
@@ -279,7 +292,7 @@ func requireReconciledVerdicts(state *models.State, task *models.Task, commit st
 		}
 		if n := len(finding.Reconciliations); n > 0 {
 			disposition := finding.Reconciliations[n-1].Disposition
-			if disposition == "refuted" || disposition == "superseded" {
+			if disposition == reconcileDispositionRefuted || disposition == reconcileDispositionSuperseded {
 				continue
 			}
 		}
@@ -287,7 +300,7 @@ func requireReconciledVerdicts(state *models.State, task *models.Task, commit st
 		if !related && !ambiguous {
 			continue
 		}
-		conflict := finding.Verdict == "REJECTED"
+		conflict := submittedVerdict(finding.Verdict) == submittedVerdictRejected
 		for _, entry := range task.History {
 			if entry.Event != models.TaskEventRejected || entry.Commit == nil {
 				continue
@@ -298,7 +311,7 @@ func requireReconciledVerdicts(state *models.State, task *models.Task, commit st
 			ambiguous = ambiguous || forwardAmbiguous || backwardAmbiguous
 		}
 		if conflict || ambiguous {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s review commit %s is held by quarantined verdict %s; an authorized orchestrator must use %s with a reason before approval or merge (rebase alone does not resolve evidence)", task.ID, commit, finding.ID, brand.Command("reconcile-verdict"))}
+			return &PreconditionError{Reason: fmt.Sprintf("task %s review commit %s is held by quarantined verdict %s; an authorized orchestrator must use %s with a reason before approval or merge (rebase alone does not resolve evidence)", task.ID, commit, finding.ID, brand.Command(reconcileVerdictOperation))}
 		}
 	}
 	return nil
@@ -308,7 +321,7 @@ func validateVerdictReviewBoundary(state *models.State, task *models.Task, verdi
 	if reviewedCommit != "" && (task.ReviewCommit == nil || !strings.EqualFold(*task.ReviewCommit, reviewedCommit)) {
 		return &PreconditionError{Reason: "review-commit does not match the current task review boundary; re-read and review the submitted commit"}
 	}
-	if verdict == "APPROVED" && task.ReviewCommit != nil {
+	if submittedVerdict(verdict) == submittedVerdictApproved && task.ReviewCommit != nil {
 		return requireReconciledVerdicts(state, task, *task.ReviewCommit)
 	}
 	return nil
@@ -321,7 +334,7 @@ func ReconcileVerdict(projectRoot, taskID, findingID, disposition, reason string
 		len(reason) > statehygiene.MaxStateTextBytes || !utf8.ValidString(reason) {
 		return &PreconditionError{Reason: "reconciliation requires a supported disposition and a nonempty UTF-8 reason of at most 4096 bytes"}
 	}
-	return withTaskReviewLock(projectRoot, taskID, "reconcile-verdict", func() error {
+	return withTaskReviewLock(projectRoot, taskID, reconcileVerdictOperation, func() error {
 		resolver, _, err := loadResolver(projectRoot)
 		if err != nil {
 			return err
@@ -331,7 +344,7 @@ func ReconcileVerdict(projectRoot, taskID, findingID, disposition, reason string
 				return err
 			}
 			capabilities, err := resolver.EffectiveRoleCapabilities(state.Agents[authority.ID].Role)
-			if err != nil || capabilities.RoleType != "orchestrator" || !slices.Contains(capabilities.AllowedOperations, "reconcile-verdict") {
+			if err != nil || capabilities.RoleType != roles.RoleTypeOrchestrator || !slices.Contains(capabilities.AllowedOperations, reconcileVerdictOperation) {
 				return &PreconditionError{Reason: "reconcile-verdict requires a registered orchestrator with the reconcile-verdict capability"}
 			}
 			if state.FindTask(taskID) == nil {

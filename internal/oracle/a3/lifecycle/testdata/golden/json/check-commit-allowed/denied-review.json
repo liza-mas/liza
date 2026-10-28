@@ -1,0 +1,16 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "allowed": false,
+          "reason": "task task-1 is in status CODE_TO_REVIEW — commits are only permitted while the task is executing, rejected, or blocked",
+          "status": "CODE_TO_REVIEW"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# exit_code
+1
+# stdout
+# stderr
+submit-for-review task-1: preparing the submission (rebase, index refresh); <elapsed> since the submit started. Still working: do not interrupt it or submit again.
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: INTEGRATION_FAILED
+effects: unknown
+task_id: task-1
+transition_id: <ID>
+Error: submit for review: submit-for-review: STATE_CHANGED (safe_action=requery): integration failed: merge conflict

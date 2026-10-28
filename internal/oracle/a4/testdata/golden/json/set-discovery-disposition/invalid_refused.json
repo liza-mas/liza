@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "invalid disposition \"Not A Disposition\": must be a valid task ID, \"deferred\", or \"dismissed\""
+    },
+    "ok": false,
+    "result": null
+  }
+}

@@ -1,0 +1,1217 @@
+# Liza Support Reference
+
+Troubleshooting reference for Liza multi-agent executions.
+This file is written to `.liza/SUPPORT.md` during `liza init`.
+
+## Diagnostic Commands
+
+```bash
+liza status                        # Dashboard: goal, sprint, agents, task summary
+liza get tasks                     # Active work and unfinished handoffs
+liza get tasks --all               # Complete task history
+liza get tasks --format table      # Tabular view
+liza get tasks.task-1.history --json # Task history
+liza get task-1.rejection_reason --json # Rejection text, or null
+liza get-tasks --field id,rejection_reason,rejection_rca --json # Selected task fields
+liza get agents                    # Registered agents and lease status
+liza get agents --zombies          # Live liza agent supervisors missing from state
+liza clear-agent-degraded <id>     # Clear role-capacity health after manual recovery
+liza validate                      # Check blackboard against invariants
+liza validate --skip-process-checks # Offline/archive validation only
+liza analyze                       # Circuit breaker pattern detection
+```
+
+`status`, `get`, `get-tasks`, `validate`, `usage-report`, `watch` and the TUI
+read state from a complete published snapshot without acquiring the state lock.
+A snapshot can already be stale while it is being decoded or used, because
+writers keep publishing. Later mutations still revalidate current state under
+lock. Auto-repair reads a snapshot too; each agent it starts registers under
+the lock. `validate --repair` still takes the lock for its reads and repairs. Process
+and filesystem diagnostics are separate observations. Do not edit state in place
+while agents are running.
+
+### Terminal task storage
+
+New runs start with `config.terminal_task_archival` on, and each merge archives
+newly terminal tasks. For an older run,
+`liza archive-terminal-tasks --json` is operator maintenance:
+it enables `config.terminal_task_archival` and drains bounded batches. Upgrade
+every process before enabling it. Terminal rows in physical `state.yaml`
+then contain identity/status/created plus a `terminal_archive` reference;
+complete history, lifecycle receipts and output remain in immutable objects.
+`get tasks --all`, inspection, validation and ordinary mutations restore them.
+The default task list is an overview; use
+`get tasks --all --field id,status,history,lifecycle,output --json` for audit evidence.
+Missing or corrupt objects fail explicitly. Save the runtime `archive/` tree
+alongside snapshots; raw YAML alone is insufficient task evidence.
+
+For rollback, stop every supervisor and run
+`liza archive-terminal-tasks --restore-inline --json` with the
+upgraded binary before starting an older binary. This restores complete task
+records and disables archival in one state publication. Keep archive objects;
+old snapshots still reference them. The restoring transaction rewrites the
+full logical state and can take the original large-state lock budget.
+
+### State-lock timeout holds
+
+`mark-blocked --state-lock-timeout` and `assess-blocked --state-lock-timeout`
+explicitly tag an infrastructure-only BLOCKED episode. Do not use the tag for
+human asks, repairs, rejection RCA, unresolved preparation or unmet dependencies.
+The orchestrator mechanically restores an eligible hold as an unassigned
+continuation after a strictly later successful state mutation. Pause/checkpoint,
+authority, dependencies and preserved worktree health are checked again.
+Prose-only legacy blocks require explicit assessment tagging; they never
+auto-unblock merely because the reason mentions a lock.
+
+`get-tasks [task-id]` is equivalent to `get tasks [task-id]`. Both accept repeated
+or comma-separated `--field` values: lists return one object per task containing
+only the requested keys; selecting one task returns one object. Optional values
+are explicit nulls. `rejection_reason` is free text; `rejection_rca` is the structured
+RCA record. Lists default to active work; `--all` includes history, and `--active`
+retains explicit active selection. Combining `--all` and `--active` refuses.
+Active inspection includes outstanding selected handoffs even when held, refused or
+undecided, pending amendment originals and their exact MERGED pending corrections.
+Completed selected routes, retired/replanned originals and applied/quarantined corrections
+are hidden. This policy does not change assignment/claim terminal semantics; explicit
+task IDs and dotted fields remain complete. Projections support JSON, YAML and value output, and cannot combine with
+`--summary`, `--output-summary`, `--zombies` or `--format table`.
+
+`get tasks.<id>` selects a whole task; `get tasks.<id>.<field>` and `get <id>.<field>`
+select fields, including nested struct fields and `history`. Reserved state and
+computed queries retain precedence. Task routes prefer an exact ID, then the
+longest matching ID prefix; the existing singular `task.<id>.<computed>` form
+retains its computed-field meaning. Use `get tasks <literal-id>` to disambiguate
+IDs containing dots or reserved names. Unknown fields, array/map traversal and
+surplus positional arguments now fail explicitly instead of ignoring input.
+Task field queries and projections use YAML field names in nested values for
+every format (for example, history has `time`, `event` and `reason`).
+`--json` returns the result envelope;
+`--format json` returns raw JSON.
+
+`liza analyze --json` reports the selected `response`
+(`WARNING`, `CHECKPOINT`, or `HALT`), provider-evidence `classification`
+(`ACKNOWLEDGED_HISTORICAL`, `NEW`, or `CONTINUING`), and `explanation` from the
+same `AnalyzeResult` used for human output. `triggered` is true only for `HALT`.
+
+`liza status --format json` and `liza get agents --format json` include `process_status_source` and `process_status_detail` for agents; status also includes them for phase-handoff blockers. Use these fields when a task appears assigned but the process state is ambiguous. On Linux, procfs identity checks distinguish a matching Liza supervisor from a dead or PID-reused/mismatched process; when process identity is unavailable, active leases are treated conservatively.
+PID-based `process_status` is local to the namespace running the command. In containers, sandboxes, or SSH/host boundary situations, a live host agent can appear as `process_status: stopped` because its PID is not observable from the current namespace. Do not recover from `process_status: stopped` alone in that environment; recent heartbeat, active lease, and growing `.liza/agent-outputs/` are stronger liveness evidence. Treat contradictory signals as ambiguous and inspect `process_status_source` / `process_status_detail` before recovery.
+Agent health is separate from lifecycle status. A degraded agent epoch remains visible in status/get-agents health fields and does not count as repair-agent-pool capacity until it is cleared or a newer successful claim proves capacity. If the agent process exits and unregisters, the health marker stays visible as degraded capacity context for repair/status output.
+Verified zombie-agent detection requires procfs and uses process cwd as project-scope evidence. A matching cwd verifies a current-project process, while a different readable cwd excludes a foreign process. When cwd is unreadable, confirmed agent processes are reported as unknown scope: `liza validate` remains successful but warns that the scan is partial, and `liza get agents --zombies` reports only verified zombies while emitting the same warning. Goal IDs do not promote unknown-scope candidates to zombies when a project root is supplied. Unknown scope means unverified, not unowned; do not stop a process solely on the basis of this warning. On hosts without procfs, `liza validate` warns and skips the live-process check, while `liza get agents --zombies` reports that scanning is unavailable.
+
+A prompt-context build failure blocks the task and releases every task-linked
+agent in the same authority-fenced state transaction. Correct the failed source
+input or task routing before unblocking; cleared ownership alone does not repair
+a stale authoritative reference.
+
+## Recovery Commands
+
+```bash
+liza recover-task <task-id>        # Release claims + preserve/reattach coherent worktree/branch
+liza recover-task <task-id> --fresh # Explicitly discard worktree/branch and reset non-blocked task to initial
+liza recover-agent <agent-id>      # Release claim + remove worktree + delete agent
+liza recover-integration <task-id> --reason "..." --dry-run # Preview premature empty-cohort recovery
+liza release-claim <task-id>       # Granular: release claim only
+liza clear-stale-review-claims     # Clear all expired review leases
+liza repair-superseded-dependencies <task-id> --reason <reason> # Repair illegal terminal dependency edges
+liza repair-acceptance-commits [--dry-run] # Restore evidence orphaned by an integration-branch rewrite
+liza repair-arch-ref <task-id> --arch-ref <path#heading> --reason <reason> # Fill an unstarted task's empty arch_ref
+liza defer-provider-dependency <task-id> --provider-task <id> --transition <name> --reason <reason> # Move an unstarted plan's writer-order wait to its outputs
+liza release-blocked-chain <task-id> --reason <reason> # Permit one more replacement of a capped BLOCKED task, without pausing the run
+liza reserve-provider <task-id> <provider-task-id> --transition <name> --reason <reason> # Hold an unstarted writer until every child a provider generates merges
+liza deferred-validation rule --command <exact> --ruling <decision> # Defer an exact canonical command at strict admission
+liza deferred-validation unrule --command <exact> # Withdraw a ruling; receipts that relied on it need update-review-commit
+liza deferred-validation retire --command <exact> --ruling <decision> # Drop an obsolete command from the batch set
+liza deferred-validation settle --ruling <decision> # Clear an unsettled runner record once no batch process survives
+liza deferred-validation abort --ruling <decision> # End the live batch: kill running steps, keep finished results
+liza deferred-validation run [--force] # Run the batch at integration HEAD; --force re-executes every command, even at a failed, aborted, exhausted or covered HEAD
+liza deferred-validation status [--json] # Deferred commands, rulings, live runner, last batches
+liza admission-limit set <class> --max-concurrent <n> --match=<substring> # Cap how many matching canonical commands run at once
+liza admit -- <command>                         # Run a local command inside the slots of the classes it matches
+liza delete agent <id>             # Remove agent from state
+liza delete task <id>              # Remove task from state
+```
+
+If code tasks refuse to claim with `acceptance.source: requires allocation by a
+direct independently approved merged planning parent`, the integration branch
+was rewritten (typically rebased) after those parents merged, so the commits
+their evidence names are no longer ancestors of it. `liza
+repair-acceptance-commits --dry-run` shows the parents affected and, for each
+orphaned commit, the commit on the integration branch with the identical diff;
+run it without `--dry-run` to write that mapping. It derives replacements by
+content identity and takes no commit arguments, refusing any parent whose
+commits lack an identical replacement. Prevent the cause instead: once anything
+has merged, merge into the integration branch rather than rebasing it.
+Amendment-backed allocation also depends on its ordered correction evidence;
+repair must account for that authority or refuse before writing. Do not repair
+only the original parent commits or hand-edit the correction provenance.
+
+If a consumer stays blocked because its provider task has an empty `arch_ref`
+(typically a replacement created before replacements inherited it), no
+lifecycle path restores it. `liza repair-arch-ref <task-id>
+--arch-ref "<path>#<exact Scope heading>" --reason "..."` sets it on a task in
+its role pair's initial status that was never claimed, refusing a non-empty
+`arch_ref`. The artifact must be on the integration branch and the heading must
+match exactly, as for an architecture output; take both from the superseded
+original's `arch_ref`. The repair is recorded as `arch_ref_repaired` history and
+wakes no one: follow it with `add-human-note` on the blocked consumer.
+
+If a generated code plan cannot be claimed because it waits on another plan's
+coding output (a writer-order wait its architecture placed one level too
+high), `liza defer-provider-dependency <task-id> --provider-task
+<id> --transition <name> --reason "..."` moves that declaration into the plan's
+`descendant_dependencies` in place, on a task in its initial status or BLOCKED
+that was never claimed. The plan becomes claimable, keeps its decomposition and
+`arch_ref`, and every output it writes carries the wait, so coding order is
+unchanged. A wait selecting tasks of another stage than the plan's writers is
+refused. The move is recorded as `provider_dependency_deferred` history and
+wakes no one.
+
+If agents cannot replace a BLOCKED task because its lineage reached the
+blocked-recovery cap, and you decide one more replacement is warranted,
+`liza release-blocked-chain <task-id> --reason "..."` releases
+its current blocked episode without `analyze` tripping the circuit breaker and
+pausing every agent. It records `blocked_recovery_released` history, which wakes
+the orchestrator for that task. The cap applies again at the next block.
+
+If a correction must land between two writers of an ordered chain and the
+later writer has not started, `liza reserve-provider <writer-id>
+<correction-id> --transition <name> --reason "..."` holds the writer until
+every child the correction generates there has merged. When other writers
+already select the correction's outputs by index, add
+`--provider-max-outputs <n>` so those selections cover every output. Cancelling
+or superseding a reserved correction is refused; `--release` withdraws the
+placement first. A writer that has started cannot be placed.
+The correction's plan or direct allocation records a reviewed `## Placement`
+when the chain's ordering rule states a correction case. At hand-off the
+orchestrator reserves each named successor that was never claimed, and passes
+only after all of them hold. A rule without a correction case, no legal slot,
+or a started successor still needs a human decision.
+
+If every mutation fails with `lease_expires without assigned_to: <task-id>`,
+that task carries half an ownership tuple written by an older binary. Global
+post-mutation validation means no command can repair it — each one is refused
+by the record it would fix. Run `liza migrate` to clear the
+stranded lease, then retry.
+
+If every rejected-task reclaim, `validate`, or task repair fails with
+`retry_loop anomaly at index N missing required details (count, error_pattern)`,
+the record is a merge-stall anomaly written by an older reviewer. Run
+`liza stop`, wait for the agents to exit, run
+`liza migrate` to retype it as `pending_merge_stalled`, then
+`liza start` and restart the agents. Migration reads and writes
+the state in separate steps, so a running agent's write in between is lost.
+
+If a write fails because a legacy `goal.alignment_history[].summary` exceeds
+the 4096-byte state text limit, run `liza migrate`, then retry.
+Migration replaces oversized summaries with a bounded scrub notice while
+preserving event metadata and task descriptions. New task creation records
+only the task ID in alignment history; full descriptions remain on tasks and
+in the activity log.
+
+## System Control
+
+```bash
+liza pause                         # Stop new claims, provider turns and merges (sets PAUSED)
+liza resume                        # Resume or advance sprint (see Sprint Lifecycle)
+liza stop                          # Abort system
+liza sprint-checkpoint             # Force checkpoint (halt + summary)
+liza replan [task-id] [--reason <text>] # Invalidate planner output, create new planning task
+liza plan-check <task-id> --clear  # Release a plan held for a human action (operator only)
+liza proceed <task-id> <transition> # Create child tasks for next role-pair
+```
+
+Pause is cooperative: an active provider turn may finish. Supervisors already
+waiting for work recheck pause before claiming newly available work; resume
+reopens that admission path. Stop makes supervisors exit at their next check.
+
+## Pipeline Structure
+
+Tasks flow through role-pairs organized in sub-pipelines. The project's frozen pipeline is in `.liza/pipeline.yaml` — inspect it for actual role-pairs, transitions, and state names.
+
+Transitions with `trigger: manual` are human gates; `trigger: auto` transitions run without one. Use `liza status` to see currently available manual transitions.
+
+### Transition Cardinalities
+
+Each transition in `.liza/pipeline.yaml` has a `cardinality`:
+
+| Cardinality | Behavior |
+|-------------|----------|
+| `per-subtask` | One child task per `output[]` entry |
+| `one-to-one` | Single child task from parent |
+| `many-to-one` | All sibling tasks in cohort must reach approved, then one child linking all parents |
+
+### `liza proceed`
+
+Creates child tasks based on a completed task's `output[]` and the transition's cardinality. After proceed, run `liza resume` to start the next sprint.
+
+The source task may be either at the transition's configured source state or already at `MERGED`.
+`MERGED` is treated as satisfying the transition precondition because `liza proceed` operates from sprint-terminal source tasks and does not change the source task's status.
+
+```bash
+liza proceed <task-id> <transition-name>
+```
+
+Transition names appear under `transitions:` within each sub-pipeline and under the top-level `pipeline-transitions:` (for cross-subpipeline transitions) in `.liza/pipeline.yaml`.
+
+A topology may offer exclusive `when: scope-decomposition` and `when: coding-allocation`
+per-subtask routes. For one fully reviewed architecture Scope, flat entries all marked
+`coding_allocation: true` share an exact `arch_ref`; each exact distinct unit `plan_ref`
+inside it must declare strict Acceptance Contract, future coder-authored manifest path,
+`decomposition.owned_files` and nonempty canonical validation. The embedded manual direct
+routes are `architecture-to-coding` and `architecture-main-to-coding`; architecture review
+also reviews allocation, and normal quorum/plan-check disposition remains. Fanout,
+RCA-required work, kind markers and one-intermediate-layer `descendant_dependencies`
+retain ordinary stages. Direct writer waits use immediate provider declarations. Existing
+unmarked output and old frozen configurations keep their routes; no automatic migration
+occurs, and unsupported marked output refuses.
+
+## Task State Machines
+
+Every role-pair in `.liza/pipeline.yaml` defines its own state names under `states:`. The generic flow is:
+
+```
+initial → executing → submitted → reviewing → approved (sprint-terminal)
+               │ ↑                      ↓
+               │ └───── rejected ──────┘
+               └──→ BLOCKED
+```
+
+Cross-pair states (not pair-specific):
+- **BLOCKED** — Cannot proceed; see `blocked_reason` and `blocked_questions`
+- **SUPERSEDED** — Replaced by tasks in `superseded_by`, or completed externally with no replacements (terminal)
+- **ABANDONED** — Killed by orchestrator (terminal)
+- **MERGED** — Merged to integration branch (terminal, coding pair only)
+- **INTEGRATION_FAILED** — Merge conflict or test failure (coding pair only)
+
+To find the actual state names for a role-pair, check `role-pairs.<name>.states` in `.liza/pipeline.yaml`. Some pairs define extra states (e.g. `partially-approved`, `reviewing-2` for quorum review, or `clean` for no-issues-found).
+
+Supervisors automatically block a still-owned executing task when the child provider process makes no observable progress for `config.agent_progress_timeout` seconds. Observable progress is task state movement, worktree HEAD/status movement including untracked files, or provider stdout/stderr output. This prevents a stale `WORKING` agent from holding a task indefinitely when its provider process stalls. The watchdog cancels the provider and waits for it to exit. A session the provider ended on quota or an outage is handled as that provider failure instead. Otherwise the doer's uncommitted work is saved as a WIP commit before the block. No supervisor block deletes the worktree or task branch: `unblock-task` resumes from them, and `wt-delete` removes them when the work is not wanted.
+
+### Reading an AWAITING HUMAN alert
+
+`🚨 AWAITING HUMAN: …` means the run needs a human to act: the sprint is at
+`CHECKPOINT` or the system mode is `PAUSED`. Run the command the alert names
+(usually `liza resume`, after reading
+`.liza/checkpoint-summary.md` when there is one). It is
+written once per episode.
+
+- `PAUSED`, or a `CHECKPOINT` without a transition trigger: every role is
+  parked, and agents stay registered, so the run looks staffed while nothing
+  advances. `STALLED` stays silent meanwhile.
+- A transition checkpoint (`PLANNING_COMPLETE`, `MANY_TO_ONE_READY`): doer and
+  reviewer work continues, but downstream tasks are not created until resume.
+  `STALLED` still fires.
+- With `auto_resume`, a checkpoint alerts only if it has not auto-resumed
+  within 6 minutes.
+- A plan the orchestrator held for a human action (`plan_check.verdict: held`)
+  raises its own alert naming the ask. Nothing expands that plan until you do
+  the ask and run `liza plan-check <task-id> --clear`.
+- A BLOCKED task only a human can clear (`<task-id> blocked on a human action:
+  <ask>`) names the ask its blocker recorded: a doer's `--human-action`, the
+  orchestrator's `assess-blocked --human-action`, or a missing runtime input.
+  Do the ask, then follow its closure step, or run
+  `liza add-human-note <task-id> --note-file <path>` so the
+  orchestrator unblocks it. `STALLED` lists these tasks as `awaiting human`.
+  Blocks recorded without an ask raise no `AWAITING HUMAN`; read
+  `blocked_reason`.
+
+### Reading a STALLED alert
+
+`⚠️ STALLED: no task progress for N minutes` is written when the stall reaches
+30 minutes and again at 60, 120, 240… minutes; new progress restarts that
+cadence. It names which of two situations it found, because they need opposite
+responses:
+
+- `… claims are being refused, not unstaffed` — there is claimable work *and*
+  live idle agents for that role, so a claim precondition is failing. The reason
+  is in the supervisor logs, not in state: `grep "Claim attempt failed"
+  .liza/agent-outputs/supervisor-<role>-*.stdout.log`. Typical
+  causes are acceptance-source refusals and dependency or ownership
+  preconditions. Spawning more agents will not help.
+- `… no live agent for that role` — the work is unstaffed. Restore capacity
+  (auto-repair, or `liza agent <role> --cli <cli>`).
+- `… N task(s) held (read blocked_reason)` — `BLOCKED`, not a dependency wait.
+  Read the reason (`liza get tasks`, or `blocked_reason` in
+  state) and intervene; the orchestrator owns repairable blocks, but one it
+  cannot clear stays. An `INTEGRATION_FAILED` task is not counted here: it stays
+  claimable through the integration-fix path, so it appears as refused or
+  unstaffed above.
+- `… N task(s) waiting on dependencies` — the run is waiting on its own graph,
+  not stuck.
+
+`liza validate`, `analyze` and `get anomalies` all stayed green
+through the 5h40m refusal stall on 2026-09-20; none of them surfaced it. The
+alert is the signal that distinguishes a waiting run from a stopped one.
+
+## Sprint Lifecycle
+
+```
+IN_PROGRESS → CHECKPOINT → COMPLETED → (new sprint) IN_PROGRESS
+```
+
+### `liza resume` behavior depends on sprint state:
+
+| Sprint State | Condition | Effect |
+|--------------|-----------|--------|
+| CHECKPOINT | Not all tasks terminal | Back to IN_PROGRESS (resume current sprint) |
+| CHECKPOINT | All tasks terminal | Mark COMPLETED |
+| COMPLETED | — | Archive sprint, create new one, execute pipeline transitions |
+
+**Two-step advance:** To move from one pipeline phase to the next, run `liza resume` twice: first marks COMPLETED, second archives and advances.
+Approved transition-source output can make a task sprint-terminal before it is integrated. The second `liza resume` refuses to advance/archive until approved planning output is merged; run `liza wt-merge <task-id>` first.
+
+### Checkpoint Actions
+
+When a sprint checkpoints (status: CHECKPOINT), it is not auto-cleared.
+Transition checkpoints (`PLANNING_COMPLETE`, `MANY_TO_ONE_READY`) and a
+circuit-breaker `CHECKPOINT` response gate downstream transition creation;
+doer/reviewer agents may continue already-available work in the current sprint
+unless system mode is `PAUSED` or `CIRCUIT_BREAKER_TRIPPED`. The human decides:
+
+| Action | Command | When |
+|--------|---------|------|
+| Accept & resume | `liza resume` | Satisfied with planner output or fan-in readiness, continue |
+| Amend & replan | Edit plan, commit, `liza replan` | Want to change planner output |
+| Release a held plan | Do the ask, then `liza plan-check <task-id> --clear` | The orchestrator held a plan for a human action; an already-expanded plan just drops the hold |
+| Retire unused original | `liza plan-check ORIGINAL --replaced-by MERGED_CORRECTION` | A separate merged correction replaces its unused hand-off |
+| Retire by ruling | `liza plan-check ORIGINAL --retire --ruling DECISION` | A ruling retires the unused hand-off, held or not, with no replacement; rerun it to restore a ruling an older binary dropped |
+| Settle a delivered cohortless source | `liza plan-check TASK --retire --ruling DECISION` | Integration waits on `planning_unsettled` for a merged, outputless many-to-one source added outside any cohort (status INTEGRATION lists it), and a downstream task outside its role-pair merged with none live |
+| Pipeline transition | `liza proceed <task-id> <transition>` | Create child tasks from output or a ready cohort (auto-done by `liza resume` in batch) |
+| Pause for manual work | (no command) | Make manual changes first |
+| Abort | `liza stop` | Stop entirely |
+
+### Replanning
+
+When a transition checkpoint fires, the human reviews proposed downstream work before child tasks are created. `PLANNING_COMPLETE` means planner `output[]` represents the proposed task breakdown; `MANY_TO_ONE_READY` means a fan-in cohort is ready to create its consolidated child task.
+
+```bash
+# Typical replan workflow
+# 1. Find planner output files — check the task's output[] in state.yaml
+liza get tasks                         # identify the planning task
+# 2. Edit the planner's output docs (e.g. specs/plan.md, specs/stories/*.md)
+vim specs/plan.md                      # amend planner deliverables
+# 3. If scope changed, also align upstream docs that fed the planner
+#    (e.g. specs/goals/*.md, specs/epic.md) so inputs match outputs
+git add -A && git commit -m "amend plan"
+# 4. Replan
+liza replan                            # auto-detects the planning task
+liza replan <task-id>                  # or specify task ID explicitly
+```
+
+Replan invalidates the old task's output (preserved for audit, marked superseded) and creates a new planning task with the same role-pair and spec; at CHECKPOINT it returns the sprint to IN_PROGRESS, at IN_PROGRESS it leaves the sprint alone. It needs a plan without children and without a human hold. `--reason` is appended to the new task's description. Multiple replans increment: `<task-id>-replan-1`, `<task-id>-replan-2`, etc.
+
+### Reviewed Plan Amendments
+
+If replan refuses because a started consumer still references a MERGED planning
+provider, preserve that identity. Before its children or any transition exist,
+request bounded same-pair reviewed correction work:
+
+```bash
+liza amend-plan ORIGINAL --reason "Correct reviewed prerequisite ordering"
+# Planner and independent reviewer submit, review and merge the returned correction.
+liza amend-plan ORIGINAL --apply CORRECTION
+# The orchestrator reviews the adopted handoff again, then passes or holds it.
+liza plan-check ORIGINAL --pass --agent-id orchestrator-1
+```
+
+Begin needs an unheld, unused planning output and installs a pending fence in
+the same transaction that creates the correction. ORIGINAL stays MERGED with
+unchanged review attribution, ID and existing output identities. The correction
+never generates children or becomes a provider. Apply allows reviewed
+dependency/inheritance/validation/prerequisite/runtime-input corrections and
+appended producer slots; existing descriptions, completion criteria, scope,
+refs, kind, supersession, decomposition and permission/classification fields
+remain fixed. Broader changes still require reviewed replan and authorized
+consumer retirement. Do not clear provider safeguards or remap indexes.
+
+For an expanded architecture whose contract prose needs correction without changing any
+output/allocation identity, use an explicit strict mode:
+
+```bash
+liza amend-plan ORIGINAL --contract --reason "Complete unchanged provider contract" --trigger consumer-interface-gap
+# Or commission reviewed replacement prose while retaining ORIGINAL's identity:
+liza replan ORIGINAL --preserve-output-identity --reason "Reconcile contract prose" --trigger consumer-interface-gap
+# After ordinary independent review and merge of the returned same-pair task:
+liza amend-plan ORIGINAL --apply CORRECTION
+```
+
+These modes freeze the complete ordered manifest, including refs, scope, ownership,
+classification, commands, prerequisites, provider/runtime declarations and fanout. Only
+the existing referenced architecture Scope's exact nested `#### CONTRACT` subsection
+may change; surrounding Scope metadata/other subsections stay byte-identical and bare
+refs refuse edits. Unused nonarchitecture planning originals may preserve referenced
+plan prose outside frozen strict acceptance allocations. Changes to acceptance allocation
+or approved resolved proofs, new files and implementation edits refuse. CONTRACT must
+already exist at the reviewed base; missing or duplicate subsections refuse. Expanded originals must be
+architecture tasks; identity preservation also supports unused planning output. ORIGINAL
+remains MERGED with its children, selectors and review history. Pending review/apply fences
+applicable consumer admission/submission, with correction work exempt. Historical adopted
+acceptance sources survive only with independent ancestry and matching current allocation
+and resolved proofs; successful receipts are not rewritten. Ordinary replan retains its
+destructive retirement behavior.
+
+`--trigger` on amendment/replan explicitly names the cause; omission is unknown. Explicit
+corrective task authoring uses `planning_change: {kind: correction, trigger: ...,
+original_task_id: ...}` in task payloads, or `--planning-change-kind`,
+`--planning-change-original` and `--trigger` for `add-task`. `get metrics` recomputes
+`planning_changes.daily` from complete logical tasks, including archives: one count per
+creation, grouped by UTC date, kind, trigger and original architecture classification.
+`unknown_attribution` and `missing_created` disclose incomplete evidence; apply/retry does
+not add a count. Reason prose and task-ID suffixes are not attribution. Comparable-run
+reopening rates and planning/coding ratios still require a later run measurement.
+
+If a merged correction cannot apply after provider retirement or integration
+drift, retain the fence and commission fresh reviewed reconciliation:
+
+```bash
+liza amend-plan ORIGINAL --replace-pending CORRECTION --reason "Reconcile changed provider evidence"
+```
+
+Replacement accepts only the exact pending unapplied MERGED correction or one
+normally cancelled to ABANDONED. It quarantines that predecessor and creates
+fresh review work atomically. Active/applied corrections refuse; already merged
+artifact changes must be reconciled by the new review. No terminal task reopens
+and there is no abort that drops the fence over merged changes. When every
+correction since the last applied one is ABANDONED and none of their recorded
+commits reached integration, an operator may release the fence instead:
+
+```bash
+liza amend-plan ORIGINAL --withdraw-pending CORRECTION --reason "Cancelled; nothing merged"
+```
+
+A human hold installed after begin
+survives replacement and apply: only an operator `plan-check ORIGINAL --clear`
+releases it. Identical apply/replacement replay creates no duplicate work or
+history. Inspect `amends_plan`, `plan_amendment`, `output`, `plan_check` and
+`history` to distinguish pending, applied and quarantined provenance.
+
+For harmless supplemental hook/probe guidance, pass with a JSON notes file:
+
+```json
+[{"output_index": 0, "message": "Confirm the hook filter covers the changed source path."}]
+```
+
+```bash
+liza plan-check ORIGINAL --pass --notes-file child-notes.json --agent-id orchestrator-1
+```
+
+Only unique existing non-dedup output slots may be selected. Messages are
+nonblank UTF-8, at most 4096 bytes each; file input is at most 16384 bytes and
+rejects unknown fields. Selected children retain notes with original
+parent/output provenance, including missing-child recovery, for both doer and
+reviewer. Identical passed replay is a no-op; changed notes require operator
+clear/recheck before generation. These notes cannot change canonical validation
+or acceptance, satisfy a missing producer/provisioning/runtime-input requirement,
+or authorize scope, contract or ordering changes. Such defects require reviewed
+amendment/replan or a human hold. See
+[ADR-0197](../specs/architecture/ADR/0197-reviewed-plan-amendments-and-validation-notes.md).
+
+### Failed Hand-off
+
+`PLAN HANDOFF FAILED` and status `REPAIR_REQUIRED` mean an initial output or
+selected-input refusal is still unresolved. Equal material inputs stop automatic
+retries and planning wakes, while keeping completion/integration open. Repair the
+named source/selected upstream or retry explicitly; repeated identical failures
+produce no duplicate history/alerts. For a pending reviewed amendment, apply its
+merged correction or replace pending work as above; an unrelated merged
+correction does not authorize in-place adoption. If retiring an unused original
+in favor of an unrelated merged correction is intended, use the retirement
+action rather than another replan; its
+preconditions are listed in
+[ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md).
+A split replacement refused because `<holder> provider_reservations on <plan>
+at <transition>` still selects the retiring child is repaired by moving that
+placement with `liza reserve-provider`; `plan-check --pass`
+refuses the same case up front. A unique replacement needs no repair: the
+reservation waits for the successor. A `PLAN HANDOFF FAILED` alert that says the
+transition "was skipped" is unclassified: it is not repair evidence and the
+transition keeps retrying, so read the named error.
+
+### Missing Disposition
+
+`PLAN DISPOSITION MISSING` and status `DISPOSITION_REQUIRED` mean an
+orchestrator `PLANNING_COMPLETE` turn left a plan without a pass, hold or
+replan. The unchanged plan no longer wakes the orchestrator and keeps the sprint
+open. Ask for a disposition with
+`liza add-human-note <task-id> --note-file <path>`, which
+re-admits it for one turn, or expand it yourself with
+`liza proceed <task-id> <transition>`.
+
+### Auto-Resume
+
+By default, checkpoints require manual `liza resume`. Auto-resume skips these gates:
+
+- At init: `liza init --auto-resume "Goal"`
+- At runtime: TUI `y` key toggles on/off
+
+When enabled, agents auto-call `liza resume` on CHECKPOINT or COMPLETED. Use `liza pause` for a hard stop (never auto-resumed).
+
+An automatic resume expands a merged plan's reviewed hand-off (manual `per-subtask`/`one-to-one` transitions) only when the orchestrator passed it with `plan-check`; a manual resume expands it regardless, except a held plan. See [ADR-0159](../specs/architecture/ADR/0159-orchestrator-plan-handoff-disposition.md) for the rules.
+
+## Agent Review Cycles
+
+Mutating lifecycle commands return `result.outcome` and one server-selected
+`result.safe_action`, including on `ok:false` failures. Follow that field:
+`continue` proceeds, `stop` ends task work, `requery` inspects current state
+and possible effects, `retry` repeats the original request serially after about
+30 s, 1, 2 and 4 min and then stops and reports (it does not name its cause, so
+it never leads to a state-lock-timeout block), and `correct_input` fixes the
+named invalid fields.
+Never derive retry from error text. Preserve the original
+`--request-id` + `--expected-transition` pair and payload across retries;
+refreshing the token creates a new request and requires reevaluation.
+After a returned acceptance refusal, the command retires its own matching
+preparation when authority and the task boundary still match. Prior rebase or
+test effects remain unknown, and the original request stays stale. Inspect the
+task and worktree, repair the evidence, then submit its current immutable SHA
+with a fresh request and inspected transition; registration need not change.
+Process abandonment and uncertain merge completion retain their preparations
+and require inspected recovery before further work. A claim that could not
+retire its preparation retries on its next claim; if claims keep reporting
+`unresolved preparation remains`, restart the preparing agent or, when the
+marker is `recover-task`, run a fresh `liza recover-task` request.
+See [Lifecycle Results](../specs/protocols/lifecycle-results.md) for receipt
+expiry, interrupted preparations and best-effort sprint counters.
+
+Both `liza await-verdict` and
+`liza await-resubmission` are foreground calls. Each invocation
+waits at most 100 seconds. `--timeout-seconds` is the remaining budget for the
+whole review wait, not a new per-call allowance.
+
+- **POLL**: Continue with another foreground invocation of the same command,
+  passing the returned `timeout_seconds` as its remaining budget. Do not add
+  custom polling or background execution.
+- **TIMEOUT**: The total budget is finally exhausted. Safe stop and exit
+  normally; do not invoke the command again.
+- If the execution harness backgrounds an await call and promises a completion
+  notification, safe stop by ending the agent turn. Do not monitor the process
+  or start another await call.
+
+### Doer: Submit → Await → Handle
+
+Planning submission checks prospective child Acceptance Contracts in the committed
+output source before rebase and again at the submitted boundary. The declaration
+must parse and its ordered validation commands must match the output allocation;
+future coder manifests, test files and executables are not required at planning
+time. If the error reports `unexpected content after JSON fence`, move prose out
+of the Acceptance Contract section using a sibling heading. Preserve the JSON
+and the prose's obligations. For an already-consumed MERGED plan, route a bounded
+independently reviewed planning correction, generate its actual replacement, then
+reconcile dependencies and supersede the malformed child. Editing historical
+output does not repair an existing child; do not weaken the parser or erase the
+declaration to make a claim pass.
+
+Submission also resolves every `output[]` ref fragment (`spec_ref`, `epic_ref`,
+`plan_ref`, `arch_ref`) into a committed strict carrier, at both boundaries. A
+fragment must be the exact eligible heading text, such as
+`#Capability CAP-001 - Task Creation`, never a slug such as
+`#capability-cap-001---task-creation`; children would otherwise block when their
+prompt context is built. Fix the fragment or the heading, then resubmit.
+`liza validate` warns about fragments that already fail to resolve at
+integration HEAD, such as those in state created before this check or those left
+behind by a later heading edit.
+
+Submission also builds the reviewer's carrier context for its own range, both
+before publication and after the rebase: every strict carrier the submission
+changed must parse, and every direct reference must resolve at its pin and
+still match integration HEAD. A refusal names the carrier, and usually the
+line or reference; a pin naming no commit in the repository, or a reference to
+a file integration HEAD lacks and the submission does not add, is refused the
+same way. The range includes superseded drafts the submission left in it. Fix the
+carrier and resubmit; the task stays with its author. A Git failure during the
+check is reported as operational instead, with its `cause` in the details: read
+it before retrying. Integration moving after submission can still block the
+reviewer's claim, and that check stays authoritative.
+
+If a strict coding claim reports `acceptance.source: requires allocation by a
+direct independently approved merged planning parent`, inspect the direct
+parent's merged review, output allocation and author evidence. Ownership release
+after submission may clear `assigned_to`; the exact reviewed submission history
+still establishes its author. Builds with this recovery accept that retained
+evidence without restoring a live owner. Missing/conflicting author evidence,
+self-approval or changed allocation remains a refusal. Do not fabricate an
+assignee or remove the acceptance declaration. `update-review-commit` repairs
+submitted/reviewing candidates, not the metadata of a MERGED parent.
+
+If `add-task` or `replace-task` fails with `acceptance.source (...): ... refused
+at creation`, claim would refuse the task at the current integration commit, so
+nothing was created. The diagnostic `field` names what to correct: use the exact
+heading text of the reviewed section rather than a slug, and copy its ordered
+validation commands. `add-task` cannot give a task a planning parent, so a section
+carrying an Acceptance Contract can be allocated only through its planning
+transition or a same-pair `liza replace-task` of an allocated
+child. A `RETRYABLE` outcome means integration could not be resolved; retry.
+
+If submission says `code tasks must include test files`, inspect the reported
+`changed_files_considered`, `test_files_matched` and `matcher_patterns` for the
+exact committed range. C# test filenames ending in `Test.cs` or `Tests.cs` are
+recognized, including nested paths. A `.csproj` or arbitrary `.cs` helper under
+`tests/` does not satisfy this check. Node `.test.mjs`, `.spec.mjs`, `.test.cjs`
+and `.spec.cjs` files are recognized, as are those module extensions under
+`__tests__/`; ordinary module helpers under `tests/` do not qualify. Older builds
+missing these patterns need an engine update; do not add dummy tests, rename a
+reviewed mandatory file, or waive behavioral work to bypass recognition.
+Filename recognition proves presence only; canonical acceptance execution and
+independent review still establish whether the tests pass and cover the work.
+
+If submission fails at `acceptance.execution[N]`, inspect the error's masked
+command-output excerpt for the failing assertion or setup error. `N` is zero-based
+in the reviewed canonical command list. Excerpts are capped at 8 KiB and marked
+when truncated; timeouts and output-limit failures omit the excerpt. A failure does not create
+an acceptance receipt. Older engines discarded failed-command output entirely;
+it cannot be recovered afterward from task state. Preserve the candidate and
+diagnose with an updated engine before another authorized submission. A later
+direct test pass does not explain the original gate failure or replace admission.
+
+```
+liza submit-for-review → liza await-verdict → handle result
+```
+
+Capture the full committed SHA once with `git -C <worktree> rev-parse HEAD`,
+submit that literal SHA, and retain it on retry. Wait for submission to finish
+with `COMPLETED` or `ALREADY_COMPLETED` and `safe_action=continue` before
+awaiting; never run submission and await concurrently. After authorized
+handoff/restart, inspect current state and capture the current immutable SHA
+for a fresh submission.
+
+- **REJECTED**: Fix issues, resubmit (session stays alive — no cold restart)
+- **ALREADY_TRANSITIONED**: Verdict was recovered after the task moved onward; follow `safe_action` (`stop` means exit without more worktree commands, `revise` means you still own it)
+- **APPROVED** / **TERMINAL** with `safe_action: stop`: Safe stop and exit normally; do not run more worktree commands because merge cleanup may remove the task worktree
+- **NEW_ATTEMPT** / **ABORTED**: Safe stop and exit normally
+
+### Reviewer: Verdict → Await → Re-review
+
+```
+liza submit-verdict TASK REJECTED --review-commit FULL_SHA --reason FEEDBACK → liza await-resubmission → review new changes
+```
+
+- **RESUBMITTED**: Review again (session stays alive), then pass the returned full `review_commit` on the next verdict
+- **TERMINAL** / **ABORTED**: Safe stop and exit normally
+
+### Quarantined verdicts and conflicting approval
+
+Every authenticated `submit-verdict` now requires `--review-commit FULL_SHA`
+(40 or 64 hex characters), bound to the commit actually inspected. Migrate
+existing scripts by preserving that reviewed SHA; do not look up a replacement
+task boundary after a generation-fence error and pretend it was reviewed.
+
+A valid fenced verdict still fails authorization, but its bounded substantive
+evidence is retained separately. Diagnostics name the finding ID and direct the
+caller to stop without exposing generations or their fingerprints; the stored
+record preserves the immutable boundary and provenance. Missing generation,
+malformed input,
+unknown task, and invalid or oversized reason are administrative failures
+without a substantive record. A valid unknown boundary is retained as unmatched
+and never creates a merge hold, even if a later task happens to use that SHA.
+
+Inspect the records through `liza get quarantined_verdicts --json`.
+Explicit `delete task` also removes that task's findings and reconciliation
+audit. Export the records first if you need to retain them after deletion.
+Applicable unresolved conflicts block approval and every merge route, including
+already-advanced Git recovery. Explicit `review_commit_updated` lineage carries
+the finding across rebases; a new SHA does not automatically resolve it.
+
+An authorized current-generation orchestrator records the decision:
+
+```bash
+liza reconcile-verdict TASK FINDING_ID refuted --reason "The named check covers this boundary; validation evidence is in the review" --agent-id ORCHESTRATOR --json
+```
+
+| Disposition | Effect |
+|-------------|--------|
+| `refuted` | Clear the hold with evidence explaining why the finding is incorrect |
+| `superseded` | Clear the hold with explanation of the replacement/correction and its boundary |
+| `accepted` | Record that the finding stands; accepted rejection still blocks unchanged work and accepted approval creates no quorum |
+| `escalated` | Retain the hold and record what further judgment is required |
+
+The actor is the actual registered orchestrator, checked again in the write
+transaction. The orchestrator may decide directly or route an escalation to a
+human. Use its inherited authority; never copy a registration generation into
+an operator shell. There is no `--changed-by` or missing-generation bypass.
+Matching frozen orchestrator roles receive the new capability automatically
+through `LoadFrozen`'s in-memory operation migration; no manual file edit is
+needed. Custom roles still need their configured capability and orchestrator type.
+
+Reconciliation appends actor, time, disposition, and reason without changing
+task status, approval actors, or quorum. Identical retries are idempotent.
+Evidence ordered before merge prevents a conflicting merge. Evidence arriving
+after a completed merge remains available for reconciliation and corrective-work
+routing; it does not reopen or roll back the task. A task-review lock timeout
+is retryable and does not claim that evidence was saved.
+
+## Agent Log Analysis
+
+Agent logs (`.liza/agent-outputs/`) are the primary diagnostic tool.
+
+**LLM-assisted** — use `/liza-logs` in any pairing agent session to cross-correlate logs, diagnose patterns, and propose fixes.
+
+**CLI analyzer** (stdlib Python 3.12+):
+```bash
+python3 ~/.liza/skills/liza-logs/scripts/analyze-log.py .liza/agent-outputs/*.txt
+```
+
+**Browser analyzer** — drag-and-drop visual charts:
+```bash
+open ~/.liza/skills/liza-logs/tools/liza-session-analyzer.html   # or xdg-open on Linux
+```
+
+## state.yaml
+
+Key task fields:
+- `status` — current state
+- `assigned_to` — which agent holds the task (doer)
+- `reviewing_by` — which agent is reviewing
+- `lease_expires` / `review_lease_expires` — when the claim expires
+- `base_commit` — review diff base; for submitted/reviewing tasks with a worktree, the merge-base of `review_commit` and the configured integration branch
+- `review_commit` — commit submitted for review; must match task worktree HEAD
+- `merge_commit` — commit on integration branch after merge
+- `iteration` — doer iteration count
+- `review_cycles_current` / `review_cycles_total` — rejection count
+- `blocked_reason` / `blocked_questions` — why the task is stuck
+- `repair_request` — optional complete orchestrator-only repair request captured when the blocker is a state transition the assigned agent cannot perform (`operation`, `target`, `evidence`, `validation`, and either `command` for command-based non-dependency requests or `dependency_updates` for `apply-dependency-repair`)
+- `rejection_reason` — reviewer feedback on rejection
+- `depends_on` — task IDs that must be directly MERGED before this task is claimable and must not point downstream in the pipeline
+- `output[]` — structured output entries (used by `liza proceed` to create child tasks)
+  - `output[].depends_on` — sibling output indexes resolved during `proceed`
+  - `output[].task_depends_on` — existing concrete task IDs copied to generated child tasks
+  - `output[].destructive_db` — requires non-empty validation, with every command starting `LIZA_ALLOW_DESTRUCTIVE_DB=1 ` or `env LIZA_ALLOW_DESTRUCTIVE_DB=1 `; copied only to per-subtask children
+- `history[]` — timestamped event log per task
+
+Key agent fields:
+- `id` — e.g. `coder-1`, `code-reviewer-2`
+- `role` — runtime role name
+- `status` — STARTING, IDLE, WORKING, REVIEWING, WAITING, HANDOFF
+- `lease_expires` — agent registration expiry
+- `current_task` — task ID being worked on
+
+### Modifying state.yaml
+
+**Golden rule:** Never edit `state.yaml` directly. Direct edits bypass locking,
+role authorization, audit history, and all-or-nothing candidate validation.
+
+Use the dedicated CLI operation for every state mutation. In particular:
+
+- use `liza retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason <reason>` for one direct edge on a non-terminal task, or on a MERGED, untransitioned plan whose edge to a replanned upstream moves to the MERGED successor its output already names, directly or through one of its children (ADR-0184);
+- use `liza narrow-inherited-dependencies <producer-task-id> --selections <file> --reason <reason>` to apply ADR-0137 `inherit_inputs` to a MERGED plan whose children were generated with the whole-phase barrier; only children still in their initial status are rewritten, only inherited edges are removed, and the whole operation writes nothing if any selection cannot be resolved;
+- for multiple active tasks or complete dependency lists, store a command-free `apply-dependency-repair` JSON request with `liza mark-blocked --repair-request-file <path>`, then have the orchestrator or operator run `liza apply-dependency-repair <blocked-task-id> --reason <reason>`;
+- use `liza repair-superseded-dependencies <task-id> --reason <reason>` for all illegal downstream direct edges on one `SUPERSEDED` task;
+- use `liza unblock-task`, `liza cancel-task`, `liza supersede-task`, `liza release-claim`, or `liza recover-task` for their declared transitions.
+
+Before any dependency repair, perform semantic verification by re-reading the
+affected tasks and their planning/decomposition context. Confirm that a
+consumer depends on its provider. If another relationship requires the inverse
+edge, name that relationship as an explicit exception rationale in the repair
+reason. Structural candidate-state validation cannot supply this semantic
+proof. An exception rationale does not bypass pipeline-direction validation.
+
+`mark-blocked --depends-on` also rejects new downstream-role dependencies before
+changing task status or ownership. If an earlier stage must await a later-stage
+source correction, block with an explicit reason and questions without adding
+an illegal edge. The orchestrator must track that correction and assess the
+blocked task after the corrected source is effective.
+
+The dependency request file contains operation `apply-dependency-repair`, the
+blocked source task as `target`, unique `dependency_updates` with explicit
+`expected_depends_on` and `desired_depends_on` lists, structured evidence, and
+validation; it omits `command`. File input is mutually exclusive with the
+individual `--repair-*` flags used for command-based non-dependency repairs. Do
+not encode dependency repairs as command sequences. If no supported operation
+covers another mutation, stop and record an orchestrator-only repair request;
+do not work around the state machine. Run `liza validate` after
+recovery to verify the whole blackboard.
+
+### Changing worktree setup during a run
+
+Read the current value with `liza config get config.post_worktree_cmd --json`.
+The general query `liza get config.post_worktree_cmd --json` is equivalent;
+an unset value is `null`. Both config subcommands use the same dotted key.
+
+After scaffolding is committed and merged, validate the proposed command from a fresh
+checkout of that commit. It must provide the required build/test environment, run
+noninteractively using project-scoped tooling, and succeed on repeated execution.
+Generated artifacts must be gitignored or already committed, and a second run must
+change nothing observable. Git status must stay clean. Check `git status --porcelain` for
+staged, unstaged, and untracked files. Put required ignore rules in the scaffold itself.
+Reference environment variables for credentials; do not embed secret values in commands
+or reasons.
+
+```bash
+liza config set config.post_worktree_cmd "make setup" --json
+# Explicitly replace a different existing value:
+liza config set config.post_worktree_cmd "make bootstrap" --replace --reason "Correct project setup" --json
+```
+
+Only `config.post_worktree_cmd` is supported. Empty, multiline, NUL-containing,
+invalid UTF-8, and whitespace-padded commands are rejected. A repeated identical set
+succeeds with outcome `unchanged`; a different existing value returns a nonzero exit
+and a JSON `validation` error with `details.conflict: existing_value` unless `--replace`
+and a non-empty `--reason` are supplied. Replacement flags guard against mistakes;
+they do not authenticate a human caller. The command is stored, not executed or certified
+by `config set`. Re-read it afterward to verify the current configuration.
+
+The value comparison and write share one locked transaction. With an agent ID (flag or
+environment), the role must explicitly allow `config-set-post-worktree-cmd`, and the
+registration generation is checked in that transaction. No default role is granted this
+capability. Without an ID, the operator path uses the ordinary locked mutation.
+
+Existing configuration takes precedence over automatic Node detection at merge. If the
+operator write commits first, detection leaves it alone. If detection commits first,
+a different operator set requires explicit replacement. Existing provider sessions are
+not restarted; subsequent setup on claim, resume, review, recovery, or recreation uses
+the configuration read by that operation. An already-running setup may have read the
+previous value. Configured command failures still fail closed: fix the command or its
+environment in the retained worktree, then follow agent recovery guidance. Do not clear
+the setting to bypass readiness failures.
+
+**Audit location:** each set attempt passing the domain operation's input validation emits one
+greppable `config_set key=config.post_worktree_cmd` process-log record on stderr, also in
+JSON mode. It is **not** persisted in `state.yaml` or the activity log; retain stderr if
+history is needed. Records include actor, project, outcome (`set`, `replaced`, `unchanged`,
+`conflict`, or `failed`), a command SHA-256 fingerprint, and masked, bounded command/reason
+excerpts. The detector comparison is observational at invocation time: `match`, `different`,
+or `none`. CLI admission failures and in-operation input validation failures (malformed
+commands or replacement requests without a non-empty reason) return errors without
+emitting these audit records.
+
+Count successful explicit changes (`set`/`replaced`) with `detector=different` or `none`
+as candidates for follow-up. Classify missed conventional layouts into the detection
+backlog; repeated custom workflows requiring operator intervention provide evidence for
+considering planner declarations. Mismatches alone do not establish that need. Log loss,
+masking, truncation, and subsequent repository changes limit retrospective classification.
+
+### Known Gotchas
+
+- **Indented acceptance output**: Older builds can reject review submission at
+  `phase=write-state` after successful validation when command output mixes
+  indented and unindented lines (for example .NET test output). Acceptance receipts
+  now quote command/output strings to preserve their exact whitespace. Install a
+  fixed build and stop/restart the TUI and all agent supervisors onto it before
+  recovery. Replacing the binary does not update resident processes: their old
+  serializer can reject heartbeat, checkpoint and cleanup writes once a new receipt
+  exists. Preserve the task worktree and use supported recovery before a fresh
+  submission. A failed submission may already have rebased HEAD; do not change the
+  original SHA during an immutable-request retry or edit the live state/receipt.
+- **`|N` block scalars**: Go writes indentation indicators for multi-line fields (for example `rejection_reason`). YAML serializers can make live state unparseable. Restore a trusted backup or use a supported migration/recovery command; do not hand-edit a live blackboard.
+- **Timestamps**: Python's `yaml.dump` can convert `2026-04-14T14:29:31Z` to `2026-04-14 14:29:31+00:00`. Go rejects this. Never round-trip the blackboard through a YAML library.
+- **Concurrent writes**: Agents and CLI write concurrently. Only CLI mutations participate in the required lock and validation protocol.
+- **Field names**: SUPERSEDED tasks require `rescope_reason` (not `superseded_reason`). Check `liza validate` for correct field names.
+- **Status constraints**: `liza supersede-task` works from BLOCKED, REJECTED, or any pipeline-declared initial state. Without replacements, pass `--recoverability-command "<single-line command>"` to record the operator audit command before branch/worktree cleanup; do not include secrets. Unsupported status changes require escalation, not a direct edit.
+- **Dependency edits**: Use `liza retarget-dependency <task-id> <old-dep-id> <new-dep-ids> --reason "..."` for one direct edge on a non-terminal task; the one terminal exception is a MERGED, untransitioned plan whose edge to a replanned upstream moves to the MERGED successor its output already names, directly or through one of its children (a refused `plan-check --pass` prints the command). For multiple active tasks or complete lists, persist a command-free request through `liza mark-blocked --repair-request-file <path>` and apply it atomically with `liza apply-dependency-repair <blocked-task-id> --reason "..."`. Use `liza repair-superseded-dependencies <task-id> --reason "..."` for all illegal downstream direct edges on a `SUPERSEDED` task.
+- **Holding a task from review**: Add a `depends_on` on the task that should be reviewed first — the system enforces ordering. Alternatively, set status to the pre-review state.
+
+## Agent Exit Codes
+
+| Code | Meaning | Supervisor action |
+|------|---------|-------------------|
+| 0 | No more work for this role | Stop supervisor |
+| 42 | Graceful abort (context exhaustion, lease lost, pause) | Restart immediately |
+| Other | Crash | Restart with backoff |
+
+Exit 42 with `handoff_pending: true` on the task means context exhaustion — the restarted agent reads handoff notes and continues.
+
+## Common Failure Patterns
+
+### Lease defaults
+
+- Lease duration: 30 minutes
+- Heartbeat interval: 60 seconds
+- If lease expires, task becomes reclaimable
+
+### Stuck task (stale lease)
+**Symptom**: Task in executing or reviewing state but agent is gone.
+**Diagnosis**: `liza get tasks` — check `lease_expires` is in the past (see Lease defaults above).
+**Automatic recovery**: An executing doer claim whose holder has no live registration is taken over by the next doer of the role, and autorepair spawns one when none is live. The worktree and branch are kept, and history records `doer_claim_released` with `previous_assignee`. A holder whose registration is still live keeps the task until that registration expires. Claims without `base_commit` stay manual.
+**Fix**: `liza recover-task <task-id>` or `liza release-claim <task-id>`.
+
+### Approved task never merges (`pending_merge_stalled`)
+**Symptom**: Task stays approved; the owning reviewer records `pending_merge_stalled`, and its merge refusal says a `wt-merge` preparation "left approved commit … on integration without an attributable receipt; inspect before recovery".
+**Diagnosis**: The integration branch already contains the approved review commit, but no mutation receipt attributes it to the task. The merge may or may not have been this task's, so it is not repeated automatically. Other interrupted merges resume or retry on their own, including those left by an approver that has since exited.
+**Fix**: No command settles this case yet. Inspect integration history to see how the approved commit landed, then escalate to the human with that evidence. Do not edit the blackboard.
+
+### Agent crash loop
+**Symptom**: Supervisor keeps restarting, agent exits non-zero repeatedly.
+**Diagnosis**: Check agent output logs in `.liza/agent-outputs/` and the bootstrap prompt in `.liza/agent-prompts/` (what the agent was told to do).
+**Fix**: After 5 restarts without progress, supervisor auto-blocks the task. Check `blocked_reason`. May need `liza recover-task` then manual investigation.
+
+### Claim refused by validation preflight
+**Symptom**: `.liza/alerts.log` contains `VALIDATION PREFLIGHT FAILED`, or a stall alert says `validation preflight failed for <task> (<agent>: <code>)`; the task stays claimable but is not claimed.
+**Diagnosis**: The agent's launch environment lacks something the task declares in `validation_prerequisites` (`executable_missing`, `environment_missing`, `probe_failed`), or its CLI does not assert `validation_execution: local` (`execution_policy_required`). `liza repair-agent-pool --dry-run --json` lists the observation per agent.
+**Fix**: Provide the named tool or variable in that agent's environment (or restart its supervisor with the corrected environment); the agent retries on its own. Do not unblock or reassign: the claim was never granted.
+
+### Withheld environment variable refused (`config.agent_env_deny`)
+**Symptom**: One of:
+- an agent launch fails with `agent_env_denied:<NAME>`;
+- worktree creation warns that a root env file was "not copied: it mentions withheld variables";
+- a write is refused because a name "would be both withheld from sessions (config.agent_env_deny) and a validation prerequisite".
+
+**Diagnosis**: `config.agent_env_deny` lists host variables that supervisors, the deferred-validation runner and agent sessions never inherit (ADR-0213). `liza config get config.agent_env_deny --json` shows the list. A name on it is refused in each of these places:
+- an agent env file such as `claude.env` that sets it;
+- a root env file copied into worktrees that mentions it;
+- a task's `validation_prerequisites` that requires it.
+
+Messages carry names only, never values.
+
+**Fix**:
+- Launch refusal: authenticate the agent CLI another way, such as a stored login, and remove the name from its env file. Alternatively, drop the name from the list.
+- Env file not copied: move the listed names out of the root env file.
+- Prerequisite collision: remove the name from either the task's prerequisites or the list.
+
+To change the list, run `liza config set config.agent_env_deny A,B --replace --reason "..."`; an empty value clears it. Newly listed names apply to the next session at once. A removed name only comes back after you restart the supervisors, because a running supervisor cannot restore a value it removed.
+
+### BLOCKED task
+**Symptom**: Task in BLOCKED state, agents skip it.
+**Diagnosis**: Read `blocked_reason`, `blocked_questions`, `depends_on`, and optional `repair_request` in state.yaml. A `BLOCKED` alert is raised when a task blocks; if the orchestrator assesses but cannot resolve it, an `UNRESOLVED BLOCKED` alert is raised.
+An assessed task remains visible in total blocked counts, but unchanged blockers do not override another wake such as `PLANNING_COMPLETE`. Wake detection and rendered instructions use the same assessment-aware checks, including new dependency or descendant activity and targeted human notes. Independently of any blocked task, an operator note (`add-human-note <task-id|all>`) that no completed orchestrator turn has rendered wakes an idle orchestrator once with the `HUMAN_NOTE` trigger, ranked after `IMMEDIATE_DISCOVERY` and before `PLANNING_COMPLETE`; the `HUMAN_NOTE` turn renders every unseen note verbatim and, on success, stamps `orchestrator_seen_at` on the notes it rendered. A turn woken by a higher-ranked trigger stamps only the notes it consumed — those targeting a task (or `all`) that gained an assessment during the turn — so a blocked-task note is delivered once, not again as a `HUMAN_NOTE` request; a note whose request no turn completed is shown again on the next wake. Audit notes written by delete/recover commands are stamped at creation and never wake the orchestrator; audit notes recorded before this build are unstamped and appear once in the catch-up `HUMAN_NOTE` turn — they are records of past operations, not requests. The same rule applies to assessed hypothesis exhaustion. If status selects planning completion while a newly saved prompt still instructs blocked-task assessment, verify the engine build and restart the resident orchestrator supervisor after installing the repair; replacing the executable alone does not reload its prompt builder.
+
+To deliver new operator input after an assessment, write a concise UTF-8 note and
+run `liza add-human-note <task-id|all> --note-file <path> --json`.
+The target must exist unless it is `all`. Notes are limited to 4096 bytes and must
+pass state hygiene; reference larger evidence by path instead of pasting logs.
+A newer note makes its assessed target actionable for the next orchestrator poll;
+it does not resume a paused run, clear a block, change task status or grant an
+approval. Notes on a dependency do not wake all its consumers; target those tasks
+explicitly or use `all`. Updating an external handoff file alone is not a note.
+The command preserves earlier notes, records operator provenance, and returns
+only target, timestamp and byte count. If it reports that the note persisted but
+the activity log failed, do not append it again. Identified agent sessions cannot
+use this local operator command. An absent agent identity is not authentication
+of a human author; the note is input, not proof of a product decision.
+
+Read the recorded input with `liza get human_notes --json`.
+The read-only result is an ordered list of `timestamp`, `message`, and `for`,
+with `source` and `operation` when recorded. Select notes addressed to the task
+or `all`; an empty history returns `[]`. Agents may read notes without operator
+write authority. Reading notes does not acknowledge them or alter task state.
+The orchestrator prompt requires this read before reassessment, including checks
+of newly referenced recovery tasks whose claim failed before they became BLOCKED.
+Restart a resident orchestrator after installing this prompt change; replacing
+the executable alone does not reload its prompt builder.
+
+Task doer and reviewer launch prompts also carry the latest nonempty unblock
+reason and the newest eight nonempty notes addressed to the task or `all`, in
+append order. Orchestrator consumption does not suppress this evidence. The block
+precedes prior rejection even with custom role section lists, after mandatory
+documents. Messages retain at most 4096 runes; timestamps and recorded provenance
+are shown, with labels capped at 128 runes. Shortening appends `...` and requires
+retrieval via `liza get <task-id> --json` for history or
+`liza get human_notes --json` for notes before deciding; overflow
+reports the number of earlier matching notes and requires the same note read.
+Omission does not supersede evidence. Recorded operator CLI provenance is labeled
+as input, other notes as legacy/audit context; neither authenticates authority.
+Verify cited evidence and closure conditions before repeating an old block or
+rejection. Notes cannot change scope, acceptance, review boundaries or lifecycle
+gates, and audit records are not fresh requests. Only a scope exception recorded
+with `liza unblock-task --scope-exception-file` adds scope: the
+files it names, for the change it states. Only a budget exception recorded with
+`liza unblock-task --budget-exception <seconds> --budget-ruling
+<decision-id>` raises a coding task's canonical admission budget (ADR-0207), apart from the
+one retry `config.admission_timeout_retry` allows a timed-out submit (ADR-0216). Restart resident doer/reviewer
+supervisors after installing this prompt change; existing prompts are snapshots.
+
+**Fix**: If the blocker was another task, the blocked task should list it in `depends_on` so the orchestrator wakes when that task changes. If one direct edge is wrong, use `liza retarget-dependency <id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "..."`. For multiple tasks or complete lists, the blocked agent stores the command-free request through `liza mark-blocked --repair-request-file <path>` and the orchestrator or operator runs `liza apply-dependency-repair <blocked-task-id> --reason "..."`; stale or invalid batches leave every dependency, audit entry, and request unchanged. The task remains BLOCKED until its repair validation passes and it is explicitly unblocked or assessed. Unassigned `liza unblock-task <id> --reason "..."` may restore a repaired task with valid pending dependencies to its role-pair initial status, but that task remains dependency-held and unclaimable until every direct dependency is `MERGED`. Adding `--assign-to <doer-agent-id>` is a direct-resume path and remains rejected while any dependency is unmet.
+If the task has a preserved worktree and integration moved while it was blocked, use `liza unblock-task <id> --rebase-on <integration-branch> --reason "..."`. Tracked worktree changes require `--allow-dirty`, which rebases with Git autostash; untracked files that would be overwritten are refused. Submit/merge conflicts move tasks to `INTEGRATION_FAILED`; unblock-time rebase conflicts remain `BLOCKED` with fresh repair metadata so the preserved worktree can be repaired and unblocked again. Once dependencies merge, claim-time recovery rebases and validates the preserved branch on one captured integration SHA, then uses the completion lock to order the final ref equality check and assignment against cooperating integration movement, without holding the integration mutation lock across the blackboard write.
+Supersede/cancel operations rewrite active downstream dependencies first; stale edges to SUPERSEDED or ABANDONED tasks must not remain on active tasks. Supersession also prunes the retiring task's own illegal downstream edges, retains legal historical dependencies, audits removed IDs, and validates the candidate before commit. Otherwise use `liza supersede-task <id> [replacements] --reason "..."` to replace with new tasks, `liza supersede-task <id> --reason "..." --recoverability-command "liza recover-task <id>"` to mark completed externally with no replacements, or `liza recover-task <id>` to reset.
+
+If validation reports downstream dependencies on an already-`SUPERSEDED` task, the orchestrator or operator runs `liza repair-superseded-dependencies <task-id> --reason <reason>`. The command removes every illegal downstream direct edge in one transaction, retains legal edges and terminal/replacement metadata, records the caller, reason, and removed/retained IDs in task history and the activity log, and validates the full candidate state. Non-`SUPERSEDED` or already-valid tasks, and candidates that add a violation, are rejected without mutation; violations the state already had are reported as warnings and do not block the repair. Activity-log failure is returned as a warning after a successful state commit. Never repair the blackboard directly.
+
+### `retarget-dependency` rejects a dependency cycle
+
+When full candidate-state validation finds a cycle, `liza retarget-dependency A old-dependency B --reason "..." --json` returns a validation envelope with safe recovery details:
+
+```json
+{
+  "ok": false,
+  "result": null,
+  "error": {
+    "code": "validation",
+    "message": "retarget dependency rejected because the candidate state contains a dependency cycle",
+    "details": {
+      "operation": "retarget-dependency",
+      "task_id": "A",
+      "old_dependency": "old-dependency",
+      "new_dependencies": ["B"],
+      "phase": "candidate-state-validation",
+      "cycle_path": ["A", "B", "C", "A"],
+      "diagnostic_action": "retarget_dependency_rejected"
+    }
+  }
+}
+```
+
+With `--json -v`, stdout contains exactly one JSON envelope and stderr contains only the classified safe message and details; the raw underlying error is not emitted. The ordered string-array `cycle_path` closes the cycle and identifies the edges to repair.
+
+The candidate dependency, repair request, and task history remain unchanged, and no `retarget-dependency` success activity is recorded. The activity log instead records `retarget_dependency_rejected` with masked, bounded rejection evidence. In retry tracking, the supervisor attributes the failure to `retarget-dependency` and uses the envelope's `validation` code.
+
+### Integration failure
+**Symptom**: Task in INTEGRATION_FAILED state.
+**Diagnosis**: Merge conflict between task worktree and integration branch.
+**Fix**: A coder can claim it (`integration_fix: true`). The worktree is preserved for conflict resolution.
+
+### Global analysis started before implementation planning
+
+**Symptom**: A global integration analysis exists while upstream epic, story,
+architecture, or code planning is unfinished, and
+`goal.integration.contributing_set.scopes` is empty.
+
+**Impact**: The frozen empty cohort omits later local coverage. An early report
+cannot establish completion of the implementation. Pause the run while repairing
+the lifecycle. An absent operator checkpoint audit route is a separate issue;
+it does not cause this integration failure.
+
+**Recovery**: Install the corrected engine and replace all older supervisors and
+monitors before recovery; older state writers do not preserve the recovery
+receipt. Keep the run PAUSED and preserve any in-flight work. Then preview:
+
+```bash
+liza recover-integration integration-global-1 --reason "Premature empty cohort before planning settled" --dry-run --json
+```
+
+Inspect the returned task, source/report commits, and preservation ref, then run
+the same command without `--dry-run`. The command accepts only the initial empty
+cohort with unfinished upstream planning and no accepted integration verdict,
+coverage, or repair descendants. It requires a clean submitted analysis
+worktree. Dirty or inconsistent work must be preserved and reconciled first.
+Any remaining owner registration blocks recovery, even when its PID appears
+stopped. Preserve its work, remove its authority through the supported
+`delete agent` operation, and verify the old supervisor has stopped before
+retrying. PID invisibility across namespaces is not proof of quiescence.
+
+Recovery pins the report in Git, retires the premature analysis through the task
+lifecycle, and records an immutable receipt before clearing the empty cohort.
+The old task and source metadata remain historical evidence. Its task branch and
+worktree are cleaned up only after preservation and the state transaction.
+Other planning tasks remain intact. Repeating a completed recovery returns its
+receipt. The next valid global analysis uses generation 2; the discarded first
+analysis does not consume the valid global review budget.
+
+Run `liza validate` and inspect `liza status` before
+`liza resume`. Planning must settle, including all eligible
+upstream transitions, before a new contributing cohort can freeze. Never repair
+this by editing `state.yaml` or deleting only the analysis task.
+
+### Sprint stuck at CHECKPOINT
+**Symptom**: All agents idle, sprint in CHECKPOINT.
+**Diagnosis**: `liza status` — check checkpoint trigger.
+**Fix**: `liza resume` to continue, or `liza proceed` + `liza resume` to advance to next pipeline phase.
+
+### Orphaned worktree
+**Symptom**: `.worktrees/task-N/` exists but task is terminal.
+**Diagnosis**: `liza validate` will flag this.
+**Fix**: `liza wt-delete <task-id>`.
+
+### Ghost agent
+**Symptom**: Agent registered in state.yaml but process is dead or the registered PID now belongs to a different process.
+**Diagnosis**: `liza get agents` — check `process_status`, `process_status_source`, `process_status_detail`, and lease expiry. Watch alerts report active-lease registered agents whose PID is dead or mismatched; unknown process identity is treated conservatively as still live.
+**Fix**: `liza recover-agent <agent-id>` or `liza delete agent <id>`.
+
+### Zombie agent process
+**Symptom**: A live `liza agent` process is not registered in `state.yaml` and can collide with registered agents claiming the same work.
+**Diagnosis**: `liza get agents --zombies` or `liza validate`.
+**Fix**: Inspect the PID and stop the stale process. `liza validate --skip-process-checks` is only for archived/offline state validation where host process state is irrelevant.
+
+### Reviewer claim quarantine
+**Symptom**: A reviewer role stops starting reviews while a reviewable task stays claimable. Earlier, `.liza/agent-outputs/supervisor-<role>-*.log` shows one error-level `Review claim error` and then nothing (further attempts are debug-level); a `reviewer_claim_circuit_open` anomaly names the task.
+**Diagnosis**: `liza get anomalies --json` — the anomaly's `failure_class` says what must be repaired (`review_boundary_repair`, `acceptance_evidence` or `worktree_context`), `recovery` gives the command, and `attempts`, `first_failure`, `last_failure` and `cooldown_until` show the last recorded quarantine. After 3 identical failures, the work check excludes the candidate for 5 min, doubling per failed re-probe to 30 min. Claims prompted by other work still evaluate and remove the broken candidate before claiming a healthy one. These failures count even when the claim succeeds, but during cooldown they neither extend it nor update the durable anomaly.
+**Fix**: Apply the `recovery` repair — for a broken review boundary, `liza update-review-commit <task-id> --changed-by <operator>`. A `review_boundary_repair` whose `base_commit` is no longer on the integration branch (a rolled-back or redone merge, or a rewrite) needs no operator: the reviewer supervisor heals it on its next claim attempt, or moves the task to `INTEGRATION_FAILED` with the `rebase --onto` repair in `integration_failure.detail` (ADR-0200). Do not run `update-review-commit` alone for it, which would pull the orphaned commit into the review range. When the heal is fenced (a rebase in progress or an unattributed commit in the worktree) or cannot restore the worktree, the anomaly's `recovery` carries that diagnostic instead: inspect the worktree as it says before any repair. A change to the task's status, `review_commit`, `base_commit`, `worktree` or history clears its key; so does successfully claiming that task. When only quarantined work remains, cooldown expiry permits a re-probe. No restart is needed: restarting loses the in-memory counters and re-attempts up to the threshold, while the durable anomaly remains deduplicated.
+
+### Coding task blocked by an acceptance refusal
+**Symptom**: A coding task goes from its initial (or rejected) status to `BLOCKED` without ever being claimed, with a `blocked_reason` starting `acceptance_evidence_invalid:` or `acceptance_claim_refused_repeatedly:`. The doer supervisor log shows `Refused claim escalated to BLOCKED for the orchestrator`.
+**Diagnosis**: `liza get tasks <task-id> --json` — `blocked_reason` names the field, the allocation (`plan_ref`, or `spec_ref` when there is none) and the refusal; `plan_ref`, `spec_ref`, `validation` and `parent_tasks` are the inputs it was judged on. `acceptance_evidence_invalid` means the allocation cannot match the reviewed section (for example a slug instead of the section's heading text, `validation` that differs from the reviewed commands, or a carrier or pinned reference that is missing, not a regular file, or over its size bound). `acceptance_claim_refused_repeatedly` means three identical allocation refusals: usually no reviewed, merged planning parent allocates the task (or an approved proof drifted), but a persistent repository read failure looks the same.
+**Fix**: The orchestrator corrects the allocation — normally `liza replace-task` with the reviewed values, or `liza reaffirm-proof` for a drifted proof — and, if the task itself is kept, `liza unblock-task <task-id>` restores it for a new claim. Unclassified refusals (a failed Git read of the carrier or a pinned reference) are not escalated and keep retrying.
+
+### Integration waits or blocks on deferred validation
+**Symptom**: Once the latest global generation is clean at integration HEAD, integration progress reports `deferred_validation_pending`, `deferred_validation_failed`, `deferred_validation_infra`, `deferred_validation_unsettled` or `deferred_validation_aborted` instead of completing; a red batch also leaves an immediate discovery by `deferred-validation` naming a culprit task, and an alert. Global generations do not wait for a batch: the gate binds completion only.
+**Background**: Strict admission skips commands the reviewed Acceptance Contract lists in `deferred` or an operator ruling names (receipt `deferred[]`, authority `contract` or `operator`). Merges record them in `goal.integration.deferred_validation`. Every `batch_every_merges` merges since the previous batch, whatever its outcome (default 5), and whenever integration needs a verdict at HEAD (no batch there yet, alongside a generation or before completion), merges, reconciliation and the orchestrator supervisor's poll (while integration waits with a batch requested, whatever the wait's reason) start a detached `deferred-validation run`, logging to `.liza/deferred-validation/runner.log`. The batch runs at integration HEAD, outside any agent session, one lane per command in `.liza/deferred-validation/worktree`, `worktree-1`, …; lanes run concurrently, bounded only by `admission_limits` classes (give suites that cannot share a resource a class with `max_concurrent: 1`). Each probe does a forced checkout and `git clean -ffdx`, copies env files if `copy_worktree_env_files` is set, runs `post_worktree_cmd` within `deferred_validation.setup_timeout_seconds`, and requires a clean tree. Lanes prepare one at a time; a failed `post_worktree_cmd` is retried once from a freshly restored tree, and each failed attempt is logged, masked, to `runner.log`. A lane waiting for an admission slot waits until it frees; a halt or stop observed meanwhile ends the batch as `halted`. Tool `env_files` are not loaded. A failing command is bisected over the merges since it last passed (ADR-0204). A command whose newest execution passed at an ancestor of HEAD is not re-run but recorded `carried_forward` (with `carried_from`) when nothing changed since in its `deferred_validation.scopes` paths (the whole tree when none) outside `deferred_validation.inert_paths`; with neither set, only an identical tree carries, so a retry at the same HEAD re-runs only what has not passed there. A command whose newest execution failed with one culprit task, whose discovery was converted (`set-discovery-disposition`) to a fix task still in flight, is not re-run or bisected but recorded `known_red` (with `owned_by` the fix and `carried_from` the failure) and keeps the batch `failed`, until the fix merges or dies. `run --force` carries nothing forward and skips nothing.
+**Diagnosis**: `liza deferred-validation status`. In the latest batch, each result's `status` is `passed`, `failed`, `contaminated` (the command dirtied the tree), or `not_run`. Leftover background processes are killed when each command ends. Each culprit names a `task_id` and `merge_commit`, with the probe `steps`, only when an executed pass precedes an executed failure. Otherwise it is `unattributed` with a `reason`: `fails_at_baseline` (already failing where it was last green or first deferred), `fails_after_last_merge`, `setup_unavailable at <commit>`, `no_baseline`, `baseline_not_in_ancestry` or `history_unavailable`. An `aborted` batch means halted (a command running when the halt committed keeps its result; commands not yet started are `not_run`), `runner_died`, `runner_settled_by_operator`, `aborted_by_operator` (`abort`: running steps were killed and are `not_run`, finished results kept), or `descendants_unstoppable` (a step left processes that could not be stopped; the runner started nothing more and left its record `unsettled`); an `infra_failed` batch carries the setup or Git error, with the setup's masked output (head and tail; none if the capture overflowed 1 MiB). A `failed` or `contaminated` result's `excerpt` and a batch `reason` keep at most 4 KiB, head and tail; a `failed` result's full masked output is in `output_sha256`: `liza tool-result read <output_sha256>`. No `output_sha256` means the capture overflowed 1 MiB (output omitted, as the excerpt says) or the output could not be stored (`runner.log` says why); the verdict stands either way. Batches do not run on Windows: run them from a supported host or retire the commands.
+**Fix**: For `failed`, the orchestrator routes the discovery: a correction task for the culprit's change. Its merge moves HEAD and the next batch re-evaluates. A command that is obsolete (renamed or removed suite) is retired with `retire`. A batch runs the effective set read at its start and is judged against the current one: a retired command that passed still lets the batch cover, but one that failed keeps the batch `failed`, so while another command stays effective, `run --force` after the retirement (or a merge that moves HEAD) is needed. For `infra`, fix the environment, then `run --force`. A HEAD that already failed, was aborted by `abort`, or has three ended attempts, is not retried without `--force`; `aborted` clears with a merge or `run --force`. To free slots a batch holds now, `abort` it (refused when no runner holds the lock); a pause or stop only keeps it from starting more. If a scope or inert path was too narrow and a carried-forward batch covered HEAD, correct the config, then `run --force`: editing the config alone does not reopen a recorded batch. For `unsettled`, or if `run` refuses because a predecessor runner did not finish, confirm none of its processes still runs (`settle` itself refuses while a process still holds the runner lock), then `settle`. For in-flight tasks whose `done_when` names a long suite, `rule` that exact command and cite the decision. Withdrawing it with `unrule` makes receipts that relied on it need `update-review-commit`.
+
+### Submit or deferred batch refused for a full admission class
+**Symptom**: `submit-for-review` fails with `acceptance.admission_slot: no admission slot for class <class> within <wait>` and outcome `RETRYABLE`, or a deferred batch stays running while `runner.log` ends with `waiting for an admission slot of class <class> … until one frees`. Batches recorded by older binaries may be `aborted` with `admission_slot_wait_exceeded`.
+**Diagnosis**: The class's `max_concurrent` commands ran for the whole wait: for a submit the 14400 s cap minus the batch budget, but at least 2 h; for `update-review-commit` or the heal, the cap minus the budget (ADR-0209). `liza get config.admission_limits --json` shows the classes; `fuser .liza/admission-slots/<class>/slot-*.lock` shows the holders. A holder that is not a running canonical command or probe is a daemonized leftover of a killed owner.
+**Fix**: The submit prepared nothing: retry the same commit. Stop a leftover holder, or raise `max_concurrent` with `admission-limit set … --replace --reason`: waiters already queued see it within about 10 s, and a retried submit queues again behind them. A deferred batch waits until the holder exits; to stop it instead, `deferred-validation abort` it, or pause or stop the system.
+
+### Abandoned background job
+**Symptom**: `.liza/alerts.log` contains `ABANDONED BACKGROUND JOB`: an agent session ended while a background job it started was still running, and the provider killed the job. The supervisor kept the claim, so the task re-runs. Past the spinning restart threshold, `ABANDONED BACKGROUND JOB LOOP` follows and the task is `BLOCKED`.
+**Diagnosis**: The alert names the agent, task, job id and job summary. Check what the job consumed or left half-applied: single-use fixtures, live-environment writes, a partial submission gate.
+**Fix**: Replace spent inputs before the re-run. For a loop, find why the job cannot finish within the session before unblocking the task.
+
+**Variant — stopped at the time limit (Claude)**: the job summary reads `stopped after reaching its background time limit`, typically on a long `submit-for-review`, and retries then fail with `STATE_CHANGED … an unresolved preparation remains at this ownership boundary`. The killed submit's preparation stays because its effects are unknown; the same session cannot clear it, but an owner-ending operation (for example `mark-blocked`) or the agent's next registration generation does. In the session's `.liza/agent-outputs/*.txt`, check the Claude Code version, how the command started (`is_backgrounded`, `run_in_background`, `timeout`) and the launched `BASH_MAX_TIMEOUT_MS`. A foreground call is moved to the background at its timeout and stopped 30 minutes later. An explicit background call lives until its requested timeout, which Liza allows up to the submit grace (6 h 10 min). Start long commands as explicit background jobs, as `AGENT_TOOLS.md` instructs.
+
+### Provider quota exhausted
+**Symptom**: All agents using a provider (e.g. Claude) have stopped. System mode is still RUNNING, sprint still IN_PROGRESS. Signal file `.liza/provider-quota-exhausted-<provider>` exists.
+**Diagnosis**: `ls .liza/provider-quota-exhausted-*` or check `.liza/alerts.log` for `PROVIDER QUOTA EXHAUSTED`. The signal file records the provider's announced reset (`resets_at`, or `unknown`) and when the block lifts (`expires`). The block lifts one minute after the announced reset, but never sooner than five minutes after detection; with no announced reset, it lifts after 30 minutes. `PROVIDER QUOTA SPAWN BLOCKED` means a spawn was attempted before `expires`. A quota message is recognised with ASCII or typographic apostrophes (Codex prints `You’ve hit your usage limit`), and also when the provider CLI prints it and still exits 0; a graceful agent abort (exit 42) is left alone. Claude limits are also recognised from a failed result with API status 429, whatever its wording, when it announces a reset (`Quota resets in 3h 43m`); a 429 without a reset raises no signal and is retried with the crash backoff. `NO USABLE PROVIDER` means pool auto-repair has claimable work for a role (or a missing orchestrator) whose configured CLI is blocked: it starts nothing for that role and raises the alert once per block, naming the waiting tasks and the expiry. Pool repair has no fallback provider. An expired file no longer blocks anything. After the lift, the first agent turn on that provider acts as the probe: if the provider is still exhausted, the file is rewritten with the newly announced reset. A doer cut off mid-task has its uncommitted work committed on the task branch before the claim is released (`WIP: provider quota exhausted …`, hooks skipped), so the task is claimable again rather than blocked as dirty. When the supervisor log reports that commit as skipped (with the reason: mid-merge or mid-rebase, wrong branch, ownership changed), the task blocks with `preserved worktree is dirty` on its next claim, as before.
+**Fix**: The block lifts on its own at `expires`, and pool auto-repair may then restore the doer and reviewer roles it covers, and a missing orchestrator. Other agents you started manually do not restart themselves: start them again once the block has lifted. To lift the block earlier, e.g. after switching accounts, delete that provider's file `.liza/provider-quota-exhausted-<provider>`. `liza resume` removes only expired quota signals and prints each one it keeps, so recovering one provider does not lift another provider's block. To staff a blocked role on another provider instead, change its CLI in `.liza/models.yaml` (for a reviewer list, the blocked item); agents read it at start.
+
+### Provider unavailable
+**Symptom**: Agents for a provider stop before doing useful work, often after startup/session errors such as Codex failing to access `~/.codex/sessions`, or Claude failing with `Failed to authenticate: OAuth session expired and could not be refreshed`. Signal file `.liza/provider-unavailable-<provider>` exists.
+**Diagnosis**: `ls .liza/provider-unavailable-*` or check `.liza/alerts.log` for `PROVIDER UNAVAILABLE`. `PROVIDER UNAVAILABLE SPAWN BLOCKED` means a spawn was attempted while the provider-unavailable signal was still set. Also inspect `.liza/agent-outputs/*.err` for provider startup errors; Claude reports its error in the final `result` event of `.liza/agent-outputs/*.txt` instead.
+**Fix**: Repair the provider environment first (for Codex, ensure the agent process can access `~/.codex/sessions`; for Claude, log the `claude` CLI in again as the OS user that runs the agents), then run `liza pause` and `liza resume` to clear provider-unavailable signals before restarting agents.
+
+### Provider audit degraded
+**Symptom**: Agent work may complete, but `.liza/agent-outputs/*.err` or `.liza/alerts.log` contains `PROVIDER AUDIT DEGRADED`, for example Codex `failed to record rollout items: thread ... not found`.
+**Impact**: Treat task state and explicit task outputs as the source of truth. The provider transcript or rollout audit trail may be incomplete for the affected session.
+**Diagnosis**: Inspect the affected session's `.liza/agent-outputs/*.err`, alerts, task state and explicit outputs. Distinguish current provider diagnostics from historical errors quoted by a log-reading command. For genuine persistence errors, retest or upgrade the provider CLI before relying on its transcript.
+
+Audit, quota and provider-unavailable detection ignores structured command/tool
+output and assistant messages; supported provider error events and plain
+diagnostics remain recognized. Audit anomalies store a canonical bounded message,
+with the original session logs retaining the detailed evidence. Older engines can
+mistake a quoted log for a fresh failure and exit when state hygiene rejects the
+raw transcript payload. Update the engine and restart the affected supervisor;
+installing a binary does not replace a resident detector. Preserve state hygiene
+and historical evidence rather than deleting anomalies to hide the symptom.
+**Response**: A single occurrence does not stop workers. A qualifying
+same-provider group is classified as `ACKNOWLEDGED_HISTORICAL`, `NEW`, or
+`CONTINUING`. Historical-only evidence is `WARNING` and takes no
+mode/sprint/trigger/active-response action. New or continuing evidence is a
+non-trigger hard `CHECKPOINT` by default: mode remains `RUNNING`, downstream
+transition creation pauses, and already-available sprint work may continue.
+
+`HALT` is permitted only when at least one current registration exactly matches
+the anomaly provider and every exact match has a degraded health record for the
+same agent ID, provider, PID, and registration time. An alias-only match (such
+as `codex` evidence versus a `codex-acp` registration), empty/missing identity,
+missing health, or a stale/mismatched PID or registration epoch is non-halting
+unknown and remains `CHECKPOINT`. `OBSERVABILITY_DEGRADED` therefore does not by
+itself trip system mode.
+
+**Recovery**: Review the report, then run exactly `liza resume`.
+Resume resolves the active `CHECKPOINT` or `HALT` response, records its history
+boundary, and clears it; a `HALT` acknowledgement also clears the trigger.
+Unchanged qualifying evidence subsequently reports
+`ACKNOWLEDGED_HISTORICAL`/`WARNING` rather than checkpointing or halting again.
+Raw provider events are not stored in `state.yaml`; inspect
+`.liza/agent-outputs/` for full transcript evidence. If an
+older state contains raw provider JSON in anomaly messages, run
+`liza migrate` to scrub those fields while keeping the anomaly
+record. Legacy circuit-breaker state without `current_response`, `response`,
+`classification`, or `explanation` remains readable; cleared legacy
+`TRIGGERED` history still acts as an acknowledgement boundary.
+
+### Circuit breaker
+
+`liza analyze` detects systemic patterns and selects a response:
+
+| Condition | Action |
+|-----------|--------|
+| Agent crash loop (3× in 5min) | Supervisor stops the agent |
+| Blackboard validation fails | All agents pause |
+| Submit/merge integration branch conflict | Task set to INTEGRATION_FAILED |
+| Unblock-time `--rebase-on` conflict | Task remains BLOCKED with fresh repair metadata |
+| Historical provider-audit evidence (`ACKNOWLEDGED_HISTORICAL`) | `WARNING`; report only, no state action |
+| New/continuing provider-audit evidence with unknown or non-degraded current health | Non-trigger `CHECKPOINT`; mode stays RUNNING and report is written |
+| Provider-audit evidence with exact all-degraded current provider/agent-ID/PID/registration-time proof | `HALT`; circuit breaker triggers and mode becomes CIRCUIT_BREAKER_TRIPPED |
+| Other qualifying systemic pattern | `HALT`; circuit breaker triggers and report is written |
+
+## Validation Invariants
+
+`liza validate` checks these (among others):
+- Tasks in executing states must have `assigned_to`, `worktree`, and valid `lease_expires`
+- Tasks in reviewing states must have `reviewing_by`, `review_lease_expires`, and `review_commit`
+- Tasks in submitted states must have `review_commit`
+- Tasks in rejected states must have `rejection_reason`
+- BLOCKED tasks must have `blocked_reason` and `blocked_questions`
+- Dependency direction applies to every task, including terminal tasks; dependencies cannot point to downstream role-pairs
+- MERGED tasks must not have `worktree`
+- No two agents assigned to the same task
+- Tasks in initial/draft states cannot have `assigned_to`

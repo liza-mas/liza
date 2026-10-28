@@ -1,0 +1,199 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: IMPLEMENTING_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    assigned_to: coder-1
+    lease_expires: <INSTANT Z>
+    worktree: .worktrees/t1
+    base_commit: "<SHA base>"
+  - id: t2
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t2
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+  coder-1:
+    role: coder
+    status: WORKING
+    generation: gen-c1
+    current_task: t1
+    lease_expires: <INSTANT Z>
+    heartbeat: <INSTANT Z>
+    registered_at: <INSTANT Z>
+    pid: 1
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t2]
+    stretch: [t1]
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: goal-1
+    description: A4 oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <INSTANT Z>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: t2
+      type: coding
+      role_pair: coding-pair
+      description: Fixture t2
+      status: DRAFT_CODE
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      created: <INSTANT Z>
+      history: []
+agents:
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: gen-c1
+        heartbeat: <INSTANT Z>
+        registered_at: <INSTANT Z>
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
+        pid: 1
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        heartbeat: <INSTANT Z>
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
+discovered: []
+human_notes:
+    - timestamp: <INSTANT Z>
+      message: 'Task t1 deleted (was DRAFT_CODE): manual deletion'
+      for: all
+      orchestrator_seen_at: "<INSTANT Z>"
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - t2
+        stretch: []
+    timeline:
+        started: <INSTANT Z>
+        deadline: <INSTANT Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <INSTANT Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING
+# written files

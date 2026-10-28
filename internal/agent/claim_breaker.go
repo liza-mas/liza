@@ -22,6 +22,9 @@ const (
 	// so first-failure behavior is unchanged; it doubles up to claimBackoffMax.
 	claimBackoffBase = 5 * time.Second
 	claimBackoffMax  = 5 * time.Minute
+	// claimBackoffFactor is the growth of both the claim backoff and the
+	// quarantine cooldown.
+	claimBackoffFactor = 2
 )
 
 // claimBreakerKey identifies one quarantined condition: a candidate, the class
@@ -30,7 +33,7 @@ const (
 type claimBreakerKey struct {
 	Role            string
 	TaskID          string
-	Class           string
+	Class           ops.ReviewClaimClass
 	BoundaryVersion string
 }
 
@@ -73,7 +76,7 @@ type claimFailureObserver interface {
 type claimBreakerScope struct {
 	role   string
 	taskID string
-	class  string
+	class  ops.ReviewClaimClass
 }
 
 type claimBreakerEntry struct {
@@ -86,7 +89,7 @@ type claimBreakerEntry struct {
 // retrying: the delay doubles while the class repeats and restarts when the
 // class changes or a claim succeeds.
 type claimBackoffState struct {
-	class string
+	class ops.ReviewClaimClass
 	delay time.Duration
 }
 
@@ -108,7 +111,7 @@ func newClaimBreaker() *claimBreaker {
 
 // quarantineClass reports whether a candidate class is deterministic and
 // repair-required — never worth retrying against unchanged state (plan D3).
-func quarantineClass(class string) bool {
+func quarantineClass(class ops.ReviewClaimClass) bool {
 	switch class {
 	case ops.ReviewClaimClassAcceptanceEvidence,
 		ops.ReviewClaimClassReviewBoundaryRepair,
@@ -120,7 +123,7 @@ func quarantineClass(class string) bool {
 
 // stopClass reports whether a candidate-free class ends the supervisor loop
 // instead of scheduling another attempt.
-func stopClass(class string) bool {
+func stopClass(class ops.ReviewClaimClass) bool {
 	return class == ops.ReviewClaimClassAuthority || class == ops.ReviewClaimClassDegraded
 }
 
@@ -172,7 +175,7 @@ func (b *claimBreaker) observeCandidateFree(failure *ops.ReviewClaimFailure) cla
 
 // advanceBackoff returns the next delay for the role's schedule: the base on a
 // fresh schedule or a class change, otherwise double the last, capped.
-func (b *claimBreaker) advanceBackoff(role, class string) time.Duration {
+func (b *claimBreaker) advanceBackoff(role string, class ops.ReviewClaimClass) time.Duration {
 	state := b.backoff[role]
 	if state == nil {
 		state = &claimBackoffState{}
@@ -183,7 +186,7 @@ func (b *claimBreaker) advanceBackoff(role, class string) time.Duration {
 		state.delay = claimBackoffBase
 		return state.delay
 	}
-	state.delay = min(state.delay*2, claimBackoffMax)
+	state.delay = min(state.delay*claimBackoffFactor, claimBackoffMax)
 	return state.delay
 }
 
@@ -214,7 +217,7 @@ func (b *claimBreaker) observeCandidate(role string, candidate ops.ReviewClaimCa
 	case now.Before(entry.counters.CooldownUntil):
 		return key, 0, false
 	default:
-		entry.cooldown = min(entry.cooldown*2, claimQuarantineCooldownMax)
+		entry.cooldown = min(entry.cooldown*claimBackoffFactor, claimQuarantineCooldownMax)
 	}
 	entry.counters.CooldownUntil = now.Add(entry.cooldown)
 	return key, entry.cooldown, true

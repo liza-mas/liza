@@ -21,8 +21,27 @@ import (
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
-const acceptanceOutputLimit = 1 << 20
-const acceptanceFailureExcerptLimit = 8 << 10
+const (
+	acceptanceOutputLimit         = 1 << 20
+	acceptanceFailureExcerptLimit = 8 << 10
+	// defaultAcceptanceTimeoutSeconds is the batch budget when a contract's
+	// timeout_seconds is zero.
+	defaultAcceptanceTimeoutSeconds = 600
+	// acceptanceCommandWaitDelay bounds how long a finished command's output
+	// pipes are waited on before they are closed.
+	acceptanceCommandWaitDelay = 5 * time.Second
+	// acceptanceExitUnknown is the exit code of a command that never reported one.
+	acceptanceExitUnknown = -1
+	// acceptanceMaskedValue replaces a credential in execution text.
+	acceptanceMaskedValue = "***"
+	// acceptanceSecretEntryName names the pseudo-variable under which known
+	// credentials are fed to the shared masker.
+	acceptanceSecretEntryName = "SECRET_ACCEPTANCE"
+	// acceptanceEnvSuffixURL and acceptanceEnvSuffixDSN mark an inherited variable
+	// as a connection string, whose value is a credential to mask.
+	acceptanceEnvSuffixURL = "URL"
+	acceptanceEnvSuffixDSN = "DSN"
+)
 
 var errAcceptanceOutputLimit = errors.New("acceptance execution output limit exceeded")
 
@@ -36,7 +55,7 @@ func executeAcceptanceCommands(taskID, worktree string, commands []string, timeo
 // grants; zero means the default.
 func acceptanceBatchTimeout(timeoutSeconds int) time.Duration {
 	if timeoutSeconds == 0 {
-		timeoutSeconds = 600
+		timeoutSeconds = defaultAcceptanceTimeoutSeconds
 	}
 	return time.Duration(timeoutSeconds) * time.Second
 }
@@ -94,7 +113,7 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 		result := models.AcceptanceCommandResult{
 			Command:       mask(command),
 			CommandSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(command))),
-			ExitCode:      -1,
+			ExitCode:      acceptanceExitUnknown,
 			StartedAt:     time.Now().UTC(),
 		}
 		cmd, err := shellCommandContext(ctx, command, worktree)
@@ -105,7 +124,7 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 		cmd.Env = grant.commandEnvironment(environ, command)
 		cmd.ExtraFiles = inherit
 		configProcessGroupKill(cmd)
-		cmd.WaitDelay = 5 * time.Second
+		cmd.WaitDelay = acceptanceCommandWaitDelay
 		err = cmd.Run()
 		result.FinishedAt = time.Now().UTC()
 		if cmd.ProcessState != nil {
@@ -208,8 +227,8 @@ func acceptanceExecutionMaskWith(environ []string, declared []string) func(strin
 			continue
 		}
 		upper := strings.ToUpper(key)
-		connection := strings.HasSuffix(upper, "URL") || strings.HasSuffix(upper, "DSN")
-		generation := key == brand.EnvName("AGENT_GENERATION") || key == brand.LegacyEnvName("AGENT_GENERATION")
+		connection := strings.HasSuffix(upper, acceptanceEnvSuffixURL) || strings.HasSuffix(upper, acceptanceEnvSuffixDSN)
+		generation := key == brand.EnvName(agentGenerationEnvSuffix) || key == brand.LegacyEnvName(agentGenerationEnvSuffix)
 		if connection || generation || secretmask.IsSecretKey(key) {
 			credentials = append(credentials, value)
 		}
@@ -233,13 +252,13 @@ func acceptanceExecutionMaskWith(environ []string, declared []string) func(strin
 	// additionally handles short passwords without weakening global defaults.
 	entries := make([]string, len(credentials))
 	for i, value := range credentials {
-		entries[i] = "SECRET_ACCEPTANCE=" + value
+		entries[i] = acceptanceSecretEntryName + "=" + value
 	}
 	masker.AddEntries(entries)
 	sort.Slice(credentials, func(i, j int) bool { return len(credentials[i]) > len(credentials[j]) })
 	replacements := make([]string, 0, 2*len(credentials))
 	for _, credential := range credentials {
-		replacements = append(replacements, credential, "***")
+		replacements = append(replacements, credential, acceptanceMaskedValue)
 	}
 	replacer := strings.NewReplacer(replacements...)
 	return func(text string) string {

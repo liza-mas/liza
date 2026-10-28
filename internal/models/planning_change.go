@@ -56,7 +56,7 @@ func (s *State) ComputePlanningChanges() PlanningChangeMetrics {
 			change = NewPlanningChange(PlanningChangeCorrection, "", task.AmendsPlan)
 		} else if change == nil && task.Supersedes != nil && *task.Supersedes != "" {
 			original := s.FindTask(*task.Supersedes)
-			if original != nil && original.TransitionsExecuted["replanned"] {
+			if original != nil && original.TransitionsExecuted[ReplannedTransition] {
 				change = NewPlanningChange(PlanningChangeReplan, "", original.ID)
 			}
 		}

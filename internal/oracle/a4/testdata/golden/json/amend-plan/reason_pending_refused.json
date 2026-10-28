@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "a correction is already pending; apply it or replace-pending after merge/cancellation"
+    },
+    "ok": false,
+    "result": null
+  }
+}

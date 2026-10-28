@@ -1,0 +1,24 @@
+{
+  "source_task_id": "t1",
+  "reason": "Rescoped",
+  "replacement": {
+    "id": "t1c",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "coding-pair",
+    "priority": 1
+  },
+  "consumers": [
+    {
+      "task_id": "t2",
+      "expected_depends_on": [
+        "t1"
+      ],
+      "desired_depends_on": [
+        "t1c"
+      ]
+    }
+  ]
+}

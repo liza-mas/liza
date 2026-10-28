@@ -104,10 +104,10 @@ func mixedCauseRequest() models.RejectionRCARequest {
 		SchemaVersion: models.RejectionRCASchemaVersion,
 		Summary:       "Two product defects, one reviewer unable to run Postgres, one stale-ownership retry.",
 		Contributions: []models.RejectionRCAContribution{
-			{RejectionIndex: 1, Categories: []string{models.RejectionCauseProductDefect}, Evidence: []string{"verdict 1: identity scalar mismatch"}},
-			{RejectionIndex: 2, Categories: []string{models.RejectionCauseCapabilityFailure, models.RejectionCauseProductDefect}, Evidence: []string{"verdict 2: reviewer could not start Postgres", "verdict 2: concurrency defect"}},
-			{RejectionIndex: 3, Categories: []string{models.RejectionCauseLifecycleRetry}, Evidence: []string{"submit-review STALE_CALLER after reclaim"}},
-			{RejectionIndex: 4, Categories: []string{models.RejectionCauseProductDefect}, Evidence: []string{"verdict 4: missing migration"}},
+			{RejectionIndex: 1, Categories: []models.RejectionCause{models.RejectionCauseProductDefect}, Evidence: []string{"verdict 1: identity scalar mismatch"}},
+			{RejectionIndex: 2, Categories: []models.RejectionCause{models.RejectionCauseCapabilityFailure, models.RejectionCauseProductDefect}, Evidence: []string{"verdict 2: reviewer could not start Postgres", "verdict 2: concurrency defect"}},
+			{RejectionIndex: 3, Categories: []models.RejectionCause{models.RejectionCauseLifecycleRetry}, Evidence: []string{"submit-review STALE_CALLER after reclaim"}},
+			{RejectionIndex: 4, Categories: []models.RejectionCause{models.RejectionCauseProductDefect}, Evidence: []string{"verdict 4: missing migration"}},
 		},
 	}
 }
@@ -131,8 +131,8 @@ func payloadFromJSON(t *testing.T, raw string) map[string]any {
 	return object
 }
 
-func dispositionPayload(path, rationale string) map[string]any {
-	object := map[string]any{"schema_version": float64(models.RejectionRCASchemaVersion), "recovery_path": path}
+func dispositionPayload(path models.RecoveryPath, rationale string) map[string]any {
+	object := map[string]any{"schema_version": float64(models.RejectionRCASchemaVersion), "recovery_path": string(path)}
 	if rationale != "" {
 		object["rationale"] = rationale
 	}
@@ -246,7 +246,7 @@ func TestRecordRejectionRCA(t *testing.T) {
 			entry.Extra["gated_at"] != fixture.gatedAt.Format(time.RFC3339) || entry.Extra["contribution_count"] != 4 || entry.Extra["recorded_by"] != rejectionRCATestActor {
 			t.Errorf("detail values = %#v", entry.Extra)
 		}
-		wantCauses := []string{models.RejectionCauseCapabilityFailure, models.RejectionCauseLifecycleRetry, models.RejectionCauseProductDefect}
+		wantCauses := []string{string(models.RejectionCauseCapabilityFailure), string(models.RejectionCauseLifecycleRetry), string(models.RejectionCauseProductDefect)}
 		if got := extraStrings(t, entry.Extra, "causes"); !reflect.DeepEqual(got, wantCauses) {
 			t.Errorf("causes = %v, want %v", got, wantCauses)
 		}
@@ -259,8 +259,8 @@ func TestRecordRejectionRCA(t *testing.T) {
 			SchemaVersion: models.RejectionRCASchemaVersion,
 			Summary:       "CI flake dominated the loop.",
 			Contributions: []models.RejectionRCAContribution{
-				{RejectionIndex: 1, Categories: []string{"flaky_ci", models.RejectionCauseProductDefect}},
-				{RejectionIndex: 2, Categories: []string{"flaky_ci"}},
+				{RejectionIndex: 1, Categories: []models.RejectionCause{"flaky_ci", models.RejectionCauseProductDefect}},
+				{RejectionIndex: 2, Categories: []models.RejectionCause{"flaky_ci"}},
 			},
 		}
 
@@ -269,14 +269,14 @@ func TestRecordRejectionRCA(t *testing.T) {
 		}
 
 		task := fixture.readTask(t)
-		if got := task.RejectionRCA.Contributions[1].Categories; !reflect.DeepEqual(got, []string{"flaky_ci"}) {
+		if got := task.RejectionRCA.Contributions[1].Categories; !reflect.DeepEqual(got, []models.RejectionCause{"flaky_ci"}) {
 			t.Fatalf("stored categories = %v, want the verbatim unknown cause", got)
 		}
 		entries := historyEntries(task, models.TaskEventRejectionRCARecorded)
 		if len(entries) != 1 {
 			t.Fatalf("rejection_rca_recorded entries = %d, want 1", len(entries))
 		}
-		if got := extraStrings(t, entries[0].Extra, "causes"); !reflect.DeepEqual(got, []string{"flaky_ci", models.RejectionCauseProductDefect}) {
+		if got := extraStrings(t, entries[0].Extra, "causes"); !reflect.DeepEqual(got, []string{"flaky_ci", string(models.RejectionCauseProductDefect)}) {
 			t.Fatalf("causes = %v, want the unknown cause verbatim", got)
 		}
 	})
@@ -285,7 +285,7 @@ func TestRecordRejectionRCA(t *testing.T) {
 		t.Parallel()
 		fixture := newRejectionRCAFixture(t, nil)
 		request := mixedCauseRequest()
-		request.Contributions = append(request.Contributions, models.RejectionRCAContribution{RejectionIndex: 5, Categories: []string{models.RejectionCauseProductDefect}})
+		request.Contributions = append(request.Contributions, models.RejectionRCAContribution{RejectionIndex: 5, Categories: []models.RejectionCause{models.RejectionCauseProductDefect}})
 		before := fixture.stateBytes(t)
 
 		_, err := RecordRejectionRCA(fixture.projectRoot, "task-1", payloadObject(t, request), rejectionRCATestActor, RejectionRCAOptions{})
@@ -380,7 +380,7 @@ func TestRecordRejectionRCAIdempotent(t *testing.T) {
 
 	different := mixedCauseRequest()
 	different.Summary = "Revised: the fourth rejection was a lifecycle retry, not a defect."
-	different.Contributions[3].Categories = []string{models.RejectionCauseLifecycleRetry}
+	different.Contributions[3].Categories = []models.RejectionCause{models.RejectionCauseLifecycleRetry}
 	result, err := RecordRejectionRCA(fixture.projectRoot, "task-1", payloadObject(t, different), rejectionRCATestActor, RejectionRCAOptions{})
 	if err != nil {
 		t.Fatalf("different RecordRejectionRCA() error: %v", err)
@@ -410,9 +410,9 @@ func TestResumeRejectionRCADispositions(t *testing.T) {
 	recordedAt := time.Now().UTC().Truncate(time.Second)
 
 	cases := []struct {
-		path            string
+		path            models.RecoveryPath
 		rationale       string
-		restoreMode     string
+		restoreMode     models.RestoreMode
 		iterationExempt bool
 		reviewCycles    int
 	}{
@@ -423,7 +423,7 @@ func TestResumeRejectionRCADispositions(t *testing.T) {
 		{path: models.RecoveryHumanOverride, rationale: "operator accepts the residual risk", restoreMode: models.RestoreModeClaimable, reviewCycles: 4},
 	}
 	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
+		t.Run(string(tc.path), func(t *testing.T) {
 			t.Parallel()
 			fixture := newRejectionRCAFixture(t, recordedRejectionRCA(mixedCauseRequest(), rejectionRCATestActor, recordedAt))
 			fingerprint := fixture.readTask(t).RejectionRCA.Fingerprint
@@ -467,7 +467,7 @@ func TestResumeRejectionRCADispositions(t *testing.T) {
 			}
 			extra := entries[0].Extra
 			requireDetailKeys(t, extra, "fingerprint", "recovery_path", "restore_mode", "actor", "lifecycle_version", "decided_at", "iteration_exempt", "gated_at")
-			if extra["fingerprint"] != fingerprint || extra["recovery_path"] != tc.path || extra["restore_mode"] != tc.restoreMode || extra["actor"] != rejectionRCATestActor ||
+			if extra["fingerprint"] != fingerprint || extra["recovery_path"] != string(tc.path) || extra["restore_mode"] != string(tc.restoreMode) || extra["actor"] != rejectionRCATestActor ||
 				extra["lifecycle_version"] != 7 || extra["decided_at"] != disposition.DecidedAt.Format(time.RFC3339) || extra["iteration_exempt"] != tc.iterationExempt ||
 				extra["gated_at"] != fixture.gatedAt.Format(time.RFC3339) {
 				t.Fatalf("detail values = %#v", extra)
@@ -854,15 +854,15 @@ func (f *gateLoopFixture) recordFromFile(request models.RejectionRCARequest) {
 	if len(entries) != 1 {
 		f.t.Fatalf("rejection_rca_recorded entries = %d, want 1", len(entries))
 	}
-	wantCauses := []string{models.RejectionCauseCapabilityFailure, models.RejectionCauseLifecycleRetry, models.RejectionCauseProductDefect}
+	wantCauses := []string{string(models.RejectionCauseCapabilityFailure), string(models.RejectionCauseLifecycleRetry), string(models.RejectionCauseProductDefect)}
 	if got := extraStrings(f.t, entries[0].Extra, "causes"); !reflect.DeepEqual(got, wantCauses) {
 		f.t.Fatalf("causes = %v, want the mixed set %v", got, wantCauses)
 	}
 }
 
-func (f *gateLoopFixture) resume(path string) {
+func (f *gateLoopFixture) resume(path models.RecoveryPath) {
 	f.t.Helper()
-	result, err := ResumeRejectionRCA(f.root, f.taskID, dispositionPayload(path, "disposition for "+path), rejectionRCATestActor, RejectionRCAOptions{})
+	result, err := ResumeRejectionRCA(f.root, f.taskID, dispositionPayload(path, "disposition for "+string(path)), rejectionRCATestActor, RejectionRCAOptions{})
 	if err != nil {
 		f.t.Fatalf("ResumeRejectionRCA(%s) error: %v", path, err)
 	}
@@ -881,7 +881,7 @@ func (f *gateLoopFixture) resume(path string) {
 
 // restore takes the unblock form the recorded restore mode authorizes and
 // leaves the task executing under the doer.
-func (f *gateLoopFixture) restore(mode string) {
+func (f *gateLoopFixture) restore(mode models.RestoreMode) {
 	f.t.Helper()
 	switch mode {
 	case models.RestoreModeAssign:
@@ -938,7 +938,7 @@ func TestRejectionRCAGateEndToEnd(t *testing.T) {
 	rows := []struct {
 		name string
 		role gateVerdictRole
-		path string
+		path models.RecoveryPath
 		// iterationAfterRestore is the product iteration once the task is
 		// executing again: unchanged for an assign restore, one more for a
 		// claimable restore whose next claim iterates.
@@ -1124,7 +1124,7 @@ func TestRejectionRCAGateBackstopsRemainActive(t *testing.T) {
 		if !result.Triggered || result.Pattern != "planning_review_churn" || !strings.Contains(result.Evidence, fixture.taskID) {
 			t.Fatalf("analyze = %+v, want planning_review_churn on %s", result, fixture.taskID)
 		}
-		if result.RejectionRCA == nil || result.RejectionRCA.GateCycles != 1 || result.RejectionRCA.RecoveryPaths[models.RecoveryLifecycleRepair] != 1 {
+		if result.RejectionRCA == nil || result.RejectionRCA.GateCycles != 1 || result.RejectionRCA.RecoveryPaths[string(models.RecoveryLifecycleRepair)] != 1 {
 			t.Fatalf("rejection_rca telemetry = %+v, want one gate cycle resumed by lifecycle_repair", result.RejectionRCA)
 		}
 	})

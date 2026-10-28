@@ -14,31 +14,35 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// ReviewClaimClass is the class a reviewer-claim failure falls in. It is
+// converted to string where it enters anomaly details, logs and messages.
+type ReviewClaimClass string
+
 // Review-claim failure classes. A supervisor keys repeated claim failures on
 // these values, never on error text, so the vocabulary is fixed here and
 // assigned where the failure is produced.
 const (
 	// Candidate classes, decided at the removal site in claimReviewerTask.
-	ReviewClaimClassAcceptanceEvidence   = "acceptance_evidence"
-	ReviewClaimClassReviewBoundaryRepair = "review_boundary_repair"
-	ReviewClaimClassWorktreeContext      = "worktree_context"
-	ReviewClaimClassGitOperation         = "git_operation"
-	ReviewClaimClassIntegrationFailed    = "integration_failed"
+	ReviewClaimClassAcceptanceEvidence   ReviewClaimClass = "acceptance_evidence"
+	ReviewClaimClassReviewBoundaryRepair ReviewClaimClass = "review_boundary_repair"
+	ReviewClaimClassWorktreeContext      ReviewClaimClass = "worktree_context"
+	ReviewClaimClassGitOperation         ReviewClaimClass = "git_operation"
+	ReviewClaimClassIntegrationFailed    ReviewClaimClass = "integration_failed"
 
 	// Envelope classes. ReviewClaimClassCandidateFailures marks a failure whose
 	// disposition is decided per candidate; the rest classify a failure that
 	// named no candidate at all.
-	ReviewClaimClassCandidateFailures = "candidate_failures"
-	ReviewClaimClassAuthority         = "authority"
-	ReviewClaimClassDegraded          = "degraded"
-	ReviewClaimClassNoWork            = "no_work"
-	ReviewClaimClassUnclassified      = "unclassified"
+	ReviewClaimClassCandidateFailures ReviewClaimClass = "candidate_failures"
+	ReviewClaimClassAuthority         ReviewClaimClass = "authority"
+	ReviewClaimClassDegraded          ReviewClaimClass = "degraded"
+	ReviewClaimClassNoWork            ReviewClaimClass = "no_work"
+	ReviewClaimClassUnclassified      ReviewClaimClass = "unclassified"
 )
 
 // Operational codes review-boundary validation reports. The class vocabulary
 // above deliberately mirrors them; these constants keep the mapping explicit.
 const (
-	reviewClaimCodeGitOperation    = "git_operation"
+	reviewClaimCodeGitOperation    = operationalCodeGitOperation
 	reviewClaimCodeWorktreeContext = "worktree_context"
 )
 
@@ -47,7 +51,7 @@ const (
 // against unchanged state, and the boundary version it was observed against.
 type ReviewClaimCandidateFailure struct {
 	TaskID          string
-	Class           string
+	Class           ReviewClaimClass
 	Transient       bool
 	BoundaryVersion string
 	Recovery        string
@@ -63,7 +67,7 @@ type ReviewClaimCandidateFailure struct {
 // recovery hints are unchanged.
 type ReviewClaimFailure struct {
 	Role       string
-	Class      string
+	Class      ReviewClaimClass
 	Transient  bool
 	Candidates []ReviewClaimCandidateFailure
 
@@ -104,7 +108,7 @@ func ClassifyReviewClaimError(role string, err error) *ReviewClaimFailure {
 
 // classifyCandidateFreeReviewClaimError classifies a claim failure that named
 // no candidate — registration rejected, no reviewable task, a failed probe.
-func classifyCandidateFreeReviewClaimError(err error) (string, bool) {
+func classifyCandidateFreeReviewClaimError(err error) (ReviewClaimClass, bool) {
 	if IsAgentAuthorityError(err) {
 		return ReviewClaimClassAuthority, false
 	}
@@ -124,7 +128,7 @@ func classifyCandidateFreeReviewClaimError(err error) (string, bool) {
 // classifyReviewBoundaryRemoval classifies the removal branch that transitions a
 // candidate to INTEGRATION_FAILED: a worktree the validator could not read, a
 // failed git probe, or a boundary the validator rejected outright.
-func classifyReviewBoundaryRemoval(err error) (string, bool) {
+func classifyReviewBoundaryRemoval(err error) (ReviewClaimClass, bool) {
 	var worktreeErr *lizaerrors.WorktreeContextError
 	if stderrors.As(err, &worktreeErr) {
 		return ReviewClaimClassWorktreeContext, false
@@ -165,7 +169,7 @@ func reviewClaimRecoveryHint(err error) string {
 // newReviewClaimCandidateFailure records one candidate at its removal site. The
 // class is the branch that removed it, not a re-inspection of the error, and the
 // boundary version is read before any transition the branch then applies.
-func newReviewClaimCandidateFailure(task *models.Task, class string, transient bool, err error) ReviewClaimCandidateFailure {
+func newReviewClaimCandidateFailure(task *models.Task, class ReviewClaimClass, transient bool, err error) ReviewClaimCandidateFailure {
 	var repairNeeded *ReviewBoundaryRepairNeededError
 	return ReviewClaimCandidateFailure{
 		TaskID:          task.ID,
@@ -254,7 +258,7 @@ type ReviewerClaimCircuitOpenInput struct {
 	Authority       *models.AgentAuthority
 	Role            string
 	TaskID          string
-	FailureClass    string
+	FailureClass    ReviewClaimClass
 	BoundaryVersion string
 	Recovery        string
 	Err             error
@@ -295,7 +299,7 @@ func RecordReviewerClaimCircuitOpen(input ReviewerClaimCircuitOpenInput) (bool, 
 			Type:      models.AnomalyTypeReviewerClaimCircuitOpen,
 			Details: map[string]any{
 				"role":             input.Role,
-				"failure_class":    input.FailureClass,
+				"failure_class":    string(input.FailureClass),
 				"boundary_version": input.BoundaryVersion,
 				"attempts":         input.Attempts,
 				"first_failure":    reviewerClaimCircuitOpenTime(input.FirstFailure),
@@ -324,7 +328,7 @@ func findReviewerClaimCircuitOpen(anomalies []models.Anomaly, input ReviewerClai
 			continue
 		}
 		if anomaly.Details["role"] == input.Role &&
-			anomaly.Details["failure_class"] == input.FailureClass &&
+			anomaly.Details["failure_class"] == string(input.FailureClass) &&
 			anomaly.Details["boundary_version"] == input.BoundaryVersion {
 			return anomaly
 		}

@@ -14,35 +14,72 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
+
+// stateLockHoldReason names why a state lock hold cannot be recovered or
+// adopted. It is persisted as models.StateLockHold.RefusedReason and hashed
+// into the refusal fingerprint as a string, so it is converted to string where
+// it enters either.
+type stateLockHoldReason string
+
+const (
+	stateLockHoldRepairRequired          stateLockHoldReason = "repair_required"
+	stateLockHoldHumanRequired           stateLockHoldReason = "human_required"
+	stateLockHoldRejectionRCARequired    stateLockHoldReason = "rejection_rca_required"
+	stateLockHoldPreparationPending      stateLockHoldReason = "preparation_pending"
+	stateLockHoldAwaitedTasksPending     stateLockHoldReason = "awaited_tasks_pending"
+	stateLockHoldInvalidDependencies     stateLockHoldReason = "invalid_dependencies"
+	stateLockHoldDependenciesPending     stateLockHoldReason = "dependencies_pending"
+	stateLockHoldChanged                 stateLockHoldReason = "hold_changed"
+	stateLockHoldPublicationPending      stateLockHoldReason = "publication_pending"
+	stateLockHoldSystemNotRunning        stateLockHoldReason = "system_not_running"
+	stateLockHoldSprintNotRunning        stateLockHoldReason = "sprint_not_running"
+	stateLockHoldInvalidRolePair         stateLockHoldReason = "invalid_role_pair"
+	stateLockHoldInvalidDependencyDir    stateLockHoldReason = "invalid_dependency_direction"
+	stateLockHoldWorktreeMetadataInvalid stateLockHoldReason = "worktree_metadata_invalid"
+	stateLockHoldWorktreeBaseInvalid     stateLockHoldReason = "worktree_base_invalid"
+	stateLockHoldWorktreeUnhealthy       stateLockHoldReason = "worktree_unhealthy"
+	stateLockHoldWorktreeBranchChanged   stateLockHoldReason = "worktree_branch_changed"
+	stateLockHoldUnblockDomainRefused    stateLockHoldReason = "unblock_domain_refused"
+	stateLockHoldUnblockNoChange         stateLockHoldReason = "unblock_no_change"
+)
+
+// stateLockHoldRequestPrefix leads the request ID of an automatic continuation,
+// which a replay of the same hold boundary reuses.
+const stateLockHoldRequestPrefix = "state-lock-hold-"
+
+// stateLockHoldUnblockPrefix leads every reason recorded from a refused unblock
+// attempt; such a refusal is kept even when the automatic gate passes.
+const stateLockHoldUnblockPrefix = "unblock_"
 
 // stateLockHoldGate checks only canonical state. No prose inference may grant
 // automatic recovery, and every RCA record remains an explicit recovery duty.
-func stateLockHoldGate(state *models.State, task *models.Task, pr models.PipelineResolver) string {
+func stateLockHoldGate(state *models.State, task *models.Task, pr models.PipelineResolver) stateLockHoldReason {
 	if task == nil || task.RepairRequest != nil {
-		return "repair_required"
+		return stateLockHoldRepairRequired
 	}
 	if _, ok := models.CurrentAwaitingHuman(task); ok {
-		return "human_required"
+		return stateLockHoldHumanRequired
 	}
 	if task.RejectionRCA != nil {
-		return "rejection_rca_required"
+		return stateLockHoldRejectionRCARequired
 	}
 	if task.Lifecycle != nil && task.Lifecycle.Preparation != nil {
-		return "preparation_pending"
+		return stateLockHoldPreparationPending
 	}
 	if awaited, ok := currentEpisodeAwaitedTasks(task); ok && len(awaited) > 0 {
-		return "awaited_tasks_pending"
+		return stateLockHoldAwaitedTasksPending
 	}
 	seen := make(map[string]bool, len(task.DependsOn))
 	for _, id := range task.DependsOn {
 		if id == "" || strings.TrimSpace(id) != id || id == task.ID || seen[id] || dependencyReachesTask(state, id, task.ID, map[string]bool{}) {
-			return "invalid_dependencies"
+			return stateLockHoldInvalidDependencies
 		}
 		seen[id] = true
 	}
 	if len(models.NewDependencyResolver(state).UnmetDependencies(task, pr)) > 0 {
-		return "dependencies_pending"
+		return stateLockHoldDependenciesPending
 	}
 	return ""
 }
@@ -70,45 +107,45 @@ func stateLockHoldReady(state *models.State, task *models.Task, pr models.Pipeli
 	return models.CurrentStateLockHold(task) && state.MutationSequence > task.StateLockHold.AfterSequence && stateLockHoldGate(state, task, pr) == ""
 }
 
-func automaticStateLockHoldGate(state *models.State, task *models.Task, projectRoot string, pr *pipeline.Resolver, expected *models.StateLockHold) string {
+func automaticStateLockHoldGate(state *models.State, task *models.Task, projectRoot string, pr *pipeline.Resolver, expected *models.StateLockHold) stateLockHoldReason {
 	if !models.CurrentStateLockHold(task) || !reflect.DeepEqual(task.StateLockHold, expected) {
-		return "hold_changed"
+		return stateLockHoldChanged
 	}
 	if state.MutationSequence <= task.StateLockHold.AfterSequence {
-		return "publication_pending"
+		return stateLockHoldPublicationPending
 	}
 	if state.Config.Mode != "" && state.Config.Mode != models.SystemModeRunning {
-		return "system_not_running"
+		return stateLockHoldSystemNotRunning
 	}
 	if state.Sprint.Status == models.SprintStatusCheckpoint || state.Sprint.Status == models.SprintStatusCompleted {
-		return "sprint_not_running"
+		return stateLockHoldSprintNotRunning
 	}
 	if reason := stateLockHoldGate(state, task, pr); reason != "" {
 		return reason
 	}
 	if _, err := pr.InitialStatus(task.RolePair); err != nil {
-		return "invalid_role_pair"
+		return stateLockHoldInvalidRolePair
 	}
 	if err := validateUnblockDirectDependencies(state, pr, task); err != nil {
-		return "invalid_dependencies"
+		return stateLockHoldInvalidDependencies
 	}
 	if err := validateDependencyDirection(state, pr, task.ID, task.RolePair, task.DependsOn); err != nil {
-		return "invalid_dependency_direction"
+		return stateLockHoldInvalidDependencyDir
 	}
 	if task.Worktree != nil {
 		g := gitpkg.New(projectRoot)
 		if *task.Worktree != g.GetWorktreeRelPath(task.ID) || task.BaseCommit == nil || *task.BaseCommit == "" {
-			return "worktree_metadata_invalid"
+			return stateLockHoldWorktreeMetadataInvalid
 		}
 		if _, err := g.GetCommitSHA(*task.BaseCommit); err != nil {
-			return "worktree_base_invalid"
+			return stateLockHoldWorktreeBaseInvalid
 		}
 		if err := g.ValidateWorktreeHealth(task.ID); err != nil {
-			return "worktree_unhealthy"
+			return stateLockHoldWorktreeUnhealthy
 		}
 		branch, err := g.GetWorktreeBranch(g.GetWorktreePath(task.ID))
 		if err != nil || branch != paths.TaskBranchPrefix+task.ID {
-			return "worktree_branch_changed"
+			return stateLockHoldWorktreeBranchChanged
 		}
 	}
 	return ""
@@ -148,7 +185,7 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 	if err := RequireAgentAuthority(state, authority); err != nil {
 		return 0, err
 	}
-	if state.Agents[authority.ID].Role != "orchestrator" {
+	if state.Agents[authority.ID].Role != roles.Orchestrator {
 		return 0, &PreconditionError{Reason: "state lock hold recovery requires orchestrator authority"}
 	}
 	pr, _, err := loadResolver(projectRoot)
@@ -162,13 +199,13 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 		}
 		task := state.FindTask(id)
 		hold := *task.StateLockHold
-		if strings.HasPrefix(hold.RefusedReason, "unblock_") && hold.RefusedFingerprint == stateLockHoldMaterial(state, task, hold.RefusedReason) {
+		if strings.HasPrefix(hold.RefusedReason, stateLockHoldUnblockPrefix) && hold.RefusedFingerprint == stateLockHoldMaterial(state, task, hold.RefusedReason) {
 			continue
 		}
 		refusal := automaticStateLockHoldGate(state, task, projectRoot, pr, &hold)
 		if refusal != "" {
-			fingerprint := stateLockHoldMaterial(state, task, refusal)
-			if hold.RefusedFingerprint == fingerprint && hold.RefusedReason == refusal {
+			fingerprint := stateLockHoldMaterial(state, task, string(refusal))
+			if hold.RefusedFingerprint == fingerprint && hold.RefusedReason == string(refusal) {
 				continue
 			}
 			err := recordStateLockHoldRefusal(bb, projectRoot, authority, pr, task, &hold, refusal)
@@ -178,7 +215,7 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 			continue
 		}
 		boundary := models.TaskTransitionID(task)
-		request := LifecycleRequestOptions{RequestID: "state-lock-hold-" + boundary, ExpectedTransition: boundary, RetryContext: ctx}
+		request := LifecycleRequestOptions{RequestID: stateLockHoldRequestPrefix + boundary, ExpectedTransition: boundary, RetryContext: ctx}
 		result, err := UnblockTaskWithAuthority(projectRoot, id, "state lock contention cleared after a later successful publication", authority, UnblockTaskOptions{Request: request, stateLockHold: &hold})
 		if err != nil {
 			if ctx.Err() != nil || IsAgentAuthorityError(err) {
@@ -188,7 +225,7 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 			if !errors.As(err, &invalid) && !errors.Is(err, ErrLifecycleIdentityReused) {
 				return count, err
 			}
-			if recordErr := recordStateLockHoldRefusal(bb, projectRoot, authority, pr, task, &hold, "unblock_domain_refused"); recordErr != nil && !errors.Is(recordErr, errStateLockHoldUnchanged) {
+			if recordErr := recordStateLockHoldRefusal(bb, projectRoot, authority, pr, task, &hold, stateLockHoldUnblockDomainRefused); recordErr != nil && !errors.Is(recordErr, errStateLockHoldUnchanged) {
 				return count, recordErr
 			}
 			continue
@@ -196,7 +233,7 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 		if result != nil && result.Outcome == models.LifecycleCompleted {
 			count++
 		} else {
-			if err := recordStateLockHoldRefusal(bb, projectRoot, authority, pr, task, &hold, "unblock_no_change"); err != nil && !errors.Is(err, errStateLockHoldUnchanged) {
+			if err := recordStateLockHoldRefusal(bb, projectRoot, authority, pr, task, &hold, stateLockHoldUnblockNoChange); err != nil && !errors.Is(err, errStateLockHoldUnchanged) {
 				return count, err
 			}
 		}
@@ -204,7 +241,7 @@ func RecoverStateLockHolds(ctx context.Context, bb *db.Blackboard, projectRoot s
 	return count, nil
 }
 
-func recordStateLockHoldRefusal(bb *db.Blackboard, projectRoot string, authority models.AgentAuthority, pr *pipeline.Resolver, observed *models.Task, expected *models.StateLockHold, reason string) error {
+func recordStateLockHoldRefusal(bb *db.Blackboard, projectRoot string, authority models.AgentAuthority, pr *pipeline.Resolver, observed *models.Task, expected *models.StateLockHold, reason stateLockHoldReason) error {
 	return ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
 		task := state.FindTask(observed.ID)
 		if task == nil || !reflect.DeepEqual(task.StateLockHold, expected) || models.TaskTransitionID(task) != models.TaskTransitionID(observed) {
@@ -212,14 +249,14 @@ func recordStateLockHoldRefusal(bb *db.Blackboard, projectRoot string, authority
 		}
 		if currentReason := automaticStateLockHoldGate(state, task, projectRoot, pr, expected); currentReason != "" {
 			reason = currentReason
-		} else if !strings.HasPrefix(reason, "unblock_") {
+		} else if !strings.HasPrefix(string(reason), stateLockHoldUnblockPrefix) {
 			return errStateLockHoldUnchanged
 		}
-		fingerprint := stateLockHoldMaterial(state, task, reason)
-		if task.StateLockHold.RefusedReason == reason && task.StateLockHold.RefusedFingerprint == fingerprint {
+		fingerprint := stateLockHoldMaterial(state, task, string(reason))
+		if task.StateLockHold.RefusedReason == string(reason) && task.StateLockHold.RefusedFingerprint == fingerprint {
 			return errStateLockHoldUnchanged
 		}
-		task.StateLockHold.RefusedReason = reason
+		task.StateLockHold.RefusedReason = string(reason)
 		task.StateLockHold.RefusedFingerprint = fingerprint
 		return nil
 	})

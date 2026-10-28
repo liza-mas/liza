@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/prompts/promptbench"
 )
@@ -43,7 +44,7 @@ func renderFixture(t *testing.T) string {
 	if err := promptbench.WriteFixtureProjectRoot(root); err != nil {
 		t.Fatalf("fixture project root: %v", err)
 	}
-	dashboard, _, err := prompts.RenderOrchestratorDashboard(promptbench.FixtureState(shape), root, "orchestrator-1")
+	dashboard, _, err := agent.RenderOrchestratorDashboard(promptbench.FixtureState(shape), root, "orchestrator-1")
 	if err != nil {
 		t.Fatalf("RenderOrchestratorDashboard: %v", err)
 	}

@@ -1,0 +1,11 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: DRAFT_CODE
+effects: committed
+task_id: t2
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+Retargeted dependency for t2: t1 -> t3
+--- stderr

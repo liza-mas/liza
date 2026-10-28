@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: add tasks: validation failed: at least one task is required

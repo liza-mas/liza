@@ -925,7 +925,7 @@ func gatedRejectionRCATask(taskID string, now time.Time) models.Task {
 
 // closeRejectionRCAGate records an RCA and the disposition a recovery path
 // authorizes, which is the only state from which unblock-task may restore.
-func closeRejectionRCAGate(task *models.Task, recoveryPath string, now time.Time) {
+func closeRejectionRCAGate(task *models.Task, recoveryPath models.RecoveryPath, now time.Time) {
 	recordedRejectionRCA(mixedCauseRequest(), "orchestrator-1", now)(task)
 	mode := models.RejectionRCARestoreMode(recoveryPath)
 	task.RejectionRCA.Disposition = &models.RejectionRCADisposition{
@@ -1204,7 +1204,7 @@ func TestUnblockTaskEnforcesRestoreMode(t *testing.T) {
 		if outcome.SafeAction != "stop" {
 			t.Errorf("safe_action = %s, want stop — no unblock form restores a rescoped task", outcome.SafeAction)
 		}
-		for _, want := range []string{models.RecoveryRescope, models.RestoreModeNone} {
+		for _, want := range []string{string(models.RecoveryRescope), string(models.RestoreModeNone)} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to name %s", err.Error(), want)
 			}

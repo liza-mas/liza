@@ -1,0 +1,25 @@
+{
+  "executables": {
+    "claude": [
+      {
+        "args": [
+          "--version"
+        ],
+        "reply": "2.1.300 (Claude Code)"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "resume"
+        ],
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 1
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "exit": 1,
+  "stderr": [],
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "conflict": "existing_value",
+        "key": "config.admission_limits.db-suite"
+      },
+      "message": "config.admission_limits.db-suite is already set differently; use --replace with --reason to replace it"
+    },
+    "ok": false,
+    "result": null
+  }
+}

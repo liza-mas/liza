@@ -1,0 +1,32 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "apply-dependency-repair",
+      "outcome": "COMPLETED",
+      "safe_action": "continue",
+      "source_task_id": "b1",
+      "task_id": "b1",
+      "task_status": "BLOCKED",
+      "transition_id": "<DIGEST 1>",
+      "updates": [
+        {
+          "canonical_dependencies": [
+            "t3"
+          ],
+          "task_id": "t2"
+        },
+        {
+          "canonical_dependencies": [
+            "t1"
+          ],
+          "task_id": "t3"
+        }
+      ]
+    }
+  }
+}

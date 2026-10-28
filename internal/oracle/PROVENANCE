@@ -1,0 +1,21 @@
+start 96c9ad69aee983ce2b929dd681b6ba43bf920535
+changed internal/oracle/a6/testdata/golden/state/WtMerge/success.yaml C5 7e4e9f37d5f791cd0adab602736a12a0c94dc5ba
+changed internal/oracle/a5/testdata/golden/state/RC4.state.yaml C2
+changed internal/oracle/a9/signals_test.go C3
+changed internal/oracle/a9/testdata/golden/human/i21-unavailable-codex-run/agent.txt C3
+changed internal/oracle/a9/testdata/golden/state/i21-unavailable-codex-run/launch.yaml C3
+changed internal/oracle/a9/testdata/golden/state/i21-unavailable-codex-run/listing.txt C3
+changed internal/oracle/a9/testdata/golden/state/i21-unavailable-codex-run/state.yaml C3
+changed internal/oracle/a9/testdata/golden/state/i21-unavailable-codex-run/files/usage-records-1.jsonl C3
+changed internal/oracle/a9/doc_test.go determinism
+changed internal/oracle/a9/kit_test.go determinism
+changed internal/oracle/a9/lifecycle_linux_test.go determinism
+changed internal/oracle/a9/lifecycle_test.go determinism
+changed internal/oracle/a9/review_test.go determinism
+changed internal/oracle/a9/signals_test.go determinism
+changed internal/oracle/a9/supervisor_owner_linux_test.go determinism
+changed internal/oracle/a9/exit_release_test.go determinism
+changed internal/oracle/a9/exit_release_cleanup_test.go determinism
+changed internal/oracle/a9/exit_release_test.go determinism
+changed internal/oracle/a9/kit_test.go determinism
+changed internal/oracle/a9/exit_release_cleanup_test.go determinism

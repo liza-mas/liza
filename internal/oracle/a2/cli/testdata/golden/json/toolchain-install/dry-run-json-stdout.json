@@ -1,0 +1,246 @@
+{
+  "ok": true,
+  "result": {
+    "install_dir": "<INSTALL>",
+    "profile": "lean",
+    "steps": [
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "ast-grep"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "ast-grep"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "gh"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "gh"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "jq"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "jq"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "mdq"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "mdq"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "curl -fsSL \"$LIZA_TOOL_INSTALL_URL\" | bash"
+          ],
+          "env": {
+            "INSTALL_DIR": "<INSTALL>",
+            "LIZA_TOOL_INSTALL_URL": "https://raw.githubusercontent.com/liza-mas/mdtoc/main/install.sh"
+          },
+          "name": "bash"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "mdtoc"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "pre-commit"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "pre-commit"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "ripgrep"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "rg"
+      },
+      {
+        "command": {
+          "name": ""
+        },
+        "message": "already installed at <BIN>/rtk",
+        "output": {
+          "exit_code": 0
+        },
+        "status": "skipped",
+        "tool_id": "rtk"
+      },
+      {
+        "command": {
+          "args": [
+            "install",
+            "github.com/scip-code/scip-go/cmd/scip-go@latest"
+          ],
+          "env": {
+            "GOBIN": "<INSTALL>"
+          },
+          "name": "go"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "scip-go"
+      },
+      {
+        "command": {
+          "args": [
+            "install",
+            "-g",
+            "@sourcegraph/scip-python"
+          ],
+          "env": {
+            "NPM_CONFIG_PREFIX": "<FIXTURE>/install"
+          },
+          "name": "npm"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "scip-python"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "curl -fsSL \"$LIZA_TOOL_INSTALL_URL\" | bash"
+          ],
+          "env": {
+            "INSTALL_DIR": "<INSTALL>",
+            "LIZA_TOOL_INSTALL_URL": "https://raw.githubusercontent.com/liza-mas/scip-search/main/install.sh"
+          },
+          "name": "bash"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "scip-search"
+      },
+      {
+        "command": {
+          "args": [
+            "install",
+            "-g",
+            "@sourcegraph/scip-typescript"
+          ],
+          "env": {
+            "NPM_CONFIG_PREFIX": "<FIXTURE>/install"
+          },
+          "name": "npm"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "scip-typescript"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "curl -fsSL \"$LIZA_TOOL_INSTALL_URL\" | bash"
+          ],
+          "env": {
+            "INSTALL_DIR": "<INSTALL>",
+            "LIZA_TOOL_INSTALL_URL": "https://raw.githubusercontent.com/liza-mas/stacklit-cli/main/install.sh"
+          },
+          "name": "bash"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "stacklit"
+      },
+      {
+        "command": {
+          "args": [
+            "-c",
+            "sudo apt-get update && sudo apt-get install -y \"$LIZA_TOOL_PACKAGE\""
+          ],
+          "env": {
+            "LIZA_TOOL_PACKAGE": "yq"
+          },
+          "name": "sh"
+        },
+        "output": {
+          "exit_code": 0
+        },
+        "status": "planned",
+        "tool_id": "yq"
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+# before
+
+# after
+[<T1:sZ>] ⚠️ CHECKPOINT SUMMARY FAILED: .liza/checkpoint-summary.md not written (cli claude): checkpoint-summary CLI "claude" failed: exit status 1: System resumed Resumed from: CHECKPOINT Changed by: human Agents will resume at their next check. System stopped Mode: RUNNING → STOPPED Changed by: human Agents will exit cleanly at their next check.; run the checkpoint-summary skill manually

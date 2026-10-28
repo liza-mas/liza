@@ -1,0 +1,27 @@
+exit_code: 0
+stdout:
+integrationhead: <SHA:BASE>
+effective:
+- command: "true"
+commandsha256: <ID>
+ruling: ""
+rulings:
+- command: "true"
+commandsha256: ""
+ruling: oracle existing ruling
+runner: null
+latestbatches:
+- id: 1
+commit: <SHA:BASE>
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+status: passed
+results:
+- command: "true"
+command_sha256: <ID>
+status: passed
+exit_code: 0
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+retirements: []
+stderr:

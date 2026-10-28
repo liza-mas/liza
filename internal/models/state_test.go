@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"gopkg.in/yaml.v3"
 )
 
@@ -832,7 +833,7 @@ func TestTaskClaimabilityWithDependencies(t *testing.T) {
 }
 
 func TestDiscoverySeverity(t *testing.T) {
-	validSeverities := []string{"critical", "high", "medium", "low"}
+	validSeverities := []DiscoverySeverity{"critical", "high", "medium", "low"}
 	for _, sev := range validSeverities {
 		d := Discovery{Severity: sev}
 		if !d.IsValidSeverity() {
@@ -847,7 +848,7 @@ func TestDiscoverySeverity(t *testing.T) {
 }
 
 func TestDiscoveryUrgency(t *testing.T) {
-	validUrgencies := []string{"immediate", "deferred"}
+	validUrgencies := []DiscoveryUrgency{"immediate", "deferred"}
 	for _, urg := range validUrgencies {
 		d := Discovery{Urgency: urg}
 		if !d.IsValidUrgency() {
@@ -862,7 +863,7 @@ func TestDiscoveryUrgency(t *testing.T) {
 }
 
 func TestAnomalyTypes(t *testing.T) {
-	validTypes := []string{
+	validTypes := []AnomalyType{
 		"retry_loop",
 		"trade_off",
 		"spec_ambiguity",
@@ -1572,12 +1573,12 @@ type mockPipelineResolver struct {
 
 func (m *mockPipelineResolver) DoerRole(string) (string, error)     { return m.doer, nil }
 func (m *mockPipelineResolver) ReviewerRole(string) (string, error) { return m.reviewer, nil }
-func (m *mockPipelineResolver) RoleType(role string) (string, error) {
+func (m *mockPipelineResolver) RoleType(role string) (roles.RoleType, error) {
 	switch role {
 	case m.doer:
-		return "doer", nil
+		return roles.RoleTypeDoer, nil
 	case m.reviewer:
-		return "reviewer", nil
+		return roles.RoleTypeReviewer, nil
 	default:
 		return "", fmt.Errorf("unknown role %q", role)
 	}

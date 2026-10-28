@@ -209,7 +209,7 @@ func usageE2ETask(id string, status models.TaskStatus, created time.Time, histor
 	return task
 }
 
-func usageE2EEvent(at time.Time, event string) models.TaskHistoryEntry {
+func usageE2EEvent(at time.Time, event models.TaskEventName) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{Time: at, Event: event}
 }
 
@@ -390,7 +390,7 @@ func TestUsageAttributionEndToEnd(t *testing.T) {
 			t.Errorf("tail tasks = %v, want R1 alone", tailRow["tasks"])
 		}
 		lastUseful, _ := tailTasks[0]["last_useful"].(map[string]any)
-		if lastUseful["event"] != models.TaskEventSubmittedForReview {
+		if lastUseful["event"] != string(models.TaskEventSubmittedForReview) {
 			t.Errorf("tail last_useful = %v, want the submitted_for_review transition", tailTasks[0]["last_useful"])
 		}
 

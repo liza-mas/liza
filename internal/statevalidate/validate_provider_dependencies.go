@@ -143,7 +143,7 @@ func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task
 		return false
 	}
 	if len(task.Output) == 0 || task.Status == models.TaskStatusSuperseded || task.Status == models.TaskStatusAbandoned ||
-		task.TransitionsExecuted["replanned"] || task.PlanHandoffRetired() {
+		task.TransitionsExecuted[models.ReplannedTransition] || task.PlanHandoffRetired() {
 		return false
 	}
 	if task.Status != models.TaskStatusMerged {
@@ -151,7 +151,7 @@ func providerOutputIsLive(state *models.State, resolver *pipeline.Resolver, task
 	}
 	for _, transition := range resolver.AllTransitions() {
 		source, err := resolver.TransitionSourceRolePair(transition.Name)
-		if err != nil || source != task.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, task.Output) {
+		if err != nil || source != task.RolePair || transition.Cardinality != models.CardinalityPerSubtask || !resolver.TransitionApplies(transition.Name, task.Output) {
 			continue
 		}
 		if !task.TransitionsExecuted[transition.Name] {
@@ -244,7 +244,7 @@ func projectedProviderGraph(state *models.State, resolver *pipeline.Resolver) pr
 		}
 		for _, transition := range resolver.AllTransitions() {
 			source, err := resolver.TransitionSourceRolePair(transition.Name)
-			if err != nil || source != parent.RolePair || transition.Cardinality != "per-subtask" || !resolver.TransitionApplies(transition.Name, parent.Output) {
+			if err != nil || source != parent.RolePair || transition.Cardinality != models.CardinalityPerSubtask || !resolver.TransitionApplies(transition.Name, parent.Output) {
 				continue
 			}
 			ids, skipped, _ := models.ResolveOutputSiblings(parent.Output, models.NonTerminalTasksByKind(state, retiring), parent.ID, transition.TaskSlugOrName())
@@ -282,7 +282,7 @@ func projectInheritedProviderEdges(g *providerGraph, state *models.State, parent
 	}
 	for _, upstreamID := range parent.DependsOn {
 		upstream := state.FindTask(upstreamID)
-		if upstream == nil || upstream.RolePair != parent.RolePair || !upstream.TransitionsExecuted[transition.Name] || upstream.TransitionsExecuted["replanned"] || upstream.PlanHandoffRetired() {
+		if upstream == nil || upstream.RolePair != parent.RolePair || !upstream.TransitionsExecuted[transition.Name] || upstream.TransitionsExecuted[models.ReplannedTransition] || upstream.PlanHandoffRetired() {
 			continue
 		}
 		ids, _, _ := models.ResolveOutputSiblings(upstream.Output, models.NonTerminalTasksByKind(state, nil), upstream.ID, transition.TaskSlugOrName())

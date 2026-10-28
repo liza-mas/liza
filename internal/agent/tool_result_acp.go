@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 )
@@ -12,7 +13,7 @@ import (
 // prepareDevinToolResultPlan puts the host proxy inside acpx's agent process,
 // not on its observational stdout. The command is stable for a task so resumed
 // sessions keep the same host and artifact namespace.
-func prepareDevinToolResultPlan(req LLMAgentRunRequest, plan LaunchPlan, engine string) (LaunchPlan, error) {
+func prepareDevinToolResultPlan(req LLMAgentRunRequest, plan agentlaunch.LaunchPlan, engine string) (agentlaunch.LaunchPlan, error) {
 	if plan.ToolName != "devin-acp" {
 		return plan, nil
 	}
@@ -50,7 +51,7 @@ func prepareDevinToolResultPlan(req LLMAgentRunRequest, plan LaunchPlan, engine 
 	for _, args := range []*[]string{&plan.ACPXShowArgs, &plan.ACPXEnsureArgs, &plan.ACPXSetModeArgs, &plan.ACPXPromptArgs} {
 		updated, err := rewrite(*args)
 		if err != nil {
-			return LaunchPlan{}, err
+			return agentlaunch.LaunchPlan{}, err
 		}
 		*args = updated
 	}

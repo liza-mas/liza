@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: BLOCKED
+effects: none
+task_id: b1
+transition_id: <DIGEST 1>
+Error: apply dependency repair: apply-dependency-repair: STATE_CHANGED (safe_action=requery): failed to apply dependency repair: modification function failed: apply-dependency-repair: STATE_CHANGED (safe_action=requery): validation failed: task t2 dependencies changed since the repair request was created: got [t3], expected [t1]

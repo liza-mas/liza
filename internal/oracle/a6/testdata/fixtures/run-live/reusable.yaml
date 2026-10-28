@@ -1,0 +1,23 @@
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Oracle reusable input task
+    status: READY
+    priority: 1
+    spec_ref: README.md
+    done_when: Oracle acceptance
+    scope: fixture
+    created: 2001-02-03T04:05:06Z
+    history: []
+    validation:
+      - sh live.sh
+    runtime_inputs:
+      - id: fixture
+        commands:
+          - sh live.sh
+        recipe: project.fixture
+        consumption: reusable
+        secret: true
+        env:
+          - ORACLE_FIXTURE

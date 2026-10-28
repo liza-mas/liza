@@ -87,11 +87,15 @@ type IntegrationPrematureRecovery struct {
 	PreservationRef         string                     `yaml:"preservation_ref" json:"preservation_ref"`
 }
 
+// prematureRecoveryFirstGeneration is the first global generation left to an
+// integration lifecycle after a premature recovery consumed generation 1.
+const prematureRecoveryFirstGeneration = 2
+
 // FirstGlobalGeneration reserves the retired analysis identity without consuming
 // the budget of accepted global generations.
 func (lifecycle *IntegrationLifecycle) FirstGlobalGeneration() int {
 	if lifecycle != nil && lifecycle.PrematureRecovery != nil {
-		return 2
+		return prematureRecoveryFirstGeneration
 	}
 	return 1
 }

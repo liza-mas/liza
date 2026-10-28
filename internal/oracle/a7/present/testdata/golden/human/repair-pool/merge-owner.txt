@@ -1,0 +1,7 @@
+exit 0
+--- stdout
+Roles with claimable work not covered by idle agents:
+code-reviewer: 1 task(s) (task-approved); starting 1 agent(s): approved task(s) with no live, healthy merge owner
+Dry run; would spawn:
+liza agent code-reviewer --cli claude
+--- stderr

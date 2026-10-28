@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+architect
+architecture-reviewer
+code-plan-reviewer
+code-planner
+code-reviewer
+coder
+epic-plan-reviewer
+epic-planner
+integration-analyst
+integration-reviewer
+orchestrator
+us-reviewer
+us-writer
+:4
+--- stderr
+Completion ended with directive: ShellCompDirectiveNoFileComp

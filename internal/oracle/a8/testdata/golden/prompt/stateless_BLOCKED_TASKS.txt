@@ -1,0 +1,82 @@
+Tasks are BLOCKED. Analyze and resolve immediately:
+
+Assess the BLOCKED tasks named by this wake.
+
+REPLACEMENT LINEAGE POLICY:
+- Bind creation, consumer retargeting and supersession in one transaction: replace-task for one replacement (retain the request ID, expected transition and payload across retries), or a corrective plan output's supersedes for plan-generated ones. Never state a replacement only in prose.
+- Preserve an independently reviewable replacement lineage for each independently scoped original; one original may split into several cohesive replacements.
+- Do not map several independent originals to one shared replacement or replan.
+- A shared replan is allowed only when corrections are semantically inseparable. Record an explicit reason explaining why; convenience or a shared incident is insufficient.
+- Reason replacement dependencies within each preserved lineage, not from the shared incident. Later specialized outputs do not restore collapsed supersession provenance.
+- Supersession is not the default for ambiguity: before replacing, state why a narrower supported repair (dependency repair, unblock/rebase, in-place scope exception, owner correction, specialist investigation) cannot preserve valid authority, and what the successor's inputs or mechanism will change; record that change as `changed` (supersede-task --changed, the replace-task payload, or a plan output), required for a BLOCKED original.
+- Before another recovery, review the logical lineage when a successor blocks before the old failure point, one unresolved commitment holds several consumers, or repeated correction advanced no consumer. Record cause, effective change, remaining constraints, next observable progress, and the new evidence for another attempt; a wake with no new evidence keeps the assessment and adds no prerequisite or replacement.
+- A blocked-recovery cap refusal means the lineage is not converging: hold the task with assess-blocked for the human; never bypass it with an unlinked task.
+
+1. Read the listed tasks from blackboard — understand blocked_reason, blocked_questions, and repair_request if present
+   Readiness of any task (can it start, what holds it) comes from `waiting_on` in liza get <id> --json (dependency holds and their chain heads), never from depends_on alone; its absence is not claimability. Name each head and its status in assessments.
+2. Determine if blocker is:
+   - approved-proof reference drift → read liza reaffirm-proof --help; orchestrator-only remedy, one transition only, no status change or approval.
+   - Rejection RCA gate (`rejection_rca` without disposition) → run liza record-rejection-rca <task-id> --rca-file <file> --agent-id orchestrator-1 --json, then liza resume-rejection-rca <task-id> --disposition-file <file> --agent-id orchestrator-1 --json. Use unblock-task below per recorded restore_mode: assign forbids --new-iteration; claimable requires it; none requires supersession, never unblock.
+   - Structured repair_request present → verify the target state still needs repair, then complete the shared semantic gate below before applying a valid orchestrator-only operation
+   - Missing dependency → create prerequisite task (run liza add-tasks --tasks-file <path.json> --agent-id orchestrator-1 --json NOW). A prerequisite whose only onward transition is many-to-one (e.g. a story) goes in the same request as its delivery task, which depends on it; the engine refuses it alone
+   - Correction writer joining an ordered shared-file chain → commission it alone (add-tasks: max_outputs, reserve_successors naming the unstarted writers it precedes, which await all its children). Provider/descendant_dependencies selecting its outputs must cover all max_outputs. Existing correction: liza reserve-provider --help. Started writer or no rule correction case → assess-blocked --human-action; else planner records reviewed Placement
+   - Runtime/environment failure or stale ownership → diagnose the host/session; narrow supported recovery, work preserved
+   - Wrong or excessive dependency → state what each disputed edge supplies and what fails without it, then graph repair below; never delete all inherited edges (documentation can be a real provider)
+   - Corrected inputs, valid task → unblock (--rebase-on when integration moved); run commands NOW
+   - In-task-fixable gap: the blocked coding task's fix touches only test support, fixtures or its own constants; production code, merged contracts, acceptance and provider obligations unchanged; no other unmerged task writes those files; no unsettled human-owned decision → unblock-task --scope-exception-file (files, change, unchanged; liza unblock-task --help). Prefer it to a correction plan or replacement, which stay for what it excludes
+   - Admission timed out, only timeout_seconds wrong → human ruling: unblock-task --budget-exception <s> --budget-ruling <id>, no correction plan; none: assess-blocked --human-action
+   - Genuine product ambiguity → assess-blocked with the minimal unresolved decision for the human, then route the answer to the source owner; not supersession by default
+   - Only a human can clear it (decision, credentials, provisioning, access) → assess-blocked --human-action "<exact one-line ask>" raises AWAITING HUMAN; --clear-human-action once agents own the repair. Unblock a human-owned block only after a human note or the ask's own closure
+   - Unsupported technical assumption → the owning specialist investigates or proposes a feasible alternative; a product trade-off goes to the human
+   - RCA owner cannot establish the cause from reads → if its named capture runs within authorized scope, add-tasks a separately reviewed capture task (done_when: the named observations recorded, or its bound exhausted with what was observed) and hold the owner on it as for unfinished work below; when it merges with those observations, unblock the owner (it judges the cause). Otherwise (evidence lost, capture outside authority, capture failed or bound exhausted without them) assess-blocked --human-action "authorize capture or waive attribution for a defensive repair". Never re-assess it unchanged
+   - Blocked only on existing unfinished work (e.g. an earlier stage awaiting a later-stage correction) → route any correction to the source owner, then: edge allowed by direction (step 3) and acyclic → graph repair (retarget-dependency <task-id> <old> <old>,<new> or a complete-list repair), then unblock without --assign-to; direction forbids it → never a backward edge, hold with assess-blocked --awaits (step 5); edge would close a cycle → break the cycle first
+   - Immutable reviewed ancestry cannot consume the correction → reviewed producer, normal generation, supported supersession, lineages preserved
+   - Scope removed (Won't) → cancel-task for removed-only scope; reviewed replacement + supersede-task for mixed; corrective task for merged work; none proves frozen integration coverage
+3. Before either stored apply-dependency-repair or direct retarget-dependency operation:
+   a. Re-read every affected task and its planning/decomposition context.
+   b. Verify provider-before-consumer direction for every proposed edge: a consumer may depend on its provider; a provider must not depend on its consumer.
+   c. For any inverse edge, confirm the stored repair request or direct repair reason identifies the explicit relationship that independently requires the provider to depend on the consumer.
+   d. Do not run either repair operation until this shared semantic gate passes.
+4. For each listed task, decide action:
+   - To apply a stored multi-task or complete-list dependency repair:
+     a. Re-read the blocked source task and confirm its request operation is `apply-dependency-repair` and its expected dependency lists still match current state.
+     b. Run: liza apply-dependency-repair <blocked-task-id> --reason "Apply the stored dependency graph repair" --agent-id orchestrator-1 --json
+     c. The batch commits atomically or not at all and clears the consumed request. The source task remains BLOCKED.
+     d. Re-read the source via liza get <blocked-task-id> --json. Use `dependency_repair_receipt.affected_task_ids` to inspect the committed tasks and run the receipt's declared validation before unblocking or assessing the source.
+   - To repair one direct edge on a non-terminal task without replacing either task:
+     a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED and still has the old depends_on edge.
+     b. Verify the new dependency task(s) already exist and represent the intended blocker.
+     c. The repair reason must identify the verified direction or name the explicit relationship that justifies an inverse edge.
+     d. Run: liza retarget-dependency <task-id> <old-dep-id> <new-dep-id[,new-dep-id]> --reason "Correct dependency edge because <why>" --agent-id orchestrator-1 --json
+     e. The task remains BLOCKED. Run the repair validation, then re-read liza get <task-id> --json as the canonical current view.
+     f. If graph repair leaves a current blocker, reconcile its canonical metadata with: liza assess-blocked <task-id> --reason "<current blocker>" --question "<current question>" --agent-id orchestrator-1 --json. Include every current question and, when needed, one complete replacement repair request.
+     g. If graph repair resolves every blocker, use liza unblock-task; do not leave stale blocker metadata behind.
+   - To resume after verified repair:
+     a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED.
+     b. Verify the blocker is no longer true using current repair_request validation, consumed `dependency_repair_receipt.validation`, current worktree state, or another concrete check.
+     c. If the task has a preserved worktree and integration moved while blocked, prefer: liza unblock-task <task-id> --rebase-on <integration-branch> --reason "Verified blocker is resolved" --agent-id orchestrator-1 --json
+     d. Otherwise run: liza unblock-task <task-id> --reason "Verified blocker is resolved" --agent-id orchestrator-1 --json
+     e. Default: any doer's next claim continues the iteration. Add --new-iteration only for a new product iteration; --assign-to <doer-agent-id> only to resume with a specific idle doer now.
+     f. A --rebase-on conflict remains BLOCKED with a fresh repair_request; do not treat it as submit/merge INTEGRATION_FAILED.
+   - To replace (create a clean replacement):
+   a. Re-read the task via liza get <task-id> --json to confirm it is still BLOCKED; take its transition_id.
+      If status changed (e.g., task was claimed), skip — the task is being actively worked.
+   b. One replacement: write a payload with source_task_id, reason (why a narrower repair cannot work), changed (what differs from the blocked attempt), replacement (the add-task object) and consumers (liza replace-task --help), then run: liza replace-task --replacement-file <path.json> --request-id <id> --expected-transition <transition_id> --agent-id orchestrator-1 --json
+   c. Several replacements: a corrective plan whose outputs name the task in supersedes, each with changed.
+   d. Never add-tasks the replacements first: a refused replacement would leave them runnable.
+   e. Run: liza wt-delete <task-id> --json (if worktree exists)
+5. After analyzing each listed task:
+   - If you resolved it (unblocked or superseded): name the closure evidence — the intended consumer is eligible or progresses beyond the old failure point; a new task ID or transition alone is not closure
+   - If you CANNOT resolve it (genuine spec ambiguity, external dependency) and canonical blocker metadata is already current: run note-only liza assess-blocked to record your assessment
+     Run: liza assess-blocked <task-id> --note "<why it cannot be resolved now>" --agent-id orchestrator-1 --json
+     This history-only form prevents re-waking without replacing canonical blocker fields. The task will trigger again only when new information arrives (dependency changes, human notes).
+     If the hold waits on specific unfinished tasks, add --awaits <id>[,<id>] naming all of them: it wakes once all merge or one fails. Later assessments keep the set minus merged tasks; --clear-awaits drops it, e.g. to wake on a plan's generated children. If an awaiting task wakes with no dependency change or human note, repeat the same --awaits: a rejection names the cycle, settled or failed task. Heads are not await targets: route a missing, MERGED, BLOCKED or failed head to its step 2 case, and await the pending tasks that will settle it.
+6. Execute all state-modifying commands in this session. Do NOT defer.
+
+DELIVERY REPORT (final response, from state and evidence; task counts do not replace it):
+- Merged planning/architecture; merged implementation; integrated behavior demonstrated; final acceptance complete/pending/failed/unavailable — with task or artifact refs, unknowns stated.
+- Must coverage and outstanding proof; delivered and deferred Should/Could; Won't exclusions preserved.
+- Dominant blocking chain, its consumers, the next concrete change; whether the latest recovery removed its cause and advanced its consumer.
+Compare within one lineage — replacements add no delivery; heartbeats and log growth are activity, not progress. Judge a planning-only run against its intended deliverable, not against absent coding. Report observed counts and elapsed intervals with their scope; invent no planning-to-coding ratio, stall duration, or halt threshold; unknown accounting stays unknown. Report only: no extra checkpoint, no prose over the sprint summary, no analysis tasks.
+
+Do NOT call liza sprint-checkpoint. If you cannot resolve a blocker, assess it and exit. Other tasks must continue uninterrupted.

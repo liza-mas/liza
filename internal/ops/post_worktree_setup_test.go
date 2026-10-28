@@ -79,13 +79,13 @@ func (f setupFixture) health(t *testing.T) map[string]models.AgentHealth {
 	return state.AgentHealth
 }
 
-func (f setupFixture) seedHealth(t *testing.T, agentID, reason, task string, at time.Time) {
+func (f setupFixture) seedHealth(t *testing.T, agentID string, reason AgentDegradedReason, task string, at time.Time) {
 	t.Helper()
 	if err := db.For(f.statePath).Modify(func(state *models.State) error {
 		if state.AgentHealth == nil {
 			state.AgentHealth = map[string]models.AgentHealth{}
 		}
-		state.AgentHealth[agentID] = models.AgentHealth{State: models.AgentHealthDegraded, Role: "coder", DegradedAt: at, Reason: reason, LastTask: task, LastError: "seeded"}
+		state.AgentHealth[agentID] = models.AgentHealth{State: models.AgentHealthDegraded, Role: "coder", DegradedAt: at, Reason: string(reason), LastTask: task, LastError: "seeded"}
 		return nil
 	}); err != nil {
 		t.Fatal(err)

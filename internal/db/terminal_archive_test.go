@@ -41,7 +41,7 @@ func coldTerminalTask(status models.TaskStatus) models.Task {
 		History: []models.TaskHistoryEntry{
 			{Time: created, Event: models.TaskEventCreated},
 			{Time: created.Add(time.Minute), Event: models.TaskEventSubmittedForReview, Reason: &reason, Commit: &reviewCommit},
-			{Time: created.Add(2 * time.Minute), Event: string(status)},
+			{Time: created.Add(2 * time.Minute), Event: models.TaskEventName(status)},
 		},
 		Output:              []models.OutputEntry{{Desc: "downstream child", DoneWhen: "child is verified", Scope: "child", SpecRef: "specs/child.md"}},
 		TransitionsExecuted: map[string]bool{"coding-to-integration": true},

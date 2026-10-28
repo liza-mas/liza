@@ -1,0 +1,12 @@
+exit 0
+--- stdout
+--- stderr
+'wezterm' 'start' '--class' 'liza-mas-technical-spec' '--workspace' 'liza-mas-technical-spec' '--cwd' '<PROJECT>' '--' '/bin/sh' '-lc' 'wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'orchestrator'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-planner'"'"'
+wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-plan-reviewer'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'coder'"'"'
+wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-reviewer'"'"'
+exec '"'"'liza'"'"' '"'"'tui'"'"'
+'
+--- invocations
+none

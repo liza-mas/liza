@@ -21,6 +21,13 @@ const KeyFileName = "runtime-input.key"
 
 const keyBytes = 32
 
+// Key storage permissions (owner-only) and the key-ID prefix of the digest.
+const (
+	keyDirMode  = 0o700
+	keyFileMode = 0o600
+	keyIDBytes  = 8
+)
+
 // Key is the persistent operator-owned HMAC key materialization identities
 // are computed with (INVARIANTS §9: persisted digests of environment values
 // are keyed). It never enters state, a child environment or an error.
@@ -63,10 +70,10 @@ func CreateKey(path string) (*Key, error) {
 	if _, err := rand.Read(secret); err != nil {
 		return nil, fmt.Errorf("%w: randomness unavailable", ErrKeyUnavailable)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), keyDirMode); err != nil {
 		return nil, fmt.Errorf("%w: cannot create key directory", ErrKeyUnavailable)
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, keyFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("%w: cannot create key file", ErrKeyUnavailable)
 	}
@@ -82,7 +89,7 @@ func CreateKey(path string) (*Key, error) {
 
 func newKey(secret []byte) *Key {
 	id := sha256.Sum256(append([]byte("runtime-input-key-id\x00"), secret...))
-	return &Key{secret: secret, ID: hex.EncodeToString(id[:8])}
+	return &Key{secret: secret, ID: hex.EncodeToString(id[:keyIDBytes])}
 }
 
 // Identity is the keyed digest of a canonical materialization: each declared

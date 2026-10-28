@@ -1,0 +1,7 @@
+exit 0
+[stdout]
+HALT response acknowledged
+System remains STOPPED
+Changed by: human
+Run "liza start" to enter RUNNING mode, then restart agent processes.
+[stderr]

@@ -1,0 +1,5 @@
++ .liza/extensions directory 0755 -
++ .liza/extensions/init-gate.ts file 0644 09287046562af89ac817055ebf837d6f3f0fe443f9bd9120cb4379ddff4ac55d
++ .pi directory 0755 -
++ .pi/agent directory 0755 -
++ .pi/agent/AGENTS.md symlink 0777 <HOME>/.liza/CORE.md

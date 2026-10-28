@@ -1,0 +1,9 @@
+exit 0
+--- stdout
+--- stderr
+'wezterm' 'start' '--class' 'liza-mas-technical-spec' '--workspace' 'liza-mas-technical-spec' '--cwd' '<PROJECT>' '--' '/oracle/bin/shell' '-lc' 'wezterm cli split-pane --right --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'coder'"'"'
+wezterm cli split-pane --bottom --cwd '"'"'<PROJECT>'"'"' -- '"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-reviewer'"'"'
+exec '"'"'liza'"'"' '"'"'tui'"'"'
+'
+--- invocations
+none

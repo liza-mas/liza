@@ -15,8 +15,8 @@ import (
 func buildRespawnArgs(role, agentID, cli string) []string {
 	return []string{
 		brand.BinaryName, "agent", role,
-		"--agent-id", agentID,
-		"--cli", cli,
+		agentFlagAgentID, agentID,
+		agentFlagCLI, cli,
 	}
 }
 
@@ -72,7 +72,7 @@ func respawnRecoveredAgent(result *ops.RecoverAgentResult, cli string, execProce
 	defer func() {
 		if retErr != nil {
 			outcome := result.LifecycleOutcome
-			outcome.Outcome, outcome.SafeAction, outcome.Effects = models.LifecycleStateChanged, "requery", "committed"
+			outcome.Outcome, outcome.SafeAction, outcome.Effects = models.LifecycleStateChanged, string(ops.LifecycleSafeActionRequery), string(ops.LifecycleEffectsCommitted)
 			retErr = &ops.LifecycleError{Outcome: outcome, Err: retErr}
 		}
 	}()

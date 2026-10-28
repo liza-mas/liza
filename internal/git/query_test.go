@@ -238,6 +238,32 @@ func TestReferenceContractRepositoryQueriesRejectInvalidInputs(t *testing.T) {
 	}
 }
 
+// A non-blob object and an unresolvable commit peel are refused with git's own
+// kind and status in the text.
+func TestObjectKindRefusalsNameTheKindAndStatus(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	git := New(repoDir)
+	writeAndCommit(t, repoDir, "dir/file.md", "x\n")
+	tree := testhelpers.MustGit(t, repoDir, "rev-parse", "HEAD^{tree}")
+
+	wantBlob := `object for "dir" at "HEAD" is tree, not a blob`
+	if _, err := git.ReadBlob("HEAD", "dir"); err == nil || err.Error() != wantBlob {
+		t.Errorf("ReadBlob(tree path) error = %v, want %q", err, wantBlob)
+	}
+	if _, err := git.BlobOID("HEAD", "dir"); err == nil || err.Error() != wantBlob {
+		t.Errorf("BlobOID(tree path) error = %v, want %q", err, wantBlob)
+	}
+
+	results, err := git.ResolveCommits([]string{tree})
+	if err != nil {
+		t.Fatalf("ResolveCommits() error = %v", err)
+	}
+	wantCommit := fmt.Sprintf("failed to resolve commit ref %q: object missing", tree)
+	if results[0].Err == nil || results[0].Err.Error() != wantCommit {
+		t.Errorf("ResolveCommits(tree) error = %v, want %q", results[0].Err, wantCommit)
+	}
+}
+
 // cat-file answers "missing" whether the revision or only the path is absent;
 // the error must say which, since the remedies differ.
 func TestBlobLookupsNameWhatIsMissing(t *testing.T) {

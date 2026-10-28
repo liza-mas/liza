@@ -1,0 +1,4 @@
+exit 0
+stdout:
+Pre-execution checkpoint written for task task-1
+stderr:

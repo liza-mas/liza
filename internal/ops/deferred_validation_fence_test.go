@@ -117,19 +117,19 @@ func TestDeferredValidationUnstoppableDescendantsFailClosed(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	batch := result.Batches[0]
-	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != deferredValidationReasonUnstoppable {
+	if batch.Status != models.DeferredValidationBatchAborted || batch.Reason != string(deferredValidationReasonUnstoppable) {
 		t.Fatalf("batch = %#v, want aborted %s", batch, deferredValidationReasonUnstoppable)
 	}
 	if _, err := os.Stat(later); !os.IsNotExist(err) {
 		t.Fatalf("a later step started after cleanup failed (stat err = %v)", err)
 	}
 	ledger := f.ledger()
-	if ledger.Runner == nil || ledger.Runner.Unsettled != deferredValidationReasonUnstoppable {
+	if ledger.Runner == nil || ledger.Runner.Unsettled != string(deferredValidationReasonUnstoppable) {
 		t.Fatalf("runner record = %#v, want it kept unsettled", ledger.Runner)
 	}
 	state, _ := f.bb.Read()
 	head := testhelpers.MustGit(t, f.root, "rev-parse", "HEAD")
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredUnsettled {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredUnsettled) {
 		t.Fatalf("gate = %#v, want blocked %s", blocked, integrationProgressBlockedDeferredUnsettled)
 	}
 	if started, err := startDeferredValidationIfDueWith(f.root, func(string) error { return nil }); err != nil || started {

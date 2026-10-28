@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	activitylog "github.com/liza-mas/liza/internal/log"
@@ -18,7 +19,6 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -1976,7 +1976,7 @@ func TestJSON_InitialPlanningRoutesRenderOneTaskContractsFromInitializedCLIState
 			projectRoot, statePath := setupInitializedProjectWithEntryPoint(t, tt.entryPoint)
 			state := readState(t, statePath)
 
-			dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+			dashboard, wakeInstruction, err := agent.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 			if err != nil {
 				t.Fatalf("RenderOrchestratorDashboard: %v", err)
 			}
@@ -2016,7 +2016,7 @@ func TestJSON_InitialPlanningMissingMasterRendersOneSpecializedFallback(t *testi
 	}
 
 	state := readState(t, statePath)
-	dashboard, wakeInstruction, err := prompts.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
+	dashboard, wakeInstruction, err := agent.RenderOrchestratorDashboard(state, projectRoot, "orchestrator-1")
 	if err != nil {
 		t.Fatalf("RenderOrchestratorDashboard: %v", err)
 	}

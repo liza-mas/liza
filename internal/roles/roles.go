@@ -2,13 +2,28 @@
 // All roles use the hyphenated form (e.g. "code-reviewer") as the single canonical name.
 package roles
 
+// ClaimType selects which claim slot ReleaseClaim releases. It is a closed
+// vocabulary; role names are open (ADR-0045) and stay plain strings.
+type ClaimType string
+
 // Claim-type selectors used by ReleaseClaim to indicate which claim slot to release.
 // These are NOT role names — a code-planner releases its claim with ClaimDoer,
 // a code-plan-reviewer with ClaimReviewer.
 const (
-	ClaimDoer     = "doer"
-	ClaimReviewer = "reviewer"
-	ClaimBoth     = "both"
+	ClaimDoer     ClaimType = "doer"
+	ClaimReviewer ClaimType = "reviewer"
+	ClaimBoth     ClaimType = "both"
+)
+
+// RoleType is the adversarial category a pipeline role declares (ADR-0042,
+// ADR-0045). It is distinct from ClaimType even where the spellings match.
+type RoleType string
+
+// Role types accepted by pipeline role definitions.
+const (
+	RoleTypeDoer         RoleType = "doer"
+	RoleTypeReviewer     RoleType = "reviewer"
+	RoleTypeOrchestrator RoleType = "orchestrator"
 )
 
 // Unified role name constants. Single hyphenated form used everywhere.

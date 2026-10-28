@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 )
+
+// sprintSummaryFileMode is the permission of the published sprint summary.
+const sprintSummaryFileMode = 0o644
 
 // ErrSprintAlreadyCheckpoint indicates the sprint is already at CHECKPOINT.
 var ErrSprintAlreadyCheckpoint = errors.New("sprint is already at CHECKPOINT")
@@ -72,11 +74,46 @@ func SprintCheckpoint(projectRoot string, trigger string) (*SprintCheckpointResu
 // the preliminary read and again under the lock before anything is written.
 func sprintCheckpoint(projectRoot string, trigger string, admit func(*models.State) error) (*SprintCheckpointResult, error) {
 	lizaPaths := paths.New(projectRoot)
-	statePath := lizaPaths.StatePath()
-	reportPath := lizaPaths.SprintSummaryPath()
+	blackboard := db.For(lizaPaths.StatePath())
 
-	blackboard := db.For(statePath)
+	state, err := admitSprintCheckpoint(blackboard, admit)
+	if err != nil {
+		return nil, err
+	}
+	trigger = resolveCheckpointTrigger(projectRoot, state, trigger)
 
+	run := sprintCheckpointRun{
+		blackboard: blackboard,
+		reportPath: lizaPaths.SprintSummaryPath(),
+		timestamp:  time.Now(),
+		trigger:    trigger,
+		admit:      admit,
+	}
+	if sprintCheckpointBeforeModifyTestHook != nil {
+		sprintCheckpointBeforeModifyTestHook()
+	}
+	if trigger == models.CheckpointTriggerSprintComplete {
+		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "sprint checkpoint", true, func(authorization *effectiveIntegrationCompletionAuthorization) error {
+			return run.checkpoint(state, authorization)
+		})
+	} else {
+		err = run.checkpoint(state, nil)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update sprint status: %w", err)
+	}
+
+	return &SprintCheckpointResult{
+		CheckpointAt: run.timestamp,
+		ReportPath:   run.reportPath,
+		Trigger:      trigger,
+	}, nil
+}
+
+// admitSprintCheckpoint reads the state and refuses a sprint that cannot take
+// a checkpoint, then applies the caller's admission. It returns the state read.
+func admitSprintCheckpoint(blackboard *db.Blackboard, admit func(*models.State) error) (*models.State, error) {
 	state, err := blackboard.Read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read state: %w", err)
@@ -95,264 +132,119 @@ func sprintCheckpoint(projectRoot string, trigger string, admit func(*models.Sta
 			return nil, err
 		}
 	}
+	return state, nil
+}
 
-	// Auto-detect transition checkpoints when trigger is empty.
-	// This makes the system resilient to LLM omission of the trigger parameter.
-	if trigger == "" {
-		if detCtx, detErr := LoadDetectionContext(projectRoot); detErr == nil {
-			for _, taskID := range state.Sprint.Scope.Planned {
-				task := state.FindTask(taskID)
-				if detCtx.PlanHandoff.HasUnfailedHandoff(state, task) {
-					trigger = models.CheckpointTriggerPlanningComplete
-					break
-				}
-			}
-			if trigger == "" && CountReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0 {
-				trigger = models.CheckpointTriggerManyToOneReady
-			}
-		}
-		// If LoadDetectionContext fails (no pipeline config), trigger stays empty.
-		// This is fine for legacy projects without pipelines.
+// resolveCheckpointTrigger returns the given trigger, or detects a transition
+// checkpoint when it is empty. This makes the system resilient to LLM omission
+// of the trigger parameter.
+func resolveCheckpointTrigger(projectRoot string, state *models.State, trigger string) string {
+	if trigger != "" {
+		return trigger
 	}
-
-	timestamp := time.Now()
-	checkpoint := func(completionAuthorization *effectiveIntegrationCompletionAuthorization) error {
-		if completionAuthorization != nil {
-			state, err = blackboard.Read()
-			if err != nil {
-				return fmt.Errorf("failed to re-read state after integration completion check: %w", err)
-			}
-			if err := completionAuthorization.validateState(state, true); err != nil {
-				return err
-			}
-		}
-
-		report := generateSprintSummary(state, timestamp)
-		stagedReport, err := os.CreateTemp(filepath.Dir(reportPath), ".sprint-summary-*.tmp")
-		if err != nil {
-			return fmt.Errorf("failed to stage sprint summary: %w", err)
-		}
-		stagedReportPath := stagedReport.Name()
-		defer os.Remove(stagedReportPath)
-		if _, err := stagedReport.WriteString(report); err != nil {
-			_ = stagedReport.Close()
-			return fmt.Errorf("failed to stage sprint summary: %w", err)
-		}
-		if err := stagedReport.Chmod(0644); err != nil {
-			_ = stagedReport.Close()
-			return fmt.Errorf("failed to stage sprint summary: %w", err)
-		}
-		if err := stagedReport.Close(); err != nil {
-			return fmt.Errorf("failed to stage sprint summary: %w", err)
-		}
-
-		return blackboard.Modify(func(s *models.State) error {
-			if admit != nil {
-				if err := admit(s); err != nil {
-					return err
-				}
-			}
-			if completionAuthorization != nil {
-				if err := completionAuthorization.validateState(s, true); err != nil {
-					return err
-				}
-			}
-			if err := os.Rename(stagedReportPath, reportPath); err != nil {
-				return fmt.Errorf("failed to write sprint summary: %w", err)
-			}
-			since := s.Sprint.Timeline.CheckpointAt
-			s.Sprint.Status = models.SprintStatusCheckpoint
-			s.Sprint.Timeline.CheckpointAt = &timestamp
-			s.Sprint.CheckpointTrigger = trigger
-			// Record the steering-report obligation in the same transaction
-			// that creates the checkpoint, so it cannot be lost to whatever
-			// happens to the sprint before the orchestrator next looks.
-			s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Trigger: trigger, Since: since}
-			return nil
-		})
-	}
-	if sprintCheckpointBeforeModifyTestHook != nil {
-		sprintCheckpointBeforeModifyTestHook()
-	}
-	if trigger == models.CheckpointTriggerSprintComplete {
-		err = withEffectiveIntegrationCompletionAuthorization(projectRoot, "sprint checkpoint", true, checkpoint)
-	} else {
-		err = checkpoint(nil)
-	}
-
+	// If LoadDetectionContext fails (no pipeline config), the trigger stays
+	// empty. This is fine for legacy projects without pipelines.
+	detCtx, err := LoadDetectionContext(projectRoot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update sprint status: %w", err)
+		return ""
 	}
-
-	return &SprintCheckpointResult{
-		CheckpointAt: timestamp,
-		ReportPath:   reportPath,
-		Trigger:      trigger,
-	}, nil
-}
-
-// generateSprintSummary creates a markdown report of the sprint status.
-func generateSprintSummary(state *models.State, timestamp time.Time) string {
-	report := sprintHeader(timestamp)
-	report += sprintStatusSection(&state.Sprint, timestamp)
-	report += taskStatusSection(state.Tasks)
-	report += sprintMetricsSection(&state.Sprint.Metrics)
-	report += activeAgentsSection(state.Agents)
-
-	if len(state.Anomalies) > 0 {
-		report += anomaliesSection(state.Anomalies)
-	}
-
-	report += circuitBreakerSection(&state.CircuitBreaker)
-	report += nextStepsSection()
-
-	return report
-}
-
-func sprintHeader(timestamp time.Time) string {
-	return "# Sprint Summary\n\n" +
-		fmt.Sprintf("**Generated:** %s\n\n", timestamp.Format(time.RFC3339))
-}
-
-func sprintStatusSection(sprint *models.Sprint, timestamp time.Time) string {
-	s := "## Sprint Status\n\n"
-	s += fmt.Sprintf("- **Sprint ID:** %s\n", sprint.ID)
-	s += fmt.Sprintf("- **Status:** %s → %s\n", sprint.Status, models.SprintStatusCheckpoint)
-	s += fmt.Sprintf("- **Started:** %s\n", sprint.Timeline.Started.Format(time.RFC3339))
-	s += fmt.Sprintf("- **Deadline:** %s\n", sprint.Timeline.Deadline.Format(time.RFC3339))
-
-	elapsed := timestamp.Sub(sprint.Timeline.Started)
-	s += fmt.Sprintf("- **Elapsed:** %s\n", formatDuration(elapsed))
-
-	remaining := sprint.Timeline.Deadline.Sub(timestamp)
-	if remaining > 0 {
-		s += fmt.Sprintf("- **Remaining:** %s\n", formatDuration(remaining))
-	} else {
-		s += fmt.Sprintf("- **Overdue by:** %s\n", formatDuration(-remaining))
-	}
-
-	s += "\n"
-	return s
-}
-
-func taskStatusSection(tasks []models.Task) string {
-	tasksByStatus := make(map[models.TaskStatus]int)
-	for _, task := range tasks {
-		tasksByStatus[task.Status]++
-	}
-
-	s := "## Task Status\n\n"
-	s += "| Status | Count |\n"
-	s += "|--------|-------|\n"
-	s += fmt.Sprintf("| MERGED | %d |\n", tasksByStatus[models.TaskStatusMerged])
-	s += fmt.Sprintf("| APPROVED | %d |\n", tasksByStatus[models.TaskStatusApproved])
-	readyForReviewCount := 0
-	for status, count := range tasksByStatus {
-		if status.IsReadyForReviewStatus() {
-			readyForReviewCount += count
+	for _, taskID := range state.Sprint.Scope.Planned {
+		task := state.FindTask(taskID)
+		if detCtx.PlanHandoff.HasUnfailedHandoff(state, task) {
+			return models.CheckpointTriggerPlanningComplete
 		}
 	}
-	s += fmt.Sprintf("| CODE_TO_REVIEW | %d |\n", readyForReviewCount)
-	s += fmt.Sprintf("| IMPLEMENTING | %d |\n", tasksByStatus[models.TaskStatusImplementing])
-	s += fmt.Sprintf("| REJECTED | %d |\n", tasksByStatus[models.TaskStatusRejected])
-	s += fmt.Sprintf("| BLOCKED | %d |\n", tasksByStatus[models.TaskStatusBlocked])
-	s += fmt.Sprintf("| READY | %d |\n", tasksByStatus[models.TaskStatusReady])
-	s += fmt.Sprintf("| ABANDONED | %d |\n", tasksByStatus[models.TaskStatusAbandoned])
-	s += fmt.Sprintf("| SUPERSEDED | %d |\n", tasksByStatus[models.TaskStatusSuperseded])
-	s += fmt.Sprintf("| INTEGRATION_FAILED | %d |\n", tasksByStatus[models.TaskStatusIntegrationFailed])
-	s += "\n"
-	return s
-}
-
-func sprintMetricsSection(metrics *models.SprintMetrics) string {
-	s := "## Sprint Metrics\n\n"
-	s += fmt.Sprintf("- **Tasks Done:** %d\n", metrics.TasksDone)
-	s += fmt.Sprintf("- **Tasks In Progress:** %d\n", metrics.TasksInProgress)
-	s += fmt.Sprintf("- **Tasks Blocked:** %d\n", metrics.TasksBlocked)
-	s += fmt.Sprintf("- **Total Iterations:** %d\n", metrics.IterationsTotal)
-	s += fmt.Sprintf("- **Total Review Cycles:** %d\n", metrics.ReviewCyclesTotal)
-	s += fmt.Sprintf("- **Review Verdict Approvals:** %d\n", metrics.ReviewVerdictApprovals)
-	s += fmt.Sprintf("- **Review Verdict Rejections:** %d\n", metrics.ReviewVerdictRejections)
-	s += fmt.Sprintf("- **Review Verdict Approval Rate:** %d%%\n", metrics.ReviewVerdictApprovalRatePercent)
-	s += fmt.Sprintf("- **Task Outcome Approval Rate:** %d%%\n", metrics.TaskOutcomeApprovalRatePercent)
-	s += "\n"
-	return s
-}
-
-func activeAgentsSection(agents map[string]models.Agent) string {
-	s := "## Active Agents\n\n"
-	if len(agents) == 0 {
-		s += "*No active agents*\n\n"
-		return s
+	if CountReadyManyToOneCohorts(state, detCtx.ManyToOneTransitions) > 0 {
+		return models.CheckpointTriggerManyToOneReady
 	}
+	return ""
+}
 
-	s += "| Agent ID | Role | Status | Current Task |\n"
-	s += "|----------|------|--------|-------------|\n"
-	for agentID, agent := range agents {
-		currentTask := "—"
-		if agent.CurrentTask != nil {
-			currentTask = *agent.CurrentTask
+// sprintCheckpointRun is one checkpoint attempt: where the report goes, when
+// and why the checkpoint is made, and the admission to judge again under the lock.
+type sprintCheckpointRun struct {
+	blackboard *db.Blackboard
+	reportPath string
+	timestamp  time.Time
+	trigger    string
+	admit      func(*models.State) error
+}
+
+// checkpoint writes the report and the sprint update. Under an authorization
+// it first reads the state again and validates it, so the report describes the
+// state the authorization judged; state is the preliminary read otherwise.
+func (r sprintCheckpointRun) checkpoint(state *models.State, authorization *effectiveIntegrationCompletionAuthorization) error {
+	if authorization != nil {
+		var err error
+		state, err = r.blackboard.Read()
+		if err != nil {
+			return fmt.Errorf("failed to re-read state after integration completion check: %w", err)
 		}
-		s += fmt.Sprintf("| %s | %s | %s | %s |\n", agentID, agent.Role, agent.Status, currentTask)
+		if err := authorization.validateState(state, true); err != nil {
+			return err
+		}
 	}
-	s += "\n"
-	return s
+
+	stagedReportPath, err := stageSprintSummary(filepath.Dir(r.reportPath), generateSprintSummary(state, r.timestamp))
+	if err != nil {
+		return err
+	}
+	defer os.Remove(stagedReportPath)
+
+	return r.blackboard.Modify(func(s *models.State) error {
+		return r.apply(s, stagedReportPath, authorization)
+	})
 }
 
-func anomaliesSection(anomalies []models.Anomaly) string {
-	s := "## Anomalies\n\n"
-	s += fmt.Sprintf("**Total:** %d anomalies detected\n\n", len(anomalies))
-
-	anomaliesByType := make(map[string]int)
-	for _, anomaly := range anomalies {
-		anomaliesByType[anomaly.Type]++
+// stageSprintSummary writes the report to a temporary file in dir and returns
+// its path, which the caller removes once the report is published or abandoned.
+func stageSprintSummary(dir, report string) (string, error) {
+	stagedReport, err := os.CreateTemp(dir, ".sprint-summary-*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("failed to stage sprint summary: %w", err)
 	}
-
-	s += "| Type | Count |\n"
-	s += "|------|-------|\n"
-	for anomalyType, count := range anomaliesByType {
-		s += fmt.Sprintf("| %s | %d |\n", anomalyType, count)
+	stagedReportPath := stagedReport.Name()
+	if _, err := stagedReport.WriteString(report); err != nil {
+		_ = stagedReport.Close()
+		_ = os.Remove(stagedReportPath)
+		return "", fmt.Errorf("failed to stage sprint summary: %w", err)
 	}
-	s += "\n"
-	return s
+	if err := stagedReport.Chmod(sprintSummaryFileMode); err != nil {
+		_ = stagedReport.Close()
+		_ = os.Remove(stagedReportPath)
+		return "", fmt.Errorf("failed to stage sprint summary: %w", err)
+	}
+	if err := stagedReport.Close(); err != nil {
+		_ = os.Remove(stagedReportPath)
+		return "", fmt.Errorf("failed to stage sprint summary: %w", err)
+	}
+	return stagedReportPath, nil
 }
 
-func circuitBreakerSection(cb *models.CircuitBreaker) string {
-	s := "## Circuit Breaker\n\n"
-	s += fmt.Sprintf("- **Status:** %s\n", cb.Status)
-	if cb.Status == "TRIGGERED" && cb.CurrentTrigger != nil {
-		s += fmt.Sprintf("- **Pattern:** %s\n", cb.CurrentTrigger.Pattern)
-		s += fmt.Sprintf("- **Severity:** %s\n", cb.CurrentTrigger.Severity)
+// apply is the locked update: it judges the admission and the authorization
+// again on the locked state, publishes the staged report and moves the sprint
+// to CHECKPOINT with its pending steering-report obligation.
+func (r sprintCheckpointRun) apply(s *models.State, stagedReportPath string, authorization *effectiveIntegrationCompletionAuthorization) error {
+	if r.admit != nil {
+		if err := r.admit(s); err != nil {
+			return err
+		}
 	}
-	s += "\n"
-	return s
-}
-
-func nextStepsSection() string {
-	s := "## Next Steps\n\n"
-	s += "- [ ] Review sprint progress and metrics\n"
-	s += "- [ ] Address any blocked tasks\n"
-	s += "- [ ] Review anomalies and circuit breaker status\n"
-	s += "- [ ] Adjust sprint scope if needed\n"
-	s += fmt.Sprintf("- [ ] Resume sprint with `%s`\n", brand.Command("resume"))
-	s += "\n"
-	return s
-}
-
-// formatDuration formats a duration in a human-readable format.
-func formatDuration(d time.Duration) string {
-	hours := int(d.Hours())
-	minutes := int(d.Minutes()) % 60
-
-	if hours >= 24 {
-		days := hours / 24
-		hours = hours % 24
-		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	if authorization != nil {
+		if err := authorization.validateState(s, true); err != nil {
+			return err
+		}
 	}
-
-	if hours > 0 {
-		return fmt.Sprintf("%dh %dm", hours, minutes)
+	if err := os.Rename(stagedReportPath, r.reportPath); err != nil {
+		return fmt.Errorf("failed to write sprint summary: %w", err)
 	}
-
-	return fmt.Sprintf("%dm", minutes)
+	since := s.Sprint.Timeline.CheckpointAt
+	s.Sprint.Status = models.SprintStatusCheckpoint
+	s.Sprint.Timeline.CheckpointAt = &r.timestamp
+	s.Sprint.CheckpointTrigger = r.trigger
+	// Record the steering-report obligation in the same transaction
+	// that creates the checkpoint, so it cannot be lost to whatever
+	// happens to the sprint before the orchestrator next looks.
+	s.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: r.timestamp, Trigger: r.trigger, Since: since}
+	return nil
 }

@@ -16,6 +16,16 @@ const (
 	correctiveLabelRunes = 128
 )
 
+// The human-note target and operator provenance values mirror the unexported
+// ops constants (humanNoteForAll, humanNoteSourceOperatorCLI,
+// addHumanNoteOperation): ops exports no owner for them, and exporting one is
+// an edit of a closed area. The values must stay equal.
+const (
+	humanNoteTargetAll         = "all"
+	humanNoteSourceOperatorCLI = "operator_cli"
+	humanNoteOperationAddNote  = "add-human-note"
+)
+
 // buildTaskCorrectiveContext projects append-only recovery evidence without
 // consuming notes or changing task authority. Overflow stays discoverable via CLI.
 func buildTaskCorrectiveContext(task *models.Task, state *models.State) *prompts.TaskCorrectiveContext {
@@ -36,7 +46,7 @@ func buildTaskCorrectiveContext(task *models.Task, state *models.State) *prompts
 	}
 	for i := len(state.HumanNotes) - 1; i >= 0; i-- {
 		note := state.HumanNotes[i]
-		if (note.For != task.ID && note.For != "all") || strings.TrimSpace(note.Message) == "" {
+		if (note.For != task.ID && note.For != humanNoteTargetAll) || strings.TrimSpace(note.Message) == "" {
 			continue
 		}
 		if len(context.Notes) == correctiveNoteLimit {
@@ -51,7 +61,7 @@ func buildTaskCorrectiveContext(task *models.Task, state *models.State) *prompts
 			Message:       prompts.TruncateText(note.Message, correctiveTextRunes),
 			Source:        prompts.TruncateText(source, correctiveLabelRunes),
 			Operation:     prompts.TruncateText(operation, correctiveLabelRunes),
-			OperatorInput: source == "operator_cli" && operation == "add-human-note",
+			OperatorInput: source == humanNoteSourceOperatorCLI && operation == humanNoteOperationAddNote,
 		}
 		view.Truncated = view.Target != note.For || view.Message != note.Message || view.Source != source || view.Operation != operation
 		context.Notes = append(context.Notes, view)

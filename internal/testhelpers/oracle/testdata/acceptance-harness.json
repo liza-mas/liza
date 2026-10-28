@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-stdlib-harness", "file": "internal/testhelpers/oracle/import_test.go", "assertion": "TestHarnessImportsStdlibOnly and TestStdlibOrHarnessClassification", "command_index": 0},
+    {"obligation_id": "AC-tree-convention", "file": "internal/oracle/sample/sample_test.go", "assertion": "TestOracleSampleHelp and TestOracleSampleErrorEnvelope: tests named TestOracle..., goldens under testdata/golden/<kind>/, discovered by ./internal/oracle/...; internal/testhelpers/oracle/golden_test.go TestGoldenNameAndKindValidation", "command_index": 0},
+    {"obligation_id": "AC-normalisers", "file": "internal/testhelpers/oracle/normalise_test.go", "assertion": "TestNormaliseTimestamps, TestNormaliseDirsLongestFirstAndNested, TestNormaliseDirWholePathOnly, TestReplaceDirRewritesWindowsSeparatorsInTail, TestNormaliseIdentifiersAndLiterals, TestSortLines, TestNormaliseIsIdempotent", "command_index": 0},
+    {"obligation_id": "AC-golden-form", "file": "internal/testhelpers/oracle/kind_test.go", "assertion": "TestJSONForm*, TestHumanForm*, TestPromptAndArtifactAreRawBytes, TestFormRejectsStateKind, TestStateFormBeforeAfterLayout", "command_index": 0},
+    {"obligation_id": "AC-golden-io", "file": "internal/testhelpers/oracle/golden_test.go", "assertion": "TestLiveMissingGoldenFailsAndIsNotCreated, TestLiveMatchPasses, TestLiveMismatchNamesPathKindAndFirstDifferingLine, TestMismatchTruncatesLongLinesAndReportsEOF, TestWriteModeCreatesAndOverwritesAndNeverFailsOnContent, TestCheckUsesPackageDirectoryAndWriteEnv", "command_index": 0},
+    {"obligation_id": "AC-cli-helper", "file": "internal/testhelpers/oracle/cli_test.go", "assertion": "TestBuildCLIBuildsOncePerTestBinary, TestRunChildEnvironmentIsExactlyThePolicyPlusSuppliedPairs, TestRunUsesFreshDisposableProjectAndNormalisesIt, TestRunReportsExitCode", "command_index": 0},
+    {"obligation_id": "AC-adapter-rule", "approved_reference_id": "arch-scope3"},
+    {"obligation_id": "AC-sample-goldens", "file": "internal/oracle/sample/sample_test.go", "assertion": "TestOracleSampleHelp (human, binary-driven) and TestOracleSampleErrorEnvelope (json, adapter-driven) pass live against the committed goldens", "command_index": 0},
+    {"obligation_id": "AC-env-safe-harness", "file": "internal/testhelpers/oracle/env_test.go", "assertion": "TestChildEnvExactNameSetPerPlatform, TestChildEnvWindowsValues, TestChildEnvGoToolchainForm, TestChildEnvExtraAppendedAndPolicyRedefinitionRejected; cli_test.go TestRunRejectsPolicyRedefinition (names only, no value in message)", "command_index": 0},
+    {"obligation_id": "AC-e1-harness", "file": "Makefile", "assertion": "make test under env -i runs ./internal/testhelpers/oracle/... and ./internal/oracle/... through ./...", "command_index": 2}
+  ]
+}

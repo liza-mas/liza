@@ -28,32 +28,32 @@ var (
 // exactStatusColors maps exact status strings to their color.
 var exactStatusColors = map[string]lipgloss.Color{
 	// Agent statuses (direct mapping)
-	"WORKING":   ColorActive,
-	"PLANNING":  ColorPlanning,
-	"STARTING":  ColorPlanning,
-	"REVIEWING": ColorReview,
-	"IDLE":      ColorIdle,
-	"WAITING":   ColorIdle,
-	"HANDOFF":   ColorHandoff,
+	string(models.AgentStatusWorking):   ColorActive,
+	string(models.AgentStatusPlanning):  ColorPlanning,
+	string(models.AgentStatusStarting):  ColorPlanning,
+	string(models.AgentStatusReviewing): ColorReview,
+	string(models.AgentStatusIdle):      ColorIdle,
+	string(models.AgentStatusWaiting):   ColorIdle,
+	string(models.AgentStatusHandoff):   ColorHandoff,
 
 	// System statuses
-	"RUNNING":    ColorActive,
-	"PAUSED":     ColorPlanning,
-	"CHECKPOINT": ColorHandoff,
-	"STOPPED":    ColorRejected,
+	string(models.SystemModeRunning):      ColorActive,
+	string(models.SystemModePaused):       ColorPlanning,
+	string(models.SprintStatusCheckpoint): ColorHandoff,
+	string(models.SystemModeStopped):      ColorRejected,
 
 	// Sprint statuses
-	"COMPLETED":   ColorApproved,
-	"IN_PROGRESS": ColorActive,
-	"ABORTED":     ColorRejected,
+	string(models.SprintStatusCompleted):  ColorApproved,
+	string(models.SprintStatusInProgress): ColorActive,
+	string(models.SprintStatusAborted):    ColorRejected,
 
 	// Task statuses (exact)
-	"MERGED":             ColorApproved,
-	"BLOCKED":            ColorRejected,
-	"INTEGRATION_FAILED": ColorRejected,
-	"ABANDONED":          ColorTerminal,
-	"SUPERSEDED":         ColorTerminal,
-	"DRAFT":              ColorBareDraft,
+	string(models.TaskStatusMerged):            ColorApproved,
+	string(models.TaskStatusBlocked):           ColorRejected,
+	string(models.TaskStatusIntegrationFailed): ColorRejected,
+	string(models.TaskStatusAbandoned):         ColorTerminal,
+	string(models.TaskStatusSuperseded):        ColorTerminal,
+	string(models.TaskStatusDraft):             ColorBareDraft,
 }
 
 // StatusColor returns the lipgloss.Color for a given status string.
@@ -110,19 +110,32 @@ func CategoryColor(category pipeline.StateCategory) lipgloss.Color {
 	}
 }
 
+// Status-name affixes that color a status the exact-status table does not list.
+const (
+	statusSuffixPartiallyApproved = "_PARTIALLY_APPROVED"
+	statusSuffixApproved          = "_APPROVED"
+	statusSuffixRejected          = "_REJECTED"
+	statusSuffixPlanning          = "_PLANNING"
+	statusSuffixToReview          = "_TO_REVIEW"
+	statusSuffixReadyForReview    = "_READY_FOR_REVIEW"
+	statusPrefixImplementing      = "IMPLEMENTING_"
+	statusPrefixReviewing         = "REVIEWING_"
+	statusPrefixDraft             = "DRAFT_"
+)
+
 func matchSuffix(status string) (lipgloss.Color, bool) {
 	switch {
-	case strings.HasSuffix(status, "_PARTIALLY_APPROVED"):
+	case strings.HasSuffix(status, statusSuffixPartiallyApproved):
 		return ColorPartialApproved, true
-	case strings.HasSuffix(status, "_APPROVED"):
+	case strings.HasSuffix(status, statusSuffixApproved):
 		return ColorApproved, true
-	case strings.HasSuffix(status, "_REJECTED"):
+	case strings.HasSuffix(status, statusSuffixRejected):
 		return ColorRejected, true
-	case strings.HasSuffix(status, "_PLANNING"):
+	case strings.HasSuffix(status, statusSuffixPlanning):
 		return ColorActive, true
-	case strings.HasSuffix(status, "_TO_REVIEW"):
+	case strings.HasSuffix(status, statusSuffixToReview):
 		return ColorToReview, true
-	case strings.HasSuffix(status, "_READY_FOR_REVIEW"):
+	case strings.HasSuffix(status, statusSuffixReadyForReview):
 		return ColorToReview, true
 	default:
 		return "", false
@@ -131,11 +144,11 @@ func matchSuffix(status string) (lipgloss.Color, bool) {
 
 func matchPrefix(status string) (lipgloss.Color, bool) {
 	switch {
-	case strings.HasPrefix(status, "IMPLEMENTING_"):
+	case strings.HasPrefix(status, statusPrefixImplementing):
 		return ColorActive, true
-	case strings.HasPrefix(status, "REVIEWING_"):
+	case strings.HasPrefix(status, statusPrefixReviewing):
 		return ColorReview, true
-	case strings.HasPrefix(status, "DRAFT_"):
+	case strings.HasPrefix(status, statusPrefixDraft):
 		return ColorBareDraft, true
 	default:
 		return "", false
@@ -144,8 +157,8 @@ func matchPrefix(status string) (lipgloss.Color, bool) {
 
 // idleDotStatuses are statuses that display hollow ○ instead of filled ●.
 var idleDotStatuses = map[string]bool{
-	"IDLE":    true,
-	"WAITING": true,
+	string(models.AgentStatusIdle):    true,
+	string(models.AgentStatusWaiting): true,
 }
 
 // StatusDot returns "●" for active statuses or "○" for idle/waiting.

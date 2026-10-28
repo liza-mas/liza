@@ -1,0 +1,6 @@
+exit_code: 0
+--- stdout
+Deleted task t1 (was DRAFT_CODE)
+Worktree at <FIXTURE>/.worktrees/t1 preserved (use wt-delete to clean up later)
+--- stderr
+Delete worktree at <FIXTURE>/.worktrees/t1? (y/N):

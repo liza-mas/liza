@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "action": "retire",
+      "command": "true",
+      "outcome": "retired"
+    }
+  }
+}

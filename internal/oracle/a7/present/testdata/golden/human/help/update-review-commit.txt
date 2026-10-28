@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Update a task's review boundary to the current worktree HEAD.
+Use this after manually rebasing a worktree that is already submitted for review,
+or to repair a submitted task whose review_commit is missing while its worktree exists.
+This is an explicit resubmission boundary: if a reviewer has claimed the task,
+their claim is released and the task returns to submitted state for a fresh review.
+The command updates review_commit to worktree HEAD and base_commit to the
+effective merge-base between worktree HEAD and the configured integration branch.
+Requirements:
+- Task must be in a submitted or reviewing state
+- Worktree must exist on disk
+- review_commit may be missing, or review_commit/base_commit must differ from the current effective review boundary
+Usage:
+liza update-review-commit <task-id> [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for update-review-commit
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

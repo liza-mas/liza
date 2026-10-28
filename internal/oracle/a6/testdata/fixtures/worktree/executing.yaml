@@ -1,0 +1,30 @@
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A6 worktree task
+    done_when: Worktree operation observed
+    scope: A6 worktree fixture
+    status: IMPLEMENTING_CODE
+    priority: 1
+    spec_ref: README.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    assigned_to: coder-1
+    lease_expires: 2099-01-01T00:00:00Z
+    base_commit: '@BASE@'
+    worktree: .worktrees/task-1
+    history: []
+agents:
+  coder-1:
+    role: coder
+    status: WORKING
+    generation: oracle-coder
+    current_task: task-1
+    lease_expires: 2099-01-01T00:00:00Z
+    heartbeat: 2099-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: codex
+    pid: 1
+    iterations_total: 0
+    context_percent: 0

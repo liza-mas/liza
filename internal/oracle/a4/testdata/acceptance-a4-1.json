@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-invocation",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4Environment: subprocess environment exact name set for operator, orchestrator and architect; fresh HOME",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-golden-forms",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4GoldenForms: complete manifest path retains each written JSON/Markdown zone class and shared SHA tokens, excludes logs/locks/Git, preserves exit wrapper and transcript content; case_test.go runCase asserts human/json final-state equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-fixtures",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4FixturesValidate checks every fixture except the exact D35 name without changing state; TestA4FixtureBuilder verifies commits, tokens, worktree, recipe and unknown-token refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-determinism",
+      "file": "internal/oracle/a4/determinism_test.go",
+      "assertion": "TestA4Determinism: zone class, named/first-appearance identifiers, object paths, durations, archive-only byte counts and escaped JSON paths; TestA4HarnessFixedPoint in conventions_test.go",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-platform",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4PlatformGate: injected Windows skip, missing Unix Etc/GMT-2 failure and available zone success",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-adapters",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4ImportsAndSleep parses every package Go file, confines non-stdlib/non-harness imports to adapters and rejects time.Sleep",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-altered",
+      "file": "internal/oracle/a4/regen_proof_test.go",
+      "assertion": "TestA4RegenerationRejectsAlteredGolden: disposable clone with exit_code 0 changed to 1 must be rejected naming json/add-task/success.json",
+      "command_index": 3
+    },
+    {
+      "obligation_id": "AC-provenance-1",
+      "file": "internal/oracle/a4/testdata/golden/json/add-task/success.json",
+      "assertion": "Filtered starting-commit regeneration check reproduces all 54 A4 goldens, including add-task/success",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-budget-1",
+      "file": "internal/oracle/a4/conventions_test.go",
+      "assertion": "TestA4ImportsAndSleep and the complete command-0 suite: measured 3.425 seconds wall time (2.610 seconds package time) on the baseline host in this coding session, target <=45 seconds; observed command output captured before submission",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-boundary-1",
+      "approved_reference_id": "a4-scope1"
+    },
+    {
+      "obligation_id": "AC-T1",
+      "file": "internal/oracle/a4/transitions_test.go",
+      "assertion": "TestOracleProceed/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-T2",
+      "file": "internal/oracle/a4/transitions_test.go",
+      "assertion": "TestOracleAutoTransitions/executes and /none_eligible",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-T3",
+      "file": "internal/oracle/a4/transitions_test.go",
+      "assertion": "TestOracleReplan/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-T4",
+      "file": "internal/oracle/a4/transitions_test.go",
+      "assertion": "TestOracleReplan/preserve and /preserve_refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G1",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleAddTask/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G2",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleAddTasks/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G3",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleSetTaskOutput/success and /refused using architect-1/gen-a1; success COMPLETED while ARCHITECTING, refusal DRAFT_ARCHITECTURE",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G4",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleReplaceTask/success and /refused; adapter-computed boundary versus stale 64-hex token",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G5",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleSupersedeTask/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G6",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleCancelTask/success and /refused",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-G7",
+      "file": "internal/oracle/a4/tasks_test.go",
+      "assertion": "TestOracleDeleteTask/success and /refused with empty stdin",
+      "command_index": 0
+    }
+  ]
+}

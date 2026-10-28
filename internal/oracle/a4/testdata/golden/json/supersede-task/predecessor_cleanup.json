@@ -1,0 +1,22 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "supersede-task",
+      "original_status": "DRAFT_CODE",
+      "outcome": "COMPLETED",
+      "replacement_ids": [
+        "t3"
+      ],
+      "safe_action": "continue",
+      "task_id": "t1",
+      "task_status": "SUPERSEDED",
+      "transition_id": "<DIGEST 1>",
+      "warnings": null
+    }
+  }
+}

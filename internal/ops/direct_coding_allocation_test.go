@@ -138,7 +138,7 @@ func TestCompletedArchitecturePendingCorrectionStillWakes(t *testing.T) {
 	if !domain.PlanningCompleteEligible(state, state.FindTask(original.ID)) {
 		t.Fatal("expanded architecture correction hidden")
 	}
-	if class, _ := domain.Classify(state, state.FindTask(original.ID)); class != PlanHandoffAmendmentReady {
+	if class, _ := domain.Classify(state, state.FindTask(original.ID)); class != models.PlanHandoffAmendmentReady {
 		t.Fatal(class)
 	}
 }

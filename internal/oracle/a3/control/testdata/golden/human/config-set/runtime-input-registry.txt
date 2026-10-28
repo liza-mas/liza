@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+[stderr]
+config.runtime_input_registry: set

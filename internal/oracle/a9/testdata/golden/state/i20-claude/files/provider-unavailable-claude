@@ -1,0 +1,6 @@
+# before
+
+# after
+provider: claude
+detected: <T1:sZ>
+message: Failed to authenticate: OAuth session expired and could not be refreshed

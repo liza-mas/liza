@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "no deferred-validation runner is live; a record a dead runner left is recovered by the next run, or by liza deferred-validation settle when unsettled"
+    },
+    "ok": false,
+    "result": null
+  }
+}

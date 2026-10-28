@@ -1,0 +1,12 @@
+{
+  "exit": 1,
+  "stderr": "",
+  "stdout": {
+    "error": {
+      "code": "not_found",
+      "message": "resource not found"
+    },
+    "ok": false,
+    "result": null
+  }
+}

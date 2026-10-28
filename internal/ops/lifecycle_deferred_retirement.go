@@ -53,7 +53,7 @@ func deferredRetirementStatePath(projectRoot string) (string, bool) {
 // retireOrDeferFailedLifecyclePreparation is retireFailedLifecyclePreparation on
 // the patient wait for in-process claim paths, which also queue an uncommitted
 // retirement for their process's next claim in this project.
-func retireOrDeferFailedLifecyclePreparation(projectRoot, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects string) error {
+func retireOrDeferFailedLifecyclePreparation(projectRoot, taskID string, authority *models.AgentAuthority, preparation *models.LifecyclePreparation, originalErr error, effects LifecycleEffects) error {
 	statePath, ok := deferredRetirementStatePath(projectRoot)
 	if !ok {
 		statePath = paths.New(projectRoot).StatePath()
@@ -107,7 +107,7 @@ func drainDeferredLifecycleRetirements(projectRoot string) {
 	}
 	bb := db.For(statePath).Patient()
 	for _, entry := range pending {
-		err := retireFailedLifecyclePreparation(bb, entry.taskID, entry.authority, &entry.preparation, errDeferredRetirement, "unknown")
+		err := retireFailedLifecyclePreparation(bb, entry.taskID, entry.authority, &entry.preparation, errDeferredRetirement, LifecycleEffectsUnknown)
 		// A committed retirement, a marker that is gone or replaced, and a
 		// stale generation all end this entry; only a failed write stays queued.
 		if retirementUncommitted(err) {

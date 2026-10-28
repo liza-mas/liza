@@ -1,0 +1,30 @@
+exit 0
+--- stdout
+Move one task-level provider_dependencies declaration of a task nobody has
+started into its descendant_dependencies, applied at the task's per-subtask
+transition. Use it when a wait that orders writers (for example coding after
+another plan's coding output) was placed on their planner, which then cannot
+start until those writers merge. Once deferred, the planner is claimable and
+every output it writes carries the wait.
+The task must be in its role pair's initial status or BLOCKED, never claimed.
+--provider-task and --transition must name one of its declarations, and the
+provider children that declaration selects must have the role pair of the
+tasks it will hold; a planning-level prerequisite cannot be deferred. The move
+is in place: decomposition, arch_ref and the reviewed parent output are kept,
+and the move is recorded as provider_dependency_deferred history and in the
+activity log. It changes no status and wakes no agent.
+Identified agent sessions cannot use this command.
+Usage:
+liza defer-provider-dependency <task-id> --provider-task <id> --transition <name> --reason <reason> [flags]
+Flags:
+-h, --help help for defer-provider-dependency
+--json output result as structured JSON
+--provider-task string Provider task the declaration names
+--reason string Why the wait moves to the generated outputs (recorded in history)
+--transition string Transition the declaration names
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

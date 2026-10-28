@@ -1,0 +1,27 @@
+exit 0
+--- stdout
+Release the blocked-recovery cap for one BLOCKED task's current blocked
+episode. Agents may replace a lineage's BLOCKED tasks at most 2 times; the
+next replacement is refused until a human releases that episode. This command
+is that release, as an alternative to resolving the blocked_replacement_chain
+circuit-breaker halt with analyze then resume, which pauses every agent.
+The task must be BLOCKED and at the cap, and its current episode not yet
+released. The release permits one further replacement of this task. It ends
+with the episode: when the task's successor blocks, or the task itself blocks
+again, the cap applies again. Other capped tasks stay capped.
+The release is recorded as blocked_recovery_released history (with the reason,
+the episode and the lineage) and in the activity log. It changes no status,
+mode or circuit-breaker state; the task's next orchestrator wake shows it.
+Identified agent sessions cannot use this command.
+Usage:
+liza release-blocked-chain <task-id> --reason <reason> [flags]
+Flags:
+-h, --help help for release-blocked-chain
+--json output result as structured JSON
+--reason string The human decision permitting one more replacement (recorded in history)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

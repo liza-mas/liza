@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "provider_task": "cp-p",
+      "released": true,
+      "task_id": "t1",
+      "transition": "code-plan-to-coding"
+    }
+  }
+}

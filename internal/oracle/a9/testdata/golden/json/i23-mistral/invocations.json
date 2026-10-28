@@ -1,0 +1,17 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "-p",
+        "<PROMPT>",
+        "--output",
+        "streaming"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "vibe",
+      "prompt_equal": true,
+      "prompt_transport": "argument"
+    }
+  ],
+  "tool": "mistral"
+}

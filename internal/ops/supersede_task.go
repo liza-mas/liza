@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
@@ -54,172 +55,238 @@ func SupersedeTaskWithAuthority(projectRoot, taskID string, replacementIDs []str
 	return supersedeTaskWithOptionalAuthority(projectRoot, taskID, replacementIDs, reason, authority.ID, opts, &authority)
 }
 
+const supersedeTaskOperation = "supersede-task"
+
+// supersedePass carries one supersede-task request through its phases:
+// admission and salvage before the lock, the locked retirement, and the cleanup
+// that follows persistence.
+type supersedePass struct {
+	projectRoot, taskID   string
+	replacementIDs        []string
+	reason, agentID       string
+	recoverabilityCommand string
+	opts                  SupersedeTaskOptions
+	authority             *models.AgentAuthority
+
+	// Set by admit, before the lock.
+	bb             *db.Blackboard
+	gw             *git.Git
+	pb             *pipelineBundle
+	request        LifecycleRequest
+	originalStatus models.TaskStatus
+	hadWorktree    bool
+	salvage        map[string]any
+
+	// Set where the task is observed, before and inside the lock.
+	observed *models.Task
+	outcome  models.LifecycleOutcome
+}
+
 func supersedeTaskWithOptionalAuthority(projectRoot, taskID string, replacementIDs []string, reason, agentID string, opts SupersedeTaskOptions, authority *models.AgentAuthority) (result *SupersedeResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
-	var observed *models.Task
+	pass := &supersedePass{projectRoot: projectRoot, taskID: taskID, replacementIDs: replacementIDs, reason: reason, agentID: agentID, opts: opts, authority: authority}
 	defer func() {
-		retErr = WrapLifecycleError("supersede-task", observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(supersedeTaskOperation, pass.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {
 			outcome, warnings = result.LifecycleOutcome, &result.Warnings
 		}
-		invocation.FinishResult("supersede-task", outcome, &retErr, warnings)
+		invocation.FinishResult(supersedeTaskOperation, outcome, &retErr, warnings)
 	}()
-	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+	if err := pass.checkRequest(); err != nil {
 		return nil, err
 	}
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if reason == "" {
-		return nil, &PreconditionError{Reason: "rescope reason is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
-	}
-	recoverabilityCommand := strings.TrimSpace(opts.RecoverabilityCommand)
-	if len(replacementIDs) == 0 {
-		if recoverabilityCommand == "" {
-			return nil, &PreconditionError{Reason: "recoverability command is required when superseding without replacements"}
-		}
-		if strings.ContainsAny(recoverabilityCommand, "\r\n") {
-			return nil, &PreconditionError{Reason: "recoverability command must be a single line"}
-		}
-		recoverabilityCommand = secretmask.New().MaskText(recoverabilityCommand)
-	} else if recoverabilityCommand != "" {
-		return nil, &PreconditionError{Reason: "recoverability command is only valid when superseding without replacements"}
-	}
-	opts.Changed = secretmask.New().MaskText(strings.TrimSpace(opts.Changed))
-	retErr = withOwnershipTaskLock(projectRoot, taskID, "supersede-task", func() error {
+	retErr = withOwnershipTaskLock(projectRoot, taskID, supersedeTaskOperation, func() error {
 		var err error
-		result, err = supersedeTaskLifecycle(projectRoot, taskID, replacementIDs, reason, agentID, recoverabilityCommand, opts, authority, &observed)
+		result, err = pass.supersede()
 		return err
 	})
 	return result, retErr
 }
 
-func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string, reason, agentID, recoverabilityCommand string, opts SupersedeTaskOptions, authority *models.AgentAuthority, observed **models.Task) (*SupersedeResult, error) {
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
-	gw := git.New(projectRoot)
-
-	pb, err := loadPipelineBundle(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+// checkRequest refuses a malformed request before any state is read and
+// normalises the recoverability command and the stated change.
+func (p *supersedePass) checkRequest() error {
+	if err := ValidateLifecycleRequestOptions(p.opts.Request); err != nil {
+		return err
 	}
-
-	// Phase 1: Read and Validate (no lock held)
-	state, task, err := readTaskState(bb, taskID)
-	if err != nil {
-		return nil, err
+	if p.taskID == "" {
+		return &PreconditionError{Reason: "task ID is required"}
 	}
-	if authority != nil {
-		if err := RequireAgentAuthority(state, *authority); err != nil {
+	if p.reason == "" {
+		return &PreconditionError{Reason: "rescope reason is required"}
+	}
+	if p.agentID == "" {
+		return &PreconditionError{Reason: "orchestrator agent ID is required"}
+	}
+	p.recoverabilityCommand = strings.TrimSpace(p.opts.RecoverabilityCommand)
+	if len(p.replacementIDs) == 0 {
+		if p.recoverabilityCommand == "" {
+			return &PreconditionError{Reason: "recoverability command is required when superseding without replacements"}
+		}
+		if strings.ContainsAny(p.recoverabilityCommand, "\r\n") {
+			return &PreconditionError{Reason: "recoverability command must be a single line"}
+		}
+		p.recoverabilityCommand = secretmask.New().MaskText(p.recoverabilityCommand)
+	} else if p.recoverabilityCommand != "" {
+		return &PreconditionError{Reason: "recoverability command is only valid when superseding without replacements"}
+	}
+	p.opts.Changed = secretmask.New().MaskText(strings.TrimSpace(p.opts.Changed))
+	return nil
+}
+
+// supersede runs the request under the ownership task lock.
+func (p *supersedePass) supersede() (*SupersedeResult, error) {
+	if replay, err := p.admit(); replay != nil || err != nil {
+		return replay, err
+	}
+	if len(p.replacementIDs) == 0 {
+		var err error
+		if p.salvage, err = collectSupersedeSalvageSnapshot(p.gw, p.observed, p.originalStatus, p.recoverabilityCommand); err != nil {
 			return nil, err
 		}
 	}
-	*observed = task
-	request, err := NewLifecycleRequest("supersede-task", task, agentID, authority, opts.Request, struct {
-		Replacements                  []string
-		Reason, RecoverabilityCommand string
-		Changed                       string `json:",omitempty"`
-	}{replacementIDs, reason, recoverabilityCommand, opts.Changed})
+
+	err := lifecycleMutation(p.bb, p.authority)(p.commit)
+	if isLifecycleReplay(err) {
+		return p.result(nil), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to supersede task: %w", err)
+	}
+	return p.result(p.cleanup()), nil
+}
+
+// admit reads and validates without the state lock: pipeline bundle, task,
+// authority, request identity, its retained receipt (returned as the replay
+// result) and the supersession eligibility of the task.
+func (p *supersedePass) admit() (*SupersedeResult, error) {
+	p.bb = RequestBlackboard(paths.New(p.projectRoot).StatePath(), p.authority, p.opts.Request)
+	p.gw = git.New(p.projectRoot)
+
+	var err error
+	if p.pb, err = loadPipelineBundle(p.projectRoot); err != nil {
+		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+	state, task, err := readTaskState(p.bb, p.taskID)
 	if err != nil {
 		return nil, err
 	}
-	receipt, err := checkOwnerEndingRequest(task, request)
+	if p.authority != nil {
+		if err := RequireAgentAuthority(state, *p.authority); err != nil {
+			return nil, err
+		}
+	}
+	p.observed = task
+	if p.request, err = NewLifecycleRequest(supersedeTaskOperation, task, p.agentID, p.authority, p.opts.Request, p.requestPayload()); err != nil {
+		return nil, err
+	}
+	receipt, err := checkOwnerEndingRequest(task, p.request)
 	if err != nil {
 		return nil, err
 	}
 	if receipt != nil {
-		return &SupersedeResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID), TaskID: taskID, OriginalStatus: receipt.Projection.SourceStatus, ReplacementIDs: replacementIDs}, nil
+		p.outcome = LifecycleReplayOutcome(task, receipt, p.agentID)
+		p.originalStatus = receipt.Projection.SourceStatus
+		return p.result(nil), nil
 	}
+	p.originalStatus = task.Status
+	p.hadWorktree = task.Worktree != nil
+	return nil, p.checkEligible(task)
+}
 
-	originalStatus := task.Status
-	var outcome models.LifecycleOutcome
+func (p *supersedePass) requestPayload() any {
+	return struct {
+		Replacements                  []string
+		Reason, RecoverabilityCommand string
+		Changed                       string `json:",omitempty"`
+	}{p.replacementIDs, p.reason, p.recoverabilityCommand, p.opts.Changed}
+}
 
-	// Supersede is allowed from: any initial (DRAFT_*) state, any rejected
-	// state, BLOCKED, or INTEGRATION_FAILED when external repair/replacement
-	// made the failed task obsolete.
-	allowed := originalStatus == models.TaskStatusBlocked || originalStatus == models.TaskStatusIntegrationFailed
-	if !allowed && task.RolePair != "" {
-		// Pipeline-aware path: resolve initial/rejected from the task's role-pair.
-		initialStatus, err := pb.resolver.InitialStatus(task.RolePair)
-		if err == nil && originalStatus == initialStatus {
-			allowed = true
-		}
-		if !allowed {
-			rejectedStatus, err := pb.resolver.RejectedStatus(task.RolePair)
-			if err == nil && originalStatus == rejectedStatus {
-				allowed = true
-			}
-		}
+// checkEligible refuses a task outside the statuses supersession accepts.
+func (p *supersedePass) checkEligible(task *models.Task) error {
+	if p.supersedable(task) {
+		return nil
 	}
-	if !allowed && task.RolePair == "" {
+	return WrapLifecycleError(supersedeTaskOperation, task, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be initial, rejected, or BLOCKED)", p.taskID, task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+}
+
+// supersedable allows any initial (DRAFT_*) state, any rejected state, BLOCKED,
+// or INTEGRATION_FAILED when external repair/replacement made the failed task
+// obsolete.
+func (p *supersedePass) supersedable(task *models.Task) bool {
+	status := task.Status
+	if status == models.TaskStatusBlocked || status == models.TaskStatusIntegrationFailed {
+		return true
+	}
+	if task.RolePair == "" {
 		// Legacy fallback: tasks without a role-pair use hardcoded statuses.
-		allowed = originalStatus == models.TaskStatusReady || originalStatus == models.TaskStatusRejected
+		return status == models.TaskStatusReady || status == models.TaskStatusRejected
 	}
-	if !allowed {
-		return nil, WrapLifecycleError("supersede-task", task, &PreconditionError{Reason: fmt.Sprintf("cannot supersede task %s in status %s (must be initial, rejected, or BLOCKED)", taskID, originalStatus)}, models.LifecycleAlreadyTransitioned, "stop", "none")
+	// Pipeline-aware path: resolve initial/rejected from the task's role-pair.
+	if initialStatus, err := p.pb.resolver.InitialStatus(task.RolePair); err == nil && status == initialStatus {
+		return true
 	}
+	rejectedStatus, err := p.pb.resolver.RejectedStatus(task.RolePair)
+	return err == nil && status == rejectedStatus
+}
 
-	var salvage map[string]any
-	if len(replacementIDs) == 0 {
-		salvage, err = collectSupersedeSalvageSnapshot(gw, task, originalStatus, recoverabilityCommand)
-		if err != nil {
-			return nil, err
-		}
+// commit is the locked transaction: lookup, receipt replay, status recheck,
+// the retirement itself, candidate validation and the lifecycle completion.
+func (p *supersedePass) commit(state *models.State) error {
+	currentTask := state.FindTask(p.taskID)
+	if currentTask == nil {
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: p.taskID}
 	}
-
-	// Phase 2: Atomic State Update
-	hadWorktree := task.Worktree != nil
-	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
-		currentTask := state.FindTask(taskID)
-		if currentTask == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		*observed = currentTask
-		receipt, err := checkOwnerEndingRequest(currentTask, request)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			outcome = LifecycleReplayOutcome(currentTask, receipt, agentID)
-			originalStatus = receipt.Projection.SourceStatus
-			return errLifecycleReplay
-		}
-
-		if currentTask.Status != originalStatus {
-			return WrapLifecycleError("supersede-task", currentTask, fmt.Errorf("task status changed before supersession"), models.LifecycleStateChanged, "requery", "none")
-		}
-
-		if _, err := supersedeTaskInState(state, pb, currentTask, replacementIDs, reason, opts.Changed, agentID, salvage, time.Now().UTC()); err != nil {
-			return err
-		}
-		// Legacy tasks predate pipeline-wide validation. For pipeline tasks, validate
-		// every structural invariant while skipping unchanged external artifact refs.
-		if currentTask.RolePair != "" {
-			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, true, os.Stderr); err != nil {
-				return err
-			}
-		}
-
-		outcome, err = CompleteLifecycleRequest(currentTask, request, models.LifecycleProjection{SourceStatus: originalStatus}, state.Agents)
-		return err
-	})
-	if isLifecycleReplay(err) {
-		return &SupersedeResult{LifecycleOutcome: outcome, TaskID: taskID, OriginalStatus: originalStatus, ReplacementIDs: replacementIDs}, nil
-	}
-
+	p.observed = currentTask
+	receipt, err := checkOwnerEndingRequest(currentTask, p.request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to supersede task: %w", err)
+		return err
+	}
+	if receipt != nil {
+		p.outcome = LifecycleReplayOutcome(currentTask, receipt, p.agentID)
+		p.originalStatus = receipt.Projection.SourceStatus
+		return errLifecycleReplay
 	}
 
-	// Best-effort worktree cleanup (after state commit — safe to lose worktree now).
+	if currentTask.Status != p.originalStatus {
+		return WrapLifecycleError(supersedeTaskOperation, currentTask, fmt.Errorf("task status changed before supersession"), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+	}
+
+	if _, err := supersedeTaskInState(state, p.pb, currentTask, p.replacementIDs, p.reason, p.opts.Changed, p.agentID, p.salvage, time.Now().UTC()); err != nil {
+		return err
+	}
+	// Legacy tasks predate pipeline-wide validation. For pipeline tasks, validate
+	// every structural invariant while skipping unchanged external artifact refs.
+	if currentTask.RolePair != "" {
+		if err := statevalidate.ValidateCandidate(state, p.bb.ReadSnapshot, p.projectRoot, true, os.Stderr); err != nil {
+			return err
+		}
+	}
+
+	p.outcome, err = CompleteLifecycleRequest(currentTask, p.request, models.LifecycleProjection{SourceStatus: p.originalStatus}, state.Agents)
+	return err
+}
+
+// result projects the recorded outcome; replays carry no warnings.
+func (p *supersedePass) result(warnings []string) *SupersedeResult {
+	return &SupersedeResult{
+		LifecycleOutcome: p.outcome,
+		TaskID:           p.taskID,
+		OriginalStatus:   p.originalStatus,
+		ReplacementIDs:   p.replacementIDs,
+		Warnings:         warnings,
+	}
+}
+
+// cleanup is best-effort and runs after the state commit, so losing the
+// worktree is safe: the worktree directory, the task's own branch, and the
+// branches of predecessors this task was the last live successor of.
+func (p *supersedePass) cleanup() []string {
 	var warnings []string
-	if hadWorktree {
-		if rmErr := gw.RemoveWorktreeDir(taskID); rmErr != nil {
+	if p.hadWorktree {
+		if rmErr := p.gw.RemoveWorktreeDir(p.taskID); rmErr != nil {
 			warnings = append(warnings, fmt.Sprintf("failed to remove worktree directory: %v", rmErr))
 		}
 	}
@@ -227,29 +294,13 @@ func supersedeTaskLifecycle(projectRoot, taskID string, replacementIDs []string,
 	// When there are no successors, delete the branch immediately — no successor
 	// will ever trigger cleanup via cleanupPredecessorBranches.
 	// When successors exist, branch is preserved for git show access.
-	if len(replacementIDs) == 0 {
-		branchName := paths.TaskBranchPrefix + taskID
-		exists, err := gw.BranchExists(branchName)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("failed to check branch %s: %v", branchName, err))
-		} else if exists {
-			if err := gw.DeleteBranch(branchName); err != nil {
-				warnings = append(warnings, fmt.Sprintf("failed to delete branch %s: %v", branchName, err))
-			}
-		}
+	if len(p.replacementIDs) == 0 {
+		warnings = append(warnings, deleteOwnTaskBranch(p.gw, p.taskID)...)
 	}
 
 	// This superseded task may itself be a successor — check if its terminal
 	// transition releases an older predecessor's branch.
-	warnings = append(warnings, cleanupPredecessorBranches(bb, gw, taskID)...)
-
-	return &SupersedeResult{
-		LifecycleOutcome: outcome,
-		TaskID:           taskID,
-		OriginalStatus:   originalStatus,
-		ReplacementIDs:   replacementIDs,
-		Warnings:         warnings,
-	}, nil
+	return append(warnings, cleanupPredecessorBranches(p.bb, p.gw, p.taskID)...)
 }
 
 // supersedeTaskInState retires one task inside an already-locked candidate

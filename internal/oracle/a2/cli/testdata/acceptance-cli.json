@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-c1",
+      "file": "internal/oracle/a2/cli/providers_test.go",
+      "assertion": "TestOracleA2ProvidersList",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c2",
+      "file": "internal/oracle/a2/cli/providers_test.go",
+      "assertion": "TestOracleA2ProvidersDetect",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c3",
+      "file": "internal/oracle/a2/cli/providers_test.go",
+      "assertion": "TestOracleA2ProvidersRefresh",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c4",
+      "file": "internal/oracle/a2/cli/toolchain_test.go",
+      "assertion": "TestOracleA2ToolchainList",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c5",
+      "file": "internal/oracle/a2/cli/toolchain_test.go",
+      "assertion": "TestOracleA2ToolchainDoctor",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c6",
+      "file": "internal/oracle/a2/cli/toolchain_test.go",
+      "assertion": "TestOracleA2ToolchainInstall",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c7",
+      "file": "internal/oracle/a2/cli/toolchain_test.go",
+      "assertion": "TestOracleA2ToolchainConfigure",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c8",
+      "file": "internal/oracle/a2/cli/tool_result_store_test.go",
+      "assertion": "TestOracleA2ToolResultFilter",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c9",
+      "file": "internal/oracle/a2/cli/tool_result_store_test.go",
+      "assertion": "TestOracleA2ToolResultRead",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c10",
+      "file": "internal/oracle/a2/cli/tool_result_store_test.go",
+      "assertion": "TestOracleA2ToolResultStats",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c11",
+      "file": "internal/oracle/a2/cli/tool_result_run_test.go",
+      "assertion": "TestOracleA2ToolResultRun",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c12",
+      "file": "internal/oracle/a2/cli/tool_result_hooks_test.go",
+      "assertion": "TestOracleA2ToolResultHooks",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c13",
+      "file": "internal/oracle/a2/cli/tool_result_acp_test.go",
+      "assertion": "TestOracleA2ToolResultACPProxy",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c14",
+      "file": "internal/oracle/a2/cli/update_test.go",
+      "assertion": "TestOracleA2UpdateSettings",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c15",
+      "file": "internal/oracle/a2/cli/index_test.go",
+      "assertion": "TestOracleA2IndexRefresh",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-c16",
+      "file": "internal/oracle/a2/cli/index_test.go",
+      "assertion": "TestOracleA2SembleReady",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-provenance",
+      "file": "internal/oracle/a2/cli/main_test.go",
+      "assertion": "Starting-tree regeneration entry point with ./internal/oracle/a2/cli/... filter, documented above TestMain",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-comparison",
+      "file": "internal/oracle/a2/cli/helpers_test.go",
+      "assertion": "fixture.check compares stdout, stderr and exit; fixture.fileEffects compares full inventory and byte artifacts",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-isolation",
+      "file": "internal/oracle/a2/cli/helpers_test.go",
+      "assertion": "newFixture, fixture.env and fixture.command enforce disposable directories, fixture PATH and explicit ChildEnv",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-validation",
+      "file": "internal/oracle/a2/cli/main_test.go",
+      "assertion": "TestMain executes all sixteen TestOracleA2 drivers through oracle.RunMain",
+      "command_index": 1
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "a2-constraints"
+    },
+    {
+      "obligation_id": "AC-adapter",
+      "approved_reference_id": "harness"
+    }
+  ]
+}

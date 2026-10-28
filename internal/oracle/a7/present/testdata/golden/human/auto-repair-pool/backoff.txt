@@ -1,0 +1,84 @@
+=== tick 1: first attempt
+--- start requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=false models_item=0
+2: role=coder cli=claude agent_id= from_config=false models_item=0
+3: role=coder cli=claude agent_id= from_config=false models_item=0
+--- outcome
+attempted: [code-reviewer coder]
+suppressed: []
+blocked: []
+spawned: role=code-reviewer agent_id=code-reviewer-1 cli=claude models_item=0 pid=5100001 command=liza agent code-reviewer --cli claude --agent-id code-reviewer-1
+spawned: role=coder agent_id= cli=claude models_item=0 pid=5100002 command=liza agent coder --cli claude
+spawned: role=coder agent_id= cli=claude models_item=0 pid=5100003 command=liza agent coder --cli claude
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100001:code-reviewer-1:0
+auto-repair-agent-pool-pending:coder:5100002::0
+auto-repair-agent-pool-pending:coder:5100003::0
+auto-repair-agent-pool:code-reviewer
+auto-repair-agent-pool:coder
+orchestrator-missing:since
+=== tick 2: immediately after: roles inside their backoff
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-start-count:code-reviewer=1
+auto-repair-agent-pool-start-count:coder=2
+auto-repair-agent-pool:code-reviewer
+auto-repair-agent-pool:coder
+orchestrator-missing:since
+=== tick 3: backoff elapsed
+--- start requests
+1: role=code-reviewer cli=claude agent_id=code-reviewer-1 from_config=false models_item=0
+2: role=coder cli=claude agent_id= from_config=false models_item=0
+3: role=coder cli=claude agent_id= from_config=false models_item=0
+--- outcome
+attempted: [code-reviewer coder]
+suppressed: []
+blocked: []
+spawned: role=code-reviewer agent_id=code-reviewer-1 cli=claude models_item=0 pid=5100004 command=liza agent code-reviewer --cli claude --agent-id code-reviewer-1
+spawned: role=coder agent_id= cli=claude models_item=0 pid=5100005 command=liza agent coder --cli claude
+spawned: role=coder agent_id= cli=claude models_item=0 pid=5100006 command=liza agent coder --cli claude
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-pending:code-reviewer:5100004:code-reviewer-1:0
+auto-repair-agent-pool-pending:coder:5100005::0
+auto-repair-agent-pool-pending:coder:5100006::0
+auto-repair-agent-pool-start-count:code-reviewer=1
+auto-repair-agent-pool-start-count:coder=2
+auto-repair-agent-pool:code-reviewer
+auto-repair-agent-pool:coder
+orchestrator-missing:since
+=== spawn log
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --cli claude --agent-id code-reviewer-1 pid=5100001
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder --cli claude pid=5100002
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder --cli claude pid=5100003
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent code-reviewer --cli claude --agent-id code-reviewer-1 pid=5100004
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder --cli claude pid=5100005
+agent: system
+action: auto_repair_agent_spawned
+detail: liza agent coder --cli claude pid=5100006

@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: reserve-provider: modification function failed: validation failed: provider cp-p max_outputs is 1; reserve-provider only tightens a cap, never raises it

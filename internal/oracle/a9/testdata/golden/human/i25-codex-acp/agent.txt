@@ -1,0 +1,4 @@
+exit_code: 1
+[stdout]
+[stderr]
+Error: codex-acp requires acpx on PATH; install with: npm install -g acpx: exec: "acpx": executable file not found in $PATH

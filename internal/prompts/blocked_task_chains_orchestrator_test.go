@@ -34,7 +34,7 @@ func TestBlockedTaskChainsOrchestratorAndBlockingProtocol(t *testing.T) {
 		"SPRINT_COMPLETE":      {report},
 	}
 	for trigger, required := range wakes {
-		rendered, err := RenderWakeInstructions(trigger, "orchestrator-1")
+		rendered, err := RenderWakeInstructions(WakeTrigger(trigger), "orchestrator-1", testMatcherText())
 		if err != nil {
 			t.Fatalf("%s: %v", trigger, err)
 		}
@@ -75,7 +75,7 @@ func TestBlockedTaskInPlaceScopeExceptionRoute(t *testing.T) {
 		brand.BinaryName = "acme-cli"
 		brand.ProjectDirName = ".acme-run"
 	})
-	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1")
+	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1", testMatcherText())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestBlockedTaskBudgetExceptionRoute(t *testing.T) {
 		brand.BinaryName = "acme-cli"
 		brand.ProjectDirName = ".acme-run"
 	})
-	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1")
+	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1", testMatcherText())
 	if err != nil {
 		t.Fatal(err)
 	}

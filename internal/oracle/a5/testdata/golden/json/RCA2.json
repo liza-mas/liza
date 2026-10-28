@@ -1,0 +1,44 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "diagnostics": [
+          {
+            "constraint": "at least one contribution is required",
+            "field": "/contributions",
+            "safe_action": "correct_input",
+            "schema_version": 1,
+            "value_class": "missing"
+          }
+        ],
+        "effects": "none",
+        "operation": "record-rejection-rca",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "record-rejection-rca: INVALID_INPUT (safe_action=correct_input): payload rejected by the record-rejection-rca schema, version 1: /contributions at least one contribution is required"
+    },
+    "ok": false,
+    "result": {
+      "diagnostics": [
+        {
+          "constraint": "at least one contribution is required",
+          "field": "/contributions",
+          "safe_action": "correct_input",
+          "schema_version": 1,
+          "value_class": "missing"
+        }
+      ],
+      "effects": "none",
+      "operation": "record-rejection-rca",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

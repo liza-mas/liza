@@ -1,0 +1,33 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "already_transitioned",
+          "details": {
+            "effects": "committed",
+            "operation": "claim-task",
+            "outcome": "ALREADY_TRANSITIONED",
+            "safe_action": "stop",
+            "task_id": "task-1",
+            "task_status": "BLOCKED",
+            "transition_id": "<id-1>"
+          },
+          "message": "claim-task: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task task-1 transitioned to BLOCKED — max iterations reached without approval (10/10)"
+        },
+        "ok": false,
+        "result": {
+          "effects": "committed",
+          "operation": "claim-task",
+          "outcome": "ALREADY_TRANSITIONED",
+          "safe_action": "stop",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

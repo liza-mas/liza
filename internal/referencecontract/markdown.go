@@ -62,7 +62,7 @@ func ResolveScalarFragment(markdown, fragment string) error {
 // fragments must resolve.
 func hasReferenceMarker(markdown string) bool {
 	headings := scanMarkdown(markdown).headings
-	return len(headingsMatching(headings, 2, sourceReferencesHeading)) > 0 ||
+	return len(headingsMatching(headings, sourceReferencesHeadingLevel, sourceReferencesHeading)) > 0 ||
 		len(headingsMatching(headings, 0, acceptanceHeading)) > 0
 }
 
@@ -153,14 +153,24 @@ func headingsMatching(headings []atxHeading, level int, exactText string) []atxH
 	return matches
 }
 
+// CommonMark limits for fences and ATX headings, plus the heading levels the
+// contract grammar places its sections at.
+const (
+	minFenceRun                  = 3
+	maxMarkdownIndent            = 3
+	maxATXHeadingLevel           = 6
+	contractHeadingLevel         = 3
+	sourceReferencesHeadingLevel = 2
+)
+
 func openingFence(line string) (fence, bool) {
 	content, ok := afterFenceIndent(line)
-	if !ok || len(content) < 3 || (content[0] != '`' && content[0] != '~') {
+	if !ok || len(content) < minFenceRun || (content[0] != '`' && content[0] != '~') {
 		return fence{}, false
 	}
 	char := content[0]
 	run := delimiterRun(content, char)
-	if run < 3 {
+	if run < minFenceRun {
 		return fence{}, false
 	}
 	return fence{char: char, length: run}, true
@@ -180,7 +190,7 @@ func afterFenceIndent(line string) (string, bool) {
 	for spaces < len(line) && line[spaces] == ' ' {
 		spaces++
 	}
-	if spaces > 3 || spaces < len(line) && line[spaces] == '\t' {
+	if spaces > maxMarkdownIndent || spaces < len(line) && line[spaces] == '\t' {
 		return "", false
 	}
 	return line[spaces:], true
@@ -199,7 +209,7 @@ func parseATXHeading(line string) (int, string, bool) {
 	for indent < len(line) && line[indent] == ' ' {
 		indent++
 	}
-	if indent > 3 || indent < len(line) && line[indent] == '\t' {
+	if indent > maxMarkdownIndent || indent < len(line) && line[indent] == '\t' {
 		return 0, "", false
 	}
 
@@ -208,7 +218,7 @@ func parseATXHeading(line string) (int, string, bool) {
 		markerEnd++
 	}
 	level := markerEnd - indent
-	if level < 1 || level > 6 {
+	if level < 1 || level > maxATXHeadingLevel {
 		return 0, "", false
 	}
 	if markerEnd == len(line) {

@@ -174,7 +174,7 @@ func TestD42EarlyResubmissionPauseBeforeAndAfterPreflight(t *testing.T) {
 				armBeforeReclaim(t, pause)
 			}
 			result, err := AwaitResubmissionWithAuthority(context.Background(), f.root, "task-1", authority, time.Second)
-			if err != nil || result.Verdict != ResubmissionPaused || result.SafeAction != SafeActionStop ||
+			if err != nil || result.Verdict != string(ResubmissionPaused) || result.SafeAction != string(SafeActionStop) ||
 				!strings.Contains(result.Reason, brand.Command("resume")) {
 				t.Fatalf("early reclaim = %+v, %v; want PAUSED/stop/resume", result, err)
 			}
@@ -216,7 +216,7 @@ func TestD42PausedDoerPreservesAnotherCurrentTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := AwaitVerdict(context.Background(), root, "task-1", "coder-1", time.Second)
-	if err != nil || result.Verdict != VerdictPaused || !strings.Contains(result.Reason, "acme resume") || strings.Contains(result.Reason, "liza") {
+	if err != nil || result.Verdict != string(VerdictPaused) || !strings.Contains(result.Reason, "acme resume") || strings.Contains(result.Reason, "liza") {
 		t.Fatalf("paused doer = %+v, %v; want branded PAUSED guidance", result, err)
 	}
 	after, err := bb.Read()
@@ -327,7 +327,7 @@ func TestD42PausedAwaitPreservesResumedDoerClaim(t *testing.T) {
 				if !errors.As(err, &fence) {
 					t.Fatalf("paused cleanup error = %T; want registration fence", err)
 				}
-			} else if err != nil || result.Verdict != VerdictPaused || result.SafeAction != SafeActionStop {
+			} else if err != nil || result.Verdict != string(VerdictPaused) || result.SafeAction != string(SafeActionStop) {
 				t.Fatalf("paused await = %+v, %v; want read-only PAUSED/stop", result, err)
 			}
 			after, err := bb.Read()

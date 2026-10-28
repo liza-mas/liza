@@ -1,0 +1,143 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A1 CLI oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2026-09-28T09:00:00+02:00
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A1 CLI oracle task
+    done_when: Oracle proves fixed CLI surfaces
+    scope: A1 fixtures
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: README.md
+    created: 2026-09-28T09:00:00+02:00
+    history:
+      - time: 2026-09-28T09:00:00+02:00
+        event: created
+        agent: orchestrator-1
+  - id: task-2
+    type: coding
+    role_pair: coding-pair
+    description: Fixture blocked task
+    done_when: Fixture blocker cleared
+    scope: Fixed input
+    status: BLOCKED
+    priority: 2
+    spec_ref: specs/vision.md
+    created: 2026-09-28T09:00:00+02:00
+    blocked_reason: Fixture dependency unavailable
+    blocked_questions: ['Which fixture input is required?']
+    history:
+      - time: 2026-10-01T12:30:00.123+02:00
+        event: blocked
+        agent: orchestrator-1
+  - id: task-3
+    type: coding
+    role_pair: coding-pair
+    description: Fixture abandoned task
+    done_when: Fixed historical task
+    scope: Fixed input
+    status: ABANDONED
+    priority: 3
+    spec_ref: specs/vision.md
+    created: 2026-09-28T09:00:00+02:00
+    history:
+      - time: 2026-10-01T09:00:00Z
+        event: abandoned
+        agent: orchestrator-1
+agents:
+  coder-1:
+    role: coder
+    status: IDLE
+    generation: g1
+    terminal: terminal-1
+    provider: codex
+    pid: 1
+    iterations_total: 0
+    context_percent: 0
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: g1
+    terminal: terminal-2
+    provider: claude
+    pid: 1
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+  - id: anomaly-1
+    type: retry_loop
+    task: task-1
+    reporter: coder-1
+    timestamp: 2026-10-01T12:30:00.123+02:00
+    details:
+      count: 3
+      error_pattern: fixed-compile-error
+      message: Fixed failure one
+  - id: anomaly-2
+    type: retry_loop
+    task: task-2
+    reporter: coder-2
+    timestamp: 2026-10-01T12:31:00.456+02:00
+    details:
+      count: 4
+      error_pattern: fixed-compile-error
+      message: Fixed failure two
+  - id: anomaly-3
+    type: retry_loop
+    task: task-3
+    reporter: coder-3
+    timestamp: 2026-10-01T12:32:00.789+02:00
+    details:
+      count: 5
+      error_pattern: fixed-compile-error
+      message: Fixed failure three
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1, task-2, task-3]
+    stretch: []
+  timeline:
+    started: 2026-09-28T09:00:00+02:00
+    deadline: 2026-10-10T00:00:00Z
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 1
+    iterations_total: 2
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2026-09-28T09:00:00+02:00
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  max_global_integration_generations: 3
+  max_instances: 3
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  doer_max_wait: 600
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 18000
+  reviewer_poll_interval: 30
+  reviewer_max_wait: 600
+  agent_progress_timeout: 1800
+  integration_branch: integration
+  mode: RUNNING
+  auto_resume: false
+  no_follow_up: false

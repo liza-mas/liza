@@ -1,0 +1,12 @@
+{
+  "tool": "Read",
+  "command": "fixture read",
+  "role": "coder",
+  "command_class": "read",
+  "task_id": "fixture-task",
+  "agent_id": "fixture-agent",
+  "session_id": "fixture-session",
+  "exit_code": 0,
+  "truncated": false,
+  "content": "envelope oracle\n"
+}

@@ -15,6 +15,18 @@ type reviewMatch struct {
 	revertStatus models.TaskStatus
 }
 
+// staleReviewClaim is a review claim detected as stale and what clearing it
+// does: a task in a reviewing state reverts to revertStatus, a task that kept
+// a reviewer after leaving the reviewing states (an await_resubmission crash)
+// only loses the claim.
+type staleReviewClaim struct {
+	reviewer     string
+	reverts      bool
+	revertStatus models.TaskStatus
+	detail       string
+	logLabel     string
+}
+
 // ClearStaleReviewClaims finds and clears expired review leases on reviewing tasks.
 // Returns the number of claims cleared.
 func ClearStaleReviewClaims(projectRoot string) (int, error) {
@@ -34,90 +46,18 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	err = bb.Modify(func(state *models.State) error {
 		for i := range state.Tasks {
 			task := &state.Tasks[i]
-
-			// Determine if this task is in a reviewing state.
-			match, err := detectReviewingState(task, pb)
+			stale, err := detectStaleReviewClaim(state, task, now, pb)
 			if err != nil {
 				return err
 			}
-			if match == nil {
-				// Not in a reviewing state — check for orphaned ReviewingBy
-				// from an await_resubmission crash.
-				if task.ReviewingBy != nil {
-					staleReason := staleReviewClaimReason(state, task, now, pb, false)
-					if staleReason == "" {
-						continue
-					}
-
-					staleReviewer := *task.ReviewingBy
-					task.ReviewingBy = nil
-					task.ReviewLeaseExpires = nil
-					models.AdvanceLifecycle(task)
-
-					if a, ok := state.Agents[staleReviewer]; ok {
-						if a.CurrentTask != nil && *a.CurrentTask == task.ID {
-							state.ReleaseAgent(staleReviewer)
-						}
-					}
-
-					detail := fmt.Sprintf("Orphaned ReviewingBy cleared (%s, reviewer: %s, task status: %s)",
-						staleReason, staleReviewer, task.Status)
-					logEntry := log.Entry{
-						Timestamp: now,
-						Agent:     "system",
-						Action:    "stale_review_cleared",
-						Task:      &task.ID,
-						Detail:    detail,
-					}
-					if err := logger.Append(logEntry); err != nil {
-						return fmt.Errorf("failed to log orphaned ReviewingBy cleanup for %s: %w", task.ID, err)
-					}
-					cleared++
-				}
+			if stale == nil {
 				continue
 			}
-
-			// Task is in a reviewing state — handle stale review claim.
-			if task.ReviewingBy == nil {
-				continue
-			}
-
-			staleReason := staleReviewClaimReason(state, task, now, pb, true)
-			if staleReason == "" {
-				continue
-			}
-
-			staleReviewer := *task.ReviewingBy
-
-			// Revert to submitted state and clear the stale claim.
-			if err := task.TransitionWith(match.revertStatus, pb.transitions); err != nil {
+			if err := clearStaleReviewClaim(state, task, stale, now, pb, logger); err != nil {
 				return err
 			}
-			task.ReviewingBy = nil
-			task.ReviewLeaseExpires = nil
-			models.AdvanceLifecycle(task)
-
-			if a, ok := state.Agents[staleReviewer]; ok {
-				if a.CurrentTask != nil && *a.CurrentTask == task.ID {
-					state.ReleaseAgent(staleReviewer)
-				}
-			}
-
-			detail := fmt.Sprintf("Review claim cleared (%s, reviewer: %s)", staleReason, staleReviewer)
-			logEntry := log.Entry{
-				Timestamp: now,
-				Agent:     "system",
-				Action:    "stale_review_cleared",
-				Task:      &task.ID,
-				Detail:    detail,
-			}
-			if err := logger.Append(logEntry); err != nil {
-				return fmt.Errorf("failed to log stale review cleanup for %s: %w", task.ID, err)
-			}
-
 			cleared++
 		}
-
 		return nil
 	})
 
@@ -126,6 +66,81 @@ func ClearStaleReviewClaims(projectRoot string) (int, error) {
 	}
 
 	return cleared, nil
+}
+
+// detectStaleReviewClaim reports the stale review claim on task, or nil when
+// the task has none to clear.
+func detectStaleReviewClaim(state *models.State, task *models.Task, now time.Time, pb *pipelineBundle) (*staleReviewClaim, error) {
+	// Determine if this task is in a reviewing state.
+	match, err := detectReviewingState(task, pb)
+	if err != nil {
+		return nil, err
+	}
+	if match == nil {
+		// Not in a reviewing state — check for orphaned ReviewingBy
+		// from an await_resubmission crash.
+		if task.ReviewingBy == nil {
+			return nil, nil
+		}
+		staleReason := staleReviewClaimReason(state, task, now, pb, false)
+		if staleReason == "" {
+			return nil, nil
+		}
+		return &staleReviewClaim{
+			reviewer: *task.ReviewingBy,
+			detail: fmt.Sprintf("Orphaned ReviewingBy cleared (%s, reviewer: %s, task status: %s)",
+				staleReason, *task.ReviewingBy, task.Status),
+			logLabel: "orphaned ReviewingBy cleanup",
+		}, nil
+	}
+
+	// Task is in a reviewing state — handle stale review claim.
+	if task.ReviewingBy == nil {
+		return nil, nil
+	}
+	staleReason := staleReviewClaimReason(state, task, now, pb, true)
+	if staleReason == "" {
+		return nil, nil
+	}
+	return &staleReviewClaim{
+		reviewer:     *task.ReviewingBy,
+		reverts:      true,
+		revertStatus: match.revertStatus,
+		detail:       fmt.Sprintf("Review claim cleared (%s, reviewer: %s)", staleReason, *task.ReviewingBy),
+		logLabel:     "stale review cleanup",
+	}, nil
+}
+
+// clearStaleReviewClaim clears a detected claim inside the transaction: revert
+// a reviewing task to its submitted state, drop the claim, release the
+// reviewer's agent record when it still points at the task, and log it.
+func clearStaleReviewClaim(state *models.State, task *models.Task, stale *staleReviewClaim, now time.Time, pb *pipelineBundle, logger *log.Logger) error {
+	if stale.reverts {
+		if err := task.TransitionWith(stale.revertStatus, pb.transitions); err != nil {
+			return err
+		}
+	}
+	task.ReviewingBy = nil
+	task.ReviewLeaseExpires = nil
+	models.AdvanceLifecycle(task)
+
+	if a, ok := state.Agents[stale.reviewer]; ok {
+		if a.CurrentTask != nil && *a.CurrentTask == task.ID {
+			state.ReleaseAgent(stale.reviewer)
+		}
+	}
+
+	logEntry := log.Entry{
+		Timestamp: now,
+		Agent:     actorSystem,
+		Action:    "stale_review_cleared",
+		Task:      &task.ID,
+		Detail:    stale.detail,
+	}
+	if err := logger.Append(logEntry); err != nil {
+		return fmt.Errorf("failed to log %s for %s: %w", stale.logLabel, task.ID, err)
+	}
+	return nil
 }
 
 func staleReviewClaimReason(state *models.State, task *models.Task, now time.Time, pb *pipelineBundle, activeReview bool) string {

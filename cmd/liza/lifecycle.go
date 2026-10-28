@@ -119,16 +119,16 @@ func (call *lifecycleCLIInvocation) finish(retErr *error) {
 		return
 	}
 	if !call.calledOps {
-		outcome, action := models.LifecycleStateChanged, "requery"
+		outcome, action := models.LifecycleStateChanged, ops.LifecycleSafeActionRequery
 		var input *lizaerrors.CLIInputError
 		var precondition *ops.PreconditionError
 		var permission *lizaerrors.PermissionError
 		if errors.As(*retErr, &input) || errors.As(*retErr, &precondition) {
-			outcome, action = models.LifecycleInvalidInput, "correct_input"
+			outcome, action = models.LifecycleInvalidInput, ops.LifecycleSafeActionCorrectInput
 		} else if errors.As(*retErr, &permission) {
-			outcome, action = models.LifecycleForbidden, "stop"
+			outcome, action = models.LifecycleForbidden, ops.LifecycleSafeActionStop
 		}
-		*retErr = ops.WrapLifecycleError(call.cmd.Name(), nil, *retErr, outcome, action, "none")
+		*retErr = ops.WrapLifecycleError(call.cmd.Name(), nil, *retErr, outcome, action, ops.LifecycleEffectsNone)
 	}
 	var failure *ops.LifecycleError
 	if !errors.As(*retErr, &failure) {

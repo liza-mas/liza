@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "already_transitioned",
+          "details": {
+            "current_assignee": "coder-1",
+            "effects": "none",
+            "operation": "mark-blocked",
+            "outcome": "ALREADY_TRANSITIONED",
+            "safe_action": "stop",
+            "task_id": "task-1",
+            "task_status": "BLOCKED",
+            "transition_id": "<id-1>"
+          },
+          "message": "mark-blocked: ALREADY_TRANSITIONED (safe_action=stop): failed to mark task as blocked: modification function failed: mark-blocked: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task must be in an executing status to be marked blocked, current status: BLOCKED"
+        },
+        "ok": false,
+        "result": {
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "mark-blocked",
+          "outcome": "ALREADY_TRANSITIONED",
+          "safe_action": "stop",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

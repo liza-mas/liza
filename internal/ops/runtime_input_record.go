@@ -11,6 +11,18 @@ import (
 	"github.com/liza-mas/liza/internal/runtimeinputs"
 )
 
+// Outcomes a registration reports, and the conflict kinds a refused one names
+// in its details.
+const (
+	runtimeInputRecorded  = "recorded"
+	runtimeInputBound     = "bound"
+	runtimeInputUnchanged = "unchanged"
+
+	runtimeInputConflictIdentity         = "instance_identity"
+	runtimeInputConflictLocator          = "instance_locator"
+	runtimeInputConflictSingleUseBinding = "single_use_binding"
+)
+
 // RecordRuntimeInputInput is an operator registration of one hand-produced
 // materialization (ADR-0169).
 type RecordRuntimeInputInput struct {
@@ -84,23 +96,23 @@ func RecordRuntimeInput(projectRoot string, input RecordRuntimeInputInput) (*Rec
 				KeyID: key.ID, Envelope: input.Envelope, Names: materialization.Names,
 				Tasks: tasks, State: models.RuntimeInputAvailable, RegisteredAt: time.Now().UTC(),
 			}
-			result.Outcome, result.State, result.Tasks = "recorded", models.RuntimeInputAvailable, tasks
+			result.Outcome, result.State, result.Tasks = runtimeInputRecorded, models.RuntimeInputAvailable, tasks
 			return nil
 		}
 		if instance.Recipe != declaration.Recipe || instance.InputID != declaration.ID || instance.Consumption != declaration.Consumption || instance.Secret != declaration.Secret {
 			return &PreconditionError{
 				Reason:  fmt.Sprintf("this materialization is already recorded as input %s (recipe %s, %s) and cannot be recorded as a different input", instance.InputID, instance.Recipe, instance.Consumption),
-				Details: map[string]any{"conflict": "instance_identity", "instance_id": materialization.Identity},
+				Details: map[string]any{"conflict": runtimeInputConflictIdentity, "instance_id": materialization.Identity},
 			}
 		}
-		result.State, result.Tasks, result.Outcome = instance.State, instance.Tasks, "unchanged"
+		result.State, result.Tasks, result.Outcome = instance.State, instance.Tasks, runtimeInputUnchanged
 		if instance.Terminal() {
 			return nil // A spent or invalidated materialization stays so.
 		}
 		if instance.Envelope != input.Envelope {
 			return &PreconditionError{
 				Reason:  fmt.Sprintf("this materialization is already recorded, available, at %s; move the envelope back or record a different materialization", instance.Envelope),
-				Details: map[string]any{"conflict": "instance_locator", "instance_id": materialization.Identity},
+				Details: map[string]any{"conflict": runtimeInputConflictLocator, "instance_id": materialization.Identity},
 			}
 		}
 		added := slices.DeleteFunc(slices.Clone(tasks), instance.BoundTo)
@@ -110,13 +122,13 @@ func RecordRuntimeInput(projectRoot string, input RecordRuntimeInputInput) (*Rec
 		if instance.Consumption == models.RuntimeInputSingleUse {
 			return &PreconditionError{
 				Reason:  "a single_use instance serves exactly one task, and this one is already bound",
-				Details: map[string]any{"conflict": "single_use_binding", "instance_id": materialization.Identity},
+				Details: map[string]any{"conflict": runtimeInputConflictSingleUseBinding, "instance_id": materialization.Identity},
 			}
 		}
 		instance.Tasks = append(slices.Clone(instance.Tasks), added...)
 		slices.Sort(instance.Tasks)
 		state.RuntimeInputs[materialization.Identity] = instance
-		result.Tasks, result.Outcome = instance.Tasks, "bound"
+		result.Tasks, result.Outcome = instance.Tasks, runtimeInputBound
 		return nil
 	})
 	if err != nil {

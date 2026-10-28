@@ -1,0 +1,1 @@
+Error: budget settings require 1024 <= digest-bytes <= threshold-bytes <= 65536

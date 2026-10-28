@@ -94,7 +94,7 @@ func isTaskActionableSinceAssessment(task *models.Task, state *models.State) boo
 	// cascade wakes when a human annotates a dependency for unrelated reasons.
 	for i := range state.HumanNotes {
 		note := &state.HumanNotes[i]
-		if (note.For == task.ID || note.For == "all") && note.Timestamp.After(lastAssessment.Time) {
+		if (note.For == task.ID || note.For == humanNoteForAll) && note.Timestamp.After(lastAssessment.Time) {
 			return true
 		}
 	}
@@ -217,7 +217,7 @@ func awaitsPlanningTransition(state *models.State, plannerID string, handoff Pla
 func PassedPlansAwaitingCheckpoint(state *models.State, handoff PlanHandoffDomain) []string {
 	var ids []string
 	for _, id := range state.Sprint.Scope.Planned {
-		if class, _ := handoff.Classify(state, state.FindTask(id)); class == PlanHandoffPassed && awaitsPlanningTransition(state, id, handoff) {
+		if class, _ := handoff.Classify(state, state.FindTask(id)); class == models.PlanHandoffPassed && awaitsPlanningTransition(state, id, handoff) {
 			ids = append(ids, id)
 		}
 	}
@@ -282,7 +282,7 @@ func dependencySatisfactionChangedAfterAssessment(state *models.State, result mo
 func CountActionableHypothesisExhaustedTasks(state *models.State) int {
 	count := 0
 	for i := range state.Tasks {
-		if len(state.Tasks[i].FailedBy) >= 2 &&
+		if len(state.Tasks[i].FailedBy) >= hypothesisExhaustionFailures &&
 			state.Tasks[i].Status != models.TaskStatusBlocked &&
 			!state.Tasks[i].Status.IsTerminal() &&
 			isTaskActionableSinceAssessment(&state.Tasks[i], state) {

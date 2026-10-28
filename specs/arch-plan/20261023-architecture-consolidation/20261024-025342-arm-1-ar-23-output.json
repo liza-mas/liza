@@ -1,0 +1,10 @@
+[
+  {
+    "desc": "C2: derive canonical provider keys at policy time for review diversity and anomaly grouping",
+    "done_when": "Focused proofs show canonical-key precedence, alias/custom-key collapse across all diversity and anomaly paths, current-config evaluation of old state, and preserved raw identity, launch, tool lookups, display and stop behavior; C2-only goldens have D24 provenance.",
+    "scope": "One C2 coding task: agentlaunch key query, ops reviewer diversity, runtime merge policy, analysis grouping, call-site-only plumbing, focused tests, acceptance manifest and affected docs. Excludes stop-signal changes/tests/goldens, persisted identity rewrites, new config and verdict gates.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261024-025342-arm-1-ar-23.md#Scope 1: C2 canonical keys for diversity and anomaly policy",
+    "rca_required": false
+  }
+]

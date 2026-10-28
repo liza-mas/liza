@@ -1,0 +1,42 @@
+--- requests
+1: role=code-reviewer cli=claude agent_id= from_config=false models_item=0
+--- result
+{
+"cli": "claude",
+"role_clis": {
+"code-reviewer": "claude"
+},
+"dry_run": false,
+"missing": [
+{
+"role": "code-reviewer",
+"task_ids": [
+"task-approved"
+],
+"task_count": 1,
+"spawn_count": 1,
+"cli": "claude",
+"reason": "approved task(s) with no live, healthy merge owner"
+}
+],
+"spawned": [
+{
+"role": "code-reviewer",
+"cli": "claude",
+"command": "liza agent code-reviewer --cli claude",
+"pid": 4001
+}
+],
+"commands": [
+"liza agent code-reviewer --cli claude"
+]
+}
+--- error
+none
+--- rendered output
+Roles with claimable work not covered by idle agents:
+code-reviewer: 1 task(s) (task-approved); starting 1 agent(s): approved task(s) with no live, healthy merge owner
+Started agent processes:
+liza agent code-reviewer --cli claude (pid 4001)
+--- rendered error
+none

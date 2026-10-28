@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-I17", "file": "internal/oracle/a9/signals_test.go", "assertion": "TestOracleA9AuditAndCleanup/i17-degraded: codex rollout-persistence line raises the PROVIDER AUDIT DEGRADED alert and a provider_audit_degraded anomaly; i17-clean: the same codex run without the pattern writes no alert and no anomaly", "command_index": 0},
+    {"obligation_id": "AC-I18", "file": "internal/oracle/a9/signals_test.go", "assertion": "TestOracleA9AuditAndCleanup/i18-cleanup: a code-reviewer pass removes the worktree of the task at INTEGRATION_ANALYSIS_CLEAN and records its completion event, while the task at INTEGRATION_ANALYSIS_REJECTED, evaluated first, keeps worktree and directory", "command_index": 0},
+    {"obligation_id": "AC-I19", "file": "internal/oracle/a9/signals_test.go", "assertion": "TestOracleA9QuotaRaise: claude quota line writes the signal file and alert and releases the claim, with a WIP commit only for the dirty worktree (i19-dirty, i19-clean); a codex run printing claude's extra-usage line raises no signal or alert (i19-other)", "command_index": 0},
+    {"obligation_id": "AC-I20", "file": "internal/oracle/a9/signals_test.go", "assertion": "TestOracleA9UnavailableRaise: claude and codex provider-unavailable patterns write signal file and alert; claude's pattern printed by a codex run raises nothing (i20-cross)", "command_index": 0},
+    {"obligation_id": "AC-I21", "file": "internal/oracle/a9/signals_test.go", "assertion": "TestOracleA9SignalMatch: unexpired own-provider quota and unavailable signals exit without claim or launch; codex/codex-acp cross-alias cells for both signal kinds recorded as observed at the starting commit; an expired quota signal does not block and the run claims and launches; the starting binary leaves the expired file on disk at supervisor start (only the resume sweep removes it, outside A9), so the golden pins that observed outcome rather than a clearing", "command_index": 0},
+    {"obligation_id": "AC-I26-2", "file": "internal/oracle/a9/kit_snapshots_test.go", "assertion": "scenario.check invoked by every I-17 to I-21 scenario: before/launch/after state, prompt/output name listing, signal files, alerts.log and usage records as runtime-file goldens, exit and non-log human output", "command_index": 0},
+    {"obligation_id": "AC-reproduce-2", "file": "internal/oracle/a9/signals_test.go", "assertion": "regen check filtered to ./internal/oracle/a9/... reproduces every I-17 to I-21 golden from provenance start 96c9ad69aee983ce2b929dd681b6ba43bf920535", "command_index": 2},
+    {"obligation_id": "AC-additive-2", "approved_reference_id": "a9-scope"}
+  ]
+}

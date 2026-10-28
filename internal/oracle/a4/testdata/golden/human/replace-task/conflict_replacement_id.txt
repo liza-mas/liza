@@ -1,0 +1,11 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: CONFLICT
+safe_action: stop
+task_status: SUPERSEDED
+effects: none
+task_id: t1
+transition_id: <DIGEST 1>
+request_id: replace-1
+Error: replace task: replace-task: CONFLICT (safe_action=stop): modification function failed: replace-task: CONFLICT (safe_action=stop): replace-task: INVALID_INPUT (safe_action=correct_input): request identity was already used with a different payload: lifecycle request identity reused

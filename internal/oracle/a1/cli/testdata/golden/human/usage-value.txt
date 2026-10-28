@@ -1,0 +1,5 @@
+exit_code: 0
+# stdout
+
+# stderr
+{{2026-10-01 00:00:00 +0000 UTC 2026-10-02 00:00:00 +0000 UTC 2026-10-02 00:00:00 +0000 UTC} [{blocked coder 1 1 {80 80 80} {20 20 20} {10 10 10}} {active coder 1 1 {1200 1200 1200} {300 300 300} {150 150 150}}] [{blocked 1 80 20 10} {active 1 1200 300 150}] <PerCompletedTask:pointer> [{coder retry_tail 1760 2 [{task-1 1650 1 <LastUseful:pointer>} {task-2 110 1 <LastUseful:pointer>}] 0}] <Provenance:pointer> <SuppressedCalls:pointer> <nil> [] [lifecycle counters unavailable]}

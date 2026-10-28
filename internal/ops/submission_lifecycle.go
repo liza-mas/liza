@@ -14,6 +14,23 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+const (
+	// submissionSHA1HexLength and submissionSHA256HexLength are the lengths of a
+	// full immutable commit SHA in each Git object format.
+	submissionSHA1HexLength   = 40
+	submissionSHA256HexLength = 64
+	// submitTimeoutRequestIDLength is how much of the settled transition names
+	// the request of the batch-timeout block.
+	submitTimeoutRequestIDLength = 16
+	// submitFinalizeLockOperation labels the task lock the final comparison holds.
+	submitFinalizeLockOperation = "submit-for-review-finalize"
+	// agentIDEnvSuffix and agentGenerationEnvSuffix are the suffixes brand turns
+	// into the session's identity variables. brand names neither, so ops names
+	// them once for the A5 files that read or cite them.
+	agentIDEnvSuffix         = "AGENT_ID"
+	agentGenerationEnvSuffix = "AGENT_GENERATION"
+)
+
 // preparedSubmission keeps warning-only indexing outside task locking while
 // retaining the captured candidate and final transaction in one call frame.
 type preparedSubmission struct {
@@ -48,13 +65,13 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			// Finalization may lose a race after Git or indexing. Report a fresh
 			// authorized observation, never a callback's uncommitted candidate.
 			invocation.task = readLifecycleTask(projectRoot, taskID, authority, opts)
-			outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
+			outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
 			var invalid *PreconditionError
 			if !invocation.effects && errors.As(err, &invalid) {
-				outcome, action = models.LifecycleInvalidInput, "correct_input"
+				outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
 			}
 			if invocation.effects {
-				effects = "unknown"
+				effects = LifecycleEffectsUnknown
 			}
 			err = WrapLifecycleError(integrationOperationSubmitForReview, invocation.task, err, outcome, action, effects)
 		}
@@ -66,7 +83,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		observation.FinishResult(integrationOperationSubmitForReview, outcome, &err, warnings)
 	}()
 	if validateErr := ValidateLifecycleRequestOptions(opts); validateErr != nil {
-		return nil, &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, nil, models.LifecycleInvalidInput, "correct_input", "none"), Err: validateErr}
+		return nil, &LifecycleError{Outcome: NewLifecycleOutcome(integrationOperationSubmitForReview, nil, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone), Err: validateErr}
 	}
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
@@ -75,7 +92,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		return nil, &PreconditionError{Reason: "commit ref is required"}
 	}
 	if agentID == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName("AGENT_ID"))}
+		return nil, &PreconditionError{Reason: fmt.Sprintf("%s is required", brand.EnvName(agentIDEnvSuffix))}
 	}
 	invocation.progress = startSubmitProgress(taskID)
 	defer invocation.progress.finish()
@@ -105,7 +122,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			prepared, inner = prepareSubmitForReview(projectRoot, taskID, commitRef, agentID, authority, opts, invocation)
 			return inner
 		}); prepareErr != nil {
-			return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, prepareErr, "unknown")
+			return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, prepareErr, LifecycleEffectsUnknown)
 		}
 		if prepared.replay != nil {
 			result = prepared.replay
@@ -119,7 +136,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			defer removeMarker()
 		}
 		warnings := prepared.refresh()
-		commitErr := lock.WithLockOperation("submit-for-review-finalize", func() error {
+		commitErr := lock.WithLockOperation(submitFinalizeLockOperation, func() error {
 			var inner error
 			result, inner = prepared.complete()
 			return inner
@@ -127,7 +144,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 		if result != nil {
 			result.Warnings = append(result.Warnings, warnings...)
 		}
-		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, "unknown")
+		return retireFailedLifecyclePreparation(retirementBB, taskID, authority, invocation.preparation, commitErr, LifecycleEffectsUnknown)
 	})
 	blockRuntimeInputRefusal(projectRoot, taskID, agentID, authority, err)
 	blockBatchTimeoutRefusal(projectRoot, taskID, agentID, authority, err)
@@ -159,7 +176,7 @@ func blockBatchTimeoutRefusal(projectRoot, taskID, agentID string, authority *mo
 	transition := retired.Outcome.TransitionID
 	reason := fmt.Sprintf("canonical admission timed out under admission_timeout_retry (ruling %s): %s", refusal.Ruling, refusal.Reason)
 	question := fmt.Sprintf("Raise the canonical admission budget for %s with a budget exception ruling, or correct timeout_seconds?", taskID)
-	opts := MarkBlockedOptions{Request: LifecycleRequestOptions{RequestID: "admission-timeout:" + transition[:16], ExpectedTransition: transition}}
+	opts := MarkBlockedOptions{Request: LifecycleRequestOptions{RequestID: "admission-timeout:" + transition[:submitTimeoutRequestIDLength], ExpectedTransition: transition}}
 	var blockErr error
 	if authority != nil {
 		_, blockErr = MarkBlockedWithAuthority(projectRoot, taskID, reason, []string{question}, *authority, opts)
@@ -202,7 +219,7 @@ func blockRuntimeInputRefusal(projectRoot, taskID, agentID string, authority *mo
 }
 
 func fullSubmissionSHA(value string) bool {
-	if len(value) != 40 && len(value) != 64 {
+	if len(value) != submissionSHA1HexLength && len(value) != submissionSHA256HexLength {
 		return false
 	}
 	_, err := hex.DecodeString(value)
@@ -241,7 +258,7 @@ func submissionRequest(task *models.Task, commitRef, actor string, authority *mo
 		for _, event := range task.History {
 			if event.Event == models.TaskEventSubmittedForReview && event.SubmissionInputCommit == commitRef {
 				return request, nil, &LifecycleError{
-					Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, "requery", "none"),
+					Outcome: NewLifecycleOutcome(request.Operation, task, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone),
 					Err:     fmt.Errorf("input SHA was submitted previously; no exact receipt matches this request and authority; inspect before choosing a new request"),
 				}
 			}

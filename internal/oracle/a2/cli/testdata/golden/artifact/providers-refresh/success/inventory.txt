@@ -1,0 +1,2 @@
+home/.liza/cache/provider-catalog.meta.json
+home/.liza/cache/provider-catalog.yaml

@@ -1,0 +1,24 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "agent_id": "coder-1",
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "operation": "handoff",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

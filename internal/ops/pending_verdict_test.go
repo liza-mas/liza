@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -380,5 +381,58 @@ func TestPendingVerdictReusedIdentityRetiresConflictingPayload(t *testing.T) {
 	}
 	if task := state.FindTask("task-1"); task.Status != models.TaskStatusApproved || len(task.Approvals) != 1 || task.ReviewCyclesTotal != 0 {
 		t.Fatal("conflicting-payload replay changed the completed verdict")
+	}
+}
+
+// A regular file where the outbox directory belongs is refused before listing,
+// whichever way the OS lists it, so a supervisor never registers over a corrupt
+// outbox (PB-3). The file is left intact.
+func TestReplayPendingVerdictsRefusesANonDirectoryOutbox(t *testing.T) {
+	root := t.TempDir()
+	testhelpers.SetupLizaDir(t, root)
+	outbox := pendingVerdictDir(root)
+	if err := os.WriteFile(outbox, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- ReplayPendingVerdicts(context.Background(), root, "code-reviewer-1") }()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("replay over a non-directory outbox did not return")
+	}
+	if !errors.Is(err, syscall.ENOTDIR) {
+		t.Fatalf("expected ENOTDIR, got %v", err)
+	}
+	if want := "read private verdict outbox: open " + outbox + ": not a directory"; err == nil || err.Error() != want {
+		t.Errorf("error text = %v, want %q", err, want)
+	}
+	if data, readErr := os.ReadFile(outbox); readErr != nil || string(data) != "not a directory" {
+		t.Errorf("the refused outbox file was changed: %v", readErr)
+	}
+}
+
+// An outbox that was never created has nothing to replay.
+func TestReplayPendingVerdictsAbsentOutboxIsEmpty(t *testing.T) {
+	root := t.TempDir()
+	testhelpers.SetupLizaDir(t, root)
+	if err := ReplayPendingVerdicts(context.Background(), root, "code-reviewer-1"); err != nil {
+		t.Fatalf("absent outbox: %v", err)
+	}
+}
+
+// The refusal carries the same text and ENOTDIR identity on every OS, including
+// Windows, where syscall.ENOTDIR spells a different message.
+func TestReplayPendingVerdictsNotDirectoryRefusalIsOSIndependent(t *testing.T) {
+	err := &os.PathError{Op: "open", Path: "outbox", Err: notDirectoryError{}}
+	if want := "open outbox: not a directory"; err.Error() != want {
+		t.Errorf("text = %q, want %q", err.Error(), want)
+	}
+	if !errors.Is(err, syscall.ENOTDIR) {
+		t.Error("refusal does not match syscall.ENOTDIR")
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		t.Error("refusal must not read as an absent outbox")
 	}
 }

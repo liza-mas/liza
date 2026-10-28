@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "validation",
+    "message": "fixture validation"
+  },
+  "ok": false,
+  "result": null
+}

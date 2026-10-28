@@ -1,0 +1,16 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "guidance": "Review verdict was recovered after the task already moved to MERGED. Stop this session; do not retry await-verdict or run more worktree commands for this submission.",
+      "iteration": 0,
+      "reason": "",
+      "review_commit": "<commit:candidate>",
+      "reviewer_agent": "code-reviewer-1",
+      "safe_action": "stop",
+      "task_status": "MERGED",
+      "verdict": "ALREADY_TRANSITIONED"
+    }
+  }
+}

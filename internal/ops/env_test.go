@@ -5,16 +5,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/scipsearch"
 	"github.com/liza-mas/liza/internal/semble"
 	"github.com/liza-mas/liza/internal/stacklit"
 )
 
 func TestMain(m *testing.M) {
+	// Provider-key derivation reads the registry; pin its catalog so tests do
+	// not depend on the on-disk cache or the network.
+	agentlaunch.UseRuntimeCatalog(providers.EmbeddedCatalog())
 	clearAmbientFeatureGates()
 	// The detached runner re-executes os.Executable(), which is this test
 	// binary here; tests drive the runner directly instead.

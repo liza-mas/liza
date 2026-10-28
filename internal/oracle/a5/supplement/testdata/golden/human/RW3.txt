@@ -1,0 +1,5 @@
+# exit_code
+1
+# stdout
+# stderr
+Error: await resubmission: task task-1 review boundary needs repair: base_commit <commit:base> does not match effective review base <commit:advanced> — run liza update-review-commit task-1

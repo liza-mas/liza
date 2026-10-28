@@ -1,13 +1,13 @@
 package ops
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -66,166 +66,192 @@ func ApplyDependencyRepairWithAuthorityAndOptions(projectRoot, sourceTaskID, rea
 	return applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reason, authority.ID, &authority, opts)
 }
 
+const applyDependencyRepairOperation = models.RepairOperationApplyDependencyRepair
+
+// applyRepairRun carries one apply-dependency-repair invocation through its
+// concerns: request checks, in-lock admission, consumed-request resolution, the
+// batch step with its source audit, complete-candidate adoption and result
+// reporting. observed and effects feed the deferred lifecycle wrapping of the
+// entry point.
+type applyRepairRun struct {
+	invocation   *LifecycleInvocation
+	projectRoot  string
+	logPath      string
+	sourceTaskID string
+	reason       string
+	agentID      string
+	authority    *models.AgentAuthority
+	opts         LifecycleRequestOptions
+	now          time.Time
+	bb           *db.Blackboard
+	resolver     *pipeline.Resolver
+	observed     *models.Task
+	effects      LifecycleEffects
+	result       ApplyDependencyRepairResult
+}
+
 func applyDependencyRepairWithOptionalAuthority(projectRoot, sourceTaskID, reason, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *ApplyDependencyRepairResult, retErr error) {
-	invocation := NewLifecycleInvocation(projectRoot)
-	const operation = models.RepairOperationApplyDependencyRepair
-	var opts LifecycleRequestOptions
-	if len(options) > 0 {
-		opts = options[0]
+	run := &applyRepairRun{
+		invocation:   NewLifecycleInvocation(projectRoot),
+		projectRoot:  projectRoot,
+		sourceTaskID: sourceTaskID,
+		reason:       reason,
+		agentID:      agentID,
+		authority:    authority,
+		effects:      LifecycleEffectsNone,
 	}
-	var observed *models.Task
-	effects := "none"
+	if len(options) > 0 {
+		run.opts = options[0]
+	}
 	defer func() {
-		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(applyDependencyRepairOperation, run.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
 			outcome = returned.LifecycleOutcome
 			warnings = &returned.Warnings
 		}
-		invocation.FinishResult(operation, outcome, &retErr, warnings)
+		run.invocation.FinishResult(applyDependencyRepairOperation, outcome, &retErr, warnings)
 	}()
-	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+	if err := run.checkRequest(); err != nil {
 		return nil, err
 	}
-	if sourceTaskID == "" {
-		return nil, &PreconditionError{Reason: "blocked task ID is required"}
+	if err := run.openState(); err != nil {
+		return nil, err
 	}
-	if reason == "" {
-		return nil, &PreconditionError{Reason: "reason is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
-	}
+	err := lifecycleMutation(run.bb, authority)(run.mutate)
+	return run.report(err)
+}
 
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts)
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, WrapLifecycleError(operation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
-	}
-
-	var result ApplyDependencyRepairResult
-	now := time.Now().UTC()
-	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
-		defer func() {
-			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
-		}()
-		source := state.FindTask(sourceTaskID)
-		if source == nil {
-			return &errors.NotFoundError{Entity: "task", ID: sourceTaskID}
-		}
-		copy := *source
-		observed = &copy
-		lifecycleRequest, err := NewLifecycleRequest(operation, source, agentID, authority, opts, reason)
-		if err != nil {
-			return err
-		}
-		receipt, err := CheckLifecycleRequest(source, lifecycleRequest, state.Agents)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			result = ApplyDependencyRepairResult{SourceTaskID: sourceTaskID, LifecycleOutcome: LifecycleReplayOutcome(source, receipt, agentID)}
-			return errLifecycleReplay
-		}
-		if source.Status != models.TaskStatusBlocked {
-			return WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair from task %s in status %s (must be BLOCKED)", sourceTaskID, source.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-		if source.RepairRequest == nil {
-			return WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("blocked task %s has no repair request", sourceTaskID)}, models.LifecycleStateChanged, "requery", "none")
-		}
-
-		request, err := normalizeRepairRequest(source.RepairRequest, sourceTaskID)
-		if err != nil {
-			return err
-		}
-		if request.Operation != models.RepairOperationApplyDependencyRepair {
-			return &PreconditionError{Reason: fmt.Sprintf("blocked task %s repair request operation is %q, want %q", sourceTaskID, request.Operation, models.RepairOperationApplyDependencyRepair)}
-		}
-		consumed, err := json.Marshal(request)
-		if err != nil {
-			return err
-		}
-		consumedDigest := lifecycleDigest(consumed)
-
-		updates, err := applyDependencyUpdatesInState(state, resolver, source, operation, request.DependencyUpdates, agentID, reason, now, map[string]any{
-			"manual":                 true,
-			"operation":              models.RepairOperationApplyDependencyRepair,
-			"repair_source_task":     sourceTaskID,
-			"repair_evidence":        append([]string{}, request.Evidence...),
-			"repair_validation":      append([]string{}, request.Validation...),
-			"repair_request_cleared": true,
-			"repair_request_digest":  consumedDigest,
-		})
-		if err != nil {
-			return err
-		}
-		sourceUpdated := slices.ContainsFunc(updates, func(update AppliedDependencyUpdate) bool {
-			return update.TaskID == sourceTaskID
-		})
-		affectedTaskIDs := make([]string, len(updates))
-		for i, update := range updates {
-			affectedTaskIDs[i] = update.TaskID
-		}
-		if !sourceUpdated {
-			note := "applied dependency repair without changing the source task dependencies"
-			source.History = append(source.History, models.TaskHistoryEntry{
-				Time:   now,
-				Event:  models.TaskEventDependencyRepairApplied,
-				Agent:  &agentID,
-				Reason: &reason,
-				Note:   &note,
-				Extra: map[string]any{
-					"manual":                 true,
-					"operation":              models.RepairOperationApplyDependencyRepair,
-					"affected_task_ids":      append([]string{}, affectedTaskIDs...),
-					"repair_evidence":        append([]string{}, request.Evidence...),
-					"repair_validation":      append([]string{}, request.Validation...),
-					"repair_request_cleared": true,
-					"repair_request_digest":  consumedDigest,
-				},
-			})
-		}
-		source.RepairRequest = nil
-
-		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
-			return err
-		}
-
-		result = ApplyDependencyRepairResult{
-			SourceTaskID: sourceTaskID,
-			Updates:      updates,
-		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(source, lifecycleRequest, models.LifecycleProjection{}, state.Agents)
-		if err == nil {
-			effects = "unknown"
-		}
+// checkRequest refuses a malformed request before any state is read.
+func (r *applyRepairRun) checkRequest() error {
+	if err := ValidateLifecycleRequestOptions(r.opts); err != nil {
 		return err
-	})
+	}
+	if r.sourceTaskID == "" {
+		return &PreconditionError{Reason: "blocked task ID is required"}
+	}
+	if r.reason == "" {
+		return &PreconditionError{Reason: "reason is required"}
+	}
+	if r.agentID == "" {
+		return &PreconditionError{Reason: "orchestrator agent ID is required"}
+	}
+	return nil
+}
+
+// openState binds the request blackboard and the pipeline resolver.
+func (r *applyRepairRun) openState() error {
+	lp := paths.New(r.projectRoot)
+	r.logPath = lp.LogPath()
+	r.bb = RequestBlackboard(lp.StatePath(), r.authority, r.opts)
+	resolver, _, err := loadResolver(r.projectRoot)
+	if err != nil {
+		return WrapLifecycleError(applyDependencyRepairOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+	}
+	r.resolver = resolver
+	r.now = time.Now().UTC()
+	return nil
+}
+
+// mutate is the locked callback and the only place the batch is published:
+// admission, request resolution, the batch step (every expected list compared
+// before any write), the source audit, request clearing, complete-candidate
+// validation and receipt completion, in that order.
+func (r *applyRepairRun) mutate(state *models.State) (callbackErr error) {
+	defer func() {
+		callbackErr = WrapLifecycleError(applyDependencyRepairOperation, r.observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+	}()
+	source, request, err := r.admit(state)
+	if err != nil {
+		return err
+	}
+	consumed, err := consumeRepairRequest(source)
+	if err != nil {
+		return err
+	}
+	updates, err := applyDependencyUpdatesInState(state, r.resolver, source, applyDependencyRepairOperation, consumed.request.DependencyUpdates, r.agentID, r.reason, r.now, consumed.batchAudit(source.ID))
+	if err != nil {
+		return err
+	}
+	consumed.auditSource(source, updates, r.agentID, r.reason, r.now)
+	source.RepairRequest = nil
+	if err := statevalidate.ValidateCandidate(state, r.bb.ReadSnapshot, r.projectRoot, false, os.Stderr); err != nil {
+		return err
+	}
+	return r.complete(state, source, request, updates)
+}
+
+// admit looks the source up, records the observed copy, checks the request
+// receipt (an already completed request is a replay) and refuses a source that
+// is not BLOCKED or carries no repair request.
+func (r *applyRepairRun) admit(state *models.State) (*models.Task, LifecycleRequest, error) {
+	source := state.FindTask(r.sourceTaskID)
+	if source == nil {
+		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: r.sourceTaskID}
+	}
+	copy := *source
+	r.observed = &copy
+	request, err := NewLifecycleRequest(applyDependencyRepairOperation, source, r.agentID, r.authority, r.opts, r.reason)
+	if err != nil {
+		return nil, request, err
+	}
+	receipt, err := CheckLifecycleRequest(source, request, state.Agents)
+	if err != nil {
+		return nil, request, err
+	}
+	if receipt != nil {
+		r.result = ApplyDependencyRepairResult{SourceTaskID: r.sourceTaskID, LifecycleOutcome: LifecycleReplayOutcome(source, receipt, r.agentID)}
+		return nil, request, errLifecycleReplay
+	}
+	if source.Status != models.TaskStatusBlocked {
+		return nil, request, WrapLifecycleError(applyDependencyRepairOperation, source, &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair from task %s in status %s (must be BLOCKED)", r.sourceTaskID, source.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+	if source.RepairRequest == nil {
+		return nil, request, WrapLifecycleError(applyDependencyRepairOperation, source, &PreconditionError{Reason: fmt.Sprintf("blocked task %s has no repair request", r.sourceTaskID)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+	}
+	return source, request, nil
+}
+
+// complete records the result and completes the lifecycle request.
+func (r *applyRepairRun) complete(state *models.State, source *models.Task, request LifecycleRequest, updates []AppliedDependencyUpdate) error {
+	r.result = ApplyDependencyRepairResult{
+		SourceTaskID: r.sourceTaskID,
+		Updates:      updates,
+	}
+	var err error
+	r.result.LifecycleOutcome, err = CompleteLifecycleRequest(source, request, models.LifecycleProjection{}, state.Agents)
+	if err == nil {
+		r.effects = LifecycleEffectsUnknown
+	}
+	return err
+}
+
+// report maps the mutation outcome to the operation result: a replay returns
+// the original completion, any other failure is wrapped as a changed state, and
+// a commit is followed by the activity log.
+func (r *applyRepairRun) report(err error) (*ApplyDependencyRepairResult, error) {
 	if isLifecycleReplay(err) {
-		return &result, nil
+		return &r.result, nil
 	}
 	if err != nil {
-		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to apply dependency repair: %w", err), models.LifecycleStateChanged, "requery", effects)
+		return nil, WrapLifecycleError(applyDependencyRepairOperation, r.observed, fmt.Errorf("failed to apply dependency repair: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, r.effects)
 	}
-
-	updated := make([]string, 0, len(result.Updates))
-	for _, update := range result.Updates {
+	updated := make([]string, 0, len(r.result.Updates))
+	for _, update := range r.result.Updates {
 		updated = append(updated, fmt.Sprintf("%s=[%s]", update.TaskID, strings.Join(update.CanonicalDependencies, ",")))
 	}
 	logEntry := log.Entry{
-		Timestamp: now,
-		Agent:     agentID,
-		Action:    models.RepairOperationApplyDependencyRepair,
-		Task:      &sourceTaskID,
-		Detail:    fmt.Sprintf("updated=%s: %s", strings.Join(updated, " "), reason),
+		Timestamp: r.now,
+		Agent:     r.agentID,
+		Action:    applyDependencyRepairOperation,
+		Task:      &r.sourceTaskID,
+		Detail:    fmt.Sprintf("updated=%s: %s", strings.Join(updated, " "), r.reason),
 	}
-	if err := log.New(lp.LogPath()).Append(logEntry); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
+	if err := log.New(r.logPath).Append(logEntry); err != nil {
+		r.result.Warnings = append(r.result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
 	}
-
-	return &result, nil
+	return &r.result, nil
 }
 
 // applyDependencyUpdatesInState commits one declarative dependency-repair batch
@@ -246,7 +272,7 @@ func applyDependencyUpdatesInState(state *models.State, resolver *pipeline.Resol
 			return nil, &PreconditionError{Reason: fmt.Sprintf("cannot apply dependency repair to terminal task %s (%s)", task.ID, task.Status)}
 		}
 		if !slices.Equal(task.DependsOn, update.ExpectedDependsOn) {
-			return nil, WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, "requery", "none")
+			return nil, WrapLifecycleError(operation, source, &PreconditionError{Reason: fmt.Sprintf("task %s dependencies changed since the repair request was created: got %v, expected %v", task.ID, task.DependsOn, update.ExpectedDependsOn)}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 		}
 		for _, dependencyID := range update.DesiredDependsOn {
 			if dependencyID == task.ID {

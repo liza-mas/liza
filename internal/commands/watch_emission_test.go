@@ -381,7 +381,7 @@ func TestRunChecksValidatesTheSuppliedSnapshot(t *testing.T) {
 
 	found := false
 	for _, alert := range RunChecksWithStateSnapshot(snapshot, config).Alerts {
-		found = found || alert.Category == invalidStateCategory
+		found = found || alert.Category == "INVALID STATE"
 	}
 	if !found {
 		t.Fatal("invalid snapshot was not reported: validation re-read the valid state file")

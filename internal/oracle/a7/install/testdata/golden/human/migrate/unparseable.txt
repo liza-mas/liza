@@ -1,0 +1,5 @@
+--- invocation migrate
+exit 1
+--- stdout
+--- stderr
+Error: failed to parse state file: failed to parse state: yaml: line 1: did not find expected node content

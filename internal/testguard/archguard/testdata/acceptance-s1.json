@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-hold-e0", "approved_reference_id": "dec-d23"},
+    {"obligation_id": "AC-hold-sync-clean", "file": "Makefile", "assertion": "lint target (ci-prepare syncs embedded copies) exits 0 and leaves the tree clean", "command_index": 1},
+    {"obligation_id": "AC-first-coding-task", "approved_reference_id": "arch-sequence"},
+    {"obligation_id": "AC-package-helpers", "file": "internal/testguard/archguard/s1_measure_test.go", "assertion": "TestProductionFilesAppliesExclusions, TestProductionFilesToleratesMissingRoots, TestParseProductionParsesAndNamesRelativePathOnError; areas_list_test.go TestModulePath, TestModulePathParsing", "command_index": 0},
+    {"obligation_id": "AC-s1-measurement", "file": "internal/testguard/archguard/s1_measure_test.go", "assertion": "TestMeasureFuncs, TestLineCount, TestMeasureOffendersAppliesStrictThresholds", "command_index": 0},
+    {"obligation_id": "AC-s1-invariants", "file": "internal/testguard/archguard/s1_check_test.go", "assertion": "TestCheckS1 cases: unlisted offender, ceiling overrun, stale entry, renamed offender, above-snapshot, duplicates, S2 validity; live TestS1SizeGuard", "command_index": 0},
+    {"obligation_id": "AC-start-snapshot", "file": "internal/testguard/archguard/areas_list_test.go", "assertion": "TestStartSnapshotShape (33 file keys, 93 function keys) and TestEveryRatchetKeyIsInTheSnapshotOnceAndPlacedInOneArea", "command_index": 0},
+    {"obligation_id": "AC-area-data", "file": "internal/testguard/archguard/areas_list_test.go", "assertion": "TestAreasListsA1ToA9OnceInOrder and TestAreaFileNamesAnExistingDataFile", "command_index": 0},
+    {"obligation_id": "AC-area-placement", "approved_reference_id": "arch-areas"},
+    {"obligation_id": "AC-lint-target", "file": "Makefile", "assertion": "lint-archguard runs go test -count=1 on the package from lint-nosync; make lint exits 0", "command_index": 1},
+    {"obligation_id": "AC-adr", "approved_reference_id": "arch-scope1"},
+    {"obligation_id": "AC-stdlib-only", "approved_reference_id": "goal-structure"},
+    {"obligation_id": "AC-env-safe-messages", "file": "internal/testguard/archguard/s1_check_test.go", "assertion": "TestCheckS1MessagesNameLimitAndAreaFile asserts messages carry no absolute path; TestCheckS1MeasurementAndLimitInEveryMessage asserts key, measurement or its absence, limit and area file per violation kind; TestParseProductionParsesAndNamesRelativePathOnError", "command_index": 0},
+    {"obligation_id": "AC-e1-proof", "file": "Makefile", "assertion": "make test under env -i runs the package through ./...", "command_index": 2}
+  ]
+}

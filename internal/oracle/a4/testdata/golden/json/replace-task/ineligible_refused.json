@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "effects": "none",
+        "operation": "replace-task",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "m1",
+        "task_status": "MERGED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "replace-task: ALREADY_TRANSITIONED (safe_action=stop): modification function failed: replace-task: ALREADY_TRANSITIONED (safe_action=stop): source is no longer eligible for replacement"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "replace-task",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "m1",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

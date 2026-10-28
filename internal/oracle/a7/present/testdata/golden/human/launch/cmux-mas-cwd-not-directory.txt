@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: --cwd "<OTHER>/file" is not a directory
+--- invocations
+none

@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: gemini
+source: flag
+backend: cli
+executable: gemini
+args: -p --output-format stream-json
+prompt_transport: stdin
+contract_key: gemini
+[stderr]
+Warning: no Liza contract symlink found for gemini. Agents may not find the behavioral contract.
+Run 'liza init --gemini' to create one.

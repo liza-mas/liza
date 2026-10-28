@@ -1,0 +1,4 @@
+exit_code: 0
+stdout:
+Eligible to recover integration-global-1; report <SHA:REPORT> would be preserved at refs/integration-recovery/integration-global-1
+stderr:

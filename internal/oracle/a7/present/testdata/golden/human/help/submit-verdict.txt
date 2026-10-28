@@ -1,0 +1,43 @@
+exit 0
+--- stdout
+Atomically submit a review verdict (APPROVED or REJECTED) for a task.
+Used by reviewer agents to approve or reject work.
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in a reviewing status (resolved from pipeline config)
+- --review-commit must be the full immutable commit SHA actually reviewed
+- For REJECTED verdicts, a rejection reason of at most 4096 bytes is required
+(via --reason, --reason-file, or positional arg)
+A generation-fenced substantive verdict is retained as quarantined evidence;
+it cannot change task or agent state. Conflicting evidence requires an
+authorized orchestrator's reconcile-verdict decision before approval or merge.
+For APPROVED verdict:
+- status = role-pair's approved status (e.g. CODE_APPROVED, CODING_PLAN_APPROVED)
+- approved_by = <agent-id>
+- Clear rejection_reason
+- Clear reviewing_by and review_lease_expires
+- Add history entry with event "approved"
+For REJECTED verdict:
+- status = role-pair's rejected status (e.g. CODE_REJECTED, CODING_PLAN_REJECTED)
+- rejection_reason = <reason>
+- Increment review_cycles_current and review_cycles_total
+- Clear reviewing_by and review_lease_expires
+- Add history entry with event "rejected" and reason
+Usage:
+liza submit-verdict <task-id> <APPROVED|REJECTED> [rejection-reason] [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for submit-verdict
+--impact string impact classification (standard, significant, architecture)
+--json output result as structured JSON
+--reason string rejection reason, at most 4096 bytes (alternative to positional argument, avoids shell quoting issues)
+--reason-file string read rejection reason from a file, or - for stdin (mutually exclusive with --reason and positional argument)
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+--review-commit string required full commit SHA actually reviewed
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

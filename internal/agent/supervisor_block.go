@@ -3,28 +3,16 @@ package agent
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // supervisorBlockBeforeModifyTestHook runs just before a supervisor block's
 // BLOCKED transaction; tests use it to move the task in between.
 var supervisorBlockBeforeModifyTestHook func()
-
-// supervisorTaskSlot names the ownership agentID holds on task: "doer"
-// (assigned_to), "reviewer" (reviewing_by), or "" for none.
-func supervisorTaskSlot(task *models.Task, agentID string) string {
-	switch {
-	case task.AssignedTo != nil && *task.AssignedTo == agentID:
-		return "doer"
-	case task.ReviewingBy != nil && *task.ReviewingBy == agentID:
-		return "reviewer"
-	}
-	return ""
-}
 
 // blockTaskFromSupervisor marks a task this agent owns as BLOCKED and releases
 // its owners. A doer's uncommitted work is first saved as a WIP commit on the
@@ -50,18 +38,21 @@ func blockTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, auth
 	if task == nil {
 		return nil
 	}
-	slot := supervisorTaskSlot(task, authority.ID)
+	slot := ops.SupervisorTaskSlot(task, authority.ID)
 	if slot == "" {
 		GetLogger().Warn("Supervisor block skipped: task is not owned by this agent", "task_id", taskID, "agent_id", authority.ID)
 		return nil
 	}
 	expected := models.TaskTransitionID(task)
-	if slot == "doer" {
+	if slot == roles.ClaimDoer {
 		commitBlockedDoerWIP(projectRoot, authority, taskID, reason)
 	}
-	return transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
-		return supervisorTaskSlot(t, authority.ID) == slot && models.TaskTransitionID(t) == expected
-	})
+	owner := ops.SupervisorBlockOwnerDoer
+	if slot == roles.ClaimReviewer {
+		owner = ops.SupervisorBlockOwnerReviewer
+	}
+	_, err = applySupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, ops.SupervisorBlockExpectation{Owner: owner, TransitionID: expected})
+	return err
 }
 
 // blockExecutingTaskFromSupervisor is blockTaskFromSupervisor for a task that
@@ -93,12 +84,8 @@ func blockExecutingTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID str
 	// in the executing state observed here.
 	expected := models.TaskTransitionID(task)
 	commitBlockedDoerWIP(projectRoot, authority, taskID, reason)
-	matched := false
-	err = transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
-		matched = supervisorTaskSlot(t, authority.ID) == "doer" && models.TaskTransitionID(t) == expected
-		return matched
-	})
-	return matched && err == nil, err
+	outcome, err := applySupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, ops.SupervisorBlockExpectation{Owner: ops.SupervisorBlockOwnerDoer, TransitionID: expected})
+	return outcome == ops.SupervisorBlockApplied && err == nil, err
 }
 
 // blockReleasedTaskFromSupervisor blocks the task whose claim this
@@ -107,7 +94,7 @@ func blockExecutingTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID str
 // named by released, never on another unowned task. Once released the task is
 // no longer executing, so no WIP commit is possible; the work stays in the
 // kept worktree and the next claim adopts it.
-func blockReleasedTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, authority models.AgentAuthority, released releasedTaskClaim, reason string) error {
+func blockReleasedTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID string, authority models.AgentAuthority, released ops.ReleasedTaskClaim, reason string) error {
 	if released.TaskID != taskID || released.TransitionID == "" {
 		GetLogger().Warn("Supervisor block skipped: this exit released no claim on the task", "task_id", taskID, "agent_id", authority.ID)
 		return nil
@@ -116,9 +103,8 @@ func blockReleasedTaskFromSupervisor(bb *db.Blackboard, projectRoot, taskID stri
 	if ptErr != nil {
 		return fmt.Errorf("load pipeline transitions for supervisor block: %w", ptErr)
 	}
-	return transitionSupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, func(t *models.Task) bool {
-		return t.AssignedTo == nil && t.ReviewingBy == nil && models.TaskTransitionID(t) == released.TransitionID
-	})
+	_, err := applySupervisorBlock(bb, pipelineTransitions, taskID, authority, reason, ops.SupervisorBlockExpectation{Owner: ops.SupervisorBlockOwnerReleased, TransitionID: released.TransitionID})
+	return err
 }
 
 // commitBlockedDoerWIP saves a blocked doer's uncommitted work. A refusal or
@@ -141,43 +127,15 @@ func commitBlockedDoerWIP(projectRoot string, authority models.AgentAuthority, t
 	GetLogger().Info("Committed blocked task work in progress", "commit", result.SHA, "task_id", taskID, "agent_id", authority.ID)
 }
 
-// transitionSupervisorBlock moves the task to BLOCKED if stillExpected holds
-// inside the transaction.
-func transitionSupervisorBlock(bb *db.Blackboard, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, taskID string, authority models.AgentAuthority, reason string, stillExpected func(*models.Task) bool) error {
-	agentID := authority.ID
+// applySupervisorBlock asks ops to move the task to BLOCKED while the observed
+// owner and lifecycle still hold, and reports a stale observation.
+func applySupervisorBlock(bb *db.Blackboard, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, taskID string, authority models.AgentAuthority, reason string, expected ops.SupervisorBlockExpectation) (ops.SupervisorBlockOutcome, error) {
 	if supervisorBlockBeforeModifyTestHook != nil {
 		supervisorBlockBeforeModifyTestHook()
 	}
-	return ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
-		task := s.FindTask(taskID)
-		if task == nil {
-			return nil
-		}
-		if !stillExpected(task) {
-			GetLogger().Warn("Supervisor block skipped: task lifecycle moved before the block; left to its current owner", "task_id", taskID, "agent_id", agentID)
-			return nil
-		}
-		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
-			return err
-		}
-		now := time.Now().UTC()
-		task.BlockedReason = &reason
-		task.BlockedQuestions = []string{
-			"Is the task spec unclear or incomplete?",
-			"Is there an environment or tooling issue preventing progress?",
-		}
-		task.AssignedTo = nil
-		task.LeaseExpires = nil
-		models.AdvanceLifecycle(task)
-		task.ReviewingBy = nil
-		task.ReviewLeaseExpires = nil
-		ops.ReleaseAgentsForTask(s, taskID)
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventBlocked,
-			Agent:  &agentID,
-			Reason: &reason,
-		})
-		return nil
-	})
+	outcome, err := ops.BlockSupervisorTask(bb, pipelineTransitions, authority, taskID, reason, expected)
+	if err == nil && outcome == ops.SupervisorBlockStale {
+		GetLogger().Warn("Supervisor block skipped: task lifecycle moved before the block; left to its current owner", "task_id", taskID, "agent_id", authority.ID)
+	}
+	return outcome, err
 }

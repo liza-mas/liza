@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+Stop the Liza system by setting config.mode to STOPPED in state.yaml.
+Agents will detect the STOPPED mode and exit cleanly at their next check.
+This provides a graceful shutdown of all agents.
+This is different from pause:
+- PAUSED: Agents block and wait for resume
+- STOPPED: Agents exit (must be restarted manually)
+Use this for:
+- Ending a work session
+- System maintenance requiring agent restart
+- Shutting down before system updates
+Usage:
+liza stop [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for stop
+--reason string reason for stopping the system
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+recorded: [specs/drift/source.md#Counters (repinned)]
+--- stderr

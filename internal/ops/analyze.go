@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/analysis"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -17,6 +18,23 @@ type analyzeTestHooks struct {
 }
 
 var testAnalyzeHooks *analyzeTestHooks
+
+// providerAuditDegradationPattern is the pattern name internal/analysis gives
+// qualifying provider-audit evidence; analysis declares no constant for it.
+const providerAuditDegradationPattern = "provider_audit_degradation"
+
+// circuitBreakerReportFileMode is the permission of the written breaker report.
+const circuitBreakerReportFileMode = 0o644
+
+// History Extra keys the rejection-RCA gate writes (rejection_rca.go,
+// submit_verdict.go) and the telemetry reads back.
+const (
+	rejectionRCABlockedClassKey     = "blocked_class"
+	rejectionRCAGatedAtKey          = "gated_at"
+	rejectionRCAFirstRejectionAtKey = "first_rejection_at"
+	rejectionRCACausesKey           = "causes"
+	rejectionRCARecoveryPathKey     = "recovery_path"
+)
 
 // AnalyzeResult contains the outcome of a circuit breaker analysis.
 type AnalyzeResult struct {
@@ -71,6 +89,9 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 	if testAnalyzeHooks != nil && testAnalyzeHooks.beforeModify != nil {
 		testAnalyzeHooks.beforeModify()
 	}
+	// The catalog is captured once, outside the transaction; the locked state's
+	// config supplies the agent_tools overrides the provider keys apply.
+	catalogTools := agentlaunch.BuiltInAgentTools()
 
 	var committed analysis.PatternResult
 	var committedReportPath string
@@ -83,7 +104,7 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 		rejectionRCA = deriveRejectionRCATelemetry(s.Tasks)
 		var consideredAnomalies []models.Anomaly
 		var suppressedCount int
-		committed, consideredAnomalies, suppressedCount = analysis.DetectUnacknowledgedPatterns(s)
+		committed, consideredAnomalies, suppressedCount = analysis.DetectUnacknowledgedPatterns(s, agentlaunch.NewProviderKeys(catalogTools, s.Config).Key)
 		s.CircuitBreaker.LastCheck = timestamp
 
 		activeResponse := s.CircuitBreaker.CurrentResponse
@@ -92,7 +113,7 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 			committedReportPath = activeResponse.ReportFile
 			return nil
 		}
-		if activeResponse != nil && activeResponse.Pattern == "provider_audit_degradation" && activeResponse.Response == models.CircuitBreakerResponseCheckpoint {
+		if activeResponse != nil && activeResponse.Pattern == providerAuditDegradationPattern && activeResponse.Response == models.CircuitBreakerResponseCheckpoint {
 			if committed.Response != models.CircuitBreakerResponseHalt {
 				committed = patternResultFromResponse(activeResponse)
 				committedReportPath = activeResponse.ReportFile
@@ -104,20 +125,20 @@ func Analyze(projectRoot string) (*AnalyzeResult, error) {
 		}
 
 		if committed.Pattern == "" {
-			s.CircuitBreaker.Status = "OK"
+			s.CircuitBreaker.Status = circuitBreakerStatusOK
 			s.CircuitBreaker.CurrentTrigger = nil
 			if s.Config.Mode == models.SystemModeCircuitBreakerTripped {
 				s.Config.Mode = models.SystemModeRunning
 			}
 			s.CircuitBreaker.History = append(s.CircuitBreaker.History, models.CircuitBreakerHistory{
 				Timestamp: timestamp,
-				Result:    "OK",
+				Result:    circuitBreakerStatusOK,
 			})
 			return nil
 		}
 
 		report := analysis.GenerateReport(committed, consideredAnomalies, timestamp, suppressedCount)
-		if err := os.WriteFile(reportPath, []byte(report), 0644); err != nil {
+		if err := os.WriteFile(reportPath, []byte(report), circuitBreakerReportFileMode); err != nil {
 			return fmt.Errorf("failed to write report: %w", err)
 		}
 		committedReportPath = reportPath
@@ -172,11 +193,11 @@ func deriveRejectionRCATelemetry(tasks []models.Task) *RejectionRCATelemetry {
 		for _, entry := range task.History {
 			switch entry.Event {
 			case models.TaskEventBlocked:
-				if entry.Extra["blocked_class"] != models.BlockedReasonRejectionRCARequired {
+				if entry.Extra[rejectionRCABlockedClassKey] != models.BlockedReasonRejectionRCARequired {
 					continue
 				}
-				at, atOK := historyTime(entry.Extra, "gated_at")
-				first, firstOK := historyTime(entry.Extra, "first_rejection_at")
+				at, atOK := historyTime(entry.Extra, rejectionRCAGatedAtKey)
+				first, firstOK := historyTime(entry.Extra, rejectionRCAFirstRejectionAtKey)
 				if atOK && firstOK {
 					intervals = append(intervals, at.Sub(first))
 				}
@@ -185,19 +206,19 @@ func deriveRejectionRCATelemetry(tasks []models.Task) *RejectionRCATelemetry {
 				}
 				gatedAt = append(gatedAt, at)
 			case models.TaskEventRejectionRCARecorded:
-				cycle, _ := entry.Extra["gated_at"].(string)
-				cycleCauses[cycle] = historyStrings(entry.Extra, "causes")
+				cycle, _ := entry.Extra[rejectionRCAGatedAtKey].(string)
+				cycleCauses[cycle] = historyStrings(entry.Extra, rejectionRCACausesKey)
 			case models.TaskEventRejectionRCAResumed:
-				if path, ok := entry.Extra["recovery_path"].(string); ok && path != "" {
+				if path, ok := entry.Extra[rejectionRCARecoveryPathKey].(string); ok && path != "" {
 					telemetry.RecoveryPaths = countInto(telemetry.RecoveryPaths, path)
 				}
 			}
 		}
 		for _, causes := range cycleCauses {
 			for _, cause := range causes {
-				if !models.IsKnownRejectionCause(cause) {
+				if !models.IsKnownRejectionCause(models.RejectionCause(cause)) {
 					telemetry.UnrecognizedCauses++
-					cause = models.RejectionCauseUnknown
+					cause = string(models.RejectionCauseUnknown)
 				}
 				telemetry.Causes = countInto(telemetry.Causes, cause)
 			}
@@ -309,7 +330,7 @@ func applyCircuitBreakerResponse(state *models.State, result analysis.PatternRes
 	case models.CircuitBreakerResponseWarning:
 		// Historical evidence is observation-only; preserve all active state.
 	case models.CircuitBreakerResponseCheckpoint:
-		state.CircuitBreaker.Status = "OK"
+		state.CircuitBreaker.Status = circuitBreakerStatusOK
 		state.CircuitBreaker.CurrentTrigger = nil
 		state.Sprint.Status = models.SprintStatusCheckpoint
 		// Stamp the checkpoint the way ops.SprintCheckpoint does. Without it a
@@ -324,8 +345,8 @@ func applyCircuitBreakerResponse(state *models.State, result analysis.PatternRes
 		state.PendingCheckpointSummary = &models.PendingCheckpointSummary{At: timestamp, Since: since}
 		state.CircuitBreaker.CurrentResponse = circuitBreakerResponse(result, timestamp, reportPath)
 	case models.CircuitBreakerResponseHalt:
-		historyResult = "TRIGGERED"
-		state.CircuitBreaker.Status = "TRIGGERED"
+		historyResult = circuitBreakerStatusTriggered
+		state.CircuitBreaker.Status = circuitBreakerStatusTriggered
 		state.CircuitBreaker.CurrentTrigger = &models.CircuitBreakerTrigger{
 			Timestamp:  timestamp,
 			Pattern:    result.Pattern,

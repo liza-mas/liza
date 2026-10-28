@@ -1,0 +1,23 @@
+{
+  "error": {
+    "code": "permission_denied",
+    "details": {
+      "effects": "none",
+      "operation": "fixture",
+      "outcome": "FORBIDDEN",
+      "safe_action": "stop",
+      "task_id": "task-executing",
+      "task_status": "IMPLEMENTING_CODE"
+    },
+    "message": "fixture: FORBIDDEN (safe_action=stop): validation failed: fixture precondition"
+  },
+  "ok": false,
+  "result": {
+    "effects": "none",
+    "operation": "fixture",
+    "outcome": "FORBIDDEN",
+    "safe_action": "stop",
+    "task_id": "task-executing",
+    "task_status": "IMPLEMENTING_CODE"
+  }
+}

@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// provisionInstanceIDWidth is how many leading characters of a runtime-input
+// instance ID the provision summary shows.
+const provisionInstanceIDWidth = 16
+
 var provisionCmd = &cobra.Command{
 	Use:   "provision --record --task <task-id> --input <input-id> --file <envelope>",
 	Short: "Record an operator-produced runtime input instance",
@@ -64,7 +68,7 @@ After recording, restore a task blocked for a missing input with %s.`, brand.Com
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Runtime input %s (%s) %s: instance %s is %s for %s.\n",
-			result.InputID, result.Recipe, result.Outcome, result.InstanceID[:16], result.State, strings.Join(result.Tasks, ", "))
+			result.InputID, result.Recipe, result.Outcome, result.InstanceID[:provisionInstanceIDWidth], result.State, strings.Join(result.Tasks, ", "))
 		return nil
 	},
 }

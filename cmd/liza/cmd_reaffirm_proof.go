@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -58,7 +59,7 @@ section refuses again. It grants no status change and no approval of the work.`,
 		if err != nil {
 			return err
 		}
-		if err := validateRoleType(resolver, authority.ID, "orchestrator"); err != nil {
+		if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 			return err
 		}
 		if err := validateAllowedOperation(resolver, authority.ID, "reaffirm-proof"); err != nil {
@@ -81,9 +82,13 @@ section refuses again. It grants no status change and no approval of the work.`,
 	},
 }
 
+// shortObjectIDWidth is how many leading characters of an object ID the human
+// output shows.
+const shortObjectIDWidth = 8
+
 func shortObjectID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
+	if len(id) > shortObjectIDWidth {
+		return id[:shortObjectIDWidth]
 	}
 	return id
 }

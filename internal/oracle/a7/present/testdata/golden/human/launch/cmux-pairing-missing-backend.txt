@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: cmux not found on PATH: exec: "cmux": executable file not found in $PATH
+--- invocations
+none

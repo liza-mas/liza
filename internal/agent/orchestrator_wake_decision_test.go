@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -74,9 +75,9 @@ func TestSupervisorOrchestratorRevalidatesSelectedWake(t *testing.T) {
 					case "aborted human note":
 						s.Sprint.Status = models.SprintStatusAborted
 					case "quota":
-						return WriteQuotaSignal(root, "codex", "test quota")
+						return providersignal.WriteQuotaSignal(root, "codex", "test quota")
 					case "provider unavailable":
-						return WriteProviderUnavailableSignal(root, "codex", "test unavailable")
+						return providersignal.WriteProviderUnavailableSignal(root, &providersignal.ProviderUnavailable{Provider: "codex", Message: "test unavailable"})
 					}
 					return nil
 				})

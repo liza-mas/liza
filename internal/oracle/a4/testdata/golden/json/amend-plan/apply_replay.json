@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": false,
+      "correction_id": "cp-1-amend-1",
+      "task_id": "cp-1"
+    }
+  }
+}

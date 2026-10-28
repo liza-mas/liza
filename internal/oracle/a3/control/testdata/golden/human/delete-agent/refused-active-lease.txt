@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: delete agent: agent coder-3 has active lease (expires <at 2099.01.01 00.00.00>Z), use --force to delete

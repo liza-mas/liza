@@ -19,7 +19,7 @@ func TestClassifyInfraClaimError(t *testing.T) {
 		name       string
 		err        error
 		wantInfra  bool
-		wantReason string
+		wantReason AgentDegradedReason
 	}{
 		{
 			name:       "cannot lock ref operation not permitted",
@@ -106,7 +106,7 @@ func TestMarkAndClearAgentDegraded(t *testing.T) {
 		ProjectRoot:    projectRoot,
 		AgentID:        "coder-1",
 		Role:           "coder",
-		Reason:         AgentDegradedWorktreeCreateFailed,
+		Reason:         string(AgentDegradedWorktreeCreateFailed),
 		LastTask:       "task-a",
 		CandidateTasks: []string{"task-a", "task-b"},
 		LastError:      "cannot lock ref: Operation not permitted",
@@ -175,7 +175,7 @@ func TestMarkAgentDegradedRejectsAuthorityActorMismatch(t *testing.T) {
 		ProjectRoot: projectRoot,
 		AgentID:     "coder-2",
 		Role:        "coder",
-		Reason:      AgentDegradedWorktreeCreateFailed,
+		Reason:      string(AgentDegradedWorktreeCreateFailed),
 		LastError:   "cannot create worktree",
 		Authority:   &authority,
 	})

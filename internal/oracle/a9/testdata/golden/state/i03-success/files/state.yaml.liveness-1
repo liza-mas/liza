@@ -1,0 +1,4 @@
+# before
+
+# after
+{"agent_id":"code-reviewer-1","generation":"<V1>","seq":1,"heartbeat":"<T1:fZ>","lease_expires":"<T1+1800s:fZ>","review_task":"task-1","review_lease_expires":"<T1+1800s:fZ>","review_seq":1}

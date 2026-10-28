@@ -1,0 +1,4 @@
+exit 1
+--- stdout
+--- stderr
+Error: invalid CLI: oracle-unknown (must be claude, codex, codex-acp, copilot, cursor, cursor-acp, devin, devin-acp, gemini, kimi, mistral, opencode, opencode-acp, pi, qwen, qwen-acp)

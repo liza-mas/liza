@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-start-commit", "approved_reference_id": "arch-scope4"},
+    {"obligation_id": "AC-e0-resolution", "approved_reference_id": "dec-d23"},
+    {"obligation_id": "AC-sync-clean", "approved_reference_id": "dec-d23"},
+    {"obligation_id": "AC-s1-counts", "approved_reference_id": "arch-areas"},
+    {"obligation_id": "AC-make-test-time", "approved_reference_id": "arch-scope4"},
+    {"obligation_id": "AC-benchmarks", "approved_reference_id": "arch-gate"},
+    {"obligation_id": "AC-env-safety", "approved_reference_id": "guard-tier1"},
+    {"obligation_id": "AC-record-boundary", "approved_reference_id": "arch-scope4"}
+  ]
+}

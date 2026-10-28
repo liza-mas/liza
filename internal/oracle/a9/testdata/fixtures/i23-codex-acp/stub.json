@@ -1,0 +1,21 @@
+{
+  "executables": {
+    "acpx": []
+  },
+  "calls": [
+    {
+      "commands": [
+        [
+          "stop"
+        ]
+      ],
+      "exit_code": 0
+    },
+    {
+      "exit_code": 0
+    },
+    {
+      "exit_code": 0
+    }
+  ]
+}

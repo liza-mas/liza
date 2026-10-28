@@ -101,7 +101,7 @@ func TestDeferredValidationKnownRedWithLiveFixIsNotRun(t *testing.T) {
 		t.Fatalf("a known-red skip recorded a discovery: %#v", state.Discovered)
 	}
 	_, blocked := deferredValidationGate(state, head)
-	if blocked == nil || blocked.Code != integrationProgressBlockedDeferredFailed || len(blocked.TaskIDs) != 0 || !strings.Contains(blocked.Guidance, "fix-1") {
+	if blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredFailed) || len(blocked.TaskIDs) != 0 || !strings.Contains(blocked.Guidance, "fix-1") {
 		t.Fatalf("gate = %#v, want failed naming fix-1 only in guidance", blocked)
 	}
 	if again := f.run(false); again.Outcome != "skipped" || again.Reason != "failed_at_head" {

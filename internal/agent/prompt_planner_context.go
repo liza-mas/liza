@@ -15,12 +15,32 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/prompts"
 	"github.com/liza-mas/liza/internal/referencecontract"
+	"github.com/liza-mas/liza/internal/roles"
+)
+
+// plannerArtifactKind is the kind of authority artifact a planner reads: the
+// architecture that bounds an architect's or the plan that bounds a coder's
+// work. It is rendered as text in the artifact pointer, converted at that boundary.
+type plannerArtifactKind string
+
+const (
+	plannerArtifactArchitecture plannerArtifactKind = "architecture"
+	plannerArtifactPlan         plannerArtifactKind = "plan"
+)
+
+const (
+	// foundationScopeHeading is the heading a master architecture gives the
+	// scope other scopes of its cohort depend on.
+	foundationScopeHeading = "Scope 0"
+	// generatedFoundationSuffix ends the persisted ID of the generated output
+	// at index 0, the foundation candidate of a legacy unanchored ref.
+	generatedFoundationSuffix = "-0"
 )
 
 // populatePlannerContext projects existing state into advisory navigation. It
 // creates no dependencies and never promotes unmerged artifacts to authority.
 func populatePlannerContext(task *models.Task, state *models.State, config SupervisorConfig, data *prompts.RoleContextData) error {
-	if data.RoleType != "doer" || (config.Role != models.RoleArchitect && config.Role != models.RoleCodePlanner) {
+	if data.RoleType != string(roles.RoleTypeDoer) || (config.Role != models.RoleArchitect && config.Role != models.RoleCodePlanner) {
 		return nil
 	}
 	data.ArchSection = paths.SplitRefFragment(task.ArchRef)
@@ -113,9 +133,9 @@ func plannerProviderTasks(task *models.Task, state *models.State, role string) (
 			continue
 		}
 		fragment := paths.SplitRefFragment(candidate.ArchRef)
-		if fragment == "Scope 0" || strings.HasPrefix(fragment, "Scope 0:") {
+		if fragment == foundationScopeHeading || strings.HasPrefix(fragment, foundationScopeHeading+":") {
 			mark(candidate.ID, "explicit Scope 0")
-		} else if fragment == "" && strings.HasPrefix(candidate.ID, candidate.CohortParentID()+"-") && strings.HasSuffix(candidate.ID, "-0") {
+		} else if fragment == "" && strings.HasPrefix(candidate.ID, candidate.CohortParentID()+"-") && strings.HasSuffix(candidate.ID, generatedFoundationSuffix) {
 			// Only the persisted canonical generated identity supplies the index;
 			// never turn it into an invented Scope heading or coding-unit ID.
 			mark(candidate.ID, "foundation candidate (generated output index 0; legacy unanchored ref)")
@@ -216,24 +236,24 @@ func plannerLineage(provider *models.Task, state *models.State) []*models.Task {
 	return lineage
 }
 
-func plannerProducedRefs(task *models.Task, kind string) []string {
+func plannerProducedRefs(task *models.Task, kind plannerArtifactKind) []string {
 	if task.AmendsPlan != "" {
 		return nil // Corrections amend the original owner's authority.
 	}
 	var refs []string
 	taskKind := plannerTaskKind(task)
 	for _, output := range task.Output {
-		if kind == "architecture" && taskKind == models.TaskTypeArchitecture && output.ArchRef != "" {
+		if kind == plannerArtifactArchitecture && taskKind == models.TaskTypeArchitecture && output.ArchRef != "" {
 			refs = appendUniqueString(refs, output.ArchRef)
 		}
-		if kind == "plan" && taskKind == models.TaskTypePlanning && output.PlanRef != "" {
+		if kind == plannerArtifactPlan && taskKind == models.TaskTypePlanning && output.PlanRef != "" {
 			refs = appendUniqueString(refs, output.PlanRef)
 		}
 	}
 	return refs
 }
 
-func plannerArtifactOwners(state *models.State, kind, ref string) []*models.Task {
+func plannerArtifactOwners(state *models.State, kind plannerArtifactKind, ref string) []*models.Task {
 	var exact, sameFile []*models.Task
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
@@ -258,7 +278,7 @@ func plannerArtifactOwners(state *models.State, kind, ref string) []*models.Task
 // Generated manifest ownership in the consumer's ancestry outranks historical
 // tasks elsewhere that reused a path or heading. Search each ancestry layer
 // together so a many-parent ambiguity cannot be resolved by iteration order.
-func plannerArtifactOwnersForTask(state *models.State, consumer *models.Task, kind, ref string) []*models.Task {
+func plannerArtifactOwnersForTask(state *models.State, consumer *models.Task, kind plannerArtifactKind, ref string) []*models.Task {
 	queue := []*models.Task{consumer}
 	seen := map[string]bool{}
 	var closestFileOwners []*models.Task
@@ -298,8 +318,8 @@ func plannerArtifactOwnersForTask(state *models.State, consumer *models.Task, ki
 	return plannerArtifactOwners(state, kind, ref)
 }
 
-func plannerArtifactPointer(producer *models.Task, kind, ref string, states ...*models.State) prompts.PlannerArtifactPointer {
-	pointer := prompts.PlannerArtifactPointer{Kind: kind, Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), ProducerID: producer.ID}
+func plannerArtifactPointer(producer *models.Task, kind plannerArtifactKind, ref string, states ...*models.State) prompts.PlannerArtifactPointer {
+	pointer := prompts.PlannerArtifactPointer{Kind: string(kind), Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), ProducerID: producer.ID}
 	if len(states) > 0 {
 		effective, err := ops.EffectivePlanReview(states[0], producer)
 		if err != nil {
@@ -322,7 +342,7 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 	lineage := plannerLineage(provider, state)
 	var artifacts []prompts.PlannerArtifactPointer
 	positions := map[string]int{}
-	add := func(kind, ref string, producer, consumer *models.Task) int {
+	add := func(kind plannerArtifactKind, ref string, producer, consumer *models.Task) int {
 		var owners []*models.Task
 		if producer == nil && ref != "" {
 			owners = plannerArtifactOwnersForTask(state, consumer, kind, ref)
@@ -330,7 +350,7 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 				producer = owners[0]
 			}
 		}
-		key := kind + "\x00" + paths.SplitRefFile(ref)
+		key := string(kind) + "\x00" + paths.SplitRefFile(ref)
 		if producer != nil {
 			key += "\x00" + producer.ID
 		} else if len(owners) > 1 {
@@ -345,7 +365,7 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 			artifacts[position].Refs = appendUniqueString(artifacts[position].Refs, ref)
 			return position
 		}
-		pointer := prompts.PlannerArtifactPointer{Kind: kind, Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), Unresolved: "no producing task attribution"}
+		pointer := prompts.PlannerArtifactPointer{Kind: string(kind), Ref: ref, Refs: []string{ref}, File: paths.SplitRefFile(ref), Unresolved: "no producing task attribution"}
 		if producer != nil {
 			pointer = plannerArtifactPointer(producer, kind, ref, state)
 		} else if len(owners) > 1 {
@@ -363,7 +383,7 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 	// Outputs supply author attribution, while scalar refs name inputs and
 	// must resolve through the actual producer rather than the consuming task.
 	for _, task := range lineage {
-		for _, kind := range []string{"architecture", "plan"} {
+		for _, kind := range []plannerArtifactKind{plannerArtifactArchitecture, plannerArtifactPlan} {
 			for _, ref := range plannerProducedRefs(task, kind) {
 				add(kind, ref, task, task)
 			}
@@ -371,20 +391,24 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 	}
 	for _, task := range lineage {
 		if plannerTaskKind(task) == models.TaskTypeCoding && task.PlanRef == "" {
-			position := add("plan", "", nil, task)
+			position := add(plannerArtifactPlan, "", nil, task)
 			artifacts[position].Unresolved = "coding descendants have no plan_ref"
 			artifacts[position].Units = append(artifacts[position].Units, prompts.PlannerUnitPointer{ID: task.ID, Status: string(task.Status)})
 		}
-		namedRefs := []struct{ kind, ref string }{{"architecture", task.ArchRef}, {"plan", task.PlanRef}}
+		type namedRef struct {
+			kind plannerArtifactKind
+			ref  string
+		}
+		namedRefs := []namedRef{{plannerArtifactArchitecture, task.ArchRef}, {plannerArtifactPlan, task.PlanRef}}
 		for _, output := range task.Output {
-			namedRefs = append(namedRefs, struct{ kind, ref string }{"architecture", output.ArchRef}, struct{ kind, ref string }{"plan", output.PlanRef})
+			namedRefs = append(namedRefs, namedRef{plannerArtifactArchitecture, output.ArchRef}, namedRef{plannerArtifactPlan, output.PlanRef})
 		}
 		for _, named := range namedRefs {
 			if named.ref == "" {
 				continue
 			}
 			position := add(named.kind, named.ref, nil, task)
-			if named.kind == "plan" && named.ref == task.PlanRef && plannerTaskKind(task) == models.TaskTypeCoding {
+			if named.kind == plannerArtifactPlan && named.ref == task.PlanRef && plannerTaskKind(task) == models.TaskTypeCoding {
 				artifacts[position].Units = append(artifacts[position].Units, prompts.PlannerUnitPointer{ID: task.ID, Status: string(task.Status), PlanRef: task.PlanRef})
 			}
 		}
@@ -402,9 +426,9 @@ func plannerProviderArtifacts(provider *models.Task, state *models.State) ([]pro
 }
 
 func plannerFormatPrecedent(task *models.Task, state *models.State, role string) *prompts.PlannerArtifactPointer {
-	kind := "architecture"
+	kind := plannerArtifactArchitecture
 	if role == models.RoleCodePlanner {
-		kind = "plan"
+		kind = plannerArtifactPlan
 	}
 	var candidates []*models.Task
 	for i := range state.Tasks {
@@ -446,7 +470,7 @@ func plannerMergedAt(task *models.Task) time.Time {
 var plannerCitationPattern = regexp.MustCompile("(?m)(?:`([^`\\n]+\\.[mM][dD]):([0-9]+)(?:[-–][0-9]+)?`|([A-Za-z0-9_./+@-]+\\.[mM][dD]):([0-9]+))")
 
 func populatePlannerRework(task *models.Task, repo *git.Git, data *prompts.RoleContextData) error {
-	if task.Iteration < 2 || data.PriorRejection == "" {
+	if task.Iteration < firstReworkIteration || data.PriorRejection == "" {
 		return nil
 	}
 	var rejection *models.TaskHistoryEntry

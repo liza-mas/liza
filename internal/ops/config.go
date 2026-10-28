@@ -33,6 +33,32 @@ type ConfigSetResult struct {
 	Outcome string `json:"outcome"`
 }
 
+// configSetOutcome is how an explicit configuration write ended. The result
+// fields that carry it are wire-visible strings, so it is converted where it
+// is stored.
+type configSetOutcome string
+
+const (
+	configSetUnchanged configSetOutcome = "unchanged"
+	configSetConflict  configSetOutcome = "conflict"
+	configSetSet       configSetOutcome = "set"
+	configSetReplaced  configSetOutcome = "replaced"
+	configSetRemoved   configSetOutcome = "removed"
+	configSetCleared   configSetOutcome = "cleared"
+	configSetFailed    configSetOutcome = "failed"
+)
+
+// configConflictExistingValue is the refusal detail naming a different value
+// already stored under the key.
+const configConflictExistingValue = "existing_value"
+
+// How the detected post-worktree command compares with the one being set.
+const (
+	postWorktreeDetectionMatch     = "match"
+	postWorktreeDetectionDifferent = "different"
+	postWorktreeDetectionNone      = "none"
+)
+
 // SetPostWorktreeCmd stores a command without executing it. Comparison and
 // mutation share one blackboard transaction, including the authority check.
 // Audit records go only to the process log, not the blackboard or activity log.
@@ -48,11 +74,11 @@ func SetPostWorktreeCmd(projectRoot string, input SetPostWorktreeCmdInput) (*Con
 	// This is observational evidence, not an activation decision. A mismatch
 	// includes conventional layouts the current detector does not yet support.
 	detected := projectdetect.DetectPostWorktreeCmd(projectRoot)
-	detection := "different"
+	detection := postWorktreeDetectionDifferent
 	if detected == "" {
-		detection = "none"
+		detection = postWorktreeDetectionNone
 	} else if detected == input.Command {
-		detection = "match"
+		detection = postWorktreeDetectionMatch
 	}
 
 	bb := db.For(paths.New(projectRoot).StatePath())
@@ -61,27 +87,27 @@ func SetPostWorktreeCmd(projectRoot string, input SetPostWorktreeCmdInput) (*Con
 		current := state.Config.PostWorktreeCmd
 		switch {
 		case current != nil && *current == input.Command:
-			result.Outcome = "unchanged"
+			result.Outcome = string(configSetUnchanged)
 		case current != nil && !input.Replace:
-			result.Outcome = "conflict"
+			result.Outcome = string(configSetConflict)
 			return &PreconditionError{
 				Reason:  PostWorktreeConfigKey + " is already set to a different command; use --replace with --reason to replace it",
-				Details: map[string]any{"key": PostWorktreeConfigKey, "conflict": "existing_value"},
+				Details: map[string]any{"key": PostWorktreeConfigKey, "conflict": configConflictExistingValue},
 			}
 		default:
 			command := input.Command
 			state.Config.PostWorktreeCmd = &command
-			result.Outcome = "set"
+			result.Outcome = string(configSetSet)
 			if current != nil {
-				result.Outcome = "replaced"
+				result.Outcome = string(configSetReplaced)
 			}
 		}
 		return nil
 	})
-	if err != nil && result.Outcome != "conflict" {
-		result.Outcome = "failed"
+	if err != nil && result.Outcome != string(configSetConflict) {
+		result.Outcome = string(configSetFailed)
 	}
-	actor := "operator"
+	actor := actorOperator
 	if input.Authority != nil {
 		actor = input.Authority.ID
 	}
@@ -174,28 +200,28 @@ func setIntegerConfig(projectRoot string, input SetPoolConfigInput, fieldFor fun
 		previous = *field
 		switch {
 		case previous == input.Value:
-			result.Outcome = "unchanged"
+			result.Outcome = string(configSetUnchanged)
 		case previous != 0 && !input.Replace:
-			result.Outcome = "conflict"
+			result.Outcome = string(configSetConflict)
 			return &PreconditionError{
 				Reason:  fmt.Sprintf("%s is already set to %d; use --replace with --reason to replace it", input.Key, previous),
-				Details: map[string]any{"key": input.Key, "conflict": "existing_value"},
+				Details: map[string]any{"key": input.Key, "conflict": configConflictExistingValue},
 			}
 		default:
 			*field = input.Value
-			result.Outcome = "set"
+			result.Outcome = string(configSetSet)
 			if previous != 0 {
-				result.Outcome = "replaced"
+				result.Outcome = string(configSetReplaced)
 			}
 		}
 		return nil
 	})
-	if err != nil && result.Outcome != "conflict" {
-		result.Outcome = "failed"
+	if err != nil && result.Outcome != string(configSetConflict) {
+		result.Outcome = string(configSetFailed)
 	}
 	mask := secretmask.New()
 	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%d value=%d reason=%q",
-		input.Key, result.Outcome, "operator", mask.MaskText(projectRoot), previous, input.Value, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
+		input.Key, result.Outcome, actorOperator, mask.MaskText(projectRoot), previous, input.Value, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %w", input.Key, err)
 	}
@@ -232,28 +258,28 @@ func SetRuntimeInputRegistry(projectRoot string, input SetRuntimeInputRegistryIn
 		previous = state.Config.RuntimeInputRegistry
 		switch {
 		case previous == input.Path:
-			result.Outcome = "unchanged"
+			result.Outcome = string(configSetUnchanged)
 		case previous != "" && !input.Replace:
-			result.Outcome = "conflict"
+			result.Outcome = string(configSetConflict)
 			return &PreconditionError{
 				Reason:  RuntimeInputRegistryConfigKey + " is already set to a different path; use --replace with --reason to replace it",
-				Details: map[string]any{"key": RuntimeInputRegistryConfigKey, "conflict": "existing_value"},
+				Details: map[string]any{"key": RuntimeInputRegistryConfigKey, "conflict": configConflictExistingValue},
 			}
 		default:
 			state.Config.RuntimeInputRegistry = input.Path
-			result.Outcome = "set"
+			result.Outcome = string(configSetSet)
 			if previous != "" {
-				result.Outcome = "replaced"
+				result.Outcome = string(configSetReplaced)
 			}
 		}
 		return nil
 	})
-	if err != nil && result.Outcome != "conflict" {
-		result.Outcome = "failed"
+	if err != nil && result.Outcome != string(configSetConflict) {
+		result.Outcome = string(configSetFailed)
 	}
 	mask := secretmask.New()
 	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%q value=%q reason=%q",
-		RuntimeInputRegistryConfigKey, result.Outcome, "operator", mask.MaskText(projectRoot), previous, input.Path, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
+		RuntimeInputRegistryConfigKey, result.Outcome, actorOperator, mask.MaskText(projectRoot), previous, input.Path, boundPostWorktreeCmd(mask.MaskText(input.Reason)))
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %w", RuntimeInputRegistryConfigKey, err)
 	}

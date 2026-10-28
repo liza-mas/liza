@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-state",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "TestOracleStateRoundTrip exact fixture/first-persisted golden and second read/write equality",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-state-refusal",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "TestOracleStateRoundTrip transcript refusal and independent unchanged state read",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-alert",
+      "file": "internal/oracle/a1/persist/alerts_test.go",
+      "assertion": "TestOracleAlertLog log/ledger and accepted/rejected parser records goldens",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-alert-refusal",
+      "file": "internal/oracle/a1/persist/alerts_test.go",
+      "assertion": "TestOracleAlertLog/refusal-plain and refusal-keyed: error, unchanged directory inventory, absent ledger",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-usage",
+      "file": "internal/oracle/a1/persist/usage_test.go",
+      "assertion": "TestOracleUsageRecordAppend sorted day filenames and exact bytes",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-usage-refusal",
+      "file": "internal/oracle/a1/persist/usage_test.go",
+      "assertion": "TestOracleUsageRecordAppend over-budget fixture refused; complete inventory unchanged",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-fixed-inputs",
+      "file": "internal/oracle/a1/persist/state_test.go",
+      "assertion": "TestOracleStateRoundTrip second-write equality; rawStateCheck retains all fixture timestamps and identifiers in nine exact goldens (usage-days includes deterministic derived record ID)",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-adapter",
+      "file": "internal/oracle/a1/persist/boundary_test.go",
+      "assertion": "TestOraclePersistenceAdapterBoundary test-only files, adapter-only production imports and no production types in signatures",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-provenance",
+      "file": "internal/oracle/a1/persist/tamper_test.go",
+      "assertion": "TestOraclePersistenceTamper unmodified candidate filtered baseline check succeeds before mutation",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-sensitivity",
+      "file": "internal/oracle/a1/persist/tamper_test.go",
+      "assertion": "TestOraclePersistenceTamper inventory equality and each golden separately corrupt/live fail/check fail/path match/restore",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-isolation",
+      "file": "internal/oracle/a1/persist/tamper_test.go",
+      "assertion": "TestOraclePersistenceTamper disposable clone pinned to captured SHA; childEnvironment asserts exact variable-name policy without enable/write/agent variables",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-boundary",
+      "approved_reference_id": "scope"
+    }
+  ]
+}

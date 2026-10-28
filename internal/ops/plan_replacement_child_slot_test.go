@@ -232,7 +232,7 @@ func preD167ProviderFailure(t *testing.T, root string, state *models.State) mode
 	if err != nil {
 		t.Fatal(err)
 	}
-	failure := PlanHandoffFailure{Version: 1, TaskID: plan.ID, Transition: providerOpsTransition, Class: handoffProviderRefusal, OutputIndex: 0, Fingerprint: lifecycleDigest(encoded), Error: barrier.Error()}
+	failure := PlanHandoffFailure{Version: 1, TaskID: plan.ID, Transition: providerOpsTransition, Class: string(handoffProviderRefusal), OutputIndex: 0, Fingerprint: lifecycleDigest(encoded), Error: barrier.Error()}
 	if encoded, err = json.Marshal(failure); err != nil {
 		t.Fatal(err)
 	}

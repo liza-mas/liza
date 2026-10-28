@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "effects": "none",
+        "operation": "apply-dependency-repair",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "t1",
+        "task_status": "DRAFT_CODE",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "apply-dependency-repair: ALREADY_TRANSITIONED (safe_action=stop): failed to apply dependency repair: modification function failed: apply-dependency-repair: ALREADY_TRANSITIONED (safe_action=stop): validation failed: cannot apply dependency repair from task t1 in status DRAFT_CODE (must be BLOCKED)"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "apply-dependency-repair",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "t1",
+      "task_status": "DRAFT_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

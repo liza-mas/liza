@@ -1,0 +1,5 @@
+exit 1
+stdout:
+stderr:
+liza: task task-1 is in status CODE_TO_REVIEW — commits are only permitted while the task is executing, rejected, or blocked
+liza: if you must commit despite the task state, re-run with --no-verify.

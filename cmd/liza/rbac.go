@@ -8,6 +8,7 @@ import (
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // afterRBACAdmissionTestHook is a deterministic test seam for replacing an
@@ -77,8 +78,12 @@ func validateAllowedOperation(resolver *pipeline.Resolver, agentID, operationNam
 
 // validateRoleType checks whether the agent identified by agentID has one of
 // the allowed role types according to the pipeline resolver.
-func validateRoleType(resolver *pipeline.Resolver, agentID string, allowedTypes ...string) error {
-	typesLabel := "[" + strings.Join(allowedTypes, ", ") + "]"
+func validateRoleType(resolver *pipeline.Resolver, agentID string, allowedTypes ...roles.RoleType) error {
+	labels := make([]string, len(allowedTypes))
+	for i, allowed := range allowedTypes {
+		labels[i] = string(allowed)
+	}
+	typesLabel := "[" + strings.Join(labels, ", ") + "]"
 
 	role, err := identity.ExtractRole(agentID)
 	if err != nil {

@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Check selected toolchain tools
+Usage:
+liza toolchain doctor [flags]
+Flags:
+--exclude stringArray tool id to exclude (repeatable)
+-h, --help help for doctor
+--include stringArray tool id to include (repeatable)
+--json output result as structured JSON
+--profile string tool profile: balanced, lean, or full (default "balanced")
+--tool string tool id to check, or all (default "all")
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

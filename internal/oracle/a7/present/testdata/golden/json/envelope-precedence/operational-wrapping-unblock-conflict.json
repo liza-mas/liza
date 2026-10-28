@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "unblock_rebase_conflict",
+    "message": "unblock rebase conflict: task remains BLOCKED with repair_request"
+  },
+  "ok": false,
+  "result": null
+}

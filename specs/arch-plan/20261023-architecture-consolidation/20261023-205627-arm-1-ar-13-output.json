@@ -1,0 +1,187 @@
+[
+  {
+    "desc": "Close A3 with its area-boundary evidence and maintainer CI ruling before A4 coding",
+    "done_when": "boundary-a3.md records passing G1-G7 at the checked integration SHA and the maintainer's green G8 Linux/Windows result with macOS follow-up recorded; failed G1-G4 is routed to A3 repair.",
+    "scope": "A3 boundary record, justified architectural-issues closures and acceptance manifest. No A3 production/test repair. G8 requires the maintainer; all A4 coding waits.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 1: A3 area-boundary checkpoint",
+    "rca_required": false,
+    "decomposition": {
+      "owned_files": [
+        "specs/architecture/consolidation-run/boundary-a3.md",
+        "specs/architecture/architectural-issues.md"
+      ],
+      "owned_modules": [],
+      "interfaces_consumed": [
+        "Area-Boundary Checkpoint Contract"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  },
+  {
+    "desc": "Separate A4 transition expansion, recovery and output construction by concern",
+    "done_when": "The two file and seven function ratchet keys allocated to Scope 2 are removed; typed owned vocabulary and preserved generation/recovery semantics pass E1 and unchanged A4/A3 oracles.",
+    "scope": "Scope 2 A4 files, private concern files, tests, additive oracle gaps, A4 guard keys and changed references; X2 caller-only conformance. No new generation policy or API migration.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 2: Transition expansion and output construction",
+    "rca_required": false,
+    "depends_on": [
+      "0"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/proceed.go",
+        "internal/ops/add_tasks.go",
+        "internal/ops/set_task_output.go",
+        "internal/ops/direct_coding_allocation.go",
+        "internal/ops/descendant_dependencies.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A4 concern)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  },
+  {
+    "desc": "Separate A4 handoff classification and reviewed plan correction from their mutation orchestration",
+    "done_when": "Replan, AmendPlan, RecordPlanCheck, bounded contract validation and obligation-drift ratchet keys are removed; handoff remains exported and E1/oracle proof preserves correction and refusal behavior.",
+    "scope": "Scope 3 A4 files, concern helpers/tests, oracle additions, A4 guard keys and reference updates. Keep prompt-facing handoff API; no A8 move, new amendment policy or changed accepted proof.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 3: Plan handoff and reviewed correction",
+    "rca_required": false,
+    "depends_on": [
+      "1"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/replan.go",
+        "internal/ops/repair_arch_ref.go",
+        "internal/ops/plan_check.go",
+        "internal/ops/plan_replacement.go",
+        "internal/ops/plan_handoff.go",
+        "internal/ops/plan_handoff_failure.go",
+        "internal/ops/plan_handoff_undecided.go",
+        "internal/ops/amend_plan.go",
+        "internal/ops/contract_amendment.go",
+        "internal/ops/obligation_drift.go",
+        "internal/ops/planning_output_acceptance.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A4 concern)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  },
+  {
+    "desc": "Separate A4 graph-repair validation, candidate rewrites and provider-wait policy",
+    "done_when": "The four graph-repair ratchet functions are removed; complete candidate validation, expected-edge checks and provider-wait semantics remain unchanged under E1 and A4 oracles.",
+    "scope": "Scope 4 A4 graph files, private helpers/tests, added oracle gaps, A4 guard keys and reference updates; X2 caller conformance. No new dependency policy or relaxed refusal.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 4: Dependency graph repair and provider waits",
+    "rca_required": false,
+    "depends_on": [
+      "2"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/retarget_dependency.go",
+        "internal/ops/narrow_inherited_dependencies.go",
+        "internal/ops/apply_dependency_repair.go",
+        "internal/ops/dependency_rewrite.go",
+        "internal/ops/dependency_direction.go",
+        "internal/ops/provider_dependencies.go",
+        "internal/ops/defer_provider_dependency.go",
+        "internal/ops/reserve_provider.go",
+        "internal/ops/repair_superseded_dependencies.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A4 concern)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  },
+  {
+    "desc": "Separate A4 task replacement and retirement decisions from durable mutation and cleanup",
+    "done_when": "ReplaceTaskWithAuthorityAndOptions, supersedeTaskLifecycle, cancelTaskLifecycle and DeleteTask ratchet keys are removed; lineage, replay, archived evidence and cleanup behavior pass E1 and immutable oracles.",
+    "scope": "Scope 5 A4 replacement/retirement/archive files, tests, additive oracle coverage, A4 guard keys and affected references. No new archival policy or external mutation move.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 5: Task replacement and retirement",
+    "rca_required": false,
+    "depends_on": [
+      "3"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/replace_task.go",
+        "internal/ops/supersede_task.go",
+        "internal/ops/cancel_task.go",
+        "internal/ops/delete_task.go",
+        "internal/ops/predecessor_cleanup.go",
+        "internal/ops/lifecycle_deferred_retirement.go",
+        "internal/ops/task_archive.go",
+        "internal/ops/archive_terminal_tasks.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A4 concern)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  },
+  {
+    "desc": "Consolidate A4 sprint coordination, finish owned vocabulary and leave A4 ready for its boundary",
+    "done_when": "sprintCheckpoint meets S1; A4 ratchet is empty with any approved S2 documented, no shims remain, K7 inventory is reconciled, references/ADR are current, and E1 plus unchanged oracle proof passes.",
+    "scope": "Scope 6 A4 coordination files; final A4-only K7 audit/adoption; A4 guard data, ADR/index, code references, tests and acceptance manifests. Preserve pipeline_ops C2 plumbing; no issue closure or overview rewrite.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-205627-arm-1-ar-13.md#Scope 6: Sprint coordination and A4 closure readiness",
+    "rca_required": false,
+    "depends_on": [
+      "4"
+    ],
+    "decomposition": {
+      "owned_files": [
+        "internal/ops/pipeline_ops.go",
+        "internal/ops/advance_sprint.go",
+        "internal/ops/sprint_checkpoint.go",
+        "internal/ops/update_sprint_metrics.go",
+        "internal/ops/set_discovery_disposition.go",
+        "internal/ops/analyze.go",
+        "internal/ops/orchestrator_wake.go",
+        "internal/ops/human_note.go"
+      ],
+      "owned_modules": [
+        "internal/ops (A4 concern)"
+      ],
+      "interfaces_consumed": [
+        "SI-1",
+        "SI-2",
+        "SI-3",
+        "ops kernel"
+      ],
+      "coverage_notes": "Must; ordinary code planning; tests, additive oracle coverage, acceptance manifests and scoped documentation updates permitted. Default inheritance retains upstream coding barriers. A4 guard keys and shared references are ordered edits per Proof and Shared Ownership, not exclusive file ownership. D30 (planning-order-ruling) waives R1 and retains the five planning-order edges for Scope 13 only."
+    }
+  }
+]

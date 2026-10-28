@@ -1,0 +1,31 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "effects": "none",
+            "operation": "recover-task",
+            "outcome": "STATE_CHANGED",
+            "safe_action": "requery",
+            "task_id": "",
+            "task_status": "UNKNOWN"
+          },
+          "message": "recover-task: STATE_CHANGED (safe_action=requery): task task-9 not found in state, use --force to clean up git artifacts anyway"
+        },
+        "ok": false,
+        "result": {
+          "effects": "none",
+          "operation": "recover-task",
+          "outcome": "STATE_CHANGED",
+          "safe_action": "requery",
+          "task_id": "",
+          "task_status": "UNKNOWN"
+        }
+      }
+    }
+  ]
+}

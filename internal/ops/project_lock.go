@@ -31,6 +31,12 @@ func projectFileLock(projectRoot, purpose string) (*filelock.FileLock, error) {
 		return nil, fmt.Errorf("git directory for %s lock is not a directory: %s", purpose, gitDir)
 	}
 
-	lockName := strings.TrimPrefix(paths.ProjectDirName(), ".") + "-" + purpose
+	lockName := projectScopedLockName(purpose)
 	return filelock.New(filepath.Join(gitDir, lockName)), nil
+}
+
+// projectScopedLockName names a lock file after the brand's project directory
+// (without its leading dot) so locks of different brands never collide.
+func projectScopedLockName(suffix string) string {
+	return strings.TrimPrefix(paths.ProjectDirName(), ".") + "-" + suffix
 }

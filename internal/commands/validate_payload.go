@@ -59,13 +59,13 @@ func ValidatePayload(operation string, payload any) (*ValidatePayloadResult, err
 	case err != nil:
 		// The registry classifies nothing else, so this invocation reached no
 		// verdict about the payload and must not imply one.
-		return nil, ops.WrapLifecycleError(ValidatePayloadOperation, nil, err, models.LifecycleStateChanged, "requery", "none")
+		return nil, ops.WrapLifecycleError(ValidatePayloadOperation, nil, err, models.LifecycleStateChanged, ops.LifecycleSafeActionRequery, ops.LifecycleEffectsNone)
 	case len(diagnostics) > 0:
 		return nil, ops.NewLifecycleInvalidInputError(ValidatePayloadOperation, nil, diagnostics,
 			fmt.Errorf("payload rejected by the %s schema, version %d", operation, version))
 	}
 
-	outcome := ops.NewLifecycleOutcome(ValidatePayloadOperation, nil, models.LifecycleCompleted, "continue", "none")
+	outcome := ops.NewLifecycleOutcome(ValidatePayloadOperation, nil, models.LifecycleCompleted, ops.LifecycleSafeActionContinue, ops.LifecycleEffectsNone)
 	// A preflight commits nothing, so it claims no durable-state change.
 	outcome.Changed = nil
 	return &ValidatePayloadResult{LifecycleOutcome: outcome, SchemaVersion: version}, nil

@@ -43,7 +43,7 @@ func TestPeerScopePayload(t *testing.T) {
 	if err := promptbench.WriteFixtureProjectRoot(root); err != nil {
 		t.Fatal(err)
 	}
-	dashboard, _, err := prompts.RenderOrchestratorDashboard(promptbench.FixtureState(shape), root, "orchestrator-1")
+	dashboard, _, err := agent.RenderOrchestratorDashboard(promptbench.FixtureState(shape), root, "orchestrator-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestPeerScopePayload(t *testing.T) {
 		if roleType == "orchestrator" {
 			data.TaskID = ""
 			data.DashboardOutput = dashboard
-			data.WakeInstruction, err = prompts.RenderWakeInstructions(wake, data.AgentID)
+			data.WakeInstruction, err = prompts.RenderWakeInstructions(prompts.WakeTrigger(wake), data.AgentID, agent.SubmissionTestPatternsText())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,7 +143,7 @@ func TestPeerScopePayload(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			measure(role, roleType, pair, "")
+			measure(role, string(roleType), pair, "")
 			measured[role] = true
 		}
 	}
@@ -161,11 +161,11 @@ func TestPeerScopePayload(t *testing.T) {
 			t.Fatal(err)
 		}
 		if roleType != "orchestrator" {
-			measure(role, roleType, "", "")
+			measure(role, string(roleType), "", "")
 			continue
 		}
 		for _, wake := range prompts.WakeTriggers {
-			measure(role, roleType, "", wake)
+			measure(role, string(roleType), "", string(wake))
 		}
 	}
 

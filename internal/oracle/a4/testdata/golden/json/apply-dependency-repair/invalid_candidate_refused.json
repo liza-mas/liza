@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "effects": "none",
+        "operation": "apply-dependency-repair",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "b1",
+        "task_status": "BLOCKED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "apply-dependency-repair: INVALID_INPUT (safe_action=correct_input): failed to apply dependency repair: modification function failed: apply-dependency-repair: INVALID_INPUT (safe_action=correct_input): circular dependency detected: t1 eventually depends on itself\ncircular dependency detected: t2 eventually depends on itself"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "apply-dependency-repair",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "b1",
+      "task_status": "BLOCKED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

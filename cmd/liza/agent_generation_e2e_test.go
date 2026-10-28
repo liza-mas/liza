@@ -52,29 +52,29 @@ var atomicGenerationFenceInventory = []atomicFenceInventoryEntry{
 	{name: "await-resubmission", command: "await-resubmission", sourceFile: "cmd/liza/cmd_review.go", declaration: "awaitResubmissionCmd", call: "awaitResubmission", authorityBinding: "authority"},
 	{name: "wt-merge", command: "wt-merge", sourceFile: "cmd/liza/cmd_worktree.go", declaration: "wtMergeCmd", call: "ops.MergeWorktreeWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "claim-task", command: "claim-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "claimTaskCmd", call: "ops.ClaimTaskWithRequest", authorityBinding: "&authority"},
-	{name: "mark-blocked", command: "mark-blocked", sourceFile: "cmd/liza/cmd_task.go", declaration: "markBlockedCmd", call: "ops.MarkBlockedWithAuthority", authorityBinding: "authority"},
-	{name: "write-checkpoint", command: "write-checkpoint", sourceFile: "cmd/liza/cmd_task.go", declaration: "writeCheckpointCmd", call: "ops.WriteCheckpointWithAuthority", authorityBinding: "authority"},
-	{name: "set-task-output", command: "set-task-output", sourceFile: "cmd/liza/cmd_task.go", declaration: "setTaskOutputCmd", call: "ops.SetTaskOutputWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "mark-blocked", command: "mark-blocked", sourceFile: "cmd/liza/cmd_task_blocked.go", declaration: "markBlockedCmd", call: "ops.MarkBlockedWithAuthority", authorityBinding: "authority"},
+	{name: "write-checkpoint", command: "write-checkpoint", sourceFile: "cmd/liza/cmd_task_records.go", declaration: "writeCheckpointCmd", call: "ops.WriteCheckpointWithAuthority", authorityBinding: "authority"},
+	{name: "set-task-output", command: "set-task-output", sourceFile: "cmd/liza/cmd_task_records.go", declaration: "setTaskOutputCmd", call: "ops.SetTaskOutputWithAuthorityAndOptions", authorityBinding: "authority"},
 	{name: "add-task", command: "add-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "addTaskCmd", call: "ops.AddTaskWithAuthority", authorityBinding: "authority"},
 	{name: "add-tasks", command: "add-tasks", sourceFile: "cmd/liza/cmd_task.go", declaration: "addTasksCmd", call: "ops.AddTasksWithAuthority", authorityBinding: "authority"},
-	{name: "supersede-task", command: "supersede-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "supersedeTaskCmd", call: "ops.SupersedeTaskWithAuthority", authorityBinding: "authority"},
-	{name: "retarget-dependency", command: "retarget-dependency", sourceFile: "cmd/liza/cmd_task.go", declaration: "retargetDependencyCmd", call: "ops.RetargetDependencyWithAuthorityAndOptions", authorityBinding: "authority"},
-	{name: "apply-dependency-repair", command: "apply-dependency-repair", sourceFile: "cmd/liza/cmd_task.go", declaration: "applyDependencyRepairCmd", call: "ops.ApplyDependencyRepairWithAuthorityAndOptions", authorityBinding: "authority"},
-	{name: "repair-superseded-dependencies", command: "repair-superseded-dependencies", sourceFile: "cmd/liza/cmd_task.go", declaration: "repairSupersededDependenciesCmd", call: "ops.RepairSupersededDependenciesWithAuthorityAndOptions", authorityBinding: "authority"},
-	{name: "unblock-task", command: "unblock-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "unblockTaskCmd", call: "ops.UnblockTaskWithAuthority", authorityBinding: "authority"},
-	{name: "assess-blocked", command: "assess-blocked", sourceFile: "cmd/liza/cmd_task.go", declaration: "assessBlockedCmd", call: "ops.AssessBlockedWithAuthority", authorityBinding: "authority"},
-	{name: "assess-hypothesis-exhausted", command: "assess-hypothesis-exhausted", sourceFile: "cmd/liza/cmd_task.go", declaration: "assessHypothesisExhaustedCmd", call: "ops.AssessHypothesisExhaustedWithAuthorityAndOptions", authorityBinding: "authority"},
-	{name: "cancel-task", command: "cancel-task", sourceFile: "cmd/liza/cmd_task.go", declaration: "cancelTaskCmd", call: "ops.CancelTaskWithAuthorityAndOptions", authorityBinding: "authority"},
-	{name: "reconcile-merged", command: "reconcile-merged", sourceFile: "cmd/liza/cmd_task.go", declaration: "reconcileMergedCmd", call: "ops.ReconcileMergedWithAuthority", authorityBinding: "authority"},
-	{name: "claim-doer", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ClaimTaskWithAuthority", authorityBinding: "*authority"},
-	{name: "resume-handoff", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ResumeHandoff", authorityField: "Authority", authorityBinding: "authority"},
-	{name: "resume-owned-task", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ResumeOwnedTask", authorityField: "Authority", authorityBinding: "authority"},
+	{name: "supersede-task", command: "supersede-task", sourceFile: "cmd/liza/cmd_task_dependencies.go", declaration: "supersedeTaskCmd", call: "ops.SupersedeTaskWithAuthority", authorityBinding: "authority"},
+	{name: "retarget-dependency", command: "retarget-dependency", sourceFile: "cmd/liza/cmd_task_dependencies.go", declaration: "retargetDependencyCmd", call: "ops.RetargetDependencyWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "apply-dependency-repair", command: "apply-dependency-repair", sourceFile: "cmd/liza/cmd_task_dependencies.go", declaration: "applyDependencyRepairCmd", call: "ops.ApplyDependencyRepairWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "repair-superseded-dependencies", command: "repair-superseded-dependencies", sourceFile: "cmd/liza/cmd_task_dependencies.go", declaration: "repairSupersededDependenciesCmd", call: "ops.RepairSupersededDependenciesWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "unblock-task", command: "unblock-task", sourceFile: "cmd/liza/cmd_task_blocked.go", declaration: "unblockTaskCmd", call: "ops.UnblockTaskWithAuthority", authorityBinding: "authority"},
+	{name: "assess-blocked", command: "assess-blocked", sourceFile: "cmd/liza/cmd_task_blocked.go", declaration: "assessBlockedCmd", call: "ops.AssessBlockedWithAuthority", authorityBinding: "authority"},
+	{name: "assess-hypothesis-exhausted", command: "assess-hypothesis-exhausted", sourceFile: "cmd/liza/cmd_task_blocked.go", declaration: "assessHypothesisExhaustedCmd", call: "ops.AssessHypothesisExhaustedWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "cancel-task", command: "cancel-task", sourceFile: "cmd/liza/cmd_task_retire.go", declaration: "cancelTaskCmd", call: "ops.CancelTaskWithAuthorityAndOptions", authorityBinding: "authority"},
+	{name: "reconcile-merged", command: "reconcile-merged", sourceFile: "cmd/liza/cmd_task_retire.go", declaration: "reconcileMergedCmd", call: "ops.ReconcileMergedWithAuthority", authorityBinding: "authority"},
+	{name: "claim-doer", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerCandidate", call: "ops.ClaimTaskWithAuthority", authorityBinding: "*authority"},
+	{name: "resume-handoff", sourceFile: "internal/agent/claiming.go", declaration: "resumeDoerTask", call: "ops.ResumeHandoff", authorityField: "Authority", authorityBinding: "authority"},
+	{name: "resume-owned-task", sourceFile: "internal/agent/claiming.go", declaration: "resumeDoerTask", call: "ops.ResumeOwnedTask", authorityField: "Authority", authorityBinding: "authority"},
 	{name: "claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "markAgentDegradedForInfraClaim", call: "ops.MarkAgentDegraded", authorityField: "Authority", authorityBinding: "authority"},
-	{name: "clear-claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "claimDoerTaskWithOptionalAuthority", call: "ops.ClearAgentDegradedWithAuthority", authorityBinding: "*authority"},
+	{name: "clear-claim-degradation", sourceFile: "internal/agent/claiming.go", declaration: "clearDegradedAfterClaim", call: "ops.ClearAgentDegradedWithAuthority", authorityBinding: "*authority"},
 	{name: "claim-reviewer", sourceFile: "internal/agent/claiming.go", declaration: "claimReviewerTaskForRoleWithOptionalAuthority", call: "ops.ClaimReviewerTask", authorityField: "Authority", authorityBinding: "authority"},
 	{name: "release-reviewer-claim", sourceFile: "internal/agent/claiming.go", declaration: "releaseReviewerClaimQuietly", call: "ops.ReleaseClaimWithAuthority", authorityBinding: "authority"},
-	{name: "watchdog-block", sourceFile: "internal/agent/supervisor_block.go", declaration: "transitionSupervisorBlock", call: "ops.ModifyWithAgentAuthority", authorityBinding: "authority"},
-	{name: "approved-merge-dispatch", sourceFile: "internal/agent/claiming.go", declaration: "handleApprovedMergesWithOptionalAuthority", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "*authority"},
+	{name: "watchdog-block", sourceFile: "internal/agent/supervisor_block.go", declaration: "applySupervisorBlock", call: "ops.BlockSupervisorTask", authorityBinding: "authority"},
+	{name: "approved-merge-dispatch", sourceFile: "internal/agent/claiming_merge.go", declaration: "mergeApprovedTask", call: "ops.MergeWorktreeWithAuthority", authorityBinding: "*authority"},
 }
 
 func TestCLIStaleSupervisorGenerationEndToEnd(t *testing.T) {
@@ -215,8 +215,8 @@ func testE2EAwaitGenerationFence(t *testing.T) {
 		"await-verdict", taskID, "--agent-id", agentID, "--timeout-seconds", "1",
 	)
 	result, ok := envelope["result"].(map[string]any)
-	if !ok || result["verdict"] != ops.VerdictTimeout {
-		t.Fatalf("current await result = %#v, want terminal %s", envelope["result"], ops.VerdictTimeout)
+	if !ok || result["verdict"] != string(ops.VerdictTimeout) {
+		t.Fatalf("current await result = %#v, want terminal %s", envelope["result"], string(ops.VerdictTimeout))
 	}
 	state := readState(t, statePath)
 	task := state.FindTask(taskID)

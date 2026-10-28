@@ -1,0 +1,32 @@
+{
+  "id": "AR3",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [
+    {
+      "agent": "code-reviewer-1",
+      "args": [
+        "submit-verdict",
+        "task-1",
+        "REJECTED",
+        "A5 defect",
+        "--review-commit",
+        "{{commit:candidate}}"
+      ],
+      "exit": 0,
+      "contains": ""
+    }
+  ],
+  "step": {
+    "agent": "code-reviewer-2",
+    "args": [
+      "await-resubmission",
+      "task-1"
+    ],
+    "exit": 1,
+    "contains": "last rejecting"
+  },
+  "modes": [
+    "json"
+  ]
+}

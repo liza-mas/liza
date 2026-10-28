@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: plan-check failed: modification function failed: validation failed: task cp-1 cannot pass while output[0] supersedes t1, which is already MERGED; replan or hold it instead

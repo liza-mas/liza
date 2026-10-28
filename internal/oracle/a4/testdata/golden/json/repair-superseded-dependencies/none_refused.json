@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "effects": "none",
+        "operation": "repair-superseded-dependencies",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "p1",
+        "task_status": "SUPERSEDED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "repair-superseded-dependencies: STATE_CHANGED (safe_action=requery): failed to repair superseded dependencies: modification function failed: repair-superseded-dependencies: STATE_CHANGED (safe_action=requery): validation failed: task p1 has no illegal downstream dependencies"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "repair-superseded-dependencies",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "p1",
+      "task_status": "SUPERSEDED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

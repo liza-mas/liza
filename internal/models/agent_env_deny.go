@@ -34,7 +34,7 @@ func ValidateAgentEnvDeny(names []string) error {
 	}
 	seen := make(map[string]bool, len(names))
 	for i, name := range names {
-		if len(name) > 256 || !prerequisiteEnvName.MatchString(name) {
+		if len(name) > maxEnvNameLen || !prerequisiteEnvName.MatchString(name) {
 			return fmt.Errorf("agent_env_deny[%d] must be a variable identifier of at most 256 bytes", i)
 		}
 		if runtimeInputNameReserved(name) || slices.Contains(agentEnvDenyProtectedNames, strings.ToUpper(name)) {

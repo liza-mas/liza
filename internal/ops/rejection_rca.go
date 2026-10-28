@@ -112,13 +112,13 @@ func recordRejectionRCA(projectRoot, taskID string, payload any, agentID string,
 			Event: models.TaskEventRejectionRCARecorded,
 			Agent: &actor,
 			Extra: map[string]any{
-				"fingerprint":        fingerprint,
-				"threshold":          record.Threshold,
-				"rejection_count":    record.RejectionCount,
-				"gated_at":           record.GatedAt.Format(time.RFC3339),
-				"causes":             rejectionRCACauses(request.Contributions),
-				"contribution_count": len(request.Contributions),
-				"recorded_by":        actor,
+				"fingerprint":                 fingerprint,
+				rejectionRCAThresholdKey:      record.Threshold,
+				rejectionRCARejectionCountKey: record.RejectionCount,
+				rejectionRCAGatedAtKey:        record.GatedAt.Format(time.RFC3339),
+				rejectionRCACausesKey:         rejectionRCACauses(request.Contributions),
+				"contribution_count":          len(request.Contributions),
+				"recorded_by":                 actor,
 			},
 		})
 		return nil
@@ -167,14 +167,14 @@ func resumeRejectionRCA(projectRoot, taskID string, payload any, agentID string,
 			Event: models.TaskEventRejectionRCAResumed,
 			Agent: &actor,
 			Extra: map[string]any{
-				"fingerprint":       record.Fingerprint,
-				"recovery_path":     request.RecoveryPath,
-				"restore_mode":      restoreMode,
-				"actor":             actor,
-				"lifecycle_version": lifecycleVersion,
-				"decided_at":        now.Format(time.RFC3339),
-				"iteration_exempt":  iterationExempt,
-				"gated_at":          record.GatedAt.Format(time.RFC3339),
+				"fingerprint":               record.Fingerprint,
+				rejectionRCARecoveryPathKey: string(request.RecoveryPath),
+				"restore_mode":              string(restoreMode),
+				"actor":                     actor,
+				"lifecycle_version":         lifecycleVersion,
+				"decided_at":                now.Format(time.RFC3339),
+				"iteration_exempt":          iterationExempt,
+				rejectionRCAGatedAtKey:      record.GatedAt.Format(time.RFC3339),
 			},
 		})
 		return nil
@@ -190,9 +190,9 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 	decode func() (any, error), mutate rejectionRCAMutation) (returned *RejectionRCAResult, retErr error) {
 	var invocation *LifecycleInvocation
 	var observed *models.Task
-	effects := "none"
+	effects := LifecycleEffectsNone
 	defer func() {
-		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		if invocation == nil {
 			return
 		}
@@ -214,7 +214,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 		return nil, &PreconditionError{Reason: "agent ID is required"}
 	}
 	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil {
-		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can run %s: %v", operation, err)}, models.LifecycleForbidden, "stop", "none")
+		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can run %s: %v", operation, err)}, models.LifecycleForbidden, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	// One structural verdict for the preflight and this boundary, reached
 	// before any state path is opened.
@@ -235,11 +235,11 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 			if isLifecycleReplay(callbackErr) || errors.Is(callbackErr, errRejectionRCANoChange) {
 				return
 			}
-			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
+			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		}()
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: taskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		copy := *task
 		observed = &copy
@@ -270,7 +270,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
 		if err == nil {
 			result.RejectionRCA = cloneRejectionRCARecord(task.RejectionRCA)
-			effects = "unknown"
+			effects = LifecycleEffectsUnknown
 		}
 		return err
 	})
@@ -278,7 +278,7 @@ func runRejectionRCAOperation(projectRoot, operation, taskID, agentID string, au
 		return &result, nil
 	}
 	if err != nil {
-		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to run %s: %w", operation, err), models.LifecycleStateChanged, "requery", effects)
+		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to run %s: %w", operation, err), models.LifecycleStateChanged, LifecycleSafeActionRequery, effects)
 	}
 	return &result, nil
 }
@@ -320,7 +320,7 @@ func requireOpenRejectionRCAGate(operation string, task *models.Task, needRecord
 	default:
 		return nil
 	}
-	return WrapLifecycleError(operation, task, &PreconditionError{Reason: reason}, models.LifecycleStateChanged, "requery", "none")
+	return WrapLifecycleError(operation, task, &PreconditionError{Reason: reason}, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 }
 
 func highestRejectionIndex(contributions []models.RejectionRCAContribution) int {
@@ -334,12 +334,19 @@ func highestRejectionIndex(contributions []models.RejectionRCAContribution) int 
 // rejectionRCACauses is the sorted distinct union of every contribution's
 // categories, unrecognized values included verbatim.
 func rejectionRCACauses(contributions []models.RejectionRCAContribution) []string {
-	var causes []string
+	var causes []models.RejectionCause
 	for _, contribution := range contributions {
 		causes = append(causes, contribution.Categories...)
 	}
 	slices.Sort(causes)
-	return slices.Compact(causes)
+	causes = slices.Compact(causes)
+	// History Extra is read back through string assertions, so the causes
+	// are stored as plain strings.
+	var stored []string
+	for _, cause := range causes {
+		stored = append(stored, string(cause))
+	}
+	return stored
 }
 
 func cloneRejectionRCARecord(record *models.RejectionRCARecord) *models.RejectionRCARecord {

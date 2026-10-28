@@ -1,0 +1,62 @@
+This is initial planning. Read the goal spec, assess complexity, and create exactly one planning task.
+
+AUTONOMY NOTICE:
+You have FULL autonomy to run CLI commands immediately.
+Do NOT wait for permission.
+
+--- PLANNING PHASE COMPLETE. NOW EXECUTE. ---
+
+1. Read the goal spec () thoroughly.
+2. Assess whether the goal is simple or fan-out.
+3. Create exactly one planning task.
+
+SIMPLE GOAL:
+Use the specialized planning target when the goal has one coherent planning scope: one functional area, no shared file/schema/interface ownership question, no migration or cross-cutting contract needing explicit ownership, and no expected downstream split into independent specialized scopes.
+
+FAN-OUT OR UNCERTAIN GOAL:
+Use the mapped master planning target when available if multiple functional areas need separate ownership, shared files or interfaces require explicit boundary assignment, independent downstream workstreams could run in parallel after planning, the goal would likely produce more than 8 downstream output entries, or boundary placement is uncertain.
+
+DEFECT CLASSIFICATION:
+Classify the objective before dispatch. A defect is a failure of existing behavior --
+a bug, regression, or incident -- rather than a new capability.
+- Direct or fallback specialized tasks own objective-level classification: set "rca_required": true on that task only for a defect fix; otherwise use false.
+- Mapped decomposition-root tasks always use "rca_required": false. Their master
+  planner must classify each output[] entry independently, so mixed feature and
+  defect scopes do not inherit one task-wide answer.
+
+--- EXECUTION PHASE (MANDATORY - DO NOT SKIP) ---
+
+Write a JSON file with exactly one planning task and run liza add-tasks.
+The file must contain a bare JSON array -- NOT a wrapper object.
+[
+  {
+    "id": "code-planning-1",
+    "desc": "<single planning scope>: <boundary description>",
+    "spec": "",
+    "done": "Implementation plan for <single planning scope> is complete, reviewable, and submitted for code-plan-review",
+    "scope": "Planning only: <single planning scope>. No implementation.",
+    "priority": 1,
+    "depends": [],
+    "rca_required": false,
+    "type": "planning",
+    "role_pair": "code-planning-pair"
+  }
+]
+Then run: liza add-tasks --tasks-file <path.json> --agent-id orchestrator-1 --json
+
+SUCCESS CRITERIA:
+- Exactly one task is created.
+- The objective classification and RCA ownership boundary are stated; direct or fallback specialized tasks classify the objective, while mapped master tasks delegate classification to each output.
+- The task uses role_pair code-planning-pair.
+- The task enters DRAFT_CODING_PLAN and is claimable by code-planner.
+
+EXPECTED BEHAVIOR EXAMPLES:
+- Simple goal: one specialized planning task, no depends_on, confirm success, exit.
+- Fan-out goal with a mapped master target: one master planning task, no specialized fan-out here, confirm success, exit.
+- Fan-out goal without a mapped master target: one specialized planning task, no invented master role-pair, confirm success, exit.
+
+INCORRECT:
+1. Plan but do not execute liza add-tasks
+2. Exit without creating the task
+3. Add a second INITIAL_PLANNING task
+4. Create downstream implementation tasks -- only planning tasks belong here

@@ -1,0 +1,13 @@
+exit_code: 0
+--- stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: MERGED
+effects: committed
+task_id: cp-b
+transition_id: <DIGEST 1>
+completed_transition_id: <DIGEST 1>
+Narrowed inherited dependencies for cp-b (code-plan-to-coding): narrowed 1, unchanged 0, skipped 0
+cp-b-code-0: -1 +0 -> 1 dependencies
+removed: cp-a-code-1
+--- stderr

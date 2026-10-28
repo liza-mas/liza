@@ -1,0 +1,4 @@
+# before
+
+# after
+[<T1:sZ>] ⚠️ PLAN DISPOSITION MISSING: orchestrator left plan plan-1 undecided (needs_review); PLANNING_COMPLETE will not wake for it again until its inputs change. Ask for a pass, hold or replan with liza add-human-note plan-1 --note-file <path>, or expand it yourself with liza proceed plan-1 code-plan-to-coding

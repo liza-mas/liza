@@ -32,7 +32,7 @@ type VerdictReconciliation struct {
 
 // IsFullReviewCommit accepts immutable Git object IDs, never refs or abbreviations.
 func IsFullReviewCommit(commit string) bool {
-	if len(commit) != 40 && len(commit) != 64 {
+	if len(commit) != gitSHA1HexLen && len(commit) != sha256HexLen {
 		return false
 	}
 	_, err := hex.DecodeString(commit)

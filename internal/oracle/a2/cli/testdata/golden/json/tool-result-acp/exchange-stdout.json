@@ -1,0 +1,19 @@
+[
+  {
+    "id": 7,
+    "jsonrpc": "2.0",
+    "method": "fs/read_text_file",
+    "params": {
+      "path": "fixture.txt",
+      "sessionId": "fixture-session"
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "fixture/observed",
+    "params": {
+      "content": "{\"tool\":\"read\",\"command\":\"{\\\"path\\\":\\\"fixture.txt\\\",\\\"sessionId\\\":\\\"fixture-session\\\"}\",\"exit_code\":null,\"original_bytes\":6100,\"stored_bytes\":6100,\"truncated\":true,\"source_truncated\":false,\"duplicate\":false,\"artifact_id\":\"<ID>\",\"artifact_path\":\"<STORE>/<ID>.txt\",\"content_hash\":\"<ID>\",\"excerpt\":\"fixture line 001: complete retained evidence for the oracle.\\nfixture line 002: complete retained evidence for the oracle.\\nfixture line 003: complete retained evidence for the oracle.\\nfixture line 004: complete retained evidence for the oracle.\\nfixture line 005: complete retained evidence for the oracl\"}\n",
+      "id": 7
+    }
+  }
+]

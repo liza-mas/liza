@@ -1,6 +1,7 @@
 package roles
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -154,6 +155,54 @@ func TestAllRolesAreHyphenated(t *testing.T) {
 			if c == '_' {
 				t.Errorf("role %q contains underscore — expected hyphenated form only", role)
 				break
+			}
+		}
+	}
+}
+
+func TestClaimAndRoleTypeConstantValues(t *testing.T) {
+	t.Parallel()
+
+	claims := map[ClaimType]string{ClaimDoer: "doer", ClaimReviewer: "reviewer", ClaimBoth: "both"}
+	for got, want := range claims {
+		if string(got) != want {
+			t.Errorf("claim type constant = %q, want %q", got, want)
+		}
+	}
+	roleTypes := map[RoleType]string{RoleTypeDoer: "doer", RoleTypeReviewer: "reviewer", RoleTypeOrchestrator: "orchestrator"}
+	for got, want := range roleTypes {
+		if string(got) != want {
+			t.Errorf("role type constant = %q, want %q", got, want)
+		}
+	}
+}
+
+// The two vocabularies share spellings but not identity: converting between
+// them is an explicit act at a call site, never an accident of assignment.
+func TestClaimTypeAndRoleTypeAreDistinct(t *testing.T) {
+	t.Parallel()
+
+	if reflect.TypeOf(ClaimDoer) == reflect.TypeOf(RoleTypeDoer) {
+		t.Fatal("ClaimType and RoleType are the same type")
+	}
+	if string(ClaimDoer) != string(RoleTypeDoer) || string(ClaimReviewer) != string(RoleTypeReviewer) {
+		t.Error("shared spellings diverged between claim types and role types")
+	}
+}
+
+// Vocabulary values reach string-keyed persistence by kind (internal/db
+// projects string kinds and treats method-bearing types as opaque), so no
+// vocabulary type may declare a serialization or zero-value method.
+func TestVocabularyTypesDeclareNoSerializationMethods(t *testing.T) {
+	t.Parallel()
+
+	forbidden := []string{"MarshalYAML", "UnmarshalYAML", "MarshalText", "UnmarshalText", "MarshalJSON", "UnmarshalJSON", "IsZero"}
+	for _, typ := range []reflect.Type{reflect.TypeOf(ClaimType("")), reflect.TypeOf(RoleType(""))} {
+		for _, candidate := range []reflect.Type{typ, reflect.PointerTo(typ)} {
+			for _, name := range forbidden {
+				if _, found := candidate.MethodByName(name); found {
+					t.Errorf("%s declares %s", candidate, name)
+				}
 			}
 		}
 	}

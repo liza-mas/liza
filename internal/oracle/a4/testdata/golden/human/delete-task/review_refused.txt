@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: cannot delete task t1 in status CODE_TO_REVIEW (under review)

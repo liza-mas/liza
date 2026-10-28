@@ -1,0 +1,5 @@
+--- invocation setup
+exit 1
+--- stdout
+--- stderr
+Error: agent symlink setup failed: provider kimi does not define setup skill symlinks

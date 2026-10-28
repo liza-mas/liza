@@ -1,0 +1,28 @@
+exit 0
+--- stdout
+Validate one operation's payload against its registered schema.
+The preflight uses the same validator as the operation's own command, so a
+payload it accepts cannot be rejected for structural reasons later. It reads no
+state, acquires no lock and changes nothing, and needs no agent identity.
+Pass the operation's canonical JSON object. For a command whose payload is one
+file, pass that same file: its content is lifted to the canonical object.
+An invalid payload exits nonzero and reports result.diagnostics — one entry per
+rejected field, naming the schema version, the field path, the violated
+constraint and the class of the rejected value, never the value itself. Read
+those instead of parsing the error message.
+Examples:
+liza validate-payload --list --json
+liza validate-payload set-task-output --payload outputs.json --json
+Usage:
+liza validate-payload <operation> --payload <file> [flags]
+Flags:
+-h, --help help for validate-payload
+--json output result as structured JSON
+--list list the registered operations and their schema versions
+--payload string path to the operation's canonical JSON payload
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -1,0 +1,4 @@
+{
+  "executables": {"claude":[{"args":["--version"],"reply":"2.1.300 (Claude Code)"}]},
+  "calls": [{"wait_file":".liza/oracle-release","deadline_seconds":20,"exit_code":0}]
+}

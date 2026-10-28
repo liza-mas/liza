@@ -1,0 +1,3 @@
+#!/bin/sh
+printf 'search\n' >> semble-invocations.txt
+printf '{"results":[]}\n'

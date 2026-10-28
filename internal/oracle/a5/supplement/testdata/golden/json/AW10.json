@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task task-1 is not in an awaitable status (current: IMPLEMENTING_CODE, expected: CODE_TO_REVIEW or REVIEWING_CODE)"
+    },
+    "ok": false,
+    "result": null
+  }
+}

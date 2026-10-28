@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Evaluate whether a git commit should be allowed for the given task.
+Used by the per-worktree pre-commit hook installed by wt-create. Exits 0 to
+allow the commit and 1 to reject it. On any evaluation error the command exits
+0 (fail-safe allow) — the hook is a guard against stale-state mutations, not
+an authoritative lock.
+Usage:
+liza check-commit-allowed <task-id> [flags]
+Flags:
+-h, --help help for check-commit-allowed
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

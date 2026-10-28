@@ -9,9 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -1409,6 +1412,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 			result := selectBestCandidate(
 				[]*models.Task{taskDiverse, taskUniform},
 				pr, "google", "claimer-1", state,
+				agentlaunch.ProviderKeys{},
 			)
 			if result == nil {
 				t.Fatal("selectBestCandidate returned nil")
@@ -1439,6 +1443,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			result := selectBestCandidate(
 				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+				agentlaunch.ProviderKeys{},
 			)
 			if result == nil || result.ID != "task-a" {
 				t.Errorf("iteration %d: got %v, want task-a (single diverse reviewer preferred)", i, result)
@@ -1459,7 +1464,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 		}
 		task := &models.Task{ID: "task-a", RolePair: "pair-a", Priority: 1, Status: "SUBMITTED_A"}
 
-		if isDiversitySatisfiable(task, "google", "claimer-1", pr, state) {
+		if isDiversitySatisfiable(task, "google", "claimer-1", pr, state, agentlaunch.ProviderKeys{}) {
 			t.Fatal("invalid alternate reviewer should not satisfy diversity")
 		}
 	})
@@ -1484,6 +1489,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 		// Just verify it returns one of them without panic.
 		result := selectBestCandidate(
 			[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+			agentlaunch.ProviderKeys{},
 		)
 		if result == nil {
 			t.Fatal("selectBestCandidate returned nil")
@@ -1514,6 +1520,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			result := selectBestCandidate(
 				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+				agentlaunch.ProviderKeys{},
 			)
 			if result == nil || result.ID != "task-a" {
 				t.Errorf("iteration %d: got %v, want task-a (diversity satisfiable via mixed pool)", i, result)
@@ -1541,6 +1548,7 @@ func TestClaimReviewerTask_DiversityFreshSubmissions(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			result := selectBestCandidate(
 				[]*models.Task{taskA, taskB}, pr, "google", "claimer-1", state,
+				agentlaunch.ProviderKeys{},
 			)
 			if result == nil || result.ID != "task-a" {
 				t.Errorf("iteration %d: got %v, want task-a (diversity always satisfiable)", i, result)
@@ -1632,8 +1640,10 @@ func (r *diversityTestResolver) PartiallyApprovedStatus(string) (models.TaskStat
 
 // Unused interface methods — return errors.
 func (r *diversityTestResolver) DoerRole(string) (string, error) { return "", fmt.Errorf("unused") }
-func (r *diversityTestResolver) RoleType(string) (string, error) { return "", fmt.Errorf("unused") }
-func (r *diversityTestResolver) AllRoleNames() []string          { return nil }
+func (r *diversityTestResolver) RoleType(string) (roles.RoleType, error) {
+	return "", fmt.Errorf("unused")
+}
+func (r *diversityTestResolver) AllRoleNames() []string { return nil }
 func (r *diversityTestResolver) InitialStatus(string) (models.TaskStatus, error) {
 	return "", fmt.Errorf("unused")
 }
@@ -1944,16 +1954,16 @@ type doerDiversityResolver struct {
 	reviewerRole   string
 }
 
-func (r *doerDiversityResolver) ProviderDiversity(_ string, impact string) (string, error) {
+func (r *doerDiversityResolver) ProviderDiversity(_ string, impact pipeline.ReviewImpact) (pipeline.ProviderDiversityMode, error) {
 	if r.diversityErr != nil {
 		return "", r.diversityErr
 	}
 	if r.impactOverride != nil {
-		if v, ok := r.impactOverride[impact]; ok {
-			return v, nil
+		if v, ok := r.impactOverride[string(impact)]; ok {
+			return pipeline.ProviderDiversityMode(v), nil
 		}
 	}
-	return r.diversity, nil
+	return pipeline.ProviderDiversityMode(r.diversity), nil
 }
 
 func (r *doerDiversityResolver) ReviewerRole(string) (string, error) {
@@ -2103,7 +2113,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if !blocked {
 			t.Error("expected blocked: claimer shares doer provider and diverse reviewer exists")
 		}
@@ -2119,7 +2129,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "google", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "google", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: claimer has different provider than doer")
 		}
@@ -2135,7 +2145,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: no diverse reviewer registered (fallback)")
 		}
@@ -2152,7 +2162,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: invalid diverse reviewer does not count as capacity")
 		}
@@ -2169,7 +2179,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: provider-diversity not configured")
 		}
@@ -2186,7 +2196,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: doer agent not in state (skip filter)")
 		}
@@ -2202,7 +2212,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if blocked {
 			t.Error("should not block: task has no AssignedTo")
 		}
@@ -2225,7 +2235,7 @@ func TestIsBlockedByDoerDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver)
+		blocked := isBlockedByDoerDiversity(task, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if !blocked {
 			t.Error("expected blocked: diverse reviewer is registered (even if busy)")
 		}
@@ -2251,7 +2261,7 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver)
+		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if len(filtered) != 0 {
 			t.Errorf("expected 0 candidates (all blocked), got %d", len(filtered))
 		}
@@ -2273,7 +2283,7 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver)
+		filtered := filterDoerProviderDiversity(tasks, "anthropic", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if len(filtered) != 1 {
 			t.Fatalf("expected 1 candidate, got %d", len(filtered))
 		}
@@ -2294,7 +2304,7 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 		}
 		resolver := &doerDiversityResolver{diversity: "preferred", reviewerRole: "code-reviewer"}
 
-		filtered := filterDoerProviderDiversity(tasks, "", "code-reviewer-1", state, resolver)
+		filtered := filterDoerProviderDiversity(tasks, "", "code-reviewer-1", state, resolver, agentlaunch.ProviderKeys{})
 		if len(filtered) != 1 {
 			t.Errorf("expected all candidates kept (no claimer provider), got %d", len(filtered))
 		}
@@ -2336,6 +2346,7 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 
 		filtered := filterDoerProviderDiversity(
 			[]*models.Task{task}, "anthropic", "code-reviewer-1", state, resolver,
+			agentlaunch.ProviderKeys{},
 		)
 		if len(filtered) != 0 {
 			t.Error("expected blocked: significant impact activates diversity from override")
@@ -2367,6 +2378,7 @@ func TestFilterDoerProviderDiversity(t *testing.T) {
 
 		filtered := filterDoerProviderDiversity(
 			[]*models.Task{task}, "anthropic", "code-reviewer-1", state, resolver,
+			agentlaunch.ProviderKeys{},
 		)
 		if len(filtered) != 1 {
 			t.Error("should not block: standard impact has no diversity configured")

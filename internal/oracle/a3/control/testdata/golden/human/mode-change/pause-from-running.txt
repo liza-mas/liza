@@ -1,0 +1,8 @@
+exit 0
+[stdout]
+System paused
+Mode: RUNNING → PAUSED
+Changed by: human
+No new claims, provider turns or merges; running turns finish.
+Use 'liza resume' to continue.
+[stderr]

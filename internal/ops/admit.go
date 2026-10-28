@@ -18,6 +18,10 @@ import (
 	"github.com/liza-mas/liza/internal/referencecontract"
 )
 
+// admitWaitDelay bounds how long Wait lingers on stdio a descendant of the
+// command still holds once the command itself has exited.
+const admitWaitDelay = 5 * time.Second
+
 // AdmitMaxWait bounds an admit slot wait: the acceptance cap.
 const AdmitMaxWait = referencecontract.AcceptanceMaxTimeoutSeconds * time.Second
 
@@ -84,7 +88,7 @@ func RunAdmitted(projectRoot string, input AdmitInput) (int, error) {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = input.Stdin, input.Stdout, input.Stderr
 	cmd.ExtraFiles = slots.files()
 	configProcessGroupKill(cmd)
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = admitWaitDelay
 	if err := cmd.Start(); err != nil {
 		slots.release()
 		return -1, fmt.Errorf("admit could not start the command: %w", err)

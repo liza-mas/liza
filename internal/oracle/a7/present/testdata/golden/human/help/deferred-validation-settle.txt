@@ -1,0 +1,19 @@
+exit 0
+--- stdout
+A runner whose step left processes it could not stop keeps its record
+unsettled, which the next run and the integration gate refuse. So does a runner
+that died where its lock did not pass to its child processes. Confirm none of its
+processes still runs, then settle it. Settling is refused while any process
+still holds the runner lock.
+Usage:
+liza deferred-validation settle [flags]
+Flags:
+-h, --help help for settle
+--json output result as structured JSON
+--ruling string decision that authorizes this change
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

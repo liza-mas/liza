@@ -1,0 +1,8 @@
+exit 1
+stdout:
+stderr:
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: UNKNOWN
+effects: none
+Error: recover task: recover-task: STATE_CHANGED (safe_action=requery): task task-9 not found in state, use --force to clean up git artifacts anyway

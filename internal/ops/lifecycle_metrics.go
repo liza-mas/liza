@@ -20,6 +20,22 @@ import (
 
 const lifecycleMetricsMaxBytes = 64 * 1024
 
+const (
+	// lifecycleSprintIDMaxBytes bounds the sprint ID a counter file may name.
+	lifecycleSprintIDMaxBytes = 256
+	// lifecycleMetricsDirMode is the mode of the counter directory.
+	lifecycleMetricsDirMode = 0o700
+	// lifecycleMetricsFileExt ends every counter file name.
+	lifecycleMetricsFileExt = ".json"
+	// lifecycleCounterTempPattern names the temporary file a counter write
+	// renames into place.
+	lifecycleCounterTempPattern = ".lifecycle-counters-*"
+	// recordLifecycleOutcomeLockOperation labels the counter file lock.
+	recordLifecycleOutcomeLockOperation = "record-lifecycle-outcome"
+	// updateSprintMetricsOperation names the operation a changed sprint refuses.
+	updateSprintMetricsOperation = "update-sprint-metrics"
+)
+
 var lifecycleMetricOperations = [...]string{
 	"submit-for-review", "submit-verdict", "mark-blocked", "assess-blocked",
 	"assess-hypothesis-exhausted", "claim-task", "claim-reviewer-task", "release-claim",
@@ -30,9 +46,9 @@ var lifecycleMetricOperations = [...]string{
 }
 
 var lifecycleMetricOutcomes = [...]string{
-	"COMPLETED", "ALREADY_COMPLETED", "ALREADY_TRANSITIONED", "STALE_CALLER",
-	"STATE_CHANGED", "RETRYABLE", "INVALID_INPUT", "FORBIDDEN",
-	"NO_CHANGE", "CONFLICT",
+	models.LifecycleCompleted, models.LifecycleAlreadyCompleted, models.LifecycleAlreadyTransitioned, models.LifecycleStaleCaller,
+	models.LifecycleStateChanged, models.LifecycleRetryable, models.LifecycleInvalidInput, models.LifecycleForbidden,
+	models.LifecycleNoChange, models.LifecycleConflict,
 }
 
 // LifecycleSprintIdentity is captured from the invocation's authoritative state.
@@ -50,7 +66,7 @@ func CaptureLifecycleSprint(sprint models.Sprint) LifecycleSprintIdentity {
 }
 
 func (s LifecycleSprintIdentity) valid() bool {
-	return s.ID != "" && len(s.ID) <= 256 && s.Number > 0 && !s.Started.IsZero()
+	return s.ID != "" && len(s.ID) <= lifecycleSprintIDMaxBytes && s.Number > 0 && !s.Started.IsZero()
 }
 
 func (s LifecycleSprintIdentity) matches(other LifecycleSprintIdentity) bool {
@@ -61,7 +77,7 @@ func lifecycleMetricsPath(projectRoot string, sprint LifecycleSprintIdentity) st
 	sprint.Started = sprint.Started.UTC()
 	data, _ := json.Marshal(sprint)
 	digest := sha256.Sum256(data)
-	return filepath.Join(paths.New(projectRoot).LifecycleMetricsDir(), hex.EncodeToString(digest[:])+".json")
+	return filepath.Join(paths.New(projectRoot).LifecycleMetricsDir(), hex.EncodeToString(digest[:])+lifecycleMetricsFileExt)
 }
 
 type lifecycleCounterFile struct {
@@ -96,10 +112,10 @@ func RecordLifecycleOutcome(projectRoot string, sprint LifecycleSprintIdentity, 
 		return errors.New("lifecycle metrics unavailable: unknown operation or outcome")
 	}
 	filename := lifecycleMetricsPath(projectRoot, sprint)
-	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filename), lifecycleMetricsDirMode); err != nil {
 		return fmt.Errorf("lifecycle metrics unavailable: %w", err)
 	}
-	err := filelock.New(filename).WithLockOperation("record-lifecycle-outcome", func() error {
+	err := filelock.New(filename).WithLockOperation(recordLifecycleOutcomeLockOperation, func() error {
 		counters, err := readLifecycleCounterFile(filename, sprint)
 		now := time.Now().UTC()
 		if errors.Is(err, os.ErrNotExist) {
@@ -202,7 +218,7 @@ func writeLifecycleCounterFile(filename string, counters lifecycleCounterFile) e
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(filename), ".lifecycle-counters-*")
+	tmp, err := os.CreateTemp(filepath.Dir(filename), lifecycleCounterTempPattern)
 	if err != nil {
 		return err
 	}
@@ -231,7 +247,7 @@ func (*LifecycleSprintChangedError) Error() string {
 
 // SafeDetails exposes actionable recovery without implying a metric write.
 func (*LifecycleSprintChangedError) SafeDetails() map[string]any {
-	return map[string]any{"operation": "update-sprint-metrics", "outcome": "STATE_CHANGED", "safe_action": "requery", "effects": "none"}
+	return map[string]any{"operation": updateSprintMetricsOperation, "outcome": models.LifecycleStateChanged, "safe_action": string(LifecycleSafeActionRequery), "effects": string(LifecycleEffectsNone)}
 }
 
 func applyLifecycleSprintMetrics(state *models.State, sprint LifecycleSprintIdentity, metrics models.SprintMetrics) error {

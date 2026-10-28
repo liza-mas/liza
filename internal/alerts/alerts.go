@@ -59,12 +59,12 @@ func ParseLine(line string) (Alert, bool) {
 	}
 
 	rest := strings.TrimLeft(line[closeBracket+1:], " ")
-	colonIdx := strings.Index(rest, ": ")
+	colonIdx := strings.Index(rest, levelCategorySeparator)
 	if colonIdx < 0 {
 		return Alert{}, false
 	}
 	levelAndCategory := rest[:colonIdx]
-	message := rest[colonIdx+2:]
+	message := rest[colonIdx+len(levelCategorySeparator):]
 
 	spaceIdx := strings.IndexByte(levelAndCategory, ' ')
 	if spaceIdx < 0 {
@@ -95,12 +95,21 @@ func GateKey(alert Alert) string {
 	return Key(alert)
 }
 
+// levelCategorySeparator ends the "LEVEL CATEGORY" prefix of an alert line.
+const levelCategorySeparator = ": "
+
+// alertFileMode is the permission of the alerts log and its once-ledger.
+const alertFileMode = 0644
+
+// alertKeyDigestBytes is the prefix of the message digest kept in an alert key.
+const alertKeyDigestBytes = 8
+
 // BlockedEpisodeKey identifies one BLOCKED alert per blocked episode and
 // message. The episode is the task's blocked history entry, persisted in state,
 // so the lifecycle writer and every watcher derive the same key.
 func BlockedEpisodeKey(taskID string, episodeStart time.Time, message string) string {
 	digest := sha256.Sum256([]byte(message))
-	return fmt.Sprintf("BLOCKED|%s|%s|%x", taskID, episodeStart.UTC().Format(time.RFC3339Nano), digest[:8])
+	return fmt.Sprintf("BLOCKED|%s|%s|%x", taskID, episodeStart.UTC().Format(time.RFC3339Nano), digest[:alertKeyDigestBytes])
 }
 
 // AwaitingHumanOccurrenceKey identifies one AWAITING HUMAN alert per human ask
@@ -109,7 +118,7 @@ func BlockedEpisodeKey(taskID string, episodeStart time.Time, message string) st
 // across watchers and restarts, and a new occurrence of the same ask alerts.
 func AwaitingHumanOccurrenceKey(taskID string, index int, at time.Time, ask string) string {
 	digest := sha256.Sum256([]byte(ask))
-	return fmt.Sprintf("AWAITING HUMAN|%s|%d|%s|%x", taskID, index, at.UTC().Format(time.RFC3339Nano), digest[:8])
+	return fmt.Sprintf("AWAITING HUMAN|%s|%d|%s|%x", taskID, index, at.UTC().Format(time.RFC3339Nano), digest[:alertKeyDigestBytes])
 }
 
 // onceLedgerLockTimeout bounds the wait of a watch tick or lifecycle writer on
@@ -193,7 +202,7 @@ func ledgerHasKey(ledger, key string) (bool, error) {
 }
 
 func appendLedgerKey(ledger, key string) error {
-	f, err := os.OpenFile(ledger, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(ledger, os.O_APPEND|os.O_CREATE|os.O_WRONLY, alertFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to open alert once-ledger: %w", err)
 	}
@@ -205,7 +214,7 @@ func appendLedgerKey(ledger, key string) error {
 }
 
 func appendAlert(alertsLog string, alert Alert) error {
-	f, err := os.OpenFile(alertsLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(alertsLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, alertFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to open alerts log: %w", err)
 	}

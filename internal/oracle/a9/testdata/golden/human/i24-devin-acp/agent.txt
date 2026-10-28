@@ -1,0 +1,12 @@
+exit_code: 0
+[stdout]
+tool: devin-acp
+source: flag
+backend: acpx
+executable: acpx
+args:
+prompt_transport: stdin
+contract_key: devin
+[stderr]
+Warning: no Liza contract symlink found for devin-acp. Agents may not find the behavioral contract.
+Run 'liza init --provider devin-acp' to create one.

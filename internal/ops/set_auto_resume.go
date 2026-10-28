@@ -29,22 +29,22 @@ func SetAutoResume(projectRoot string, enabled bool) error {
 // It changes no execution mode, sprint status or task state.
 func SetAutoResumeWithResult(projectRoot string, enabled bool) (*AutoResumeConfigResult, error) {
 	bb := db.For(paths.New(projectRoot).StatePath())
-	result := &AutoResumeConfigResult{Key: AutoResumeConfigKey, Value: enabled, Outcome: "unchanged"}
+	result := &AutoResumeConfigResult{Key: AutoResumeConfigKey, Value: enabled, Outcome: string(configSetUnchanged)}
 	previous := false
 	err := bb.Modify(func(state *models.State) error {
 		previous = state.Config.AutoResume
 		if previous != enabled {
 			state.Config.AutoResume = enabled
-			result.Outcome = "set"
+			result.Outcome = string(configSetSet)
 		}
 		return nil
 	})
 	if err != nil {
-		result.Outcome = "failed"
+		result.Outcome = string(configSetFailed)
 	}
 	// Same record shape as the other config_set writers; no reason, since this key takes none.
 	log.Printf("config_set key=%s outcome=%s actor=%q project=%q previous=%t value=%t",
-		AutoResumeConfigKey, result.Outcome, "operator", secretmask.New().MaskText(projectRoot), previous, enabled)
+		AutoResumeConfigKey, result.Outcome, actorOperator, secretmask.New().MaskText(projectRoot), previous, enabled)
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %w", AutoResumeConfigKey, err)
 	}

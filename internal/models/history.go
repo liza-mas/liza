@@ -45,8 +45,10 @@ type AlignmentHistory struct {
 	Extra     map[string]any `yaml:",inline"`
 }
 
-// TaskEventName identifies a task-history event.
-type TaskEventName = string
+// TaskEventName identifies a task-history event. The set is open: history
+// written by earlier versions may carry event names no constant names, and they
+// load and persist unchanged.
+type TaskEventName string
 
 // Task-event constants used in history entries across ops, commands, and agent packages.
 const (
@@ -118,7 +120,7 @@ const (
 // TaskHistoryEntry represents a single event in a task's history
 type TaskHistoryEntry struct {
 	Time                  time.Time      `yaml:"time"`
-	Event                 string         `yaml:"event"`
+	Event                 TaskEventName  `yaml:"event"`
 	Agent                 *string        `yaml:"agent,omitempty"`
 	PreviousAssignee      *string        `yaml:"previous_assignee,omitempty"`
 	Reason                *string        `yaml:"reason,omitempty"`
@@ -131,27 +133,50 @@ type TaskHistoryEntry struct {
 
 // Discovery represents a finding by an agent during work
 type Discovery struct {
-	ID              string         `yaml:"id"`
-	By              string         `yaml:"by"`
-	During          string         `yaml:"during"`
-	Description     string         `yaml:"description"`
-	Severity        string         `yaml:"severity"`
-	Urgency         string         `yaml:"urgency"`
-	Recommendation  string         `yaml:"recommendation"`
-	Created         time.Time      `yaml:"created"`
-	ConvertedToTask *string        `yaml:"converted_to_task,omitempty"`
-	Extra           map[string]any `yaml:",inline"`
+	ID              string            `yaml:"id"`
+	By              string            `yaml:"by"`
+	During          string            `yaml:"during"`
+	Description     string            `yaml:"description"`
+	Severity        DiscoverySeverity `yaml:"severity"`
+	Urgency         DiscoveryUrgency  `yaml:"urgency"`
+	Recommendation  string            `yaml:"recommendation"`
+	Created         time.Time         `yaml:"created"`
+	ConvertedToTask *string           `yaml:"converted_to_task,omitempty"`
+	Extra           map[string]any    `yaml:",inline"`
 }
+
+// DiscoverySeverity grades how serious a discovery is. Validation refuses any
+// value outside the set; a defined string type still holds one so that state
+// written with an unknown value loads and is refused by IsValidSeverity.
+type DiscoverySeverity string
+
+// Discovery severities accepted by IsValidSeverity.
+const (
+	DiscoverySeverityCritical DiscoverySeverity = "critical"
+	DiscoverySeverityHigh     DiscoverySeverity = "high"
+	DiscoverySeverityMedium   DiscoverySeverity = "medium"
+	DiscoverySeverityLow      DiscoverySeverity = "low"
+)
+
+// DiscoveryUrgency says whether a discovery needs an immediate orchestrator
+// turn or can wait. Like DiscoverySeverity, it is closed by validation only.
+type DiscoveryUrgency string
+
+// Discovery urgencies accepted by IsValidUrgency.
+const (
+	DiscoveryUrgencyImmediate DiscoveryUrgency = "immediate"
+	DiscoveryUrgencyDeferred  DiscoveryUrgency = "deferred"
+)
 
 // IsValidSeverity checks if the discovery severity is valid
 func (d *Discovery) IsValidSeverity() bool {
-	return d.Severity == "critical" || d.Severity == "high" ||
-		d.Severity == "medium" || d.Severity == "low"
+	return d.Severity == DiscoverySeverityCritical || d.Severity == DiscoverySeverityHigh ||
+		d.Severity == DiscoverySeverityMedium || d.Severity == DiscoverySeverityLow
 }
 
 // IsValidUrgency checks if the discovery urgency is valid
 func (d *Discovery) IsValidUrgency() bool {
-	return d.Urgency == "immediate" || d.Urgency == "deferred"
+	return d.Urgency == DiscoveryUrgencyImmediate || d.Urgency == DiscoveryUrgencyDeferred
 }
 
 // HandoffTrigger identifies what caused a handoff event.
@@ -219,10 +244,41 @@ type SpecChange struct {
 	Extra       map[string]any `yaml:",inline"`
 }
 
+// AnomalyType names the kind of an execution anomaly. Anomaly.IsValidType
+// accepts exactly the constants below; a defined string type still holds any
+// value, so state written with an unknown type loads and is refused by
+// validation with the same message as before.
+type AnomalyType string
+
+// Anomaly types accepted by IsValidType. Types with more to say than their
+// name are declared with their own documentation after this block, and
+// AnomalyTypeRuntimeInputUnavailable beside the runtime-input vocabulary.
+const (
+	AnomalyTypeRetryLoop             AnomalyType = "retry_loop"
+	AnomalyTypeTradeOff              AnomalyType = "trade_off"
+	AnomalyTypeSpecAmbiguity         AnomalyType = "spec_ambiguity"
+	AnomalyTypeExternalBlocker       AnomalyType = "external_blocker"
+	AnomalyTypeAssumptionViolated    AnomalyType = "assumption_violated"
+	AnomalyTypeScopeDeviation        AnomalyType = "scope_deviation"
+	AnomalyTypeWorkaround            AnomalyType = "workaround"
+	AnomalyTypeDebtCreated           AnomalyType = "debt_created"
+	AnomalyTypeSpecChanged           AnomalyType = "spec_changed"
+	AnomalyTypeHypothesisExhaustion  AnomalyType = "hypothesis_exhaustion"
+	AnomalyTypeSpecGap               AnomalyType = "spec_gap"
+	AnomalyTypeReviewBudgetExhausted AnomalyType = "review_budget_exhausted"
+	AnomalyTypeReviewExhaustion      AnomalyType = "review_exhaustion"
+	AnomalyTypeReviewerLoop          AnomalyType = "reviewer_loop"
+	AnomalyTypeStaleVerdict          AnomalyType = "stale_verdict"
+	AnomalyTypeSystemAmbiguity       AnomalyType = "system_ambiguity"
+	AnomalyTypeProviderAuditDegraded AnomalyType = "provider_audit_degraded"
+	AnomalyTypeAgentDegraded         AnomalyType = "agent_degraded"
+	AnomalyTypeSubmitVerdictFailed   AnomalyType = "submit_verdict_failed"
+)
+
 // AnomalyTypeReviewerClaimCircuitOpen records a reviewer-claim circuit breaker
 // opening after repeated identical pre-claim failures. Its required details
 // are listed in anomalyRequiredDetails.
-const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
+const AnomalyTypeReviewerClaimCircuitOpen AnomalyType = "reviewer_claim_circuit_open"
 
 // AnomalyTypeObligationContentDrifted records that the content an approved
 // plan's obligation rests on is no longer what the reviewer saw. It is a
@@ -238,14 +294,14 @@ const AnomalyTypeReviewerClaimCircuitOpen = "reviewer_claim_circuit_open"
 //     re-pin may have made unreviewed, and the section at the merge commit,
 //     or "" when it no longer resolves. It does not assert a reviewer saw
 //     reviewed_section.
-const AnomalyTypeObligationContentDrifted = "obligation_content_drifted"
+const AnomalyTypeObligationContentDrifted AnomalyType = "obligation_content_drifted"
 
 // AnomalyTypePendingMergeStalled records that a reviewer's bounded wake gave up
 // retrying a merge it owns. It is not a retry_loop: that type describes a retry
 // cluster inside a task's execution, and retry-cluster detection answers it
 // with HALT, which repeated stalls of one supervisor loop do not warrant.
 // Its required details are listed in anomalyRequiredDetails.
-const AnomalyTypePendingMergeStalled = "pending_merge_stalled"
+const AnomalyTypePendingMergeStalled AnomalyType = "pending_merge_stalled"
 
 // PendingMergeStallImpact is the impact detail every pending-merge stall
 // record carries. Legacy stall records are recognized by it, so it must not
@@ -257,19 +313,19 @@ type Anomaly struct {
 	Timestamp time.Time      `yaml:"timestamp"`
 	Task      string         `yaml:"task"`
 	Reporter  string         `yaml:"reporter"`
-	Type      string         `yaml:"type"`
+	Type      AnomalyType    `yaml:"type"`
 	Details   map[string]any `yaml:"details"`
 	Extra     map[string]any `yaml:",inline"`
 }
 
 // IsValidType checks if the anomaly type is valid
 func (a *Anomaly) IsValidType() bool {
-	validTypes := []string{
-		"retry_loop", "trade_off", "spec_ambiguity", "external_blocker",
-		"assumption_violated", "scope_deviation", "workaround", "debt_created",
-		"spec_changed", "hypothesis_exhaustion", "spec_gap", "review_budget_exhausted",
-		"review_exhaustion", "reviewer_loop", "stale_verdict", "system_ambiguity",
-		"provider_audit_degraded", "agent_degraded", "submit_verdict_failed",
+	validTypes := []AnomalyType{
+		AnomalyTypeRetryLoop, AnomalyTypeTradeOff, AnomalyTypeSpecAmbiguity, AnomalyTypeExternalBlocker,
+		AnomalyTypeAssumptionViolated, AnomalyTypeScopeDeviation, AnomalyTypeWorkaround, AnomalyTypeDebtCreated,
+		AnomalyTypeSpecChanged, AnomalyTypeHypothesisExhaustion, AnomalyTypeSpecGap, AnomalyTypeReviewBudgetExhausted,
+		AnomalyTypeReviewExhaustion, AnomalyTypeReviewerLoop, AnomalyTypeStaleVerdict, AnomalyTypeSystemAmbiguity,
+		AnomalyTypeProviderAuditDegraded, AnomalyTypeAgentDegraded, AnomalyTypeSubmitVerdictFailed,
 		AnomalyTypeReviewerClaimCircuitOpen, AnomalyTypeObligationContentDrifted,
 		AnomalyTypePendingMergeStalled, AnomalyTypeRuntimeInputUnavailable,
 	}
@@ -286,16 +342,16 @@ type AnomalyViolation struct {
 
 // anomalyRequiredDetails lists, per anomaly type, the details a record cannot
 // be acted on without. Types absent here require none.
-var anomalyRequiredDetails = map[string][]string{
-	"retry_loop":              {"count", "error_pattern"},
-	"trade_off":               {"what", "why", "debt_created"},
-	"external_blocker":        {"blocker_service"},
-	"assumption_violated":     {"assumption", "reality"},
-	"system_ambiguity":        {"protocol_section", "question"},
-	"provider_audit_degraded": {"provider", "agent_id", "message"},
-	"agent_degraded":          {"agent_id", "role", "reason", "last_error"},
-	"stale_verdict":           {"attempted_verdict", "current_status"},
-	"submit_verdict_failed":   {"verdict", "error"},
+var anomalyRequiredDetails = map[AnomalyType][]string{
+	AnomalyTypeRetryLoop:             {"count", "error_pattern"},
+	AnomalyTypeTradeOff:              {"what", "why", "debt_created"},
+	AnomalyTypeExternalBlocker:       {"blocker_service"},
+	AnomalyTypeAssumptionViolated:    {"assumption", "reality"},
+	AnomalyTypeSystemAmbiguity:       {"protocol_section", "question"},
+	AnomalyTypeProviderAuditDegraded: {"provider", "agent_id", "message"},
+	AnomalyTypeAgentDegraded:         {"agent_id", "role", "reason", "last_error"},
+	AnomalyTypeStaleVerdict:          {"attempted_verdict", "current_status"},
+	AnomalyTypeSubmitVerdictFailed:   {"verdict", "error"},
 	// The breaker keys a quarantine on role, failure class and boundary
 	// version, and an operator recovers from the counters and the hint; a
 	// record missing any of them cannot be acted on.
@@ -357,7 +413,7 @@ func anomalyDetailMissing(value any) bool {
 // writer's full signature qualifies; a partial match is someone else's
 // malformed record and stays for inspection. Returns true if the record changed.
 func (a *Anomaly) MigrateLegacyPendingMergeStall() bool {
-	if a.Type != "retry_loop" || a.Details["count"] != nil || a.Details["error_pattern"] != nil {
+	if a.Type != AnomalyTypeRetryLoop || a.Details["count"] != nil || a.Details["error_pattern"] != nil {
 		return false
 	}
 	if a.Details["agent_id"] == nil || a.Details["role"] == nil || a.Details["rounds"] == nil {

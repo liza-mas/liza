@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "already_existed": false,
+      "base_commit": "<SHA:BASE>",
+      "task_id": "task-1",
+      "warnings": null,
+      "worktree_dir": "<PROJECT>/.worktrees/task-1"
+    }
+  }
+}

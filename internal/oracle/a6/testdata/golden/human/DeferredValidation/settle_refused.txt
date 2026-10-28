@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: validation failed: a deferred-validation runner holds the lock; it is live and cannot be settled

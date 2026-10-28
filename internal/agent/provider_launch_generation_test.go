@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/db"
@@ -339,7 +340,7 @@ func TestProviderLaunchFenceFailureSemantics(t *testing.T) {
 			missingTool: {
 				Backend:         "cli",
 				Executable:      filepath.Join(binDir, "missing-executable"),
-				PromptTransport: PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 			},
 		}}
 		_, startErr := NewCLIAgent("").Run(context.Background(), LLMAgentRunRequest{BackendName: missingTool, AgentID: fixture.agentID, Generation: fixture.authorityA.Generation, ProjectRoot: fixture.projectRoot, Prompt: "prompt", RuntimeConfig: runtimeConfig, EventSink: startSink, LaunchGate: gate})

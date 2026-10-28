@@ -1,0 +1,7 @@
+exit_code: 1
+[stdout]
+[stderr]
+Warning: no Liza contract symlink found for claude. Agents may not find the behavioral contract.
+Run 'liza init --claude' to create one.
+Auto-assigned agent ID: coder-2
+Error: modification function failed: role coder already has 1 live agent(s) (max 1); only 1 instance(s) allowed; coder-1: effective ownership unknown/degraded; raw state mismatched from procfs (pid exists but cmdline does not match expected agent supervisor); recorded namespace-local pid <V1>; <CORRELATION>

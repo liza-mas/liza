@@ -53,7 +53,7 @@ func DeferProviderDependency(projectRoot, taskID, providerTask, transition, reas
 	err = bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if !models.UnstartedProviderConsumer(task, resolver) {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s is not unstarted (assigned, leased, holding a worktree or hand-off, claimed before, or past its initial status); %s only moves a declaration of a task nobody has started", taskID, deferProviderDependencyOperation)}
@@ -91,12 +91,12 @@ func DeferProviderDependency(projectRoot, taskID, providerTask, transition, reas
 		note := fmt.Sprintf("provider wait on %s %s outputs %v deferred to the outputs generated at %s", providerTask, transition, dep.Outputs, atTransition)
 		task.History = append(task.History, models.TaskHistoryEntry{
 			Time:   now,
-			Event:  string(models.TaskEventDependencyDeferred),
+			Event:  models.TaskEventDependencyDeferred,
 			Reason: &reason,
 			Note:   &note,
 			Extra: map[string]any{
 				"operation":     deferProviderDependencyOperation,
-				"source":        "operator_cli",
+				"source":        humanNoteSourceOperatorCLI,
 				"provider_task": providerTask,
 				"transition":    transition,
 				"outputs":       slices.Clone(dep.Outputs),
@@ -112,7 +112,7 @@ func DeferProviderDependency(projectRoot, taskID, providerTask, transition, reas
 
 	if err := log.New(lp.LogPath()).Append(log.Entry{
 		Timestamp: now,
-		Agent:     "operator",
+		Agent:     actorOperator,
 		Action:    string(models.TaskEventDependencyDeferred),
 		Task:      &taskID,
 		Detail:    fmt.Sprintf("%s %s -> %s: %s", providerTask, transition, result.AtTransition, reason),

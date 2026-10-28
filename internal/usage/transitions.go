@@ -14,7 +14,7 @@ import (
 
 // usefulEvents are the task-history events that change task content, the
 // ownership boundary, an accepted artifact/commit or the terminal outcome.
-var usefulEvents = map[string]struct{}{
+var usefulEvents = map[models.TaskEventName]struct{}{
 	models.TaskEventCreated:                  {},
 	models.TaskEventClaimed:                  {},
 	models.TaskEventPreExecutionCheckpoint:   {},
@@ -46,7 +46,7 @@ var usefulEvents = map[string]struct{}{
 }
 
 // notUsefulEvents are polling, release, re-entry and recovery bookkeeping.
-var notUsefulEvents = map[string]struct{}{
+var notUsefulEvents = map[models.TaskEventName]struct{}{
 	models.TaskEventOrchestratorAssessment:    {},
 	models.TaskEventClaimReleased:             {},
 	models.TaskEventDoerClaimReleased:         {},
@@ -74,7 +74,7 @@ var notUsefulEvents = map[string]struct{}{
 // IsUsefulEvent classifies a task-history event name. An event in neither
 // documented list is unclassified: reported as not useful with classified=false
 // so vocabulary drift surfaces instead of silently changing the denominator.
-func IsUsefulEvent(name string) (useful bool, classified bool) {
+func IsUsefulEvent(name models.TaskEventName) (useful bool, classified bool) {
 	if _, ok := usefulEvents[name]; ok {
 		return true, true
 	}
@@ -88,9 +88,9 @@ func IsUsefulEvent(name string) (useful bool, classified bool) {
 // reading is reproducible at any as_of. Revision is the task's lifecycle
 // revision at the time of the state read (0 when the task has no lifecycle).
 type Evidence struct {
-	Event    string    `json:"event"`
-	Time     time.Time `json:"time"`
-	Revision uint64    `json:"revision"`
+	Event    models.TaskEventName `json:"event"`
+	Time     time.Time            `json:"time"`
+	Revision uint64               `json:"revision"`
 }
 
 // Transition is a useful state transition of a task. TaskID names the task
@@ -158,7 +158,7 @@ var OutcomeClasses = []OutcomeClass{
 
 // decidingEvents map a history event to the outcome it decides. unblocked
 // clears blocked back to active.
-var decidingEvents = map[string]OutcomeClass{
+var decidingEvents = map[models.TaskEventName]OutcomeClass{
 	models.TaskEventMerged:     OutcomeMerged,
 	models.TaskEventSuperseded: OutcomeSuperseded,
 	models.TaskEventAbandoned:  OutcomeAbandoned,
@@ -216,7 +216,7 @@ var FailureCategories = []FailureCategory{
 
 // lifecycleRetryEvents are the attempt, release and reclaim entries that
 // classify a post-transition tail as lifecycle_retry.
-var lifecycleRetryEvents = map[string]struct{}{
+var lifecycleRetryEvents = map[models.TaskEventName]struct{}{
 	models.TaskEventNewAttempt:               {},
 	models.TaskEventClaimReleased:            {},
 	models.TaskEventDoerClaimReleased:        {},
@@ -292,7 +292,7 @@ func hasCircuitOpen(anomalies []models.Anomaly, taskID string, since time.Time) 
 // UnclassifiedEvents returns the sorted, deduplicated event names found in the
 // tasks' histories that belong to neither documented list.
 func UnclassifiedEvents(tasks []models.Task) []string {
-	seen := map[string]struct{}{}
+	seen := map[models.TaskEventName]struct{}{}
 	for i := range tasks {
 		for _, h := range tasks[i].History {
 			if _, classified := IsUsefulEvent(h.Event); !classified {
@@ -302,7 +302,7 @@ func UnclassifiedEvents(tasks []models.Task) []string {
 	}
 	names := make([]string, 0, len(seen))
 	for name := range seen {
-		names = append(names, name)
+		names = append(names, string(name))
 	}
 	sort.Strings(names)
 	return names

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,8 +12,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/agentlaunch"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/subprocess"
+)
+
+// Sizes of the ACPX stdout line scanner: its initial buffer and the longest
+// single JSON line it accepts.
+const (
+	acpxStdoutScanInitialBuffer = 64 * 1024
+	acpxStdoutScanMaxLine       = 8 * 1024 * 1024
 )
 
 // ACPXAgent implements LLMAgent through the headless acpx ACP client.
@@ -31,149 +38,44 @@ func NewACPXAgent(outputsDir string) *ACPXAgent {
 }
 
 func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
-		ToolName:      req.BackendName,
-		ProfileName:   req.ProfileName,
-		ProfileVars:   req.ProfileVars,
-		Model:         req.Model,
-		Prompt:        req.Prompt,
-		ProjectRoot:   req.ProjectRoot,
-		AgentID:       req.AgentID,
-		TaskID:        req.TaskID,
-		SessionID:     req.SessionID,
-		SessionScope:  req.SessionScope,
-		OutputsDir:    a.outputsDir,
-		RuntimeConfig: req.RuntimeConfig,
-	})
+	plan, failed, err := a.prepareRun(req)
 	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
+		return failed, err
 	}
-	plan.Environment, err = resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
-	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1}, err
-	}
-	engine, err := os.Executable()
-	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1}, fmt.Errorf("resolve tool-result engine executable")
-	}
-	plan, err = prepareDevinToolResultPlan(req, plan, engine)
-	if err != nil {
-		return LLMAgentRunResult{ExitCode: 1, Output: err.Error()}, err
-	}
-	if a.masker != nil {
-		a.masker.AddEntries(plan.Environment)
-	}
-	acpxAgent := plan.ACPXAgent
 	sessionName := plan.ACPXSessionName
 	if sessionName == "" {
-		sessionName = acpxSessionName(req.AgentID)
+		sessionName = agentlaunch.ACPXSessionName(req.AgentID)
 	}
-	var warm bool
-	var promptProcess *acpxPromptProcess
-	err = req.LaunchGate.launch(ctx, func() error {
-		warm = a.hasSeenSession(sessionName) || a.sessionExists(ctx, req.ProjectRoot, req.AgentID, req.Generation, plan)
-		if err := a.ensureSession(ctx, req.AgentID, req.Generation, req.ProjectRoot, plan); err != nil {
-			return err
-		}
-		if err := a.configureSession(ctx, req.AgentID, req.Generation, plan); err != nil {
-			return err
-		}
-		var err error
-		promptProcess, err = a.startACPXPrompt(ctx, req, plan)
-		return err
-	})
+	turn := acpxTurn{
+		req: req,
+		base: LLMAgentEvent{
+			BackendName: req.BackendName,
+			AgentID:     req.AgentID,
+			TaskID:      req.TaskID,
+			SessionID:   sessionName,
+		},
+		acpxAgent: plan.ACPXAgent,
+	}
+	promptProcess, warm, err := a.launchPrompt(ctx, req, plan, sessionName)
+	turn.warm = warm
 	if err != nil {
 		errText, maskedErr := a.boundedProviderFailure(err, req.BackendName)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     errText,
-			Payload: map[string]any{
-				"error": errText,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: errText, WarmUsage: warm, SessionID: sessionName}, maskedErr
+		emitLLMAgentFailed(ctx, req.EventSink, turn.base, errText)
+		return turn.result(1, errText, LLMAgentUsage{}), maskedErr
 	}
 	a.markSessionSeen(sessionName)
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventStarted,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"mode":       "acpx",
-			"acpx_agent": acpxAgent,
-		},
-	})
+	started := turn.base
+	started.Kind = LLMAgentEventStarted
+	started.Payload = map[string]any{llmAgentPayloadMode: llmAgentModeACPX, llmAgentPayloadACPXAgent: turn.acpxAgent}
+	emitLLMAgentEvent(ctx, req.EventSink, started)
 
 	output, usage, failureEvidence, err := a.waitACPXPrompt(ctx, req, promptProcess)
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventUsage,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"usage": usage,
-		},
-	})
-
-	if err != nil {
-		errText := a.maskText(err.Error())
-		maskedErr := maskedError{message: errText, err: err}
-		resultOutput := ""
-		if _, diagnostic := classifyProviderUnavailable(a.maskText(failureEvidence), req.BackendName); diagnostic != "" {
-			resultOutput = diagnostic
-		}
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     errText,
-			Payload: map[string]any{
-				"error": errText,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: resultOutput, Usage: usage, WarmUsage: warm, SessionID: sessionName}, maskedErr
-	}
-
-	if qe := DetectQuotaExhaustion(output.Text, acpxAgent); qe != nil {
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: req.BackendName,
-			AgentID:     req.AgentID,
-			TaskID:      req.TaskID,
-			SessionID:   sessionName,
-			Message:     qe.Message,
-			Payload: map[string]any{
-				"exit_code": 1,
-				"quota":     true,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: output.Text, Usage: usage, WarmUsage: warm, SessionID: sessionName}, nil
-	}
-
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventCompleted,
-		BackendName: req.BackendName,
-		AgentID:     req.AgentID,
-		TaskID:      req.TaskID,
-		SessionID:   sessionName,
-		Payload: map[string]any{
-			"exit_code": 0,
-		},
-	})
-	return LLMAgentRunResult{ExitCode: 0, Output: output.Text, Usage: usage, WarmUsage: warm, SessionID: sessionName}, nil
+	emitLLMAgentUsage(ctx, req.EventSink, turn.base, usage)
+	return a.completeRun(ctx, turn, output, usage, failureEvidence, err)
 }
 
 func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      req.BackendName,
 		ProfileName:   req.ProfileName,
 		ProfileVars:   req.ProfileVars,
@@ -186,7 +88,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != ToolBackendACPX {
+	if plan.Backend != providers.BackendACPX {
 		return NewCLIAgent(a.outputsDir).RunInteractive(ctx, req)
 	}
 
@@ -217,7 +119,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 			AgentID:     req.AgentID,
 			SessionID:   req.SessionID,
 			Payload: map[string]any{
-				"mode": "interactive",
+				llmAgentPayloadMode: llmAgentModeInteractive,
 			},
 		})
 		err = cmd.Wait()
@@ -231,7 +133,7 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 				AgentID:     req.AgentID,
 				SessionID:   req.SessionID,
 				Payload: map[string]any{
-					"exit_code": exitCode,
+					llmAgentPayloadExitCode: exitCode,
 				},
 			})
 			return exitCode, nil
@@ -244,13 +146,13 @@ func (a *ACPXAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveR
 		AgentID:     req.AgentID,
 		SessionID:   req.SessionID,
 		Payload: map[string]any{
-			"exit_code": 0,
+			llmAgentPayloadExitCode: 0,
 		},
 	})
 	return 0, nil
 }
 
-func interactiveExecutableForACPX(plan LaunchPlan) string {
+func interactiveExecutableForACPX(plan agentlaunch.LaunchPlan) string {
 	switch plan.ACPXAgent {
 	case "cursor":
 		return "cursor-agent"
@@ -267,64 +169,6 @@ func interactiveExecutableForACPX(plan LaunchPlan) string {
 	}
 }
 
-func (a *ACPXAgent) ensureSession(ctx context.Context, agentID, generation, projectRoot string, plan LaunchPlan) error {
-	args := plan.ACPXEnsureArgs
-	if len(args) == 0 {
-		if strings.TrimSpace(projectRoot) == "" {
-			return fmt.Errorf("acpx ensure args are required when project root is empty")
-		}
-		args = []string{"--cwd", projectRoot, plan.ACPXAgent, "sessions", "ensure", "--name", plan.ACPXSessionName}
-	}
-	out, err := a.runACPX(ctx, plan, args, "")
-	if err != nil {
-		return fmt.Errorf("acpx sessions ensure: %w\n%s", err, out)
-	}
-	return nil
-}
-
-func (a *ACPXAgent) configureSession(ctx context.Context, agentID, generation string, plan LaunchPlan) error {
-	if len(plan.ACPXSetModeArgs) == 0 {
-		return nil
-	}
-	out, err := a.runACPX(ctx, plan, plan.ACPXSetModeArgs, "")
-	if err != nil {
-		return fmt.Errorf("acpx set-mode: %w\n%s", err, out)
-	}
-	return nil
-}
-
-func (a *ACPXAgent) boundedProviderFailure(err error, backendName string) (string, maskedError) {
-	errText := a.maskText(err.Error())
-	if _, diagnostic := classifyProviderUnavailable(errText, backendName); diagnostic != "" {
-		errText = diagnostic
-	}
-	return errText, maskedError{message: errText, err: err}
-}
-
-func (a *ACPXAgent) sessionExists(ctx context.Context, _ string, agentID, generation string, plan LaunchPlan) bool {
-	if len(plan.ACPXShowArgs) == 0 {
-		return false
-	}
-	_, err := a.runACPX(ctx, plan, plan.ACPXShowArgs, "")
-	return err == nil
-}
-
-func (a *ACPXAgent) runACPX(ctx context.Context, plan LaunchPlan, args []string, stdin string) (string, error) {
-	cmd, err := snapshotCommand(ctx, plan.Executable, plan.Directory, plan.Environment, args...)
-	if err != nil {
-		return "", err
-	}
-	subprocess.ConfigureCancellation(cmd)
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err = cmd.Run()
-	return stdout.String() + stderr.String(), err
-}
-
 type acpxPromptProcess struct {
 	cmd             *exec.Cmd
 	stdout          io.ReadCloser
@@ -336,7 +180,7 @@ type acpxPromptProcess struct {
 	eventBase       LLMAgentEvent
 }
 
-func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan LaunchPlan) (*acpxPromptProcess, error) {
+func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest, plan agentlaunch.LaunchPlan) (*acpxPromptProcess, error) {
 	cmd, err := snapshotCommand(ctx, plan.Executable, req.ProjectRoot, plan.Environment, plan.ACPXPromptArgs...)
 	if err != nil {
 		return nil, err
@@ -365,9 +209,7 @@ func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest,
 		},
 	}
 	if a.outputsDir != "" {
-		timestamp := time.Now().UTC().Format("20060102-150405")
-		process.stdoutLog = newStreamingOutputFile(a.outputsDir, req.AgentID, "txt", timestamp, a.masker)
-		process.stderrLog = newStreamingOutputFile(a.outputsDir, req.AgentID, "err", timestamp, a.masker)
+		process.stdoutLog, process.stderrLog = newAgentOutputLogs(a.outputsDir, req.AgentID, a.masker)
 		process.stdoutLogWriter = process.stdoutLog
 		process.stderrLogWriter = process.stderrLog
 	}
@@ -448,7 +290,7 @@ func (a *ACPXAgent) scanACPXPromptStdout(
 	markProgress func(),
 ) error {
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	scanner.Buffer(make([]byte, 0, acpxStdoutScanInitialBuffer), acpxStdoutScanMaxLine)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if stdoutLog != nil {
@@ -543,7 +385,7 @@ func (e maskedError) Unwrap() error {
 }
 
 func acpxAgentMessageChunk(update map[string]any) string {
-	if update["sessionUpdate"] != "agent_message_chunk" {
+	if update[acpSessionUpdateKey] != string(acpSessionUpdateMessageChunk) {
 		return ""
 	}
 	content, ok := update["content"].(map[string]any)
@@ -578,12 +420,4 @@ func acpxInt(raw any) int {
 	default:
 		return 0
 	}
-}
-
-func acpxSessionName(agentID string) string {
-	binaryName := brand.RuntimeValues().BinaryName
-	if agentID == "" {
-		return binaryName + "-agent"
-	}
-	return binaryName + "-" + agentID
 }

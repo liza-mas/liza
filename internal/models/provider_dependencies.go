@@ -75,7 +75,7 @@ type ProviderTransition struct {
 	SourceRolePair string
 	TargetRolePair string
 	TaskSlug       string
-	Cardinality    string
+	Cardinality    TransitionCardinality
 }
 
 // ProviderTransitionResolver is optional for legacy PipelineResolver callers.
@@ -258,7 +258,7 @@ func ProviderDependencyChildren(dep ProviderDependency, pr PipelineResolver) (Pr
 	if err != nil {
 		return ProviderTransition{}, nil, err
 	}
-	if td.Cardinality != "per-subtask" || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
+	if td.Cardinality != CardinalityPerSubtask || td.SourceRolePair == "" || td.TargetRolePair == "" || td.TaskSlug == "" {
 		return ProviderTransition{}, nil, fmt.Errorf("provider transition %q must identify a per-subtask source, target and task slug", dep.Transition)
 	}
 	children := make([]string, len(dep.Outputs))
@@ -331,7 +331,7 @@ func SelectedChildProvenance(state *State, td ProviderTransition, providerID, pr
 // ProviderRetired reports a provider whose reviewed output can never be
 // generated: replanned, hand-off retired, or terminal other than MERGED.
 func ProviderRetired(provider *Task) bool {
-	return provider.AmendsPlan != "" || provider.TransitionsExecuted["replanned"] || provider.PlanHandoffRetired() ||
+	return provider.AmendsPlan != "" || provider.TransitionsExecuted[ReplannedTransition] || provider.PlanHandoffRetired() ||
 		(provider.Status.IsTerminal() && provider.Status != TaskStatusMerged)
 }
 
@@ -455,7 +455,7 @@ func generatedProviderDeclarationMismatch(task *Task, state *State, pr PipelineR
 	}
 	for _, parentID := range task.EffectiveParentTasks() {
 		parent := state.FindTask(parentID)
-		if parent == nil || parent.Status == TaskStatusSuperseded || parent.Status == TaskStatusAbandoned || parent.TransitionsExecuted["replanned"] || parent.PlanHandoffRetired() {
+		if parent == nil || parent.Status == TaskStatusSuperseded || parent.Status == TaskStatusAbandoned || parent.TransitionsExecuted[ReplannedTransition] || parent.PlanHandoffRetired() {
 			continue
 		}
 		for index, output := range parent.Output {
@@ -521,7 +521,7 @@ func resolveProviderDependency(dep ProviderDependency, state *State, pr Pipeline
 			if !SelectedChildProvenance(state, td, provider.ID, projected[position], child, pr) {
 				return invalid(fmt.Sprintf("selected provider child %s has wrong role or provenance", child.ID))
 			}
-			if child.TransitionsExecuted["replanned"] || child.PlanHandoffRetired() || (child.Status.IsTerminal() && child.Status != TaskStatusMerged) {
+			if child.TransitionsExecuted[ReplannedTransition] || child.PlanHandoffRetired() || (child.Status.IsTerminal() && child.Status != TaskStatusMerged) {
 				return invalid(fmt.Sprintf("selected provider child %s was retired", child.ID))
 			}
 		}

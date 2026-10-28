@@ -23,7 +23,7 @@ var (
 	trT4 = trT0.Add(4 * time.Hour)
 )
 
-func trEntry(at time.Time, event string) models.TaskHistoryEntry {
+func trEntry(at time.Time, event models.TaskEventName) models.TaskHistoryEntry {
 	return models.TaskHistoryEntry{Time: at, Event: event}
 }
 
@@ -36,7 +36,7 @@ func trTaskWith(id string, revision uint64, entries ...models.TaskHistoryEntry) 
 }
 
 func TestUsefulTransitionRule(t *testing.T) {
-	useful := []string{
+	useful := []models.TaskEventName{
 		models.TaskEventCreated, models.TaskEventClaimed,
 		models.TaskEventPreExecutionCheckpoint, models.TaskEventOutputSet,
 		models.TaskEventSubmittedForReview, models.TaskEventReviewCommitUpdated,
@@ -51,7 +51,7 @@ func TestUsefulTransitionRule(t *testing.T) {
 		models.TaskEventHandoffInitiated,
 		models.TaskEventPlanAmendment,
 	}
-	notUseful := []string{
+	notUseful := []models.TaskEventName{
 		models.TaskEventOrchestratorAssessment, models.TaskEventClaimReleased,
 		models.TaskEventDoerClaimReleased, models.TaskEventReviewClaimReleased,
 		models.TaskEventReclaimedAfterRejection, models.TaskEventReassignedAfterRejection,
@@ -82,7 +82,7 @@ func TestUsefulTransitionRule(t *testing.T) {
 	})
 
 	t.Run("unknown event is unclassified and not useful", func(t *testing.T) {
-		for _, name := range []string{"invented_event", ""} {
+		for _, name := range []models.TaskEventName{"invented_event", ""} {
 			gotUseful, classified := IsUsefulEvent(name)
 			if gotUseful || classified {
 				t.Errorf("IsUsefulEvent(%q) = (%v, %v); want (false, false)", name, gotUseful, classified)
@@ -193,8 +193,8 @@ func TestDeclaredTaskEventsClassified(t *testing.T) {
 					t.Fatalf("%s: %v", name.Name, err)
 				}
 				count++
-				_, useful := usefulEvents[event]
-				_, notUseful := notUsefulEvents[event]
+				_, useful := usefulEvents[models.TaskEventName(event)]
+				_, notUseful := notUsefulEvents[models.TaskEventName(event)]
 				if useful == notUseful {
 					t.Errorf("%s (%q): must be in exactly one classification map; useful=%v notUseful=%v", name.Name, event, useful, notUseful)
 				}
@@ -208,13 +208,13 @@ func TestDeclaredTaskEventsClassified(t *testing.T) {
 
 func TestAcceptanceCommitsRemappedReportClassification(t *testing.T) {
 	for _, tc := range []struct {
-		event       string
+		event       models.TaskEventName
 		wantWarning bool
 	}{
 		{models.TaskEventAcceptanceCommitsRemapped, false},
 		{"invented_event", true},
 	} {
-		t.Run(tc.event, func(t *testing.T) {
+		t.Run(string(tc.event), func(t *testing.T) {
 			task := rpTask("parent", rpEv(0, models.TaskEventCreated), rpEv(1, models.TaskEventMerged), rpEv(2, tc.event))
 			records := []Record{rpRec(task.ID, "coder", 3, 10, 20, 5)}
 			report := rpBuild(t, Input{

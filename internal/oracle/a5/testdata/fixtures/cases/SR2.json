@@ -1,0 +1,21 @@
+{
+  "id": "SR2",
+  "base": "legacy",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "coder-2",
+    "args": [
+      "submit-for-review",
+      "task-1",
+      "{{commit:candidate}}"
+    ],
+    "exit": 1,
+    "contains": "not assigned"
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

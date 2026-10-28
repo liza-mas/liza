@@ -1,0 +1,44 @@
+exit 0
+--- stdout
+Re-invoke a planner agent after amending a plan file, or to correct a
+merged plan before its children exist.
+This command invalidates the old planning task's output and creates a new
+planning task with the same role_pair and spec_ref, which a planner agent
+picks up.
+If task-id is omitted, the command auto-detects the single planning task
+with unconsumed output in the current sprint. If multiple planning tasks
+match, specify the task ID explicitly.
+At CHECKPOINT the sprint is set back to IN_PROGRESS. At IN_PROGRESS (for
+example the orchestrator's plan review, or after an automatic resume) the
+sprint status is left alone. --reason is appended to the new task's
+description so the planner and plan reviewer see what must change.
+--preserve-output-identity commissions an independently reviewed replacement
+through the amendment fence. The original provider identity remains MERGED;
+adopt compatible output with amend-plan <original> --apply <replacement>.
+Expanded architectures may use this mode; their allocation remains unchanged.
+--trigger records the cause for UTC creation-day planning-change metrics.
+Preconditions:
+- Sprint must be at CHECKPOINT or IN_PROGRESS
+- Target task must be MERGED with output[]
+- No child tasks already created (TransitionsExecuted must be empty)
+- Task must belong to a planning role-pair
+- Task must not be held for human action (clear the hold first)
+Example workflow:
+1. Planner produces output → sprint checkpoints at PLANNING_COMPLETE
+2. Human reviews and edits the plan markdown file
+3. liza replan # auto-detect planning task
+4. Planner agent claims new task, re-reads plan, regenerates output
+Usage:
+liza replan [task-id] [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for replan
+--preserve-output-identity commission a reviewed replacement without retiring provider/output identity
+--reason string why the plan must change; appended to the new planning task's description
+--trigger string planning-change trigger for UTC creation-day metrics (omitted: unknown)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

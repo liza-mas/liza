@@ -360,7 +360,7 @@ func TestDeferredValidationBisectNamesCulpritAndRecordsDiscovery(t *testing.T) {
 	if len(state.Discovered) != 1 || state.Discovered[0].Urgency != "immediate" || state.Discovered[0].During != "task-2" || !strings.Contains(state.Discovered[0].Recommendation, "task-2") {
 		t.Fatalf("discovery = %#v", state.Discovered)
 	}
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredFailed || len(blocked.TaskIDs) != 1 || blocked.TaskIDs[0] != "task-2" {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredFailed) || len(blocked.TaskIDs) != 1 || blocked.TaskIDs[0] != "task-2" {
 		t.Fatalf("gate must block on the culprit, got %#v", blocked)
 	}
 	if again := f.run(false); again.Outcome != "skipped" || again.Reason != "failed_at_head" {
@@ -1019,7 +1019,7 @@ func TestDeferredValidationGateWaitsAndBlocksOnAttempts(t *testing.T) {
 	for i := 1; i <= models.DeferredValidationMaxAttemptsPerCommit; i++ {
 		ledger.Batches = append(ledger.Batches, models.DeferredValidationBatch{ID: i, Commit: head, Status: models.DeferredValidationBatchAborted})
 	}
-	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != integrationProgressBlockedDeferredInfra {
+	if _, blocked := deferredValidationGate(state, head); blocked == nil || blocked.Code != string(integrationProgressBlockedDeferredInfra) {
 		t.Fatalf("exhausted attempts must block, got %v", blocked)
 	}
 	ledger.Batches = append(ledger.Batches, models.DeferredValidationBatch{ID: 9, Commit: head, Status: models.DeferredValidationBatchPassed, Results: []models.DeferredValidationResult{{CommandSHA256: check.CommandSHA256, Status: models.DeferredValidationResultPassed}}})

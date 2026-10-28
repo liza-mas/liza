@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "fixture_operation",
+    "details": {
+      "phase": "fixture",
+      "task_id": "task-executing"
+    },
+    "message": "fixture operation"
+  },
+  "ok": false,
+  "result": null
+}

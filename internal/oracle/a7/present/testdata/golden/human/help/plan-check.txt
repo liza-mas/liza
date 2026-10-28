@@ -1,0 +1,46 @@
+exit 0
+--- stdout
+Record whether a merged plan may be expanded into child tasks.
+Automatic paths (auto-resume and supervisor transition passes) expand a merged
+plan's manual per-subtask or one-to-one hand-off only after the orchestrator
+passed it. An operator resume or proceed authorizes it directly. Held plans are
+expanded by no path until an operator clears the hold.
+--pass orchestrator: the plan's declared checks can run; refused
+while an upstream plan is replanned, held or unreviewed, on
+a held plan, and while its hand-off would retire an original
+that a live reservation still waits on
+--notes-file <file>
+pass only: JSON [{"output_index":0,"message":"guidance"}];
+advisory child validation guidance, never contract changes;
+at most 4096 bytes per message and 16384 bytes per file
+--hold <ask> orchestrator: the plan needs a human action first (the ask);
+raises an AWAITING HUMAN alert
+--clear operator only: remove the disposition after the human action;
+the plan returns to orchestrator review
+--replaced-by <merged-correction>
+operator only: retire an unused hand-off by an existing
+merged correction; preserves status and ordinary dependencies
+--retire --ruling <decision>
+operator only: retire an unused hand-off, held or not, that a
+ruling leaves with no replacement; nothing expands it again
+Material corrections require reviewed amend-plan work or replan --reason.
+Usage:
+liza plan-check <task-id> (--pass | --hold <ask> | --clear | --replaced-by <merged-correction> | --retire --ruling <decision>) [flags]
+Flags:
+--agent-id string orchestrator agent ID (auto-resolved if not provided)
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+--clear operator: remove the disposition after the human action
+-h, --help help for plan-check
+--hold string orchestrator: hold the plan for the given human action
+--json output result as structured JSON
+--notes-file string pass only: bounded JSON advisory notes selected by output_index
+--pass orchestrator: admit the plan's hand-off
+--replaced-by string operator: retire an unused hand-off by a merged correction
+--retire operator: retire an unused hand-off that a ruling leaves with no replacement (requires --ruling)
+--ruling string retire only: the decision that retires the hand-off
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

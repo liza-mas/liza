@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+wezterm-stub: started
+--- stderr
+wezterm-stub: notice
+--- invocations
+== wezterm
+arg 1: start
+arg 2: --class
+arg 3: liza-mas-technical-spec
+arg 4: --workspace
+arg 5: liza-mas-technical-spec
+arg 6: --cwd
+arg 7: <PROJECT>
+arg 8: --
+arg 9: /bin/sh
+arg 10: -lc
+arg 11: wezterm cli split-pane --right --cwd '<PROJECT>' -- 'liza' 'agent' 'orchestrator'
+wezterm cli split-pane --bottom --cwd '<PROJECT>' -- 'liza' 'agent' 'code-planner'
+wezterm cli split-pane --right --cwd '<PROJECT>' -- 'liza' 'agent' 'code-plan-reviewer'
+wezterm cli split-pane --bottom --cwd '<PROJECT>' -- 'liza' 'agent' 'coder'
+wezterm cli split-pane --right --cwd '<PROJECT>' -- 'liza' 'agent' 'code-reviewer'
+exec 'liza' 'tui'
+stdin: oracle-stdin

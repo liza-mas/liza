@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/payloadschema"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/spf13/cobra"
 )
 
@@ -112,7 +113,7 @@ func newRejectionRCACmd(spec rejectionRCACommand, short, long string) *cobra.Com
 			if err := validateAllowedOperation(resolver, authority.ID, spec.operation); err != nil {
 				return err
 			}
-			if err := validateRoleType(resolver, authority.ID, "orchestrator"); err != nil {
+			if err := validateRoleType(resolver, authority.ID, roles.RoleTypeOrchestrator); err != nil {
 				return err
 			}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/roles"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -20,12 +21,12 @@ type orchestratorTestResolver struct {
 	roleTypes map[string]string
 }
 
-func (r orchestratorTestResolver) RoleType(role string) (string, error) {
+func (r orchestratorTestResolver) RoleType(role string) (roles.RoleType, error) {
 	roleType, ok := r.roleTypes[role]
 	if !ok {
 		return "", fmt.Errorf("unknown role %q", role)
 	}
-	return roleType, nil
+	return roles.RoleType(roleType), nil
 }
 
 func (r orchestratorTestResolver) AllRoleNames() []string {

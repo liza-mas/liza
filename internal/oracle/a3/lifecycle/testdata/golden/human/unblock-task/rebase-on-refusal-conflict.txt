@@ -1,0 +1,8 @@
+exit 1
+stdout:
+stderr:
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: UNKNOWN
+effects: unknown
+Error: unblock task: unblock-task: STATE_CHANGED (safe_action=requery): unblock rebase conflict: task task-1 remains BLOCKED with repair_request

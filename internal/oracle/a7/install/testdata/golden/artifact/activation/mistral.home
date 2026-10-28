@@ -1,0 +1,4 @@
++ .vibe directory 0755 -
++ .vibe/config.toml file 0644 c53bf9b980746cee99bf70aaeec370ac45aca8ec24709ea13d69132a57e2f0f7
++ .vibe/prompts directory 0755 -
++ .vibe/prompts/liza.md symlink 0777 <HOME>/.liza/CORE.md

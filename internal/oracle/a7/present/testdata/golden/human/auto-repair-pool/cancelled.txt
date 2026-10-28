@@ -1,0 +1,15 @@
+=== tick 1: cancelled context does nothing
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: []
+--- alerts
+none
+--- warnings
+none
+--- cache
+none
+=== spawn log
+none

@@ -1,0 +1,13 @@
+exit_code: 0
+[stdout]
+tool: copilot
+source: flag
+backend: cli
+executable: copilot
+args: --allow-all -p <prompt> --output-format json
+prompt_transport: arg
+env_files: copilot.env
+contract_key: copilot
+[stderr]
+Warning: no Liza contract symlink found for copilot. Agents may not find the behavioral contract.
+Run 'liza init --provider copilot' to create one.

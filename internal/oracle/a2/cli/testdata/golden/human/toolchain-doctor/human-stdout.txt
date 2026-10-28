@@ -1,0 +1,14 @@
+[MISSING] ast-grep — ast-grep not found on PATH
+[MISSING] gh — gh not found on PATH
+[MISSING] jq — jq not found on PATH
+[MISSING] mdq — mdq not found on PATH
+[MISSING] mdtoc — mdtoc not found on PATH
+[MISSING] pre-commit — pre-commit not found on PATH
+[MISSING] rg — rg not found on PATH
+[OK] rtk: <BIN>/rtk
+[MISSING] scip-go — scip-go not found on PATH
+[MISSING] scip-python — scip-python not found on PATH
+[MISSING] scip-search — scip-search not found on PATH
+[MISSING] scip-typescript — scip-typescript not found on PATH
+[MISSING] stacklit — stacklit not found on PATH
+[MISSING] yq — yq not found on PATH

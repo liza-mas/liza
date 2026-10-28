@@ -15,6 +15,10 @@ import (
 
 const handoffUndecidedVersion = 1
 
+// planDispositionMissingAlertCategory is the alert category, and the first
+// segment of the once-key, of a plan left undecided at PLANNING_COMPLETE.
+const planDispositionMissingAlertCategory = "PLAN DISPOSITION MISSING"
+
 // PlanHandoffUndecided is a persisted observation that a PLANNING_COMPLETE
 // turn left a plan without a disposition (D-49). While its fingerprint matches,
 // the plan stays outstanding but does not wake PLANNING_COMPLETE: an identical
@@ -37,7 +41,7 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 		return ""
 	}
 	class, blocker := d.Classify(state, task)
-	if class != PlanHandoffNeedsReview && class != PlanHandoffNeedsReconciliation && class != PlanHandoffAmendmentReady {
+	if class != models.PlanHandoffNeedsReview && class != models.PlanHandoffNeedsReconciliation && class != models.PlanHandoffAmendmentReady {
 		return ""
 	}
 	deps, _, err := canonicalizeConcreteDependencyList(state, d.resolver, task.ID, task.RolePair, task.DependsOn)
@@ -58,7 +62,7 @@ func (d PlanHandoffDomain) undecidedFingerprint(state *models.State, task *model
 	}
 	var notes []time.Time
 	for i := range state.HumanNotes {
-		if note := &state.HumanNotes[i]; note.For == task.ID || note.For == "all" {
+		if note := &state.HumanNotes[i]; note.For == task.ID || note.For == humanNoteForAll {
 			notes = append(notes, note.Timestamp.UTC())
 		}
 	}
@@ -168,11 +172,11 @@ func (d PlanHandoffDomain) WriteUndecidedAlert(projectRoot string, task *models.
 		reason += ": " + observation.Blocker
 	}
 	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN DISPOSITION MISSING",
-		OnceKey: "PLAN DISPOSITION MISSING|" + observation.TaskID + "|" + observation.Fingerprint,
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: planDispositionMissingAlertCategory,
+		OnceKey: planDispositionMissingAlertCategory + "|" + observation.TaskID + "|" + observation.Fingerprint,
 		Message: fmt.Sprintf("orchestrator left plan %s undecided (%s); PLANNING_COMPLETE will not wake for it again until its inputs change. Ask for a pass, hold or replan with %s, or expand it yourself with %s",
 			observation.TaskID, reason,
-			brand.Command("add-human-note", observation.TaskID, "--note-file", "<path>"),
-			brand.Command("proceed", observation.TaskID, d.pendingGatedTransition(task))),
+			brand.Command(addHumanNoteOperation, observation.TaskID, "--note-file", "<path>"),
+			brand.Command(proceedOperation, observation.TaskID, d.pendingGatedTransition(task))),
 	})
 }

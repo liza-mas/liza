@@ -1,0 +1,14 @@
+exit 0
+--- stdout
+List known Liza toolchain tools
+Usage:
+liza toolchain list [flags]
+Flags:
+-h, --help help for list
+--json output result as structured JSON
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

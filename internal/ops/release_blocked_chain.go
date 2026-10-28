@@ -16,6 +16,10 @@ import (
 	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
+// humanNoteSourceOperatorCLI is the source recorded on history entries an
+// operator command writes; the corrective context of agent prompts matches it.
+const humanNoteSourceOperatorCLI = "operator_cli"
+
 const releaseBlockedChainOperation = "release-blocked-chain"
 
 // ReleaseBlockedChainResult reports the blocked episode an operator released.
@@ -49,7 +53,7 @@ func ReleaseBlockedChain(projectRoot, taskID, reason string) (*ReleaseBlockedCha
 	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		if task.Status != models.TaskStatusBlocked {
 			return &PreconditionError{Reason: fmt.Sprintf("task %s is %s, not BLOCKED; %s releases only a BLOCKED task's current episode", taskID, task.Status, releaseBlockedChainOperation)}
@@ -75,7 +79,7 @@ func ReleaseBlockedChain(projectRoot, taskID, reason string) (*ReleaseBlockedCha
 			Note:   &note,
 			Extra: map[string]any{
 				"operation":  releaseBlockedChainOperation,
-				"source":     "operator_cli",
+				"source":     humanNoteSourceOperatorCLI,
 				"blocked_at": blockedAt.UTC().Format(time.RFC3339Nano),
 				"lineage":    slices.Clone(chain.Path),
 				"recoveries": slices.Clone(chain.Recoveries),
@@ -90,8 +94,8 @@ func ReleaseBlockedChain(projectRoot, taskID, reason string) (*ReleaseBlockedCha
 
 	if err := log.New(lp.LogPath()).Append(log.Entry{
 		Timestamp: now,
-		Agent:     "operator",
-		Action:    models.TaskEventBlockedRecoveryReleased,
+		Agent:     actorOperator,
+		Action:    string(models.TaskEventBlockedRecoveryReleased),
 		Task:      &taskID,
 		Detail:    fmt.Sprintf("episode %s, lineage %s: %s", result.BlockedAt.UTC().Format(time.RFC3339Nano), strings.Join(result.Lineage, " -> "), reason),
 	}); err != nil {

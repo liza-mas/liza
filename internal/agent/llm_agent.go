@@ -192,3 +192,68 @@ func emitLLMAgentEvent(ctx context.Context, sink LLMAgentEventSink, event LLMAge
 	}
 	sink.RecordLLMAgentEvent(ctx, event)
 }
+
+// Payload keys and mode values of the backend events. The supervisor's event
+// sink reads the usage and exit_code entries.
+const (
+	llmAgentPayloadMode      = "mode"
+	llmAgentPayloadACPXAgent = "acpx_agent"
+	llmAgentPayloadUsage     = "usage"
+	llmAgentPayloadExitCode  = "exit_code"
+	llmAgentPayloadQuota     = "quota"
+	llmAgentPayloadError     = "error"
+	llmAgentPayloadStream    = "stream"
+	llmAgentPayloadBytes     = "bytes"
+
+	llmAgentModeRun         = "run"
+	llmAgentModeACPX        = "acpx"
+	llmAgentModeInteractive = "interactive"
+)
+
+// Stream names of output events and the layout and extensions of the persisted
+// per-run output logs.
+const (
+	llmAgentStreamStdout = "stdout"
+	llmAgentStreamStderr = "stderr"
+
+	agentOutputLogTimestampLayout = "20060102-150405"
+	agentOutputLogStdoutExt       = "txt"
+	agentOutputLogStderrExt       = "err"
+)
+
+// emitLLMAgentUsage publishes one run's provider usage. Every backend emits it
+// on each exit path after the provider could have run, so the supervisor sink
+// can tell "no usage reported" (the empty value) from a missing event.
+func emitLLMAgentUsage(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent, usage LLMAgentUsage) {
+	event := base
+	event.Kind = LLMAgentEventUsage
+	event.Payload = map[string]any{llmAgentPayloadUsage: usage}
+	emitLLMAgentEvent(ctx, sink, event)
+}
+
+// emitLLMAgentExited publishes the completed event of a run that ended with exitCode.
+func emitLLMAgentExited(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent, exitCode int) {
+	event := base
+	event.Kind = LLMAgentEventCompleted
+	event.Payload = map[string]any{llmAgentPayloadExitCode: exitCode}
+	emitLLMAgentEvent(ctx, sink, event)
+}
+
+// emitLLMAgentFailed publishes the completed event of a run that ended with an error.
+func emitLLMAgentFailed(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent, message string) {
+	event := base
+	event.Kind = LLMAgentEventCompleted
+	event.Message = message
+	event.Payload = map[string]any{llmAgentPayloadError: message}
+	emitLLMAgentEvent(ctx, sink, event)
+}
+
+// emitLLMAgentQuotaExhausted publishes the completed event of a run whose
+// provider printed its quota failure: the run is reported as a failed session.
+func emitLLMAgentQuotaExhausted(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent, message string) {
+	event := base
+	event.Kind = LLMAgentEventCompleted
+	event.Message = message
+	event.Payload = map[string]any{llmAgentPayloadExitCode: 1, llmAgentPayloadQuota: true}
+	emitLLMAgentEvent(ctx, sink, event)
+}

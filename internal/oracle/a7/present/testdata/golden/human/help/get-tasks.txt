@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Query tasks using the same snapshot and formatting as liza get tasks.
+Examples:
+liza get-tasks --field id,rejection_reason,rejection_rca --json
+liza get-tasks task-1 --field history --format yaml
+Repeat --field or separate fields with commas. Only requested keys are returned;
+absent optional values are null. See liza get --help for query details.
+Usage:
+liza get-tasks [task-id] [flags]
+Flags:
+--active return active work and unfinished handoffs
+--all include terminal task history (task listings default to active work)
+--field stringArray project task fields (repeat or comma-separate; e.g. id,rejection_reason,rejection_rca)
+--format string output format: json, yaml, table, value (default varies by query type)
+-h, --help help for get-tasks
+--json output result as structured JSON
+--output-summary return compact task output summaries
+--summary return compact task summaries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

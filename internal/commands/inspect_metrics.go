@@ -12,10 +12,10 @@ import (
 
 // inspectMetricsOptions contains options for metrics inspection
 type inspectMetricsOptions struct {
-	Format       string // Output format: json, yaml, table, value
-	ProjectRoot  string // Project root directory; locates the usage store
-	AgentMetrics bool   // If true, show per-agent metrics instead of sprint metrics
-	Internal     bool   // Return structured data for composition
+	Format       inspectFormat // Output format: json, yaml, table, value
+	ProjectRoot  string        // Project root directory; locates the usage store
+	AgentMetrics bool          // If true, show per-agent metrics instead of sprint metrics
+	Internal     bool          // Return structured data for composition
 }
 
 // metricsInfo represents sprint metrics information
@@ -162,7 +162,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 		if _, exists := agentStats[agentID]; !exists {
 			agentStats[agentID] = &AgentMetricsInfo{
 				AgentID: agentID,
-				Role:    "unknown",
+				Role:    unknownRoleLabel,
 			}
 		}
 
@@ -192,7 +192,7 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 	for _, stats := range agentStats {
 		totalTasks := stats.TasksCompleted + stats.TasksInProgress + stats.TasksFailed
 		if totalTasks > 0 {
-			stats.SuccessRatePercent = (stats.TasksCompleted * 100) / totalTasks
+			stats.SuccessRatePercent = (stats.TasksCompleted * percentScale) / totalTasks
 		}
 	}
 
@@ -206,20 +206,20 @@ func calculateAgentMetrics(tasks []models.Task, agents map[string]models.Agent) 
 }
 
 // formatMetricsOutput formats sprint metrics for output
-func formatMetricsOutput(metrics metricsInfo, format string) (string, error) {
+func formatMetricsOutput(metrics metricsInfo, format inspectFormat) (string, error) {
 	// Default to value format
 	if format == "" {
-		format = "value"
+		format = inspectFormatValue
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(metrics)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(metrics)
-	case "value":
+	case inspectFormatValue:
 		return formatMetricsValue(metrics)
-	case "table":
+	case inspectFormatTable:
 		// Table format doesn't make sense for single metrics object
 		return "", fmt.Errorf("table format not supported for metrics (use json, yaml, or value)")
 	default:
@@ -228,20 +228,20 @@ func formatMetricsOutput(metrics metricsInfo, format string) (string, error) {
 }
 
 // formatAgentMetricsOutput formats per-agent metrics for output
-func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format string) (string, error) {
+func formatAgentMetricsOutput(metrics []AgentMetricsInfo, format inspectFormat) (string, error) {
 	// Default to table format
 	if format == "" {
-		format = "table"
+		format = inspectFormatTable
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(metrics)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(metrics)
-	case "table":
+	case inspectFormatTable:
 		return formatAgentMetricsTable(metrics), nil
-	case "value":
+	case inspectFormatValue:
 		// Value format doesn't make sense for multiple agents
 		return "", fmt.Errorf("value format not supported for agent metrics (use json, yaml, or table)")
 	default:

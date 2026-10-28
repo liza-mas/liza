@@ -193,7 +193,7 @@ func TestAwaitVerdictAutoReclaim_ReclaimsWhileRunning(t *testing.T) {
 		t.Fatalf("handleVerdictResult: %v", err)
 	}
 	after := readTaskForHaltTest(t, statePath, "task-1")
-	if result.Verdict != VerdictRejected || after.Status != models.TaskStatusImplementing || after.Iteration != before.Iteration+1 {
+	if result.Verdict != string(VerdictRejected) || after.Status != models.TaskStatusImplementing || after.Iteration != before.Iteration+1 {
 		t.Fatalf("control reclaim: verdict %q reason %q, task %s iteration %d", result.Verdict, result.Reason, after.Status, after.Iteration)
 	}
 }
@@ -246,7 +246,7 @@ func TestAwaitVerdictAutoReclaim_RefusedWhilePaused(t *testing.T) {
 	if after.Status != models.TaskStatusRejected || after.Iteration != before.Iteration {
 		t.Fatalf("auto-reclaim ran while PAUSED: status %s iteration %d (was %s/%d)", after.Status, after.Iteration, before.Status, before.Iteration)
 	}
-	if result.SafeAction != SafeActionStop || !strings.Contains(result.Reason, string(models.SystemModePaused)) {
+	if result.SafeAction != string(SafeActionStop) || !strings.Contains(result.Reason, string(models.SystemModePaused)) {
 		t.Fatalf("result = verdict %q safe_action %q reason %q, want stop naming PAUSED", result.Verdict, result.SafeAction, result.Reason)
 	}
 }

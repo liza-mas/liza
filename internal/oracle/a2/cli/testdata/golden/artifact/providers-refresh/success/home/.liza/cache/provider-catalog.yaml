@@ -1,0 +1,12 @@
+version: 2
+providers:
+  - id: oracle-provider
+    display_name: Oracle Fixture
+    backend: cli
+    detection:
+      binaries: [oracle-provider]
+    runtime:
+      provider_key: oracle-provider
+      executable: oracle-provider
+      prompt_transport: stdin
+      run_args: []

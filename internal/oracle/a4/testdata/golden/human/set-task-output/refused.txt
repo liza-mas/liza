@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: DRAFT_ARCHITECTURE
+effects: none
+task_id: arch-2
+transition_id: <DIGEST 1>
+Error: set-task-output: ALREADY_TRANSITIONED (safe_action=stop): failed to set task output: validation failed: task arch-2 is not in an executing state (current status: DRAFT_ARCHITECTURE)

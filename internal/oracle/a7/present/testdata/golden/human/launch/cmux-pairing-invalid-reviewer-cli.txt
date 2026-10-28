@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: invalid reviewer CLI "oracle-unknown"
+--- invocations
+none

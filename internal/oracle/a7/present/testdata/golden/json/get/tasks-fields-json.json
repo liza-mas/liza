@@ -1,0 +1,25 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "id": "task-executing",
+        "status": "IMPLEMENTING_CODE"
+      },
+      {
+        "id": "task-review",
+        "status": "REVIEWING_CODE"
+      },
+      {
+        "id": "task-blocked",
+        "status": "BLOCKED"
+      },
+      {
+        "id": "task-approved",
+        "status": "ARCHITECTURE_APPROVED"
+      }
+    ]
+  }
+}

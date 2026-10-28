@@ -7,14 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
 
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"github.com/spf13/cobra"
 )
@@ -48,8 +49,8 @@ func TestBuildWeztermInteractivePaneScriptStartsCLIsWithInitialPrompts(t *testin
 		PromptDelay: 2 * time.Second,
 	}
 	script := buildWeztermInteractivePaneScript(opts, []interactivePane{
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 
 	for _, want := range []string{
@@ -122,7 +123,7 @@ func TestAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 }
 
 func TestPairingInteractiveCLICommandMapsACPToInteractiveBaseCLI(t *testing.T) {
-	cmd := agent.InteractiveCLICommand("codex-acp")
+	cmd := agentlaunch.InteractiveCLICommand("codex-acp")
 	got := strings.Join(cmd, "\x00")
 	if got != "codex" {
 		t.Fatalf("command = %q, want codex", got)
@@ -494,8 +495,8 @@ func TestBuildCmuxInteractiveLaunchCommandsSendsPromptsWithEnter(t *testing.T) {
 		CWD:       "/tmp/project",
 	}
 	cmds, err := buildCmuxInteractiveLaunchCommands(opts, []interactivePane{
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
-		{Command: agent.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("doer", "/tmp/board.md", false)},
+		{Command: agentlaunch.InteractiveCLICommand("codex"), Prompt: pairingSkillPrompt("reviewer-codex", "/tmp/board.md", false)},
 	})
 	if err != nil {
 		t.Fatalf("buildCmuxInteractiveLaunchCommands returned error: %v", err)
@@ -1061,5 +1062,77 @@ func initGitRepoForLaunchTest(t *testing.T, dir string) {
 	output, err := exec.Command("git", "-C", dir, "init").CombinedOutput()
 	if err != nil {
 		t.Fatalf("git init failed: %v\n%s", err, string(output))
+	}
+}
+
+func TestLaunchBackendVocabularyKeepsCLIValues(t *testing.T) {
+	if got := []string{string(launchBackendWezterm), string(launchBackendCmux)}; got[0] != "wezterm" || got[1] != "cmux" {
+		t.Fatalf("launch backend values = %v, want [wezterm cmux]", got)
+	}
+	if launchWeztermCmd.Use != string(launchBackendWezterm) || launchCmuxCmd.Use != string(launchBackendCmux) {
+		t.Fatalf("backend command names = %q, %q, want the backend values", launchWeztermCmd.Use, launchCmuxCmd.Use)
+	}
+}
+
+func TestMASLaunchPresetVocabularyKeepsCLIValues(t *testing.T) {
+	want := []masLaunchPreset{"technical-spec", "functional-spec", "general-objective"}
+	if got := []masLaunchPreset{masPresetTechnicalSpec, masPresetFunctionalSpec, masPresetGeneralObjective}; strings.Join(presetNames(got), ",") != strings.Join(presetNames(want), ",") {
+		t.Fatalf("preset values = %v, want %v", got, want)
+	}
+	presets := masLaunchPresets()
+	if len(presets) != len(want) {
+		t.Fatalf("masLaunchPresets has %d presets, want %d", len(presets), len(want))
+	}
+	for _, preset := range want {
+		if len(presets[preset]) == 0 {
+			t.Fatalf("masLaunchPresets has no roles for %q", preset)
+		}
+	}
+	for _, cmd := range []*cobra.Command{launchWeztermMASCmd, launchCmuxMASCmd} {
+		if got := cmd.Flags().Lookup("preset").DefValue; got != string(masPresetTechnicalSpec) {
+			t.Fatalf("%s --preset default = %q, want %q", cmd.CommandPath(), got, masPresetTechnicalSpec)
+		}
+		complete, ok := cmd.GetFlagCompletionFunc("preset")
+		if !ok {
+			t.Fatalf("%s --preset has no completion", cmd.CommandPath())
+		}
+		values, _ := complete(cmd, nil, "")
+		// Completion lists values sorted; the order is asserted by the completion oracle.
+		wantSorted := presetNames(want)
+		sort.Strings(wantSorted)
+		if strings.Join(values, ",") != strings.Join(wantSorted, ",") {
+			t.Fatalf("%s --preset completion = %v, want %v", cmd.CommandPath(), values, wantSorted)
+		}
+	}
+}
+
+func presetNames(presets []masLaunchPreset) []string {
+	names := make([]string, len(presets))
+	for i, preset := range presets {
+		names[i] = string(preset)
+	}
+	return names
+}
+
+func TestLaunchWaitConstantsKeepFormerValues(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		got, want time.Duration
+	}{
+		{"wezterm prompt delay", defaultWeztermPromptDelay, 2 * time.Second},
+		{"cmux interactive settle", cmuxInteractiveSettleDelay, 2 * time.Second},
+		{"cmux prompt submit", cmuxPromptSubmitDelay, 2 * time.Second},
+		{"cmux screen poll", cmuxScreenPollInterval, 500 * time.Millisecond},
+		{"cmux interactive ready timeout", cmuxInteractiveReadyTimeout, 60 * time.Second},
+	} {
+		if tc.got != tc.want {
+			t.Fatalf("%s = %s, want %s", tc.name, tc.got, tc.want)
+		}
+	}
+	if cmuxPromptSubmitAttempts != 5 || cmuxScreenReadLines != "80" {
+		t.Fatalf("cmux submit attempts = %d, screen lines = %q, want 5 and 80", cmuxPromptSubmitAttempts, cmuxScreenReadLines)
+	}
+	if got := launchWeztermAdversarialPairingCmd.Flags().Lookup("prompt-delay").DefValue; got != defaultWeztermPromptDelay.String() {
+		t.Fatalf("wezterm --prompt-delay default = %q, want %q", got, defaultWeztermPromptDelay)
 	}
 }

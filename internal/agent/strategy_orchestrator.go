@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/prompts"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // orchestratorStrategy handles the orchestrator role.
@@ -75,7 +76,7 @@ func orchestratorProgressSignature(state *models.State) string {
 	// Unconverted immediate discovery count — changes when orchestrator triages.
 	immediateDisc := 0
 	for _, d := range state.Discovered {
-		if d.Urgency == "immediate" && d.ConvertedToTask == nil {
+		if d.Urgency == models.DiscoveryUrgencyImmediate && d.ConvertedToTask == nil {
 			immediateDisc++
 		}
 	}
@@ -140,12 +141,7 @@ func (s *orchestratorStrategy) PreWork(ctx context.Context, bb *db.Blackboard, c
 
 	// Clear trigger even if transitions failed — the human approved, so don't
 	// re-checkpoint. Transition errors are logged; retry is manual.
-	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(s *models.State) error {
-		if ops.SameResumedTransitionCheckpoint(s.Sprint, state.Sprint) {
-			s.Sprint.CheckpointTrigger = ""
-		}
-		return nil
-	}); err != nil {
+	if err := ops.ClearResumedTransitionCheckpoint(bb, config.Authority, state.Sprint); err != nil {
 		return false, fmt.Errorf("clear checkpoint trigger: %w", err)
 	}
 
@@ -214,7 +210,7 @@ func (s *orchestratorStrategy) ClaimTask(_ SupervisorConfig, _ *db.Blackboard) (
 }
 
 func (s *orchestratorStrategy) PreExecution(bb *db.Blackboard, config SupervisorConfig) error {
-	if err := setAgentToOrchestratingStatus(bb, config.Authority); err != nil {
+	if err := ops.EnterOrchestration(bb, config.Authority); err != nil {
 		return err
 	}
 	if orchestratorPreExecutionHook != nil {
@@ -257,7 +253,7 @@ func (s *orchestratorStrategy) RevalidateWake(ctx context.Context, bb *db.Blackb
 	})
 	stopped, _ := isSystemStopped(state)
 	if ctx.Err() != nil || stopped || RolePauseReason(state, "orchestrator") != "" ||
-		CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName) || CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
+		providersignal.CheckProviderUnavailableSignal(config.ProjectRoot, config.CLIName, providerKeysOfConfig(state.Config)) || providersignal.CheckQuotaSignal(config.ProjectRoot, config.CLIName) || !result.ShouldWake() {
 		GetLogger().Info("Skipping orchestrator launch after revalidation", "selected_trigger", selected.Trigger, "fresh_trigger", fresh.Trigger)
 		return false, nil
 	}
@@ -294,21 +290,11 @@ func (s *orchestratorStrategy) PostExecution(bb *db.Blackboard, config Superviso
 	// wake the orchestrator again.
 	if ops.CountUnseenHumanNotes(stateBefore) > 0 {
 		trigger := result.Trigger
-		rendered := len(stateBefore.HumanNotes)
-		if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-			consumed := func(*models.HumanNote) bool { return true }
-			if trigger != WakeTriggerHumanNote {
-				assessed := ops.TasksAssessedBetween(stateBefore, state)
-				consumed = func(note *models.HumanNote) bool {
-					return assessed[note.For] || (note.For == "all" && len(assessed) > 0)
-				}
-			}
-			if stamped := ops.MarkHumanNotesSeen(state, time.Now().UTC(), rendered, consumed); stamped > 0 {
-				GetLogger().Info("Marked operator notes as seen by orchestrator", "count", stamped, "trigger", trigger)
-			}
-			return nil
-		}); err != nil {
+		stamped, err := ops.ConsumeRenderedHumanNotes(bb, config.Authority, stateBefore, len(stateBefore.HumanNotes), trigger == WakeTriggerHumanNote)
+		if err != nil {
 			GetLogger().Warn("Failed to mark operator notes as seen", "error", err)
+		} else if stamped > 0 {
+			GetLogger().Info("Marked operator notes as seen by orchestrator", "count", stamped, "trigger", trigger)
 		}
 	}
 
@@ -386,7 +372,7 @@ func (s *orchestratorStrategy) observeBlockedTurn(bb *db.Blackboard, projectRoot
 	if identity == s.unresolvedBlocked && identity != s.alertedBlocked {
 		message := fmt.Sprintf("consecutive BLOCKED_TASKS turns ended with unchanged blocker state for %s; the wake carried no new blocker input — blocks may require human intervention",
 			strings.Join(blocked, ", "))
-		if err := LogAlert(projectRoot, "⚠️", "BLOCKED_TASKS UNRESOLVED", message); err != nil {
+		if err := providersignal.LogAlert(projectRoot, alertLevelWarning, alertCategoryBlockedTasksUnresolved, message); err != nil {
 			GetLogger().Warn("Failed to write blocked-turn alert", "error", err)
 		} else {
 			s.alertedBlocked = identity
@@ -404,28 +390,16 @@ func recordUndecidedPlans(bb *db.Blackboard, config SupervisorConfig, stateBefor
 		GetLogger().Warn("Failed to load plan hand-off domain for undecided plans", "error", err)
 		return
 	}
-	type recorded struct {
-		task        models.Task
-		observation ops.PlanHandoffUndecided
-	}
-	var observations []recorded
 	now := time.Now().UTC()
-	if err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-		observations = nil
-		for _, id := range planIDs {
-			if observation := domain.RecordUndecided(stateBefore, state, id, now); observation != nil {
-				observations = append(observations, recorded{task: *state.FindTask(id), observation: *observation})
-			}
-		}
-		return nil
-	}); err != nil {
+	observations, err := ops.RecordUndecidedPlans(bb, config.Authority, domain, stateBefore, planIDs, now)
+	if err != nil {
 		GetLogger().Warn("Failed to record undecided plans", "error", err, "plans", planIDs)
 		return
 	}
 	for _, r := range observations {
-		GetLogger().Warn("Plan left undecided; PLANNING_COMPLETE waits for new input", "task_id", r.observation.TaskID, "class", r.observation.Class)
-		if err := domain.WriteUndecidedAlert(config.ProjectRoot, &r.task, r.observation, now); err != nil {
-			GetLogger().Warn("Failed to write undecided-plan alert", "error", err, "task_id", r.observation.TaskID)
+		GetLogger().Warn("Plan left undecided; PLANNING_COMPLETE waits for new input", "task_id", r.Observation.TaskID, "class", r.Observation.Class)
+		if err := domain.WriteUndecidedAlert(config.ProjectRoot, &r.Task, r.Observation, now); err != nil {
+			GetLogger().Warn("Failed to write undecided-plan alert", "error", err, "task_id", r.Observation.TaskID)
 		}
 	}
 }

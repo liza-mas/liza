@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 type exit42RestartState struct {
@@ -39,103 +40,16 @@ func (t *exit42RestartTracker) reset(taskID string) {
 }
 
 func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, taskID string, authority models.AgentAuthority) (exit42RestartOutcome, error) {
-	agentID := authority.ID
 	state, err := bb.ReadSnapshot()
 	if err != nil {
 		return exit42RestartOutcome{}, fmt.Errorf("read state for exit-42 tracking: %w", err)
 	}
 
-	maxBackoff := effectiveExit42MaxBackoff(state.Config)
-	restartLimit := effectiveExit42RestartLimit(state.Config)
-	key := exit42TrackerKey(taskID, role, agentID)
-	prev := t.byKey[key]
+	key := exit42TrackerKey(taskID, role, authority.ID)
+	prev, outcome := advanceExit42Restart(t.byKey[key], exit42CurrentSignature(state, taskID), effectiveExit42MaxBackoff(state.Config))
 
-	var signature string
-	if taskID != "" {
-		task := state.FindTask(taskID)
-		if task != nil {
-			signature = exit42TaskProgressSignature(task)
-		}
-	}
-
-	if prev.Signature != "" && signature != "" && prev.Signature != signature {
-		prev.RestartCount = 0
-	}
-
-	prev.RestartCount++
-	prev.Signature = signature
-
-	outcome := exit42RestartOutcome{
-		Delay:        computeExit42BackoffDelay(prev.RestartCount, maxBackoff),
-		RestartCount: prev.RestartCount,
-	}
-
-	blockedTask := false
-	if err := ops.ModifyWithAgentAuthority(bb, authority, func(s *models.State) error {
-		if taskID == "" {
-			return nil
-		}
-
-		task := s.FindTask(taskID)
-		if task == nil {
-			return nil
-		}
-
-		task.Exit42RestartCount = outcome.RestartCount
-
-		if outcome.RestartCount <= restartLimit {
-			return nil
-		}
-		// Check if task is in an active state owned by this agent.
-		pr, prErr := ops.LoadResolverForModels(projectRoot)
-		if prErr != nil {
-			return prErr
-		}
-		isActive := models.IsExecutingStatus(task, pr) || isReviewingStatus(task, pr)
-		if !isActive {
-			return nil
-		}
-		ownedByAgent := (task.AssignedTo != nil && *task.AssignedTo == agentID) ||
-			(task.ReviewingBy != nil && *task.ReviewingBy == agentID)
-		if !ownedByAgent {
-			return nil
-		}
-
-		reason := fmt.Sprintf(
-			"exit code 42 restart loop detected: %d consecutive restarts without progress (threshold=%d)",
-			outcome.RestartCount,
-			restartLimit,
-		)
-		questions := []string{
-			"What task/environment issue is causing repeated exit code 42 without progress?",
-			"Should this task be decomposed or the spec clarified before retrying?",
-		}
-
-		pipelineTransitions, ptErr := ops.LoadPipelineTransitions(projectRoot)
-		if ptErr != nil {
-			return ptErr
-		}
-		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
-			return err
-		}
-
-		now := time.Now().UTC()
-		task.BlockedReason = &reason
-		task.BlockedQuestions = questions
-		task.AssignedTo = nil
-		task.LeaseExpires = nil
-		models.AdvanceLifecycle(task)
-		task.ReviewingBy = nil
-		task.ReviewLeaseExpires = nil
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventBlocked,
-			Agent:  &agentID,
-			Reason: &reason,
-		})
-		blockedTask = true
-		return nil
-	}); err != nil {
+	blockedTask, err := ops.PersistExit42Restart(bb, authority, projectRoot, taskID, outcome.RestartCount, effectiveExit42RestartLimit(state.Config))
+	if err != nil {
 		return exit42RestartOutcome{}, fmt.Errorf("persist exit-42 tracking state: %w", err)
 	}
 
@@ -148,6 +62,35 @@ func (t *exit42RestartTracker) Handle(bb *db.Blackboard, projectRoot, role, task
 
 	t.byKey[key] = prev
 	return outcome, nil
+}
+
+// exit42CurrentSignature is the progress signature of the task being restarted,
+// or empty when there is no task to observe.
+func exit42CurrentSignature(state *models.State, taskID string) string {
+	if taskID == "" {
+		return ""
+	}
+	if task := state.FindTask(taskID); task != nil {
+		return exit42TaskProgressSignature(task)
+	}
+	return ""
+}
+
+// advanceExit42Restart is the in-memory half of a restart: a changed progress
+// signature resets the count, then the restart is counted and its backoff
+// computed. It returns the state to remember and the outcome so far.
+func advanceExit42Restart(prev exit42RestartState, signature string, maxBackoff time.Duration) (exit42RestartState, exit42RestartOutcome) {
+	if prev.Signature != "" && signature != "" && prev.Signature != signature {
+		prev.RestartCount = 0
+	}
+
+	prev.RestartCount++
+	prev.Signature = signature
+
+	return prev, exit42RestartOutcome{
+		Delay:        computeExit42BackoffDelay(prev.RestartCount, maxBackoff),
+		RestartCount: prev.RestartCount,
+	}
 }
 
 func exit42TrackerKey(taskID, role, agentID string) string {
@@ -173,6 +116,13 @@ func effectiveExit42RestartLimit(cfg models.Config) int {
 	return limit
 }
 
+// Restart backoff doubles from a base delay up to a ceiling. The exit-42 ceiling
+// is configurable (exit42_max_backoff_seconds); the crash-restart one is fixed.
+const (
+	exit42BackoffBaseDelay = 2 * time.Second
+	restartBackoffFactor   = 2
+)
+
 func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.Duration {
 	if restartCount <= 0 {
 		restartCount = 1
@@ -181,7 +131,7 @@ func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.
 		maxBackoff = time.Duration(models.DefaultExit42MaxBackoffSec) * time.Second
 	}
 
-	delay := 2 * time.Second
+	delay := exit42BackoffBaseDelay
 	if delay > maxBackoff {
 		return maxBackoff
 	}
@@ -190,10 +140,10 @@ func computeExit42BackoffDelay(restartCount int, maxBackoff time.Duration) time.
 		if delay >= maxBackoff {
 			return maxBackoff
 		}
-		if delay > maxBackoff/2 {
+		if delay > maxBackoff/restartBackoffFactor {
 			return maxBackoff
 		}
-		delay *= 2
+		delay *= restartBackoffFactor
 	}
 
 	if delay > maxBackoff {
@@ -243,15 +193,6 @@ func successfulTurnTaskProgressSignature(task *models.Task) string {
 	return string(payload)
 }
 
-// isReviewingStatus checks if a task is in a reviewing state.
-func isReviewingStatus(task *models.Task, pr models.PipelineResolver) bool {
-	if task.RolePair == "" || pr == nil {
-		return false
-	}
-	reviewing, err := pr.ReviewingStatus(task.RolePair)
-	return err == nil && task.Status == reviewing
-}
-
 // --- Crash restart tracker ---
 
 type crashRestartState struct {
@@ -297,7 +238,7 @@ const (
 func crashRestartDelay(consecutiveCrashes int) time.Duration {
 	delay := crashRestartBaseDelay
 	for i := 1; i < consecutiveCrashes && delay < crashRestartMaxDelay; i++ {
-		delay *= 2
+		delay *= restartBackoffFactor
 	}
 	return min(delay, crashRestartMaxDelay)
 }
@@ -361,7 +302,7 @@ func blockSpinningTask(bb *db.Blackboard, config SupervisorConfig, pr models.Pip
 		"task_id", taskID,
 		"agent_id", config.AgentID,
 		"count", spinCount)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "SPINNING", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategorySpinning, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
 	}
 	if blockErr := blockTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, reason); blockErr != nil {
@@ -387,7 +328,7 @@ func stopSpinningOrchestrator(config SupervisorConfig, stateBefore *models.State
 	GetLogger().Error("Orchestrator spinning detected, stopping system",
 		"agent_id", config.AgentID,
 		"count", spinCount)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "ORCHESTRATOR_SPINNING", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryOrchestratorSpinning, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write spinning alert", "error", alertErr)
 	}
 	if _, stopErr := ops.Stop(config.ProjectRoot, reason, config.AgentID); stopErr != nil {

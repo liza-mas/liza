@@ -1,0 +1,20 @@
+[
+  {
+    "id": "us-1",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "us-writing-pair",
+    "priority": 1
+  },
+  {
+    "id": "t3",
+    "desc": "D",
+    "done": "W",
+    "scope": "S",
+    "spec": "specs/vision.md",
+    "role_pair": "coding-pair",
+    "priority": 1
+  }
+]

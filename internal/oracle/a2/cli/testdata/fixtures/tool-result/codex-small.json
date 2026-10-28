@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "session_id": "fixture-session",
+  "tool_input": {
+    "file_path": "fixture.txt"
+  },
+  "tool_response": "hello oracle\n"
+}

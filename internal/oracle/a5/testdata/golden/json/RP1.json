@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "carrier_path": "specs/plan.md",
+      "current_section": "<ID>",
+      "heading": "Task 1",
+      "parent_task": "parent-1",
+      "reference_id": "identity",
+      "reviewed_section": "<ID>",
+      "task_id": "task-1"
+    }
+  }
+}

@@ -16,6 +16,24 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// RunLive timing: the default and maximum command timeout in seconds, and how
+// long the child's pipes may stay open after its process ended.
+const (
+	runLiveMinTimeoutSeconds     = 1
+	runLiveDefaultTimeoutSeconds = 600
+	runLiveMaxTimeoutSeconds     = 3600
+	runLiveWaitDelay             = 5 * time.Second
+
+	// runLiveShellFlag and runLiveShellWrapperArgs describe the `<shell> -c
+	// <command>` wrapper whose command runLiveConsumptiveMatch also compares.
+	runLiveShellFlag        = "-c"
+	runLiveShellWrapperArgs = 3
+)
+
+// runLiveShells are the shells whose `-c` wrapper is looked through; any other
+// program is compared as typed.
+var runLiveShells = []string{"sh", "bash", "zsh", "dash"}
+
 // RunLiveInput runs one local live command for a task (ADR-0169).
 type RunLiveInput struct {
 	TaskID         string
@@ -44,10 +62,10 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	}
 	timeout := input.TimeoutSeconds
 	if timeout == 0 {
-		timeout = 600
+		timeout = runLiveDefaultTimeoutSeconds
 	}
-	if timeout < 1 || timeout > 3600 {
-		return nil, &PreconditionError{Reason: "timeout must be between 1 and 3600 seconds"}
+	if timeout < runLiveMinTimeoutSeconds || timeout > runLiveMaxTimeoutSeconds {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("timeout must be between %d and %d seconds", runLiveMinTimeoutSeconds, runLiveMaxTimeoutSeconds)}
 	}
 	bb := db.For(paths.New(projectRoot).StatePath())
 	state, task, err := readTaskState(bb, input.TaskID)
@@ -99,7 +117,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	cmd.Env = append(models.ScrubEnvironment(environ, grant.deny), overlay...)
 	cmd.Stdout, cmd.Stderr = output, output
 	configProcessGroupKill(cmd)
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = runLiveWaitDelay
 	runErr := cmd.Run()
 	if output.overflow {
 		// A truncated capture could split a secret and evade masking.
@@ -108,7 +126,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("run-live timed out after %d seconds", timeout)}
 	}
-	result := &RunLiveResult{ExitCode: -1, Output: mask(output.buffer.String())}
+	result := &RunLiveResult{ExitCode: acceptanceExitUnknown, Output: mask(output.buffer.String())}
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
@@ -124,7 +142,7 @@ func RunLive(projectRoot string, input RunLiveInput) (*RunLiveResult, error) {
 // spaces, or a `sh|bash|zsh|dash -c <command>` wrapper around it.
 func runLiveConsumptiveMatch(task *models.Task, argv []string) (string, string) {
 	candidates := []string{strings.Join(argv, " ")}
-	if len(argv) == 3 && argv[1] == "-c" && slices.Contains([]string{"sh", "bash", "zsh", "dash"}, filepath.Base(argv[0])) {
+	if len(argv) == runLiveShellWrapperArgs && argv[1] == runLiveShellFlag && slices.Contains(runLiveShells, filepath.Base(argv[0])) {
 		candidates = append(candidates, argv[2])
 	}
 	for _, input := range task.RuntimeInputs {

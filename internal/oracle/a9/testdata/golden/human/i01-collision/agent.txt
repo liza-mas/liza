@@ -1,0 +1,6 @@
+exit_code: 1
+[stdout]
+[stderr]
+Warning: no Liza contract symlink found for claude. Agents may not find the behavioral contract.
+Run 'liza init --claude' to create one.
+Error: modification function failed: agent ID collision: coder-1 already registered with valid lease; effective ownership unknown/degraded; raw state mismatched from procfs (pid exists but cmdline does not match expected agent supervisor); recorded namespace-local pid <V1>; <CORRELATION>

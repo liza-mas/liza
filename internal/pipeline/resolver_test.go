@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 func loadPhase2Config(t *testing.T) *PipelineConfig {
@@ -678,7 +679,7 @@ func TestRoleType(t *testing.T) {
 
 	tests := []struct {
 		role     string
-		wantType string
+		wantType roles.RoleType
 	}{
 		{"coder", "doer"},
 		{"code-reviewer", "reviewer"},
@@ -1187,7 +1188,7 @@ pipeline:
 	tests := []struct {
 		name       string
 		rolePair   string
-		impact     string
+		impact     ReviewImpact
 		wantQuorum int
 	}{
 		{"empty_impact_returns_base", "coding-pair", "", 1},
@@ -1528,8 +1529,8 @@ pipeline:
 
 	tests := []struct {
 		name   string
-		impact string
-		want   string
+		impact ReviewImpact
+		want   ProviderDiversityMode
 	}{
 		{"standard returns base-level", "", "preferred"},
 		{"standard explicit returns base-level", "standard", "preferred"},

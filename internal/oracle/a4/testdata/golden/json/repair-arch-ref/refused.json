@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task cp-q already has arch_ref \"specs/architecture/a.md#Scope 1: One\"; repair-arch-ref only fills an empty arch_ref"
+    },
+    "ok": false,
+    "result": null
+  }
+}

@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+Resume the Liza system from a resumable mode or sprint state, or acknowledge an active HALT response.
+This command can be used when:
+- System is in PAUSED mode (sets mode to RUNNING)
+- Sprint is at CHECKPOINT status (sets status to IN_PROGRESS)
+- Both (resumes from both states)
+- System is STOPPED with an unresolved HALT (acknowledges it and remains STOPPED)
+For transitions to RUNNING or IN_PROGRESS, agents resume normal operation at
+their next check.
+liza resume cannot restart stopped agents. After it acknowledges a HALT while
+STOPPED, run liza start and restart agents manually. STOPPED without an active
+HALT remains invalid for resume.
+Usage:
+liza resume [flags]
+Flags:
+--changed-by string identifier for audit trail (overrides LIZA_AGENT_ID env var, defaults to 'human')
+-h, --help help for resume
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

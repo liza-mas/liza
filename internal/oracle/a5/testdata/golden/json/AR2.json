@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "base_commit": "",
+      "reason": "task already BLOCKED — no resubmission expected",
+      "review_commit": "",
+      "review_cycle": 0,
+      "task_status": "BLOCKED",
+      "verdict": "ABORTED"
+    }
+  }
+}

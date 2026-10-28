@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Retire an exact command (for example a renamed or removed test) from the
+effective batch set for every deferral recorded so far. History is kept, and a
+task merged later that defers the same command puts it back.
+Usage:
+liza deferred-validation retire [flags]
+Flags:
+--command string exact canonical command
+-h, --help help for retire
+--json output result as structured JSON
+--ruling string decision that authorizes this change
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

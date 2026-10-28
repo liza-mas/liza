@@ -1,0 +1,1 @@
+{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"fixed transcript evidence belongs outside state"}}

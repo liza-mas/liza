@@ -1,0 +1,10 @@
+# exit_code
+0
+# stdout
+Verdict: ALREADY_TRANSITIONED
+Status: MERGED
+Reviewer: code-reviewer-1
+Review commit: <commit:candidate>
+Safe action: stop
+Review verdict was recovered after the task already moved to MERGED. Stop this session; do not retry await-verdict or run more worktree commands for this submission.
+# stderr

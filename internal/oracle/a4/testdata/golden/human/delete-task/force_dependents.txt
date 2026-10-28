@@ -1,0 +1,5 @@
+exit_code: 0
+--- stdout
+Deleted task t1 (was DRAFT_CODE)
+--- stderr
+Warning: Tasks [t2] depend on t1 and will have dangling dependencies

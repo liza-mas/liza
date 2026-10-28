@@ -1,0 +1,9 @@
+exit_code: 0
+--- stdout
+Replanned: cp-a → cp-a-replan-1
+Role pair: code-planning-pair
+Spec ref: specs/vision.md
+Planner agents will pick up the new task.
+--- stderr
+warning: task cp-b output[0] selected specific outputs of replanned task cp-a; selection retired to whole-phase inheritance (replacement cp-a-replan-1)
+warning: task cp-b is MERGED and depends on replanned task cp-a — consider replanning cp-b too

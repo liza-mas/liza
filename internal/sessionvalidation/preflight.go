@@ -13,10 +13,32 @@ import (
 // ErrPreflight identifies safe prerequisite failures without exposing raw errors.
 var ErrPreflight = errors.New("validation preflight failed")
 
+// ErrorCode is a safe preflight diagnostic identifier. It holds any string:
+// Error renders values outside the declared set as CodePrerequisiteFailed.
+type ErrorCode string
+
+const (
+	CodeEnvFileUnavailable      ErrorCode = "env_file_unavailable"
+	CodeInvalidContract         ErrorCode = "invalid_contract"
+	CodeEnvironmentMissing      ErrorCode = "environment_missing"
+	CodeExecutableMissing       ErrorCode = "executable_missing"
+	CodeProbeStartFailed        ErrorCode = "probe_start_failed"
+	CodeProbeFailed             ErrorCode = "probe_failed"
+	CodeProbeTimeout            ErrorCode = "probe_timeout"
+	CodePreflightCanceled       ErrorCode = "preflight_canceled"
+	CodeExecutionPolicyRequired ErrorCode = "execution_policy_required"
+	CodeArtifactUnsupported     ErrorCode = "artifact_unsupported"
+	CodeContextUnavailable      ErrorCode = "context_unavailable"
+	CodeContextChanged          ErrorCode = "context_changed"
+	CodeRetryPending            ErrorCode = "retry_pending"
+	CodeRuntimeInputScrubbed    ErrorCode = "runtime_input_scrubbed"
+	CodePrerequisiteFailed      ErrorCode = "prerequisite_failed"
+)
+
 // Error contains only diagnostic identifiers, never command text, environment
 // values, probe output, or the underlying operating-system error.
 type Error struct {
-	Code         string
+	Code         ErrorCode
 	CommandIndex int
 	CheckIndex   int
 	Variable     string
@@ -25,9 +47,9 @@ type Error struct {
 func (e *Error) Error() string {
 	code := e.Code
 	switch code {
-	case "env_file_unavailable", "invalid_contract", "environment_missing", "executable_missing", "probe_start_failed", "probe_failed", "probe_timeout", "preflight_canceled", "execution_policy_required", "artifact_unsupported", "context_unavailable", "context_changed", "retry_pending", "runtime_input_scrubbed":
+	case CodeEnvFileUnavailable, CodeInvalidContract, CodeEnvironmentMissing, CodeExecutableMissing, CodeProbeStartFailed, CodeProbeFailed, CodeProbeTimeout, CodePreflightCanceled, CodeExecutionPolicyRequired, CodeArtifactUnsupported, CodeContextUnavailable, CodeContextChanged, CodeRetryPending, CodeRuntimeInputScrubbed:
 	default:
-		code = "prerequisite_failed"
+		code = CodePrerequisiteFailed
 	}
 	message := fmt.Sprintf("validation preflight: %s (command=%d check=%d); repair the configured execution context and retry", code, e.CommandIndex, e.CheckIndex)
 	if validVariable(e.Variable) {
@@ -38,8 +60,11 @@ func (e *Error) Error() string {
 
 func (e *Error) Is(target error) bool { return target == ErrPreflight }
 
+// maxVariableNameLength bounds a prerequisite environment variable name.
+const maxVariableNameLength = 256
+
 func validVariable(name string) bool {
-	if name == "" || len(name) > 256 {
+	if name == "" || len(name) > maxVariableNameLength {
 		return false
 	}
 	for i, c := range name {
@@ -50,6 +75,12 @@ func validVariable(name string) bool {
 	return true
 }
 
+// Fallback limits for Check when a caller passes a non-positive limit.
+const (
+	defaultProbeTimeout = 10 * time.Second
+	defaultTotalTimeout = 30 * time.Second
+)
+
 // Check executes cheap declared prerequisite probes in cwd with exactly env.
 // Each probe gets at most probeTimeout and the whole check at most totalTimeout
 // (models.EffectiveValidationPreflightLimits); a non-positive limit falls back
@@ -57,13 +88,13 @@ func validVariable(name string) bool {
 // Output is discarded at the child-process boundary, including on failure.
 func Check(ctx context.Context, commands []string, prerequisites []models.ValidationPrerequisite, cwd string, env []string, probeTimeout, totalTimeout time.Duration) error {
 	if err := models.ValidateValidationPrerequisites(commands, prerequisites); err != nil {
-		return &Error{Code: "invalid_contract", CommandIndex: -1, CheckIndex: -1}
+		return &Error{Code: CodeInvalidContract, CommandIndex: -1, CheckIndex: -1}
 	}
 	if probeTimeout <= 0 {
-		probeTimeout = 10 * time.Second
+		probeTimeout = defaultProbeTimeout
 	}
 	if totalTimeout <= 0 {
-		totalTimeout = 30 * time.Second
+		totalTimeout = defaultTotalTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, totalTimeout)
 	defer cancel()
@@ -76,16 +107,16 @@ func Check(ctx context.Context, commands []string, prerequisites []models.Valida
 			}
 		}
 		if ctx.Err() != nil {
-			return &Error{Code: "preflight_canceled", CommandIndex: commandIndex, CheckIndex: -1}
+			return &Error{Code: CodePreflightCanceled, CommandIndex: commandIndex, CheckIndex: -1}
 		}
 		for i, variable := range prerequisite.Env {
 			if environmentValue(env, variable) == "" {
-				return &Error{Code: "environment_missing", CommandIndex: commandIndex, CheckIndex: i, Variable: variable}
+				return &Error{Code: CodeEnvironmentMissing, CommandIndex: commandIndex, CheckIndex: i, Variable: variable}
 			}
 		}
 		for i, executable := range prerequisite.Executables {
 			if _, err := LookPath(executable, cwd, env); err != nil {
-				return &Error{Code: "executable_missing", CommandIndex: commandIndex, CheckIndex: i}
+				return &Error{Code: CodeExecutableMissing, CommandIndex: commandIndex, CheckIndex: i}
 			}
 		}
 		for i, argv := range prerequisite.Probes {
@@ -97,10 +128,10 @@ func Check(ctx context.Context, commands []string, prerequisites []models.Valida
 	return nil
 }
 
-func runProbe(ctx context.Context, argv []string, cwd string, env []string, timeout time.Duration) string {
+func runProbe(ctx context.Context, argv []string, cwd string, env []string, timeout time.Duration) ErrorCode {
 	path, err := LookPath(argv[0], cwd, env)
 	if err != nil {
-		return "executable_missing"
+		return CodeExecutableMissing
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -111,18 +142,18 @@ func runProbe(ctx context.Context, argv []string, cwd string, env []string, time
 	// Nil stdout/stderr connect directly to the null device, never a log buffer.
 	if err := cmd.Start(); err != nil {
 		if probeCtx.Err() != nil {
-			return "probe_timeout"
+			return CodeProbeTimeout
 		}
-		return "probe_start_failed"
+		return CodeProbeStartFailed
 	}
 	if err := cmd.Wait(); err != nil {
 		if probeCtx.Err() != nil {
-			return "probe_timeout"
+			return CodeProbeTimeout
 		}
-		return "probe_failed"
+		return CodeProbeFailed
 	}
 	if probeCtx.Err() != nil {
-		return "probe_timeout"
+		return CodeProbeTimeout
 	}
 	return ""
 }

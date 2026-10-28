@@ -1,0 +1,1 @@
+Liza-managed pairing index hook collision: post-commit at <REPO>/.git/hooks/post-commit already exists and is not Liza-managed

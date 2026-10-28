@@ -33,8 +33,8 @@ func validRejectionRCARequest() models.RejectionRCARequest {
 		SchemaVersion: models.RejectionRCASchemaVersion,
 		Summary:       "two product defects and one reviewer capability failure",
 		Contributions: []models.RejectionRCAContribution{
-			{RejectionIndex: 1, Categories: []string{models.RejectionCauseProductDefect}, Evidence: []string{"review verdict 1: identity scalar mismatch"}},
-			{RejectionIndex: 2, Categories: []string{models.RejectionCauseCapabilityFailure, models.RejectionCauseProductDefect}},
+			{RejectionIndex: 1, Categories: []models.RejectionCause{models.RejectionCauseProductDefect}, Evidence: []string{"review verdict 1: identity scalar mismatch"}},
+			{RejectionIndex: 2, Categories: []models.RejectionCause{models.RejectionCauseCapabilityFailure, models.RejectionCauseProductDefect}},
 		},
 	}
 }
@@ -316,7 +316,7 @@ func TestResumeRejectionRCASchemaDiagnostics(t *testing.T) {
 
 func TestResumeRejectionRCARationale(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{
+	for _, path := range []models.RecoveryPath{
 		models.RecoveryImplementationCorrection, models.RecoveryCapabilityReroute,
 		models.RecoveryLifecycleRepair, models.RecoveryRescope, models.RecoveryHumanOverride,
 	} {
@@ -330,9 +330,9 @@ func TestResumeRejectionRCARationale(t *testing.T) {
 			{name: "whitespace", value: " \t\n\u2003", present: true},
 			{name: "nonblank", value: "operator accepts the residual risk", present: true},
 		} {
-			t.Run(path+"/"+rationale.name, func(t *testing.T) {
+			t.Run(string(path)+"/"+rationale.name, func(t *testing.T) {
 				t.Parallel()
-				payload := map[string]any{"schema_version": float64(1), "recovery_path": path}
+				payload := map[string]any{"schema_version": float64(1), "recovery_path": string(path)}
 				if rationale.present {
 					payload["rationale"] = rationale.value
 				}

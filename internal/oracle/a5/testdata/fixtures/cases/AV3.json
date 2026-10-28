@@ -1,0 +1,18 @@
+{
+  "id": "AV3",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "coder-2",
+    "args": [
+      "await-verdict",
+      "task-1"
+    ],
+    "exit": 1,
+    "contains": "not"
+  },
+  "modes": [
+    "json"
+  ]
+}

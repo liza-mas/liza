@@ -24,8 +24,36 @@ import (
 // the per-worktree git hooks live. Git resolves core.hooksPath (set via
 // --worktree) to this directory. See InstallWorktreePreCommitHook.
 func worktreeHooksDirName() string {
-	return paths.ProjectDirName() + "-hooks"
+	return paths.ProjectDirName() + worktreeHooksDirSuffix
 }
+
+// Named values of the provisioning steps (K7); the bytes and modes are the
+// ones the steps always used.
+const (
+	claudeConfigDirName       = ".claude"
+	claudeSettingsFileName    = "settings.json"
+	claudeLocalSettingsName   = "settings.local.json"
+	claudeHooksDirName        = "hooks"
+	preCommitHookFileName     = "pre-commit"
+	worktreeDirMode           = 0o755
+	worktreeHookFileMode      = 0o755
+	provisionClaudeConfigWarn = "provision-claude-config"
+	copyWorktreeEnvFilesWarn  = "copy-worktree-env-files"
+	installPreCommitHookWarn  = "install-pre-commit-hook"
+	// worktreeCreateOperation labels the shared project lifecycle hold of
+	// worktree creation.
+	worktreeCreateOperation = "worktree-create"
+	// worktreeHooksDirSuffix follows the project directory name in the name of
+	// the per-worktree hooks directory.
+	worktreeHooksDirSuffix = "-hooks"
+
+	// The file names ProvisionWorktreeEnvFiles recognises as environment
+	// files: the plain name, a dotted variant, an extension and the direnv name.
+	worktreeEnvFileName   = ".env"
+	worktreeEnvFilePrefix = ".env."
+	worktreeEnvFileSuffix = ".env"
+	worktreeEnvrcFileName = ".envrc"
+)
 
 // CreateWorktreeResult contains the outcome of creating a worktree.
 type CreateWorktreeResult struct {
@@ -41,7 +69,7 @@ type CreateWorktreeResult struct {
 // deletes any existing worktree first (for reassignment). No terminal I/O.
 func CreateWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResult, error) {
 	var result *CreateWorktreeResult
-	err := WithProjectLifecycleSharedLock(projectRoot, "worktree-create", func() error {
+	err := WithProjectLifecycleSharedLock(projectRoot, worktreeCreateOperation, func() error {
 		var createErr error
 		result, createErr = createWorktree(projectRoot, taskID, fresh)
 		return createErr
@@ -55,119 +83,101 @@ func createWorktree(projectRoot, taskID string, fresh bool) (*CreateWorktreeResu
 	}
 
 	lp := paths.New(projectRoot)
-	worktreeRel := filepath.Join(paths.WorktreesDirName, taskID)
-	worktreeDir := filepath.Join(lp.ProjectRoot(), worktreeRel)
+	worktreeDir := filepath.Join(lp.ProjectRoot(), paths.WorktreesDirName, taskID)
 
 	bb := db.For(lp.StatePath())
-	state, task, err := readTaskState(bb, taskID)
+	state, err := readExecutingTaskState(bb, projectRoot, taskID)
 	if err != nil {
 		return nil, err
 	}
 
+	gitWrapper := git.New(lp.ProjectRoot())
+	provisioning := worktreeProvisioning{
+		projectRoot:         lp.ProjectRoot(),
+		worktreeDir:         worktreeDir,
+		taskID:              taskID,
+		gitWrapper:          gitWrapper,
+		copyEnvFiles:        state.Config.CopyWorktreeEnvFiles,
+		postCmd:             state.Config.PostWorktreeCmd,
+		postCmdTimeout:      models.EffectivePostWorktreeCmdTimeout(state.Config),
+		scipSearchLanguages: append([]string(nil), state.Config.ScipSearch...),
+	}
+
+	if _, err := os.Stat(worktreeDir); err == nil && !fresh {
+		if err := gitWrapper.ValidateWorktreeHealth(taskID); err != nil {
+			return nil, fmt.Errorf("existing worktree not healthy: %w", err)
+		}
+		warnings, err := provisionWorktree(provisioning)
+		if err != nil {
+			return nil, err
+		}
+		return &CreateWorktreeResult{
+			TaskID:         taskID,
+			WorktreeDir:    worktreeDir,
+			AlreadyExisted: true,
+			Warnings:       warnings,
+		}, nil
+	}
+
+	baseCommit, err := createWorktreeBranch(gitWrapper, taskID, state.Config.IntegrationBranch, fresh)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create worktree: %w", err)
+	}
+	if err := recordWorktreeBaseCommit(bb, gitWrapper, taskID, baseCommit); err != nil {
+		return nil, err
+	}
+
+	warnings, err := provisionWorktree(provisioning)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateWorktreeResult{
+		TaskID:      taskID,
+		WorktreeDir: worktreeDir,
+		BaseCommit:  baseCommit,
+		Warnings:    warnings,
+	}, nil
+}
+
+// readExecutingTaskState reads the state and refuses unless the task is in an
+// executing status.
+func readExecutingTaskState(bb *db.Blackboard, projectRoot, taskID string) (*models.State, error) {
+	state, task, err := readTaskState(bb, taskID)
+	if err != nil {
+		return nil, err
+	}
 	pr, _ := LoadResolverForModels(projectRoot)
 	if !models.IsExecutingStatus(task, pr) {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing state (status: %s)", taskID, task.Status)}
 	}
+	return state, nil
+}
 
-	integrationBranch := state.Config.IntegrationBranch
-	postCmd := state.Config.PostWorktreeCmd
-	postCmdTimeout := models.EffectivePostWorktreeCmdTimeout(state.Config)
-	copyEnvFiles := state.Config.CopyWorktreeEnvFiles
-	scipSearchLanguages := append([]string(nil), state.Config.ScipSearch...)
-
-	gitWrapper := git.New(lp.ProjectRoot())
-
-	// Check if worktree already exists
-	if _, err := os.Stat(worktreeDir); err == nil {
-		if !fresh {
-			if err := gitWrapper.ValidateWorktreeHealth(taskID); err != nil {
-				return nil, fmt.Errorf("existing worktree not healthy: %w", err)
-			}
-			result := &CreateWorktreeResult{
-				TaskID:         taskID,
-				WorktreeDir:    worktreeDir,
-				AlreadyExisted: true,
-			}
-			// Provision Claude Code config — idempotent, catches prior failures or upgrades.
-			result.Warnings = append(result.Warnings, ProvisionClaudeConfig(lp.ProjectRoot(), worktreeDir)...)
-			// Install the pre-commit hook — idempotent, upgrades pre-hook-era worktrees
-			// without requiring fresh=true.
-			result.Warnings = append(result.Warnings, InstallWorktreePreCommitHook(gitWrapper, worktreeDir, taskID)...)
-			if copyEnvFiles {
-				result.Warnings = append(result.Warnings, ProvisionWorktreeEnvFiles(lp.ProjectRoot(), worktreeDir)...)
-			}
-			// Run post-worktree command even on existing worktrees — idempotent, catches prior failures.
-			// Fail closed: an unprepared worktree must not be reported as ready.
-			if postCmd != nil {
-				if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, postCmdTimeout, nil); err != nil {
-					return nil, err
-				}
-			}
-			result.Warnings = append(result.Warnings, PrepareSembleWorktreeIgnore(worktreeDir)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(lp.ProjectRoot(), worktreeDir)...)
-			result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
-			return result, nil
-		}
-	}
-
-	var baseCommit string
+// createWorktreeBranch creates the task worktree from the integration branch
+// outside any lock. fresh deletes an existing worktree first (reassignment).
+func createWorktreeBranch(gitWrapper *git.Git, taskID, integrationBranch string, fresh bool) (string, error) {
 	if fresh {
-		baseCommit, err = gitWrapper.CreateWorktreeFresh(taskID, integrationBranch)
-	} else {
-		baseCommit, err = gitWrapper.CreateWorktree(taskID, integrationBranch)
+		return gitWrapper.CreateWorktreeFresh(taskID, integrationBranch)
 	}
+	return gitWrapper.CreateWorktree(taskID, integrationBranch)
+}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to create worktree: %w", err)
-	}
-
-	err = bb.Modify(func(state *models.State) error {
+// recordWorktreeBaseCommit persists the task's base_commit in one transaction
+// that runs no Git. On a write failure the just-created worktree is removed.
+func recordWorktreeBaseCommit(bb *db.Blackboard, gitWrapper *git.Git, taskID, baseCommit string) error {
+	err := bb.Modify(func(state *models.State) error {
 		task := state.FindTask(taskID)
 		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
+			return &errors.NotFoundError{Entity: notFoundEntityTask, ID: taskID}
 		}
 		task.BaseCommit = &baseCommit
 		return nil
 	})
-
 	if err != nil {
 		_ = gitWrapper.RemoveWorktree(taskID)
-		return nil, fmt.Errorf("failed to update state: %w", err)
+		return fmt.Errorf("failed to update state: %w", err)
 	}
-
-	result := &CreateWorktreeResult{
-		TaskID:      taskID,
-		WorktreeDir: worktreeDir,
-		BaseCommit:  baseCommit,
-	}
-
-	// Provision Claude Code config for agents in worktrees.
-	result.Warnings = append(result.Warnings, ProvisionClaudeConfig(lp.ProjectRoot(), worktreeDir)...)
-
-	// Install the per-worktree pre-commit hook (git-level guard against
-	// post-submission mutations). Non-fatal: the submit-verdict HEAD check
-	// remains as the second line of defense.
-	result.Warnings = append(result.Warnings, InstallWorktreePreCommitHook(gitWrapper, worktreeDir, taskID)...)
-
-	if copyEnvFiles {
-		result.Warnings = append(result.Warnings, ProvisionWorktreeEnvFiles(lp.ProjectRoot(), worktreeDir)...)
-	}
-
-	// Run post-worktree command so the worktree is build/test-ready.
-	// Fail closed: the worktree stays on disk for inspection, but creation
-	// reports failure rather than handing over an unprepared checkout.
-	if postCmd != nil {
-		if err := RunPostWorktreeCmd(lp.ProjectRoot(), *postCmd, worktreeDir, postCmdTimeout, nil); err != nil {
-			return nil, err
-		}
-	}
-	result.Warnings = append(result.Warnings, PrepareSembleWorktreeIgnore(worktreeDir)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeScipIndexes(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeStacklitIndex(lp.ProjectRoot(), worktreeDir)...)
-	result.Warnings = append(result.Warnings, refreshTaskWorktreeFunctionalClustersIndex(lp.ProjectRoot(), worktreeDir, scipSearchLanguages)...)
-
-	return result, nil
+	return nil
 }
 
 // ProvisionClaudeConfig copies Claude Code configuration files from the project
@@ -179,8 +189,8 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 
 	// Individual files to copy (relative to project root).
 	files := []string{
-		filepath.Join(".claude", "settings.json"),
-		filepath.Join(".claude", "settings.local.json"),
+		filepath.Join(claudeConfigDirName, claudeSettingsFileName),
+		filepath.Join(claudeConfigDirName, claudeLocalSettingsName),
 	}
 
 	for _, rel := range files {
@@ -190,12 +200,12 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 			if os.IsNotExist(err) {
 				continue
 			}
-			warnings = append(warnings, fmt.Sprintf("provision-claude-config: %s: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(provisionClaudeConfigWarn+": %s: %v", rel, err))
 		}
 	}
 
 	// Copy hook scripts (may have execute bits).
-	hooksDir := filepath.Join(projectRoot, ".claude", "hooks")
+	hooksDir := filepath.Join(projectRoot, claudeConfigDirName, claudeHooksDirName)
 	entries, err := os.ReadDir(hooksDir)
 	if err != nil {
 		// No hooks directory — nothing to copy.
@@ -205,11 +215,11 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 		if entry.IsDir() {
 			continue
 		}
-		rel := filepath.Join(".claude", "hooks", entry.Name())
+		rel := filepath.Join(claudeConfigDirName, claudeHooksDirName, entry.Name())
 		src := filepath.Join(projectRoot, rel)
 		dst := filepath.Join(worktreeDir, rel)
 		if err := copyFilePreserveMode(src, dst); err != nil {
-			warnings = append(warnings, fmt.Sprintf("provision-claude-config: %s: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(provisionClaudeConfigWarn+": %s: %v", rel, err))
 		}
 	}
 
@@ -228,11 +238,11 @@ func ProvisionClaudeConfig(projectRoot, worktreeDir string) []string {
 func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 	entries, err := os.ReadDir(projectRoot)
 	if err != nil {
-		return []string{fmt.Sprintf("copy-worktree-env-files: read project root: %v", err)}
+		return []string{fmt.Sprintf(copyWorktreeEnvFilesWarn+": read project root: %v", err)}
 	}
 	deny, err := worktreeEnvFileDenyNames(projectRoot)
 	if err != nil {
-		return []string{fmt.Sprintf("copy-worktree-env-files: read runtime-input declarations: %v; no env file copied", err)}
+		return []string{fmt.Sprintf(copyWorktreeEnvFilesWarn+": read runtime-input declarations: %v; no env file copied", err)}
 	}
 
 	var warnings []string
@@ -245,26 +255,26 @@ func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 		src := filepath.Join(projectRoot, rel)
 		info, err := os.Lstat(src)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: inspect source: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: inspect source: %v", rel, err))
 			continue
 		}
 		if !info.Mode().IsRegular() {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: source is not a regular file", rel))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: source is not a regular file", rel))
 			continue
 		}
 
 		if err := checkIgnored(projectRoot, rel); err != nil {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: source is not ignored by git", rel))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: source is not ignored by git", rel))
 			continue
 		}
 		// A user-owned core.excludesFile blocks the private exclude; a destination
 		// the effective rules already ignore is as safe to copy into.
 		if err := worktreeexclude.EnsurePrivateExclude(worktreeDir, rel); err != nil && checkIgnored(worktreeDir, rel) != nil {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: configure worktree ignore: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: configure worktree ignore: %v", rel, err))
 			continue
 		}
 		if err := checkIgnored(worktreeDir, rel); err != nil {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: destination is not ignored by git", rel))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: destination is not ignored by git", rel))
 			continue
 		}
 
@@ -273,15 +283,15 @@ func ProvisionWorktreeEnvFiles(projectRoot, worktreeDir string) []string {
 			// Preserve existing worktree-local env files; ignore was verified above.
 			continue
 		} else if !os.IsNotExist(err) {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: inspect destination: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: inspect destination: %v", rel, err))
 			continue
 		}
 
 		reserved, err := copyEnvFileUnlessReserved(src, dst, info.Mode().Perm(), deny)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: copy: %v", rel, err))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: copy: %v", rel, err))
 		} else if len(reserved) > 0 {
-			warnings = append(warnings, fmt.Sprintf("copy-worktree-env-files: %s: not copied: it mentions withheld variables %s (runtime inputs or config.agent_env_deny); move them out of the file", rel, strings.Join(reserved, ", ")))
+			warnings = append(warnings, fmt.Sprintf(copyWorktreeEnvFilesWarn+": %s: not copied: it mentions withheld variables %s (runtime inputs or config.agent_env_deny); move them out of the file", rel, strings.Join(reserved, ", ")))
 		}
 	}
 	return warnings
@@ -335,10 +345,10 @@ func copyEnvFileUnlessReserved(src, dst string, mode os.FileMode, deny map[strin
 }
 
 func isWorktreeEnvFileCandidate(name string) bool {
-	return name == ".env" ||
-		strings.HasPrefix(name, ".env.") ||
-		strings.HasSuffix(name, ".env") ||
-		name == ".envrc"
+	return name == worktreeEnvFileName ||
+		strings.HasPrefix(name, worktreeEnvFilePrefix) ||
+		strings.HasSuffix(name, worktreeEnvFileSuffix) ||
+		name == worktreeEnvrcFileName
 }
 
 func checkIgnored(dir, rel string) error {
@@ -372,31 +382,31 @@ func InstallWorktreePreCommitHook(gitWrapper *git.Git, worktreeDir, taskID strin
 	}
 
 	if err := gitWrapper.EnableWorktreeConfigExtension(); err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: enable worktreeConfig: %v", err))
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": enable worktreeConfig: %v", err))
 		return warnings
 	}
 
 	hooksDir := filepath.Join(worktreeDir, worktreeHooksDirName())
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: mkdir: %v", err))
+	if err := os.MkdirAll(hooksDir, worktreeDirMode); err != nil {
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": mkdir: %v", err))
 		return warnings
 	}
 
-	hookPath := filepath.Join(hooksDir, "pre-commit")
+	hookPath := filepath.Join(hooksDir, preCommitHookFileName)
 	content := embedded.RenderWorktreePreCommitHook(lizaBin, taskID)
-	if err := os.WriteFile(hookPath, content, 0755); err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: write: %v", err))
+	if err := os.WriteFile(hookPath, content, worktreeHookFileMode); err != nil {
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": write: %v", err))
 		return warnings
 	}
 
 	hooksAbs, err := filepath.Abs(hooksDir)
 	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: resolve abs: %v", err))
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": resolve abs: %v", err))
 		return warnings
 	}
 
 	if err := gitWrapper.SetWorktreeHooksPath(worktreeDir, hooksAbs); err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: set hooksPath: %v", err))
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": set hooksPath: %v", err))
 		return warnings
 	}
 
@@ -406,12 +416,12 @@ func InstallWorktreePreCommitHook(gitWrapper *git.Git, worktreeDir, taskID strin
 	// a warning so silent misconfiguration is visible at create time.
 	got, err := gitWrapper.GetWorktreeHooksPath(worktreeDir)
 	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("install-pre-commit-hook: verify hooksPath: %v", err))
+		warnings = append(warnings, fmt.Sprintf(installPreCommitHookWarn+": verify hooksPath: %v", err))
 		return warnings
 	}
 	if got != hooksAbs {
 		warnings = append(warnings, fmt.Sprintf(
-			"install-pre-commit-hook: hooksPath verification mismatch (got %q, want %q) — hook may not fire",
+			installPreCommitHookWarn+": hooksPath verification mismatch (got %q, want %q) — hook may not fire",
 			got, hooksAbs,
 		))
 	}
@@ -433,7 +443,7 @@ func copyFilePreserveMode(src, dst string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), worktreeDirMode); err != nil {
 		return err
 	}
 

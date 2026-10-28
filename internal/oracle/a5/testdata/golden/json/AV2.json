@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "guidance": "Stop this session; do not run more worktree commands for this submission. Task status is CODE_APPROVED, and Liza may clean up the task worktree after terminal merge.",
+      "iteration": 0,
+      "reason": "",
+      "reviewer_agent": "code-reviewer-1",
+      "safe_action": "stop",
+      "task_status": "CODE_APPROVED",
+      "verdict": "APPROVED"
+    }
+  }
+}

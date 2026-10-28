@@ -257,7 +257,7 @@ func TestReviewExecutionForcedReleaseRetiresOwnVerdict(t *testing.T) {
 				return errors.New("await-resubmission never took review ownership")
 			}
 		}
-		if _, err := ops.ReleaseClaim(config.ProjectRoot, "review-task", roles.ClaimReviewer, true, "operator release", "operator"); err != nil {
+		if _, err := ops.ReleaseClaim(config.ProjectRoot, "review-task", string(roles.ClaimReviewer), true, "operator release", "operator"); err != nil {
 			return err
 		}
 		select {

@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "canonical_dependencies": [
+        "cp-1-replan-1"
+      ],
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "new_dependencies": [
+        "cp-1-replan-1"
+      ],
+      "old_dependency": "cp-1",
+      "operation": "retarget-dependency",
+      "outcome": "COMPLETED",
+      "repair_request_cleared": false,
+      "safe_action": "continue",
+      "task_id": "cp-2",
+      "task_status": "MERGED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

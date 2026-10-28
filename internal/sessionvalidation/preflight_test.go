@@ -87,7 +87,7 @@ func TestPreflightUsesSelectedPathAndWorktree(t *testing.T) {
 	contract := []models.ValidationPrerequisite{{Command: "validate", Executables: []string{"runtime"}, Probes: [][]string{{"runtime", "--import-module"}}}}
 	for _, tc := range []struct {
 		path string
-		code string
+		code ErrorCode
 	}{
 		{"absent", "executable_missing"},
 		{"broken", "probe_failed"},
@@ -298,7 +298,7 @@ func TestPreflightProcess(t *testing.T) {
 	}
 }
 
-func assertPreflightCode(t *testing.T, err error, code string) {
+func assertPreflightCode(t *testing.T, err error, code ErrorCode) {
 	t.Helper()
 	var failure *Error
 	if !errors.Is(err, ErrPreflight) || !errors.As(err, &failure) || failure.Code != code {
@@ -310,5 +310,17 @@ func writeExecutable(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0700); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidVariableNameLengthEdge(t *testing.T) {
+	if maxVariableNameLength != 256 {
+		t.Fatalf("maxVariableNameLength = %d, want 256", maxVariableNameLength)
+	}
+	if !validVariable(strings.Repeat("A", 256)) || validVariable(strings.Repeat("A", 257)) {
+		t.Fatal("variable name length bound must accept 256 and refuse 257 characters")
+	}
+	if defaultProbeTimeout != 10*time.Second || defaultTotalTimeout != 30*time.Second {
+		t.Fatalf("fallback limits = %s, %s; want 10s, 30s", defaultProbeTimeout, defaultTotalTimeout)
 	}
 }

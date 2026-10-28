@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "disposition references task \"t9\" which does not exist"
+    },
+    "ok": false,
+    "result": null
+  }
+}

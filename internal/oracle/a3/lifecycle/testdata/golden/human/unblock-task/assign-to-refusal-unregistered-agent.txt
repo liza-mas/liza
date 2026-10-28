@@ -1,0 +1,8 @@
+exit 1
+stdout:
+stderr:
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: UNKNOWN
+effects: none
+Error: unblock task: unblock-task: INVALID_INPUT (safe_action=correct_input): validation failed: assign-to agent coder-9 is not registered

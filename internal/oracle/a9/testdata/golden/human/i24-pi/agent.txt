@@ -1,0 +1,13 @@
+exit_code: 0
+[stdout]
+tool: pi
+source: flag
+backend: cli
+executable: pi
+args: -p --mode json -e <HOME>/.liza/extensions/init-gate.ts
+prompt_transport: stdin
+env_files: pi.env
+contract_key: pi
+[stderr]
+Warning: no Liza contract symlink found for pi. Agents may not find the behavioral contract.
+Run 'liza init --provider pi' to create one.

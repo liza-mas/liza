@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "human hold requires operator plan-check --clear before beginning an amendment"
+    },
+    "ok": false,
+    "result": null
+  }
+}

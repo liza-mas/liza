@@ -23,6 +23,7 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/precommit"
+	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -866,7 +867,7 @@ fi
 			AgentTools: map[string]models.AgentToolConfig{
 				"cursor": {
 					Executable:      "fake-agent",
-					PromptTransport: PromptTransportFile,
+					PromptTransport: string(providers.PromptTransportFile),
 					RunArgs:         []string{"--prompt-file", "{{promptFile}}", "--cwd", "{{projectRoot}}"},
 				},
 			},
@@ -986,8 +987,8 @@ func testSupervisorAuditPostExecution(t *testing.T, auditOutput string, wantAnom
 		}
 		return
 	}
-	if updated.Anomalies[0].Type != ProviderAuditDegradedAnomalyType {
-		t.Fatalf("anomaly.Type = %q, want %q", updated.Anomalies[0].Type, ProviderAuditDegradedAnomalyType)
+	if updated.Anomalies[0].Type != models.AnomalyTypeProviderAuditDegraded {
+		t.Fatalf("anomaly.Type = %q, want %q", updated.Anomalies[0].Type, models.AnomalyTypeProviderAuditDegraded)
 	}
 
 	alerts, err := os.ReadFile(filepath.Join(projectRoot, paths.ProjectDirName(), "alerts.log"))
@@ -3109,7 +3110,7 @@ func TestAbandonedBackgroundTaskRetry_BlocksReleasedTaskOverThreshold(t *testing
 	spinTracker := newSpinningTracker()
 	backgroundTracker := newRuntimeFailureTracker()
 	abandoned := abandonedBackgroundTask{TaskID: "bnajie1ul", Summary: "Run full race test suite"}
-	claimThenExit := func(attempt int) releasedTaskClaim {
+	claimThenExit := func(attempt int) ops.ReleasedTaskClaim {
 		t.Helper()
 		if err := bb.Modify(func(s *models.State) error {
 			task := s.FindTask(taskID)
@@ -3195,7 +3196,7 @@ func TestAbandonedBackgroundTaskRetry_DoesNotConsumeSpinBudget(t *testing.T) {
 	if count := spinTracker.Track(taskID, signature); count != 1 {
 		t.Fatalf("spin count = %d, want 1", count)
 	}
-	handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, releasedTaskClaim{}, backgroundTracker, spinTracker)
+	handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, ops.ReleasedTaskClaim{}, backgroundTracker, spinTracker)
 	if count := spinTracker.Track(taskID, signature); count != 1 {
 		t.Fatalf("spin count after preservation = %d, want 1: preservation is not a no-progress spin", count)
 	}
@@ -3229,7 +3230,7 @@ func TestAbandonedBackgroundTaskRetry_AlertsOperatorOnFirstAbandonment(t *testin
 	}
 	abandoned := abandonedBackgroundTask{TaskID: "bgate123", Summary: "Submit for review with live gate"}
 
-	if blocked := handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, releasedTaskClaim{}, newRuntimeFailureTracker(), newSpinningTracker()); blocked {
+	if blocked := handleAbandonedBackgroundTaskRetry(bb, config, taskID, state.Config, abandoned, ops.ReleasedTaskClaim{}, newRuntimeFailureTracker(), newSpinningTracker()); blocked {
 		t.Fatal("first abandonment blocked the task, want the claim preserved")
 	}
 

@@ -1,0 +1,8 @@
+exit 1
+stdout:
+stderr:
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: UNKNOWN
+effects: none
+Error: unblock task: unblock-task: INVALID_INPUT (safe_action=correct_input): validation failed: task task-1 recovery path capability_reroute continues the current iteration: retry unblock-task without --new-iteration

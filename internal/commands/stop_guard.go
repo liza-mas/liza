@@ -21,6 +21,14 @@ var awaitSubcommands = map[string]struct{}{
 	"await-resubmission": {},
 }
 
+// Wire spellings of the Claude Code Stop hook: the decision this command emits
+// and the background-job fields of the envelope it reads.
+const (
+	stopGuardDecisionBlock     = "block"
+	stopGuardKeyBackgroundJobs = "background_tasks"
+	backgroundJobStatusRunning = "running"
+)
+
 type stopGuardDecision struct {
 	Decision string `json:"decision"`
 	Reason   string `json:"reason"`
@@ -48,7 +56,7 @@ func StopGuardCommand(in io.Reader, out io.Writer, getenv func(string) string) e
 	if !block {
 		return nil
 	}
-	return json.NewEncoder(out).Encode(stopGuardDecision{Decision: "block", Reason: reason})
+	return json.NewEncoder(out).Encode(stopGuardDecision{Decision: stopGuardDecisionBlock, Reason: reason})
 }
 
 // stopGuardReason decides whether the turn must stay open. It fails closed on
@@ -61,8 +69,8 @@ func stopGuardReason(input []byte, binaryName string) (string, bool) {
 	if err := json.Unmarshal(input, &envelope); err != nil {
 		return unreadable, true
 	}
-	raw, ok := envelope["background_tasks"]
-	if !ok || string(raw) == "null" {
+	raw, ok := envelope[stopGuardKeyBackgroundJobs]
+	if !ok || string(raw) == jsonNullLiteral {
 		return "", false
 	}
 	var entries []json.RawMessage
@@ -80,7 +88,7 @@ func stopGuardReason(input []byte, binaryName string) (string, bool) {
 		if err := json.Unmarshal(entry, &task); err != nil || task.ID == nil || task.Status == nil {
 			return unreadable, true
 		}
-		if *task.Status != "running" {
+		if *task.Status != backgroundJobStatusRunning {
 			continue
 		}
 		command := ""
@@ -98,29 +106,43 @@ func stopGuardReason(input []byte, binaryName string) (string, bool) {
 	return fmt.Sprintf("Background job(s) you started are still running: %s. Ending the turn now kills them. Wait for each to exit as AGENT_TOOLS.md describes, then act on its result before ending the turn.", strings.Join(live, "; ")), true
 }
 
+// Text isAwaitCommand recognizes in the hook's command line.
+const (
+	// shellMetacharacters is every character whose shell meaning isAwaitCommand
+	// refuses to interpret.
+	shellMetacharacters     = ";&|<>`$()\\\n*?[]{}~#!"
+	windowsExecutableSuffix = ".exe"
+	flagProjectRootShort    = "-C"
+	flagProjectRoot         = "--project-root"
+	flagVerboseShort        = "-v"
+	flagVerbose             = "--verbose"
+	flagValueSeparator      = "="
+	jsonNullLiteral         = "null"
+)
+
 // isAwaitCommand reports whether command is a plain invocation of an await
 // subcommand. Anything else that merely mentions one, such as a compound shell
 // command, is not exempt. Syntax outside plain words and literal quotes is
 // rejected rather than interpreted, so the guard errs toward blocking.
 func isAwaitCommand(command, binaryName string) bool {
-	if binaryName == "" || strings.ContainsAny(command, ";&|<>`$()\\\n*?[]{}~#!") {
+	if binaryName == "" || strings.ContainsAny(command, shellMetacharacters) {
 		return false
 	}
 	tokens, ok := shellWords(command)
 	if !ok || len(tokens) < 2 {
 		return false
 	}
-	executable := strings.TrimSuffix(filepath.Base(tokens[0]), ".exe")
+	executable := strings.TrimSuffix(filepath.Base(tokens[0]), windowsExecutableSuffix)
 	if executable != binaryName {
 		return false
 	}
 	for i := 1; i < len(tokens); i++ {
 		token := tokens[i]
 		switch {
-		case token == "-C" || token == "--project-root":
+		case token == flagProjectRootShort || token == flagProjectRoot:
 			i++
-		case strings.HasPrefix(token, "-C=") || strings.HasPrefix(token, "--project-root="),
-			token == "-v" || token == "--verbose":
+		case strings.HasPrefix(token, flagProjectRootShort+flagValueSeparator) || strings.HasPrefix(token, flagProjectRoot+flagValueSeparator),
+			token == flagVerboseShort || token == flagVerbose:
 		default:
 			_, ok := awaitSubcommands[token]
 			return ok

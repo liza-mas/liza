@@ -2017,17 +2017,17 @@ func TestDetectOrchestratorWakeTriggers_IntegrationExists(t *testing.T) {
 func TestDetectOrchestratorWakeTriggersWithIntegrationProjection_Outcomes(t *testing.T) {
 	tests := []struct {
 		name       string
-		decision   ops.IntegrationProgressDecision
+		decision   models.IntegrationProgressDecision
 		evaluation error
 		want       OrchestratorWakeTrigger
 		shouldWake bool
 	}{
-		{name: "complete", decision: ops.IntegrationProgressDecision{IntegrationComplete: true}, want: WakeTriggerSprintComplete, shouldWake: true},
-		{name: "waiting", decision: ops.IntegrationProgressDecision{Waiting: &ops.IntegrationProgressReason{Code: "integration_repairs_pending"}}, want: WakeTriggerIntegrationWaiting},
-		{name: "blocked", decision: ops.IntegrationProgressDecision{Blocked: &ops.IntegrationProgressReason{Code: "integration_analysis_blocked"}}, want: WakeTriggerIntegrationBlocked},
-		{name: "exhausted", decision: ops.IntegrationProgressDecision{Exhausted: true, Blocked: &ops.IntegrationProgressReason{Code: "global_generations_exhausted"}}, want: WakeTriggerIntegrationExhausted},
+		{name: "complete", decision: models.IntegrationProgressDecision{IntegrationComplete: true}, want: WakeTriggerSprintComplete, shouldWake: true},
+		{name: "waiting", decision: models.IntegrationProgressDecision{Waiting: &models.IntegrationProgressReason{Code: "integration_repairs_pending"}}, want: WakeTriggerIntegrationWaiting},
+		{name: "blocked", decision: models.IntegrationProgressDecision{Blocked: &models.IntegrationProgressReason{Code: "integration_analysis_blocked"}}, want: WakeTriggerIntegrationBlocked},
+		{name: "exhausted", decision: models.IntegrationProgressDecision{Exhausted: true, Blocked: &models.IntegrationProgressReason{Code: "global_generations_exhausted"}}, want: WakeTriggerIntegrationExhausted},
 		{name: "unavailable", evaluation: errors.New("read integration HEAD: missing ref"), want: WakeTriggerIntegrationUnavailable},
-		{name: "reconciliation needed", decision: ops.IntegrationProgressDecision{FreezeContributingSet: true, GlobalRequest: &ops.IntegrationAnalysisRequest{Key: "global:2"}}, want: WakeTriggerCodingComplete, shouldWake: true},
+		{name: "reconciliation needed", decision: models.IntegrationProgressDecision{FreezeContributingSet: true, GlobalRequest: &models.IntegrationAnalysisRequest{Key: "global:2"}}, want: WakeTriggerCodingComplete, shouldWake: true},
 	}
 
 	for _, tt := range tests {

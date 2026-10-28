@@ -62,7 +62,7 @@ func ScrubStateForMigration(state *models.State) bool {
 		if !IsTranscriptPayload(message) && len([]byte(message)) <= MaxStateTextBytes {
 			continue
 		}
-		if anomaly.Type == "provider_audit_degraded" {
+		if anomaly.Type == models.AnomalyTypeProviderAuditDegraded {
 			anomaly.Details["message"] = scrubbedProviderAuditMessage()
 		} else {
 			anomaly.Details["message"] = scrubbedStateMessage()

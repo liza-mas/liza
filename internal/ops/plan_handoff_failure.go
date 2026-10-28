@@ -13,17 +13,32 @@ import (
 	"github.com/liza-mas/liza/internal/secretmask"
 )
 
+// handoffRefusalClass is the closed set of refusals a plan hand-off failure
+// records. Its string spelling is persisted as PlanHandoffFailure.Class and
+// hashed into the failure fingerprint.
+type handoffRefusalClass string
+
 const (
-	handoffFailureVersion  = 1
-	handoffOutputRefusal   = "output_validation"
-	handoffInputRefusal    = "selective_inheritance"
-	handoffProviderRefusal = "provider_retirement"
+	handoffFailureVersion = 1
+
+	handoffOutputRefusal   handoffRefusalClass = "output_validation"
+	handoffInputRefusal    handoffRefusalClass = "selective_inheritance"
+	handoffProviderRefusal handoffRefusalClass = "provider_retirement"
+
+	// Versions of the retirement admission policy folded into a provider-refusal
+	// fingerprint: raising one invalidates observations made under the old policy.
+	reservationTransferPolicyVersion  = 1
+	selectedChildLineagePolicyVersion = 1
+
+	// planHandoffFailedAlertCategory is the alert category, and the first segment
+	// of every once-key, of a plan hand-off failure.
+	planHandoffFailedAlertCategory = "PLAN HANDOFF FAILED"
 )
 
 // Only initial pure refusals use this type. Recovery and graph/configuration
 // failures deliberately retain their existing retry semantics.
 type handoffInputError struct {
-	class string
+	class handoffRefusalClass
 	index int
 	err   error
 }
@@ -47,11 +62,12 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 	if d.resolver == nil || !d.GatesTransition(task, failure.Transition) || failure.OutputIndex < 0 || failure.OutputIndex >= len(task.Output) {
 		return ""
 	}
-	if failure.Class != handoffOutputRefusal && failure.Class != handoffInputRefusal && failure.Class != handoffProviderRefusal {
+	class := handoffRefusalClass(failure.Class)
+	if class != handoffOutputRefusal && class != handoffInputRefusal && class != handoffProviderRefusal {
 		return ""
 	}
 	td, err := d.resolver.Transition(failure.Transition)
-	if err != nil || td.Cardinality != "per-subtask" {
+	if err != nil || td.Cardinality != models.CardinalityPerSubtask {
 		return ""
 	}
 	resolved, err := buildTransitionDefFromPipeline(d.resolver, failure.Transition)
@@ -71,7 +87,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 	}
 	relevantKinds := map[string]string{}
 	upstreams := map[string]any{}
-	if failure.Class == handoffInputRefusal {
+	if class == handoffInputRefusal {
 		incumbents := collectNonTerminalByKind(state, declaredOriginals(task.Output))
 		for _, entry := range task.Output {
 			if id := incumbents[entry.Kind]; entry.Kind != "" && id != "" {
@@ -94,7 +110,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 			}
 			upstreams[upstream.ID] = map[string]any{
 				"executed":  upstream.TransitionsExecuted[failure.Transition],
-				"replanned": upstream.TransitionsExecuted["replanned"],
+				"replanned": upstream.TransitionsExecuted[models.ReplannedTransition],
 				"children":  children,
 			}
 		}
@@ -105,7 +121,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 		"resolved_target": resolved.targetRolePair, "target_status": resolved.targetStatus, "task_type": resolved.taskType,
 		"upstreams": upstreams, "incumbents": relevantKinds,
 	}
-	if failure.Class == handoffProviderRefusal {
+	if class == handoffProviderRefusal {
 		originalID := task.Output[failure.OutputIndex].Supersedes
 		original := state.FindTask(originalID)
 		if original == nil {
@@ -120,7 +136,7 @@ func (d PlanHandoffDomain) failureFingerprint(state *models.State, task *models.
 			// D-89 and D-167 change retirement admission. Retry observations
 			// made under an old policy once; unchanged new-policy refusals stay
 			// suppressed.
-			"reservation_transfer_policy": 1, "selected_child_lineage_policy": 1,
+			"reservation_transfer_policy": reservationTransferPolicyVersion, "selected_child_lineage_policy": selectedChildLineagePolicyVersion,
 		}
 	}
 	encoded, err := json.Marshal(material)
@@ -138,10 +154,10 @@ func (d PlanHandoffDomain) TransitionFailure(state *models.State, task *models.T
 	}
 	for i := len(task.History) - 1; i >= 0; i-- {
 		entry := task.History[i]
-		if entry.Event != models.TaskEventTransitionFailed || entry.Extra["transition"] != transition {
+		if entry.Event != models.TaskEventTransitionFailed || entry.Extra[transitionExtraKey] != transition {
 			continue
 		}
-		if index, present := entry.Extra["output_index"]; !present || index == nil {
+		if index, present := entry.Extra[outputIndexExtraKey]; !present || index == nil {
 			return nil
 		}
 		encoded, err := json.Marshal(entry.Extra)
@@ -185,7 +201,7 @@ func (d PlanHandoffDomain) HasFailedPlan(state *models.State) bool {
 
 // recordFailure must run in the same lock and state as the refused attempt.
 func (d PlanHandoffDomain) recordFailure(state *models.State, task *models.Task, transition string, refusal *handoffInputError, now time.Time) *PlanHandoffFailure {
-	failure := PlanHandoffFailure{Version: handoffFailureVersion, TaskID: task.ID, Transition: transition, Class: refusal.class, OutputIndex: refusal.index, Error: secretmask.New().MaskText(refusal.Error())}
+	failure := PlanHandoffFailure{Version: handoffFailureVersion, TaskID: task.ID, Transition: transition, Class: string(refusal.class), OutputIndex: refusal.index, Error: secretmask.New().MaskText(refusal.Error())}
 	failure.Fingerprint = d.failureFingerprint(state, task, failure)
 	if failure.Fingerprint == "" {
 		return nil
@@ -202,10 +218,10 @@ func (d PlanHandoffDomain) recordFailure(state *models.State, task *models.Task,
 
 func writeHandoffFailureAlert(projectRoot string, failure PlanHandoffFailure, now time.Time) error {
 	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN HANDOFF FAILED",
-		OnceKey: "PLAN HANDOFF FAILED|" + failure.TaskID + "|" + failure.Transition + "|" + failure.Fingerprint,
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: planHandoffFailedAlertCategory,
+		OnceKey: planHandoffFailedAlertCategory + "|" + failure.TaskID + "|" + failure.Transition + "|" + failure.Fingerprint,
 		Message: fmt.Sprintf("task %s transition %s: %s; repair inputs and retry %s, or retire its unused handoff with %s", failure.TaskID, failure.Transition, failure.Error,
-			brand.Command("resume"), brand.Command("plan-check", failure.TaskID, "--replaced-by", "<merged-correction>")),
+			brand.Command(resumeOperation), brand.Command("plan-check", failure.TaskID, "--replaced-by", "<merged-correction>")),
 	})
 }
 
@@ -215,8 +231,8 @@ func writeHandoffFailureAlert(projectRoot string, failure PlanHandoffFailure, no
 func writeHandoffSkipAlert(projectRoot string, skipped TransitionFailure, now time.Time) error {
 	message := secretmask.New().MaskText(skipped.Error)
 	return alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
-		Timestamp: now, Level: alerts.AlertLevelWarning, Category: "PLAN HANDOFF FAILED",
-		OnceKey: "PLAN HANDOFF FAILED|" + skipped.SourceTaskID + "|" + skipped.Transition + "|unclassified|" + lifecycleDigest([]byte(message)),
+		Timestamp: now, Level: alerts.AlertLevelWarning, Category: planHandoffFailedAlertCategory,
+		OnceKey: planHandoffFailedAlertCategory + "|" + skipped.SourceTaskID + "|" + skipped.Transition + "|unclassified|" + lifecycleDigest([]byte(message)),
 		Message: fmt.Sprintf("task %s transition %s was skipped: %s; it is retried at each pass until its inputs change", skipped.SourceTaskID, skipped.Transition, message),
 	})
 }

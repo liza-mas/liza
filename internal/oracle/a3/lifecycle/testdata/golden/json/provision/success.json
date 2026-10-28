@@ -1,0 +1,21 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "input_id": "tok",
+          "instance_id": "<id-1>",
+          "outcome": "recorded",
+          "recipe": "project.tok",
+          "state": "available",
+          "tasks": [
+            "task-1"
+          ]
+        }
+      }
+    }
+  ]
+}

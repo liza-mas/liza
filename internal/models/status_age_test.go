@@ -77,7 +77,7 @@ func TestEveryDeclaredEventIsClassified(t *testing.T) {
 					t.Fatalf("%s: %v", name.Name, err)
 				}
 				count++
-				if _, classified := IsStatusTransitionEvent(event); !classified {
+				if _, classified := IsStatusTransitionEvent(TaskEventName(event)); !classified {
 					t.Errorf("%s (%q) is declared but unclassified", name.Name, event)
 				}
 			}

@@ -10,6 +10,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// killTreeDeadline bounds the wait for every terminated process in a tree.
+const killTreeDeadline = 5 * time.Second
+
 // KillProcessTree terminates pid and its descendants, deepest first.
 //
 // An agent spawns a provider CLI as a child, and that child may spawn its own.
@@ -39,7 +42,7 @@ func KillProcessTree(pid int) error {
 	}
 	// TerminateProcess is asynchronous. Wait on the same handles so callers
 	// can remove working directories after cancellation, with one tree-wide bound.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(killTreeDeadline)
 	for _, handle := range handles {
 		var timeout uint32
 		if remaining := time.Until(deadline); remaining > 0 {

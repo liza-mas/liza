@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: --role values must not be empty
+--- invocations
+none

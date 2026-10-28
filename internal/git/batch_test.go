@@ -36,6 +36,49 @@ func TestParseCatFileBatch_ContentMissingAndSubmodule(t *testing.T) {
 	}
 }
 
+// The object kind and unresolved status are open sets: kinds the package does
+// not branch on and statuses beyond the declared constants keep their raw
+// spelling instead of being refused.
+func TestParseCatFileBatch_UnknownKindAndStatusPassThrough(t *testing.T) {
+	names := []string{"v1", "HEAD:amb", "HEAD:exc", "HEAD:sub", "HEAD:gone"}
+	output := "4444 tag 12\n" +
+		"HEAD:amb ambiguous\n" +
+		"HEAD:exc excluded\n" +
+		"2222 submodule\n" +
+		"HEAD:gone missing\n"
+	got, err := parseCatFileBatch(names, []byte(output), false)
+	if err != nil {
+		t.Fatalf("parseCatFileBatch() error = %v", err)
+	}
+	if got[0].Type != ObjectType("tag") || got[0].Missing || got[0].OID != "4444" || got[0].Size != 12 {
+		t.Errorf("unknown kind = %+v, want tag passed through", got[0])
+	}
+	for i, want := range []BatchStatus{"ambiguous", "excluded", BatchStatusSubmodule, BatchStatusMissing} {
+		if object := got[i+1]; !object.Missing || object.Status != want || object.Type != "" {
+			t.Errorf("answer %d = %+v, want unresolved %q", i+1, object, want)
+		}
+	}
+	// "deleted" is declared but not produced by the parser: git's answer of
+	// that spelling stays a malformed header.
+	if got, err := parseCatFileBatch([]string{"x"}, []byte("x deleted\n"), false); err == nil {
+		t.Errorf("parseCatFileBatch(deleted) = %+v, want malformed header error", got)
+	}
+}
+
+func TestBatchVocabularyMatchesGitSpelling(t *testing.T) {
+	for got, want := range map[string]string{
+		string(ObjectTypeBlob):       "blob",
+		string(ObjectTypeCommit):     "commit",
+		string(BatchStatusMissing):   "missing",
+		string(BatchStatusSubmodule): "submodule",
+		string(BatchStatusDeleted):   "deleted",
+	} {
+		if got != want {
+			t.Errorf("constant spells %q, want %q", got, want)
+		}
+	}
+}
+
 func TestParseCatFileBatch_RejectsPartialOrMalformedOutput(t *testing.T) {
 	cases := map[string]struct {
 		names       []string

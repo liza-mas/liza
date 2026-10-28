@@ -251,11 +251,11 @@ func TestPlanReplacement_MergedOriginalNeedsReconciliation(t *testing.T) {
 	}
 	state := readReplacementState(t, stateFile)
 	class, blocker := domain.Classify(state, state.FindTask(replacementPlanID))
-	if class != PlanHandoffNeedsReconciliation || !strings.Contains(blocker, "delivered") {
+	if class != models.PlanHandoffNeedsReconciliation || !strings.Contains(blocker, "delivered") {
 		t.Fatalf("passed plan class = %q blocker %q, want needs_reconciliation naming delivered", class, blocker)
 	}
 	undecided := replacementPlan("", replacingOutput("delivered"))
-	if class, blocker := domain.Classify(state, &undecided); class != PlanHandoffNeedsReview || !strings.Contains(blocker, "delivered") {
+	if class, blocker := domain.Classify(state, &undecided); class != models.PlanHandoffNeedsReview || !strings.Contains(blocker, "delivered") {
 		t.Fatalf("undecided plan class = %q blocker %q, want needs_review with a blocker naming delivered", class, blocker)
 	}
 
@@ -280,11 +280,11 @@ func TestPlanReplacement_InFlightOriginalWaitsThenRetires(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := readReplacementState(t, stateFile)
-	if class, blocker := domain.Classify(state, state.FindTask(replacementPlanID)); class != PlanHandoffWaitingUpstream || !strings.Contains(blocker, "in-flight") {
+	if class, blocker := domain.Classify(state, state.FindTask(replacementPlanID)); class != models.PlanHandoffWaitingUpstream || !strings.Contains(blocker, "in-flight") {
 		t.Fatalf("passed plan class = %q blocker %q, want waiting_upstream naming in-flight", class, blocker)
 	}
 	undecided := replacementPlan("", replacingOutput("in-flight"))
-	if class, blocker := domain.Classify(state, &undecided); class != PlanHandoffNeedsReview || blocker != "" {
+	if class, blocker := domain.Classify(state, &undecided); class != models.PlanHandoffNeedsReview || blocker != "" {
 		t.Fatalf("undecided plan class = %q blocker %q, want needs_review without a blocker (a pass stays allowed)", class, blocker)
 	}
 

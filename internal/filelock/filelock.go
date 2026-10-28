@@ -20,6 +20,15 @@ const (
 	DefaultLockTimeout = 10 * time.Second
 	// LockCheckInterval is how often to retry lock acquisition.
 	LockCheckInterval = 100 * time.Millisecond
+	// maxAcquireBackoff caps the retry wait of a context-bounded acquisition,
+	// which starts at LockCheckInterval and doubles after each timeout.
+	maxAcquireBackoff   = 5 * time.Second
+	backoffGrowthFactor = 2
+	// Caller chain recorded for diagnostics: stack depth walked and names kept.
+	lockCallerMaxFrames = 32
+	lockCallerMaxNames  = 8
+	// lockCallerSkipFrames hides runtime.Callers and lockCaller themselves.
+	lockCallerSkipFrames = 2
 )
 
 // FileLock provides file-based mutual exclusion with diagnostic owner metadata.
@@ -157,11 +166,11 @@ func (fl *FileLock) writeOwnerMetadata(operation string) {
 // Only compiled function names are exposed: no paths, arguments or state data.
 // Operation remains the stable metrics category; this field is diagnostic only.
 func lockCaller() string {
-	var pcs [32]uintptr
-	n := runtime.Callers(2, pcs[:])
+	var pcs [lockCallerMaxFrames]uintptr
+	n := runtime.Callers(lockCallerSkipFrames, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
 	var names []string
-	for len(names) < 8 {
+	for len(names) < lockCallerMaxNames {
 		frame, more := frames.Next()
 		if frame.Function != "" && !strings.Contains(frame.Function, "/internal/filelock.(*FileLock).") &&
 			!strings.HasPrefix(frame.Function, "runtime.") && !strings.HasPrefix(frame.Function, "testing.") {
@@ -237,7 +246,7 @@ func (fl *FileLock) withLockOperationContext(ctx context.Context, operation stri
 			return retryCtx.Err()
 		case <-timer.C:
 		}
-		backoff = min(2*backoff, 5*time.Second)
+		backoff = min(backoffGrowthFactor*backoff, maxAcquireBackoff)
 	}
 }
 

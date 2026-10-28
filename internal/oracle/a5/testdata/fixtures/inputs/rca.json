@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "summary": "Prior rejections identify product defects.",
+  "contributions": [
+    {
+      "rejection_index": 1,
+      "categories": [
+        "product_defect"
+      ],
+      "evidence": [
+        "A5 defect 1"
+      ]
+    },
+    {
+      "rejection_index": 2,
+      "categories": [
+        "product_defect"
+      ],
+      "evidence": [
+        "A5 defect 2"
+      ]
+    },
+    {
+      "rejection_index": 3,
+      "categories": [
+        "product_defect"
+      ],
+      "evidence": [
+        "A5 defect 3"
+      ]
+    },
+    {
+      "rejection_index": 4,
+      "categories": [
+        "product_defect"
+      ],
+      "evidence": [
+        "A5 defect 4"
+      ]
+    }
+  ]
+}

@@ -26,7 +26,7 @@ func TestBuildPromptWithContext_RuntimeInputsFollowRegistryConfig(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clearCLIEnv(t)
+			testhelpers.ClearCLIEnv(t)
 			projectRoot := t.TempDir()
 			testhelpers.SetupTestGitRepo(t, projectRoot)
 			config := models.Config{IntegrationBranch: "main", RuntimeInputRegistry: tt.registry}

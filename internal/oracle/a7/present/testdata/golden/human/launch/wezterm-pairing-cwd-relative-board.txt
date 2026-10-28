@@ -1,0 +1,22 @@
+exit 0
+--- stdout
+--- stderr
+'wezterm' 'start' '--class' 'liza-adversarial' '--workspace' 'liza-adversarial' '--cwd' '<OTHER>' '--' '/bin/sh' '-lc' 'set -e
+wezterm_liza_send_prompt() {
+pane_id="$1"
+prompt="$2"
+(
+sleep 2
+printf '"'"'%s'"'"' "$prompt" | wezterm cli --class '"'"'liza-adversarial'"'"' send-text --no-paste --pane-id "$pane_id"
+printf '"'"'\r'"'"' | wezterm cli --class '"'"'liza-adversarial'"'"' send-text --no-paste --pane-id "$pane_id"
+) &
+}
+pane_id_1=$(wezterm cli --class '"'"'liza-adversarial'"'"' split-pane --right --cwd '"'"'<OTHER>'"'"' -- '"'"'codex'"'"')
+wezterm_liza_send_prompt "$pane_id_1" '"'"'$adversarial-pairing reviewer-codex <OTHER>/board.md'"'"'
+pane_id_2=$(wezterm cli --class '"'"'liza-adversarial'"'"' split-pane --bottom --cwd '"'"'<OTHER>'"'"' -- '"'"'codex'"'"')
+wezterm_liza_send_prompt "$pane_id_2" '"'"'$adversarial-pairing reviewer-codex-2 <OTHER>/board.md'"'"'
+wezterm_liza_send_prompt "$WEZTERM_PANE" '"'"'$adversarial-pairing doer <OTHER>/board.md'"'"'
+exec '"'"'codex'"'"'
+'
+--- invocations
+none

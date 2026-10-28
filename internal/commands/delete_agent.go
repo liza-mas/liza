@@ -11,6 +11,10 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 )
 
+// deleteAgentTerminateWait is how long delete-agent waits for the agent process
+// to exit after the terminate request.
+const deleteAgentTerminateWait = 5 * time.Second
+
 var terminateAgent = ops.TerminateAgent
 
 // DeleteAgentCommand stops the agent process, removes it from the state
@@ -30,7 +34,7 @@ func DeleteAgentCommand(projectRoot, agentID string, force bool, reason string, 
 		pidConfirmed = confirmed
 	}
 
-	result, err := terminateAgent(projectRoot, agentID, force, pidConfirmed, reason, 5*time.Second)
+	result, err := terminateAgent(projectRoot, agentID, force, pidConfirmed, reason, deleteAgentTerminateWait)
 	if err != nil {
 		return fmt.Errorf("delete agent: %w", err)
 	}
@@ -62,7 +66,7 @@ func confirmRunningProcess(projectRoot, agentID string, stdin io.Reader) (bool, 
 		return false, fmt.Errorf("deletion cancelled")
 	}
 	answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-	if answer != "y" && answer != "yes" {
+	if answer != confirmAnswerY && answer != confirmAnswerYes {
 		return false, fmt.Errorf("deletion cancelled by user")
 	}
 	// Only bypass PID check, not lease/task checks

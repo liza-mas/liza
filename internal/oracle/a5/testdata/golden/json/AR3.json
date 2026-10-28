@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "agent code-reviewer-2 is not the last rejecting reviewer of task task-1"
+    },
+    "ok": false,
+    "result": null
+  }
+}

@@ -410,7 +410,7 @@ func TestPlanReplacement_ReservationSelectingSplitChildRefusesHandoff(t *testing
 		t.Fatal("refusal committed candidate changes")
 	}
 	plan := state.FindTask(replacementPlanID)
-	if got := handoffFailureCount(plan); got != 1 || plan.History[len(plan.History)-1].Extra["failure_class"] != handoffProviderRefusal {
+	if got := handoffFailureCount(plan); got != 1 || plan.History[len(plan.History)-1].Extra["failure_class"] != string(handoffProviderRefusal) {
 		t.Fatalf("refusal observations = %d, last %+v; want one %s observation", got, plan.History[len(plan.History)-1], handoffProviderRefusal)
 	}
 	if got := strings.Count(d172Alerts(t, root), "PLAN HANDOFF FAILED"); got != 1 {

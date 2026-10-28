@@ -1,0 +1,20 @@
+{
+  "id": "RCA2",
+  "base": "review",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "agent": "orchestrator-1",
+    "args": [
+      "record-rejection-rca",
+      "task-1",
+      "--rca-file",
+      "rca-invalid.json"
+    ],
+    "exit": 1,
+    "contains": "INVALID_INPUT"
+  },
+  "modes": [
+    "json"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "validation",
+    "details": {
+      "field": "fixture"
+    },
+    "message": "validation failed: precondition not met"
+  },
+  "ok": false,
+  "result": null
+}

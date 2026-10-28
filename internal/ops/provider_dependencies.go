@@ -114,7 +114,7 @@ func rejectReferencedProviderRetirement(state *models.State, resolver *pipeline.
 		if holder := reservationRetirementHolder(state, resolver, task, targetID); permanent && holder != "" {
 			holders = append(holders, holder)
 		}
-		outputLive := !task.TransitionsExecuted["replanned"] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task)
+		outputLive := !task.TransitionsExecuted[models.ReplannedTransition] && !task.PlanHandoffRetired() && operationalOutputMayBeConsumed(state, resolver, task)
 		// A terminal owner still applies its descendant waits until its output
 		// has generated the writers that carry them.
 		if (!task.Status.IsTerminal() || outputLive) && holds(models.DescendantProviderDependencies(task.DescendantDependencies), never) {
@@ -200,7 +200,7 @@ func routeStaleProviderConsumers(state *models.State, resolver *pipeline.Resolve
 				}
 				declaration := fmt.Sprintf("output[%d].provider_dependencies[%d] declares %s", index, position, staleDeclaration(dep, targetID, direct))
 				question := fmt.Sprintf("Re-author %s output[%d]: provider_dependencies[%d] declares %s; after unblocking, %s must select the replacement's output (submission and approval refuse the stale declaration).",
-					task.ID, index, position, staleDeclaration(dep, targetID, direct), brand.Command("set-task-output"))
+					task.ID, index, position, staleDeclaration(dep, targetID, direct), brand.Command(setTaskOutputOperation))
 				if !slices.Contains(task.BlockedQuestions, question) {
 					task.BlockedQuestions = append(task.BlockedQuestions, question)
 				}
@@ -254,7 +254,7 @@ func rejectStaleDraftOutput(state *models.State, resolver *pipeline.Resolver, ta
 		}
 	}
 	if stale := staleOutputDeclaration(state, resolver, task.Output); stale != "" {
-		return &PreconditionError{Reason: fmt.Sprintf("task %s %s; re-author it with %s before submitting", task.ID, stale, brand.Command("set-task-output", task.ID))}
+		return &PreconditionError{Reason: fmt.Sprintf("task %s %s; re-author it with %s before submitting", task.ID, stale, brand.Command(setTaskOutputOperation, task.ID))}
 	}
 	return nil
 }
@@ -286,7 +286,7 @@ func blockStaleProviderConsumers(state *models.State, resolver *pipeline.Resolve
 		}
 		reason += "; output indexes do not transfer to a replacement"
 		question := fmt.Sprintf("Re-author %s: %s it with a task whose provider_dependencies select the replacement's output, or %s it.",
-			task.ID, brand.Command("replace-task"), brand.Command("cancel-task"))
+			task.ID, brand.Command(replaceTaskOperation), brand.Command(cancelTaskOperation))
 		if err := task.TransitionWith(models.TaskStatusBlocked, transitions); err != nil {
 			return err
 		}

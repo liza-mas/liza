@@ -1,0 +1,30 @@
+exit 0
+--- stdout
+Record implementation intent, validation plan, and scope before submission.
+Requirements:
+- Agent ID must be provided (via --agent-id flag or LIZA_AGENT_ID env var)
+- Task must be in an executing status (resolved from pipeline config)
+- Task must be assigned to the submitting agent
+Updates:
+- Appends pre_execution_checkpoint event to task history
+- Does not change task status
+Usage:
+liza write-checkpoint <task-id> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--assumptions strings tagged assumptions
+--files-to-modify strings files that will be modified (omit for read-only analysis tasks)
+-h, --help help for write-checkpoint
+--impact string impact classification (standard, significant, architecture)
+--intent string specific, observable intent of implementation (required)
+--json output result as structured JSON
+--risks string identified risks
+--scope-extensions string scope extensions as JSON array, e.g. [{"file":"path","justification":"why"}]
+--tdd-not-required string justification for skipping new test files
+--validation-plan string concrete validation command and expected output (required)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

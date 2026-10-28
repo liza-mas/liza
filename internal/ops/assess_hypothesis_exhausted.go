@@ -48,108 +48,133 @@ func AssessHypothesisExhaustedWithAuthorityAndOptions(projectRoot, taskID, note 
 	return assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, authority.ID, &authority, opts)
 }
 
+const assessHypothesisExhaustedOperation = "assess-hypothesis-exhausted"
+
+// assessHypothesisExhaustedCall carries one assessment across its phases:
+// caller validation, the locked mutation and the result it fills.
+type assessHypothesisExhaustedCall struct {
+	taskID, note, agentID string
+	authority             *models.AgentAuthority
+	opts                  LifecycleRequestOptions
+	now                   time.Time
+	transitions           map[models.TaskStatus][]models.TaskStatus
+
+	result   *AssessHypothesisExhaustedResult
+	observed *models.Task
+	effects  LifecycleEffects
+}
+
 func assessHypothesisExhaustedWithOptionalAuthority(projectRoot, taskID, note, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *AssessHypothesisExhaustedResult, retErr error) {
 	invocation := NewLifecycleInvocation(projectRoot)
-	const operation = "assess-hypothesis-exhausted"
-	var opts LifecycleRequestOptions
+	call := &assessHypothesisExhaustedCall{taskID: taskID, note: note, agentID: agentID, authority: authority, effects: LifecycleEffectsNone,
+		result: &AssessHypothesisExhaustedResult{TaskID: taskID}}
 	if len(options) > 0 {
-		opts = options[0]
+		call.opts = options[0]
 	}
-	var observed *models.Task
-	effects := "none"
 	defer func() {
-		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
 			outcome = returned.LifecycleOutcome
 			warnings = &returned.Warnings
 		}
-		invocation.FinishResult(operation, outcome, &retErr, warnings)
+		invocation.FinishResult(assessHypothesisExhaustedOperation, outcome, &retErr, warnings)
 	}()
-	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+	if err := call.validateCaller(); err != nil {
 		return nil, err
 	}
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
+	lp := paths.New(projectRoot)
+	bb := RequestBlackboard(lp.StatePath(), authority, call.opts)
+	call.now = time.Now().UTC()
+	resolver, _, err := loadResolver(projectRoot)
+	if err != nil {
+		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
 	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "agent ID is required"}
+	call.transitions = BuildPipelineTransitions(resolver)
+
+	err = lifecycleMutation(bb, authority)(call.mutate)
+	if isLifecycleReplay(err) {
+		return call.result, nil
+	}
+
+	if err != nil {
+		return nil, WrapLifecycleError(assessHypothesisExhaustedOperation, call.observed, fmt.Errorf("failed to assess hypothesis-exhausted task: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, call.effects)
+	}
+
+	return call.result, nil
+}
+
+func (c *assessHypothesisExhaustedCall) validateCaller() error {
+	if err := ValidateLifecycleRequestOptions(c.opts); err != nil {
+		return err
+	}
+	if c.taskID == "" {
+		return &PreconditionError{Reason: "task ID is required"}
+	}
+	if c.agentID == "" {
+		return &PreconditionError{Reason: "agent ID is required"}
 	}
 	// Defense-in-depth: orchestrator_assessment history entries suppress future wakes,
 	// so this must be restricted to orchestrator agents even though the MCP handler
 	// also gates via resolveOrchestratorID.
-	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil {
-		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess hypothesis-exhausted tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
+	if err := identity.ValidateRole(c.agentID, roles.Orchestrator); err != nil {
+		return WrapLifecycleError(assessHypothesisExhaustedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess hypothesis-exhausted tasks: %v", err)}, models.LifecycleForbidden, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts)
-	now := time.Now().UTC()
-	resolver, _, err := loadResolver(projectRoot)
+	return nil
+}
+
+// mutate is the assessment transaction body: it resolves the request identity,
+// blocks the exhausted task when it is not already BLOCKED and records the
+// assessment.
+func (c *assessHypothesisExhaustedCall) mutate(state *models.State) (callbackErr error) {
+	defer func() {
+		callbackErr = WrapLifecycleError(assessHypothesisExhaustedOperation, c.observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+	}()
+	task := state.FindTask(c.taskID)
+	if task == nil {
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
+	}
+	copy := *task
+	c.observed = &copy
+	request, err := NewLifecycleRequest(assessHypothesisExhaustedOperation, task, c.agentID, c.authority, c.opts, c.note)
 	if err != nil {
-		return nil, WrapLifecycleError(operation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
-	}
-	pipelineTransitions := BuildPipelineTransitions(resolver)
-	result := &AssessHypothesisExhaustedResult{TaskID: taskID}
-
-	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
-		defer func() {
-			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
-		}()
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		copy := *task
-		observed = &copy
-		request, err := NewLifecycleRequest(operation, task, agentID, authority, opts, note)
-		if err != nil {
-			return err
-		}
-		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			result.LifecycleOutcome = LifecycleReplayOutcome(task, receipt, agentID)
-			return errLifecycleReplay
-		}
-
-		if len(task.FailedBy) < 2 {
-			return &PreconditionError{Reason: fmt.Sprintf("task must have 2+ entries in failed_by to assess as hypothesis-exhausted, has %d", len(task.FailedBy))}
-		}
-		if task.Status.IsTerminal() {
-			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must not be in terminal status, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-
-		if _, err := blockTaskForHypothesisExhaustion(state, task, agentID, pipelineTransitions, now); err != nil {
-			return err
-		}
-
-		entry := models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventOrchestratorAssessment,
-			Agent: &agentID,
-		}
-		if note != "" {
-			entry.Note = &note
-		}
-
-		dropSupersededWakeSnapshots(task)
-		task.History = append(task.History, entry)
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-		if err == nil {
-			effects = "unknown"
-		}
 		return err
-	})
-	if isLifecycleReplay(err) {
-		return result, nil
 	}
-
+	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
 	if err != nil {
-		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to assess hypothesis-exhausted task: %w", err), models.LifecycleStateChanged, "requery", effects)
+		return err
+	}
+	if receipt != nil {
+		c.result.LifecycleOutcome = LifecycleReplayOutcome(task, receipt, c.agentID)
+		return errLifecycleReplay
 	}
 
-	return result, nil
+	if len(task.FailedBy) < hypothesisExhaustionFailures {
+		return &PreconditionError{Reason: fmt.Sprintf("task must have 2+ entries in failed_by to assess as hypothesis-exhausted, has %d", len(task.FailedBy))}
+	}
+	if task.Status.IsTerminal() {
+		return WrapLifecycleError(assessHypothesisExhaustedOperation, task, &PreconditionError{Reason: fmt.Sprintf("task must not be in terminal status, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+
+	if _, err := blockTaskForHypothesisExhaustion(state, task, c.agentID, c.transitions, c.now); err != nil {
+		return err
+	}
+
+	entry := models.TaskHistoryEntry{
+		Time:  c.now,
+		Event: models.TaskEventOrchestratorAssessment,
+		Agent: &c.agentID,
+	}
+	if c.note != "" {
+		entry.Note = &c.note
+	}
+
+	dropSupersededWakeSnapshots(task)
+	task.History = append(task.History, entry)
+	c.result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+	if err == nil {
+		c.effects = LifecycleEffectsUnknown
+	}
+	return err
 }

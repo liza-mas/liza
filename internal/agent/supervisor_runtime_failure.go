@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 const unknownJSONCommand = "unknown-json-envelope"
@@ -50,13 +51,13 @@ func (t *runtimeFailureTracker) reset(taskID string) {
 }
 
 func detectObservedRuntimeFailure(output string) *observedRuntimeFailure {
-	if strings.Contains(output, "submit_verdict_failed") {
-		return &observedRuntimeFailure{Command: "submit-verdict", Code: "submit_verdict_failed"}
+	if strings.Contains(output, submitVerdictFailedCode) {
+		return &observedRuntimeFailure{Command: submitVerdictCommand, Code: submitVerdictFailedCode}
 	}
 
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) {
 			continue
 		}
 		if failure := detectFailedCommandEvent(line); failure != nil {
@@ -108,12 +109,12 @@ func detectFailedCommandEvent(line string) *observedRuntimeFailure {
 
 	command := detectLizaCommandContext(event.Item.Command)
 	output := event.Item.AggregatedOutput
-	if strings.Contains(output, "submit_verdict_failed") {
-		return &observedRuntimeFailure{Command: "submit-verdict", Code: "submit_verdict_failed"}
+	if strings.Contains(output, submitVerdictFailedCode) {
+		return &observedRuntimeFailure{Command: submitVerdictCommand, Code: submitVerdictFailedCode}
 	}
 	for _, outputLine := range strings.Split(output, "\n") {
 		outputLine = strings.TrimSpace(outputLine)
-		if !strings.HasPrefix(outputLine, "{") {
+		if !strings.HasPrefix(outputLine, streamJSONObjectPrefix) {
 			continue
 		}
 		env, ok := parseFailedJSONEnvelope(outputLine)
@@ -182,7 +183,7 @@ func handleObservedRuntimeFailureRetry(
 		"command", failure.Command,
 		"code", failure.Code,
 		"count", count)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "TOOL FAILURE RETRY LOOP", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryToolFailureRetryLoop, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write tool failure retry alert", "error", alertErr)
 	}
 	if err := blockTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, reason); err != nil {
@@ -191,4 +192,10 @@ func handleObservedRuntimeFailureRetry(
 	runtimeTracker.reset(taskID)
 	spinTracker.reset(taskID)
 	return true
+}
+
+// providerEndedSession reports whether the session output shows the provider
+// itself ended the session: a startup failure or an exhausted quota.
+func providerEndedSession(output, cliName string) bool {
+	return providersignal.DetectProviderUnavailable(output, cliName) != nil || providersignal.DetectQuotaExhaustion(output, cliName) != nil
 }

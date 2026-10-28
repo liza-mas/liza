@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "base_commit": "",
+      "reason": "system is PAUSED; stop this session; an operator can use \"liza resume\" to resume",
+      "review_commit": "",
+      "review_cycle": 0,
+      "safe_action": "stop",
+      "task_status": "CODE_REJECTED",
+      "verdict": "PAUSED"
+    }
+  }
+}

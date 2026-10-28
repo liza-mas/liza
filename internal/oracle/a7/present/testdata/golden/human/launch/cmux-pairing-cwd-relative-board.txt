@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+--- stderr
+'cmux' 'new-workspace' '--name' 'liza-adversarial' '--cwd' '<OTHER>' '--command' ''"'"'codex'"'"''
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'right' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' ''"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'down' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' ''"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' 'enter'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-from-new-workspace-output>' '$adversarial-pairing doer <OTHER>/board.md'
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-from-new-workspace-output>' 'enter'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' '$adversarial-pairing reviewer-codex <OTHER>/board.md'
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' 'enter'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' '$adversarial-pairing reviewer-codex-2 <OTHER>/board.md'
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' 'enter'
+--- invocations
+none

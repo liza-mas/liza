@@ -493,7 +493,7 @@ func TestProviderScopedWizardActionOverridesManagedGlobalForNonPreferProvider(t 
 			}
 
 			if _, err := createContractSymlinksForProviders(projectRoot, contractTarget, []providers.Provider{provider}, contractSymlinkOptions{
-				ProviderActions: map[string]string{"custom": action},
+				ProviderActions: map[string]ContractAction{"custom": ContractAction(action)},
 			}); err != nil {
 				t.Fatal(err)
 			}

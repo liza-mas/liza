@@ -52,38 +52,38 @@ func TestPlanHandoffDomainClassify(t *testing.T) {
 		name        string
 		task        models.Task
 		others      []models.Task
-		want        PlanHandoffClass
+		want        models.PlanHandoffClass
 		wantBlocker string
 	}{
-		{name: "not merged", task: unmerged, want: PlanHandoffNotSource},
-		{name: "replanned", task: replannedPlan(handoffPlan("p", plan)), want: PlanHandoffNotSource},
-		{name: "empty output", task: func() models.Task { p := handoffPlan("p", plan); p.Output = nil; return p }(), want: PlanHandoffNotSource},
-		{name: "manual per-subtask code plan", task: handoffPlan("p", plan), want: PlanHandoffNeedsReview},
-		{name: "manual per-subtask architecture plan", task: handoffPlan("p", "architecture-pair"), want: PlanHandoffNeedsReview},
-		{name: "many-to-one source", task: handoffPlan("p", "us-writing-pair"), want: PlanHandoffOutOfDomain},
-		{name: "auto-only source", task: handoffPlan("p", "integration-pair"), want: PlanHandoffOutOfDomain},
-		{name: "auto master decomposition", task: handoffPlan("p", "code-planning-main-pair"), want: PlanHandoffOutOfDomain},
-		{name: "held", task: withPlanCheck(handoffPlan("p", plan), models.PlanCheckHeld, "provision credentials"), want: PlanHandoffHeld, wantBlocker: "provision credentials"},
-		{name: "passed", task: withPlanCheck(handoffPlan("p", plan), models.PlanCheckPassed, ""), want: PlanHandoffPassed},
+		{name: "not merged", task: unmerged, want: models.PlanHandoffNotSource},
+		{name: "replanned", task: replannedPlan(handoffPlan("p", plan)), want: models.PlanHandoffNotSource},
+		{name: "empty output", task: func() models.Task { p := handoffPlan("p", plan); p.Output = nil; return p }(), want: models.PlanHandoffNotSource},
+		{name: "manual per-subtask code plan", task: handoffPlan("p", plan), want: models.PlanHandoffNeedsReview},
+		{name: "manual per-subtask architecture plan", task: handoffPlan("p", "architecture-pair"), want: models.PlanHandoffNeedsReview},
+		{name: "many-to-one source", task: handoffPlan("p", "us-writing-pair"), want: models.PlanHandoffOutOfDomain},
+		{name: "auto-only source", task: handoffPlan("p", "integration-pair"), want: models.PlanHandoffOutOfDomain},
+		{name: "auto master decomposition", task: handoffPlan("p", "code-planning-main-pair"), want: models.PlanHandoffOutOfDomain},
+		{name: "held", task: withPlanCheck(handoffPlan("p", plan), models.PlanCheckHeld, "provision credentials"), want: models.PlanHandoffHeld, wantBlocker: "provision credentials"},
+		{name: "passed", task: withPlanCheck(handoffPlan("p", plan), models.PlanCheckPassed, ""), want: models.PlanHandoffPassed},
 		{
 			name: "passed with transitioned upstream", task: withPlanCheck(handoffPlan("p", plan, "transitioned"), models.PlanCheckPassed, ""),
-			others: []models.Task{transitioned}, want: PlanHandoffPassed,
+			others: []models.Task{transitioned}, want: models.PlanHandoffPassed,
 		},
 		{
 			name: "passed with out-of-domain upstream", task: withPlanCheck(handoffPlan("p", plan, "us"), models.PlanCheckPassed, ""),
-			others: []models.Task{handoffPlan("us", "us-writing-pair")}, want: PlanHandoffPassed,
+			others: []models.Task{handoffPlan("us", "us-writing-pair")}, want: models.PlanHandoffPassed,
 		},
 		{
 			name: "passed with unreviewed upstream", task: withPlanCheck(handoffPlan("p", plan, "a"), models.PlanCheckPassed, ""),
-			others: []models.Task{handoffPlan("a", plan)}, want: PlanHandoffWaitingUpstream, wantBlocker: "upstream a awaits plan review",
+			others: []models.Task{handoffPlan("a", plan)}, want: models.PlanHandoffWaitingUpstream, wantBlocker: "upstream a awaits plan review",
 		},
 		{
 			name: "passed with replanned upstream", task: withPlanCheck(handoffPlan("p", plan, "a"), models.PlanCheckPassed, ""),
-			others: []models.Task{replannedPlan(handoffPlan("a", plan))}, want: PlanHandoffNeedsReconciliation, wantBlocker: "upstream a was replanned",
+			others: []models.Task{replannedPlan(handoffPlan("a", plan))}, want: models.PlanHandoffNeedsReconciliation, wantBlocker: "upstream a was replanned",
 		},
 		{
 			name: "passed with held upstream", task: withPlanCheck(handoffPlan("p", plan, "a"), models.PlanCheckPassed, ""),
-			others: []models.Task{withPlanCheck(handoffPlan("a", plan), models.PlanCheckHeld, "seed smoke users")}, want: PlanHandoffNeedsReconciliation, wantBlocker: "upstream a is held: seed smoke users",
+			others: []models.Task{withPlanCheck(handoffPlan("a", plan), models.PlanCheckHeld, "seed smoke users")}, want: models.PlanHandoffNeedsReconciliation, wantBlocker: "upstream a is held: seed smoke users",
 		},
 		{
 			name: "blocker survives a longer chain", task: withPlanCheck(handoffPlan("p", plan, "c"), models.PlanCheckPassed, ""),
@@ -91,16 +91,16 @@ func TestPlanHandoffDomainClassify(t *testing.T) {
 				withPlanCheck(handoffPlan("c", plan, "a"), models.PlanCheckPassed, ""),
 				replannedPlan(handoffPlan("a", plan)),
 			},
-			want: PlanHandoffNeedsReconciliation, wantBlocker: "upstream c: upstream a was replanned",
+			want: models.PlanHandoffNeedsReconciliation, wantBlocker: "upstream c: upstream a was replanned",
 		},
 		{
 			name: "reconciliation outranks waiting", task: withPlanCheck(handoffPlan("p", plan, "w", "r"), models.PlanCheckPassed, ""),
 			others: []models.Task{handoffPlan("w", plan), replannedPlan(handoffPlan("r", plan))},
-			want:   PlanHandoffNeedsReconciliation, wantBlocker: "upstream r was replanned",
+			want:   models.PlanHandoffNeedsReconciliation, wantBlocker: "upstream r was replanned",
 		},
 		{
 			name: "unreviewed plan reports the blocker a pass would hit", task: handoffPlan("p", plan, "a"),
-			others: []models.Task{replannedPlan(handoffPlan("a", plan))}, want: PlanHandoffNeedsReview, wantBlocker: "upstream a was replanned",
+			others: []models.Task{replannedPlan(handoffPlan("a", plan))}, want: models.PlanHandoffNeedsReview, wantBlocker: "upstream a was replanned",
 		},
 	}
 	for _, tc := range cases {
@@ -147,7 +147,7 @@ func TestRecordPlanCheck_PassHoldClear(t *testing.T) {
 	root, stateFile := setupPlanCheckTest(t, handoffPlan("p", "code-planning-pair"))
 
 	result, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "p", Action: PlanCheckActionPass, Authority: orchestratorAuthority()})
-	if err != nil || !result.Changed || result.Class != PlanHandoffPassed {
+	if err != nil || !result.Changed || result.Class != models.PlanHandoffPassed {
 		t.Fatalf("pass = %+v, %v; want changed, passed", result, err)
 	}
 	if replay, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "p", Action: PlanCheckActionPass, Authority: orchestratorAuthority()}); err != nil || replay.Changed {
@@ -169,7 +169,7 @@ func TestRecordPlanCheck_PassHoldClear(t *testing.T) {
 	if check := readPlanCheck(t, stateFile, "p"); check != nil {
 		t.Fatalf("plan_check = %+v after clear, want none", check)
 	}
-	if replay, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "p", Action: PlanCheckActionClear, ChangedBy: "human"}); err != nil || replay.Changed || replay.Class != PlanHandoffNeedsReview {
+	if replay, err := RecordPlanCheck(root, PlanCheckInput{TaskID: "p", Action: PlanCheckActionClear, ChangedBy: "human"}); err != nil || replay.Changed || replay.Class != models.PlanHandoffNeedsReview {
 		t.Fatalf("clear replay = %+v, %v; want unchanged, back to review", replay, err)
 	}
 }

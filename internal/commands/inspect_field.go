@@ -21,13 +21,13 @@ func getField(state *models.State, fieldPath string) (any, error) {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
 
-	parts := strings.Split(fieldPath, ".")
+	parts := strings.Split(fieldPath, queryPathSeparator)
 	if slices.Contains(parts, "") {
 		return nil, &errors.NotFoundError{Entity: "field", Field: fieldPath}
 	}
 
 	// Preserve existing version-path behavior.
-	if parts[0] == "version" && len(parts) > 1 {
+	if inspectQueryRoot(parts[0]) == inspectRootVersion && len(parts) > 1 {
 		return nil, &errors.NotFoundError{Entity: "state", Field: fieldPath}
 	}
 
@@ -44,7 +44,7 @@ func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath st
 	current = derefReflectValue(current)
 	if !current.IsValid() {
 		if entityPath == "" {
-			return nil, &errors.NotFoundError{Entity: "field", Field: strings.Join(parts, ".")}
+			return nil, &errors.NotFoundError{Entity: "field", Field: strings.Join(parts, queryPathSeparator)}
 		}
 		return nil, &errors.NotFoundError{Entity: entityPath, Field: ""}
 	}
@@ -70,14 +70,14 @@ func resolveFieldByYAMLPath(current reflect.Value, parts []string, entityPath st
 
 	nextEntityPath := part
 	if entityPath != "" {
-		nextEntityPath = entityPath + "." + part
+		nextEntityPath = entityPath + queryPathSeparator + part
 	}
 
 	if len(parts) == 1 {
 		// Historical asymmetry: "sprint.metrics" returns the whole struct, but
 		// "sprint.timeline" required a sub-field in the original switch-based
 		// implementation. Preserved here for backward compatibility.
-		if nextEntityPath == "sprint.timeline" {
+		if nextEntityPath == sprintTimelinePath {
 			if value := derefReflectValue(next); value.IsValid() && value.Kind() == reflect.Struct {
 				return nil, &errors.NotFoundError{Entity: "sprint.timeline", Field: ""}
 			}
@@ -92,11 +92,11 @@ func findFieldByYAMLTag(value reflect.Value, tagName string) (reflect.Value, boo
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		if field.Tag.Get("inspect") == "-" {
+		if field.Tag.Get(inspectTagKey) == tagOmitted {
 			continue
 		}
-		yamlTag := strings.Split(field.Tag.Get("yaml"), ",")[0]
-		if yamlTag == "" || yamlTag == "-" {
+		yamlTag := strings.Split(field.Tag.Get(yamlTagKey), ",")[0]
+		if yamlTag == "" || yamlTag == tagOmitted {
 			continue
 		}
 		if yamlTag == tagName {
@@ -179,19 +179,19 @@ func derefReflectValue(value reflect.Value) reflect.Value {
 // literal ID, including one that collides with a reserved state query.
 func handleTaskQuery(state *models.State, query string, opts InspectOptions) (string, error) {
 	if task := state.FindTask(query); task != nil {
-		return handleEntityQuery(state, "tasks", []string{query}, opts)
+		return handleEntityQuery(state, inspectTargetTasks, []string{query}, opts)
 	}
 	var selected *models.Task
 	for i := range state.Tasks {
 		task := &state.Tasks[i]
-		if strings.HasPrefix(query, task.ID+".") && (selected == nil || len(task.ID) > len(selected.ID)) {
+		if strings.HasPrefix(query, task.ID+queryPathSeparator) && (selected == nil || len(task.ID) > len(selected.ID)) {
 			selected = task
 		}
 	}
 	if selected == nil {
-		return "", &errors.NotFoundError{Entity: "task", ID: query}
+		return "", &errors.NotFoundError{Entity: string(inspectRootTask), ID: query}
 	}
-	return handleTaskFieldQuery(selected, strings.TrimPrefix(query, selected.ID+"."), opts)
+	return handleTaskFieldQuery(selected, strings.TrimPrefix(query, selected.ID+queryPathSeparator), opts)
 }
 
 func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) (string, error) {
@@ -202,18 +202,17 @@ func handleTaskFieldQuery(task *models.Task, field string, opts InspectOptions) 
 	if err != nil {
 		return "", err
 	}
-	return formatOutput(value, opts.Format)
+	return formatOutput(value, opts.format())
 }
 
 // taskInspectionField is shared by dotted queries and projections. Sanitize
 // before traversal so intermediate lifecycle objects cannot bypass redaction.
 func taskInspectionField(projectRoot string, task *models.Task, field string) (any, error) {
-	parts := strings.Split(field, ".")
-	if slices.Contains(parts, "") || slices.Contains(parts, "generation_digest") {
-		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
+	parts := strings.Split(field, queryPathSeparator)
+	if slices.Contains(parts, "") || slices.Contains(parts, taskFieldGenerationDigest) {
+		return nil, &errors.NotFoundError{Entity: string(inspectRootTask), ID: task.ID, Field: field}
 	}
-	switch field {
-	case "transition_id", "age", "time_in_status":
+	if isTaskComputedField(field) {
 		return taskComputedField(task, field)
 	}
 	safeTask := redactTaskLifecycleForInspection(*task)
@@ -242,47 +241,47 @@ func taskInspectionField(projectRoot string, task *models.Task, field string) (a
 // getComputedField calculates derived data from state
 // Supports computed fields like agents.active_count, sprint.elapsed, etc.
 func getComputedField(state *models.State, fieldPath string) (any, error) {
-	parts := strings.Split(fieldPath, ".")
+	parts := strings.Split(fieldPath, queryPathSeparator)
 	if len(parts) < 2 {
 		return nil, &errors.NotFoundError{Entity: "computed", Field: fieldPath}
 	}
 
-	entity := parts[0]
-	if slices.Contains(parts, "") || ((entity == "agent" || entity == "task") && len(parts) != 3) ||
-		(entity != "agent" && entity != "task" && len(parts) != 2) {
-		return nil, &errors.NotFoundError{Entity: entity, Field: fieldPath}
+	entity := inspectQueryRoot(parts[0])
+	if slices.Contains(parts, "") || ((entity == inspectRootAgent || entity == inspectRootTask) && len(parts) != 3) ||
+		(entity != inspectRootAgent && entity != inspectRootTask && len(parts) != 2) {
+		return nil, &errors.NotFoundError{Entity: string(entity), Field: fieldPath}
 	}
 
 	switch entity {
-	case "agents":
+	case inspectRootAgents:
 		return getAgentsComputedField(state, parts[1])
-	case "tasks":
+	case inspectRootTasks:
 		return getTasksComputedField(state, parts[1])
-	case "sprint":
+	case inspectRootSprint:
 		return getSprintComputedField(state, parts[1])
-	case "agent":
+	case inspectRootAgent:
 		if len(parts) < 3 {
-			return nil, &errors.NotFoundError{Entity: "agent", Field: "id required"}
+			return nil, &errors.NotFoundError{Entity: string(inspectRootAgent), Field: "id required"}
 		}
 		agentID := parts[1]
 		field := parts[2]
 		return getAgentComputedField(state, agentID, field)
-	case "task":
+	case inspectRootTask:
 		if len(parts) < 3 {
-			return nil, &errors.NotFoundError{Entity: "task", Field: "id required"}
+			return nil, &errors.NotFoundError{Entity: string(inspectRootTask), Field: "id required"}
 		}
 		taskID := parts[1]
 		field := parts[2]
 		return getTaskComputedField(state, taskID, field)
 	default:
-		return nil, &errors.NotFoundError{Entity: entity, Field: fieldPath}
+		return nil, &errors.NotFoundError{Entity: string(entity), Field: fieldPath}
 	}
 }
 
 // getAgentsComputedField calculates aggregate agent metrics
 func getAgentsComputedField(state *models.State, field string) (any, error) {
-	switch field {
-	case "active_count":
+	switch computedField(field) {
+	case computedFieldActiveCount:
 		count := 0
 		for _, agent := range state.Agents {
 			if agent.Status != models.AgentStatusIdle {
@@ -290,7 +289,7 @@ func getAgentsComputedField(state *models.State, field string) (any, error) {
 			}
 		}
 		return count, nil
-	case "utilization":
+	case computedFieldUtilization:
 		if len(state.Agents) == 0 {
 			return 0.0, nil
 		}
@@ -300,16 +299,16 @@ func getAgentsComputedField(state *models.State, field string) (any, error) {
 				active++
 			}
 		}
-		return float64(active) / float64(len(state.Agents)) * 100, nil
+		return float64(active) / float64(len(state.Agents)) * percentScale, nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "agents", Field: field}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootAgents), Field: field}
 	}
 }
 
 // getTasksComputedField calculates aggregate task metrics
 func getTasksComputedField(state *models.State, field string) (any, error) {
-	switch field {
-	case "completion_rate":
+	switch computedField(field) {
+	case computedFieldCompletionRate:
 		if len(state.Tasks) == 0 {
 			return 0.0, nil
 		}
@@ -319,8 +318,8 @@ func getTasksComputedField(state *models.State, field string) (any, error) {
 				done++
 			}
 		}
-		return float64(done) / float64(len(state.Tasks)) * 100, nil
-	case "avg_iteration_count":
+		return float64(done) / float64(len(state.Tasks)) * percentScale, nil
+	case computedFieldAvgIterationCount:
 		if len(state.Tasks) == 0 {
 			return 0.0, nil
 		}
@@ -330,20 +329,20 @@ func getTasksComputedField(state *models.State, field string) (any, error) {
 		}
 		return float64(total) / float64(len(state.Tasks)), nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "tasks", Field: field}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootTasks), Field: field}
 	}
 }
 
 // getSprintComputedField calculates sprint-related computed values
 func getSprintComputedField(state *models.State, field string) (any, error) {
-	switch field {
-	case "elapsed":
+	switch computedField(field) {
+	case computedFieldElapsed:
 		duration := calculateSprintElapsed(&state.Sprint)
 		return render.FormatDuration(duration), nil
-	case "remaining":
+	case computedFieldRemaining:
 		duration := calculateSprintRemaining(&state.Sprint)
 		return render.FormatDuration(duration), nil
-	case "progress_percent":
+	case computedFieldProgressPercent:
 		if len(state.Tasks) == 0 {
 			return 0.0, nil
 		}
@@ -353,9 +352,9 @@ func getSprintComputedField(state *models.State, field string) (any, error) {
 				done++
 			}
 		}
-		return float64(done) / float64(len(state.Tasks)) * 100, nil
+		return float64(done) / float64(len(state.Tasks)) * percentScale, nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "sprint", Field: field}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootSprint), Field: field}
 	}
 }
 
@@ -363,25 +362,25 @@ func getSprintComputedField(state *models.State, field string) (any, error) {
 func getAgentComputedField(state *models.State, agentID, field string) (any, error) {
 	agent, ok := state.Agents[agentID]
 	if !ok {
-		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootAgent), ID: agentID}
 	}
 
-	switch field {
-	case "time_since_heartbeat":
+	switch computedField(field) {
+	case computedFieldTimeSinceHeartbeat:
 		duration := calculateTimeSinceHeartbeat(&agent)
 		return render.FormatDuration(duration), nil
-	case "time_on_task":
+	case computedFieldTimeOnTask:
 		if agent.CurrentTask == nil {
-			return "0s", nil
+			return zeroDurationText, nil
 		}
 		task := state.FindTask(*agent.CurrentTask)
 		if task == nil {
-			return "0s", nil
+			return zeroDurationText, nil
 		}
 		duration := AgentTimeOnTask(task, agentID)
 		return render.FormatDuration(duration), nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "agent", ID: agentID, Field: field}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootAgent), ID: agentID, Field: field}
 	}
 }
 
@@ -389,21 +388,21 @@ func getAgentComputedField(state *models.State, agentID, field string) (any, err
 func getTaskComputedField(state *models.State, taskID, field string) (any, error) {
 	task := state.FindTask(taskID)
 	if task == nil {
-		return nil, &errors.NotFoundError{Entity: "task", ID: taskID}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootTask), ID: taskID}
 	}
 	return taskComputedField(task, field)
 }
 
 func taskComputedField(task *models.Task, field string) (any, error) {
-	switch field {
-	case "transition_id":
+	switch computedField(field) {
+	case computedFieldTransitionID:
 		return models.TaskTransitionID(task), nil
-	case "age":
+	case computedFieldAge:
 		duration := calculateTaskAge(task)
 		return render.FormatDuration(duration), nil
-	case "time_in_status":
+	case computedFieldTimeInStatus:
 		return render.FormatDuration(models.TimeInStatus(task, time.Now())), nil
 	default:
-		return nil, &errors.NotFoundError{Entity: "task", ID: task.ID, Field: field}
+		return nil, &errors.NotFoundError{Entity: string(inspectRootTask), ID: task.ID, Field: field}
 	}
 }

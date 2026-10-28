@@ -1,0 +1,254 @@
+{
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/enforce-init.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/rtk-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-path-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-path-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-path-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-path-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "MultiEdit"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-context.sh\"",
+            "timeout": 40,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "liza hook-stop-guard",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "additionalDirectories": [
+      "~/.liza",
+      "/tmp"
+    ],
+    "allow": [
+      "Read(~/.claude/**)",
+      "Read(~/.liza/**)",
+      "Edit(//tmp/**)",
+      "Monitor(*)",
+      "Skill(adr-backfill)",
+      "Skill(adversarial-pairing)",
+      "Skill(architecture-planning)",
+      "Skill(bash-policy)",
+      "Skill(black-box-red-testing)",
+      "Skill(check-liza-input-readiness)",
+      "Skill(checkpoint-summary)",
+      "Skill(clean-code)",
+      "Skill(code-quality-assessment)",
+      "Skill(code-review)",
+      "Skill(code-spec-backfill)",
+      "Skill(context-engineering)",
+      "Skill(debugging)",
+      "Skill(detailed-spec-writing)",
+      "Skill(epic-writing)",
+      "Skill(feynman)",
+      "Skill(generic-subagent)",
+      "Skill(goal-writing)",
+      "Skill(have-you-considered)",
+      "Skill(lesson-capture)",
+      "Skill(liza-logs)",
+      "Skill(liza-operator)",
+      "Skill(software-architecture-review)",
+      "Skill(spec-backfill)",
+      "Skill(spec-review)",
+      "Skill(systemic-thinking)",
+      "Skill(testing)",
+      "Skill(user-story-writing)",
+      "Skill(white-box-red-testing)",
+      "WebFetch",
+      "WebSearch",
+      "LSP",
+      "mcp__Ref__ref_read_url",
+      "mcp__Ref__ref_search_documentation",
+      "mcp__context7__query-docs",
+      "mcp__context7__resolve-library-id",
+      "mcp__deepwiki__ask_question",
+      "mcp__deepwiki__read_wiki_contents",
+      "mcp__deepwiki__read_wiki_structure",
+      "mcp__fetch__fetch",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__get_file_info",
+      "mcp__filesystem__read_file",
+      "mcp__filesystem__read_multiple_files",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__search_files",
+      "mcp__jetbrains__find_files_by_glob",
+      "mcp__jetbrains__get_file_problems",
+      "mcp__jetbrains__get_file_text_by_path",
+      "mcp__jetbrains__get_project_dependencies",
+      "mcp__jetbrains__get_project_modules",
+      "mcp__jetbrains__get_symbol_info",
+      "mcp__jetbrains__list_directory_tree",
+      "mcp__jetbrains__read_file",
+      "mcp__jetbrains__rename_refactoring",
+      "mcp__jetbrains__replace_text_in_file",
+      "mcp__morph-mcp__codebase_search",
+      "mcp__morph-mcp__edit_file",
+      "mcp__perplexity__perplexity_ask",
+      "Bash(liza:*)",
+      "Bash(bash-policy:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(jq:*)",
+      "Bash(mdq:*)",
+      "Bash(yq:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(cut:*)",
+      "Bash(tr:*)",
+      "Bash(diff:*)",
+      "Bash(realpath:*)",
+      "Bash(dirname:*)",
+      "Bash(basename:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(which:*)",
+      "Bash(file:*)",
+      "Bash(tree:*)",
+      "Bash(env:*)",
+      "Bash(printenv:*)",
+      "Bash(gh:*)",
+      "Bash(git:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(mypy:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(pre-commit:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(sqlfluff:*)",
+      "Bash(uv:*)",
+      "Bash(uvx:*)",
+      "Bash(shellcheck:*)",
+      "Bash(bash:*)",
+      "Bash(ls:*)",
+      "Bash(awk:*)",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(test:*)",
+      "Bash(/usr/bin/test:*)",
+      "Bash(wc:*)",
+      "Bash(date:*)",
+      "Bash(sha256sum:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(ast-grep:*)",
+      "Bash(semble:*)",
+      "Bash(scip-search:*)",
+      "Bash(stacklit:*)",
+      "Bash(mdtoc:*)",
+      "Bash(go doc:*)",
+      "Bash(go fmt:*)",
+      "Bash(gofmt:*)",
+      "Bash(go test:*)",
+      "Bash(go mod:*)",
+      "Bash(go vet:*)",
+      "Bash(go build:*)",
+      "Bash(go -C:*)",
+      "Bash(make build)",
+      "Bash(make test)",
+      "Bash(make lint)",
+      "Bash(diff-cover:*)",
+      "Bash(cargo:*)",
+      "Bash(rustfmt:*)",
+      "Bash(clippy-driver:*)",
+      "Bash(yarn:*)",
+      "Bash(pnpm:*)",
+      "Bash(bun:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Bash(tsc:*)",
+      "Bash(vitest:*)",
+      "Bash(rtk:*)",
+      "Bash(rtk grep:*)",
+      "Bash(rtk proxy:*)",
+      "Read(~/.local/share/rtk/tee/**)"
+    ]
+  }
+}

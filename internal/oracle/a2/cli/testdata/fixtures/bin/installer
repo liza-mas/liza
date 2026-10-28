@@ -1,0 +1,3 @@
+#!/bin/sh
+printf 'unexpected installer execution\n' > "$ORACLE_STUB_LOG"
+exit 91

@@ -77,7 +77,7 @@ func mergedPlanningParent(id string, base, review, merge string, now time.Time) 
 	agent := "code-planner-1"
 	submitted := review
 	task.History = append(task.History, models.TaskHistoryEntry{
-		Time: now, Event: string(models.TaskEventSubmittedForReview), Agent: &agent, Commit: &submitted,
+		Time: now, Event: models.TaskEventSubmittedForReview, Agent: &agent, Commit: &submitted,
 	})
 	return task
 }
@@ -121,7 +121,7 @@ func TestRepairAcceptanceCommits_RemapsOrphanedParentByContentIdentity(t *testin
 	}
 	var submitted *string
 	for _, entry := range got.History {
-		if entry.Event == string(models.TaskEventSubmittedForReview) {
+		if entry.Event == models.TaskEventSubmittedForReview {
 			submitted = entry.Commit
 		}
 	}
@@ -311,7 +311,7 @@ func TestRepairAcceptanceCommits_ChildAllocatesAfterRepair(t *testing.T) {
 	// The rewrite is on the record, with the pairs an auditor needs.
 	var audit *models.TaskHistoryEntry
 	for i := range repaired.History {
-		if repaired.History[i].Event == string(models.TaskEventAcceptanceCommitsRemapped) {
+		if repaired.History[i].Event == models.TaskEventAcceptanceCommitsRemapped {
 			audit = &repaired.History[i]
 		}
 	}

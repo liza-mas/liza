@@ -1,0 +1,17 @@
+{
+  "id": "CS2",
+  "base": "legacy",
+  "state_delta": {},
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "clear-stale-review-claims"
+    ],
+    "exit": 0,
+    "contains": "No stale"
+  },
+  "modes": [
+    "human"
+  ]
+}

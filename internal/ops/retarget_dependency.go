@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
@@ -65,199 +66,222 @@ func RetargetDependencyWithAuthorityAndOptions(projectRoot, taskID, oldDependenc
 	return retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency, newDependencies, reason, authority.ID, &authority, opts)
 }
 
+// retargetRun carries one retarget-dependency invocation through its concerns:
+// request checks, in-lock admission, eligibility, rewrite planning, adoption
+// and result reporting. observed and effects feed the deferred lifecycle
+// wrapping of the entry point.
+type retargetRun struct {
+	invocation      *LifecycleInvocation
+	projectRoot     string
+	logPath         string
+	taskID          string
+	oldDependency   string
+	newDependencies []string
+	reason          string
+	agentID         string
+	authority       *models.AgentAuthority
+	opts            LifecycleRequestOptions
+	now             time.Time
+	bb              *db.Blackboard
+	resolver        *pipeline.Resolver
+	observed        *models.Task
+	effects         LifecycleEffects
+	result          RetargetDependencyResult
+
+	repairRequestCleared bool
+}
+
 func retargetDependencyWithOptionalAuthority(projectRoot, taskID, oldDependency string, newDependencies []string, reason, agentID string, authority *models.AgentAuthority, options ...LifecycleRequestOptions) (returned *RetargetDependencyResult, retErr error) {
-	invocation := NewLifecycleInvocation(projectRoot)
-	var opts LifecycleRequestOptions
-	if len(options) > 0 {
-		opts = options[0]
+	run := &retargetRun{
+		invocation:    NewLifecycleInvocation(projectRoot),
+		projectRoot:   projectRoot,
+		taskID:        taskID,
+		oldDependency: oldDependency,
+		reason:        reason,
+		agentID:       agentID,
+		authority:     authority,
+		effects:       LifecycleEffectsNone,
 	}
-	var observed *models.Task
-	effects := "none"
+	if len(options) > 0 {
+		run.opts = options[0]
+	}
 	defer func() {
-		retErr = WrapLifecycleError(retargetDependencyOperation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(retargetDependencyOperation, run.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
 			outcome = returned.LifecycleOutcome
 			warnings = &returned.Warnings
 		}
-		invocation.FinishResult(retargetDependencyOperation, outcome, &retErr, warnings)
+		run.invocation.FinishResult(retargetDependencyOperation, outcome, &retErr, warnings)
 	}()
-	if err := ValidateLifecycleRequestOptions(opts); err != nil {
+	if err := run.checkRequest(newDependencies); err != nil {
 		return nil, err
 	}
-	if taskID == "" {
-		return nil, &PreconditionError{Reason: "task ID is required"}
-	}
-	if oldDependency == "" {
-		return nil, &PreconditionError{Reason: "old dependency is required"}
-	}
-	if reason == "" {
-		return nil, &PreconditionError{Reason: "reason is required"}
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "orchestrator agent ID is required"}
-	}
-
-	normalizedNewDeps, err := normalizeRetargetNewDependencies(newDependencies)
-	if err != nil {
+	if err := run.openState(); err != nil {
 		return nil, err
 	}
+	err := lifecycleMutation(run.bb, authority)(run.mutate)
+	return run.report(err)
+}
 
-	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts)
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, WrapLifecycleError(retargetDependencyOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, "requery", "none")
-	}
-
-	var result RetargetDependencyResult
-	now := time.Now().UTC()
-
-	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
-		defer func() {
-			callbackErr = WrapLifecycleError(retargetDependencyOperation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
-		}()
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		copy := *task
-		observed = &copy
-		request, err := NewLifecycleRequest(retargetDependencyOperation, task, agentID, authority, opts, struct {
-			OldDependency   string
-			NewDependencies []string
-			Reason          string
-		}{oldDependency, normalizedNewDeps, reason})
-		if err != nil {
-			return err
-		}
-		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			result = RetargetDependencyResult{TaskID: taskID, LifecycleOutcome: LifecycleReplayOutcome(task, receipt, agentID)}
-			return errLifecycleReplay
-		}
-		lineageRepair := false
-		if task.Status.IsTerminal() {
-			if repairErr := mergedPlanLineageRepair(state, resolver, task, oldDependency, normalizedNewDeps); repairErr != nil {
-				return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("cannot retarget dependencies on terminal task %s (%s): %v", taskID, task.Status, repairErr)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-			}
-			lineageRepair = true
-		}
-		if !slices.Contains(task.DependsOn, oldDependency) {
-			return WrapLifecycleError(retargetDependencyOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s does not depend on %s", taskID, oldDependency)}, models.LifecycleStateChanged, "requery", "none")
-		}
-		for _, depID := range normalizedNewDeps {
-			if depID == task.ID {
-				return &PreconditionError{Reason: fmt.Sprintf("task %s cannot depend on itself", task.ID)}
-			}
-			if state.FindTask(depID) == nil {
-				return &PreconditionError{Reason: fmt.Sprintf("new dependency %q does not exist", depID)}
-			}
-		}
-
-		replaced := replaceDependency(task.DependsOn, oldDependency, normalizedNewDeps)
-		canonical, _, err := canonicalizeConcreteDependencyList(state, resolver, task.ID, task.RolePair, replaced)
-		if err != nil {
-			return err
-		}
-		if len(canonical) == 0 {
-			return &PreconditionError{Reason: "retarget-dependency cannot remove all dependencies; use an explicit dependency-removal operation instead"}
-		}
-		if err := rejectUnmetDependencyOnExecutingConsumer(state, resolver, retargetDependencyOperation, task, canonical); err != nil {
-			return err
-		}
-
-		repairExtra := matchingRetargetRepairExtra(task.RepairRequest, taskID, oldDependency, canonical)
-		repairRequestCleared := repairExtra != nil
-		if repairRequestCleared {
-			task.RepairRequest = nil
-		}
-
-		task.DependsOn = canonical
-		extra := map[string]any{
-			"manual":                 true,
-			"operation":              retargetDependencyOperation,
-			"old_dependency":         oldDependency,
-			"new_dependencies":       append([]string(nil), normalizedNewDeps...),
-			"canonical_dependencies": append([]string(nil), canonical...),
-			"repair_request_cleared": repairRequestCleared,
-		}
-		if lineageRepair {
-			extra["merged_plan_lineage_repair"] = true
-		}
-		for key, value := range repairExtra {
-			extra[key] = value
-		}
-		note := fmt.Sprintf("retargeted dependency %s -> %s", oldDependency, strings.Join(normalizedNewDeps, ", "))
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventDependenciesRewritten,
-			Agent:  &agentID,
-			Reason: &reason,
-			Note:   &note,
-			Extra:  extra,
-		})
-
-		if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
-			return err
-		}
-
-		result = RetargetDependencyResult{
-			TaskID:                taskID,
-			OldDependency:         oldDependency,
-			NewDependencies:       append([]string(nil), normalizedNewDeps...),
-			CanonicalDependencies: append([]string(nil), canonical...),
-			RepairRequestCleared:  repairRequestCleared,
-		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-		if err == nil {
-			effects = "unknown"
-		}
+// checkRequest refuses a malformed request before any state is read and
+// normalises the new dependencies.
+func (r *retargetRun) checkRequest(newDependencies []string) error {
+	if err := ValidateLifecycleRequestOptions(r.opts); err != nil {
 		return err
-	})
+	}
+	if r.taskID == "" {
+		return &PreconditionError{Reason: "task ID is required"}
+	}
+	if r.oldDependency == "" {
+		return &PreconditionError{Reason: "old dependency is required"}
+	}
+	if r.reason == "" {
+		return &PreconditionError{Reason: "reason is required"}
+	}
+	if r.agentID == "" {
+		return &PreconditionError{Reason: "orchestrator agent ID is required"}
+	}
+	normalized, err := normalizeRetargetNewDependencies(newDependencies)
+	if err != nil {
+		return err
+	}
+	r.newDependencies = normalized
+	return nil
+}
+
+// openState binds the request blackboard and the pipeline resolver.
+func (r *retargetRun) openState() error {
+	lp := paths.New(r.projectRoot)
+	r.logPath = lp.LogPath()
+	r.bb = RequestBlackboard(lp.StatePath(), r.authority, r.opts)
+	resolver, _, err := loadResolver(r.projectRoot)
+	if err != nil {
+		return WrapLifecycleError(retargetDependencyOperation, nil, fmt.Errorf("failed to load pipeline config: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone)
+	}
+	r.resolver = resolver
+	r.now = time.Now().UTC()
+	return nil
+}
+
+// mutate is the locked callback: admission, eligibility, rewrite planning,
+// adoption, full-candidate validation and receipt completion, in that order.
+func (r *retargetRun) mutate(state *models.State) (callbackErr error) {
+	defer func() {
+		callbackErr = WrapLifecycleError(retargetDependencyOperation, r.observed, callbackErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+	}()
+	task, request, err := r.admit(state)
+	if err != nil {
+		return err
+	}
+	lineageRepair, err := r.checkEligibility(state, task)
+	if err != nil {
+		return err
+	}
+	canonical, err := r.planRewrite(state, task)
+	if err != nil {
+		return err
+	}
+	r.adopt(task, canonical, lineageRepair)
+	if err := statevalidate.ValidateCandidate(state, r.bb.ReadSnapshot, r.projectRoot, false, os.Stderr); err != nil {
+		return err
+	}
+	return r.complete(state, task, request, canonical)
+}
+
+// admit looks the task up, records the observed copy and checks the request
+// receipt; an already completed request is a replay.
+func (r *retargetRun) admit(state *models.State) (*models.Task, LifecycleRequest, error) {
+	task := state.FindTask(r.taskID)
+	if task == nil {
+		return nil, LifecycleRequest{}, &errors.NotFoundError{Entity: notFoundEntityTask, ID: r.taskID}
+	}
+	copy := *task
+	r.observed = &copy
+	request, err := NewLifecycleRequest(retargetDependencyOperation, task, r.agentID, r.authority, r.opts, struct {
+		OldDependency   string
+		NewDependencies []string
+		Reason          string
+	}{r.oldDependency, r.newDependencies, r.reason})
+	if err != nil {
+		return nil, request, err
+	}
+	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
+	if err != nil {
+		return nil, request, err
+	}
+	if receipt != nil {
+		r.result = RetargetDependencyResult{TaskID: r.taskID, LifecycleOutcome: LifecycleReplayOutcome(task, receipt, r.agentID)}
+		return nil, request, errLifecycleReplay
+	}
+	return task, request, nil
+}
+
+// complete records the result and completes the lifecycle request.
+func (r *retargetRun) complete(state *models.State, task *models.Task, request LifecycleRequest, canonical []string) error {
+	r.result = RetargetDependencyResult{
+		TaskID:                r.taskID,
+		OldDependency:         r.oldDependency,
+		NewDependencies:       append([]string(nil), r.newDependencies...),
+		CanonicalDependencies: append([]string(nil), canonical...),
+		RepairRequestCleared:  r.repairRequestCleared,
+	}
+	var err error
+	r.result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+	if err == nil {
+		r.effects = LifecycleEffectsUnknown
+	}
+	return err
+}
+
+// report maps the mutation outcome to the operation result: a replay returns
+// the original completion, a dependency cycle is logged and wrapped with its
+// diagnostics, any other failure is wrapped as a changed state, and a commit
+// is followed by the activity log.
+func (r *retargetRun) report(err error) (*RetargetDependencyResult, error) {
 	if isLifecycleReplay(err) {
-		return &result, nil
+		return &r.result, nil
 	}
 	if err != nil {
 		var cycleErr *statevalidate.DependencyCycleError
 		if stderrors.As(err, &cycleErr) {
-			cyclePath := slices.Clone(cycleErr.CyclePath)
-			recordRetargetDependencyRejection(lp.LogPath(), now, agentID, taskID, oldDependency, normalizedNewDeps, cyclePath, reason, err)
-			return nil, WrapLifecycleError(retargetDependencyOperation, observed, &OperationalError{
-				Code:    "validation",
-				Phase:   retargetDependencyCandidateValidation,
-				Message: "retarget dependency rejected because the candidate state contains a dependency cycle",
-				Details: map[string]any{
-					"operation":         retargetDependencyOperation,
-					"task_id":           taskID,
-					"old_dependency":    oldDependency,
-					"new_dependencies":  append([]string(nil), normalizedNewDeps...),
-					"cycle_path":        cyclePath,
-					"diagnostic_action": retargetDependencyRejectedAction,
-				},
-				Err: err,
-			}, models.LifecycleInvalidInput, "correct_input", "none")
+			return nil, r.cycleRejection(cycleErr, err)
 		}
-		return nil, WrapLifecycleError(retargetDependencyOperation, observed, fmt.Errorf("failed to retarget dependency: %w", err), models.LifecycleStateChanged, "requery", effects)
+		return nil, WrapLifecycleError(retargetDependencyOperation, r.observed, fmt.Errorf("failed to retarget dependency: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, r.effects)
 	}
-
-	logger := log.New(lp.LogPath())
 	logEntry := log.Entry{
-		Timestamp: now,
-		Agent:     agentID,
+		Timestamp: r.now,
+		Agent:     r.agentID,
 		Action:    retargetDependencyOperation,
-		Task:      &taskID,
-		Detail:    fmt.Sprintf("%s -> %s: %s", oldDependency, strings.Join(normalizedNewDeps, ","), reason),
+		Task:      &r.taskID,
+		Detail:    fmt.Sprintf("%s -> %s: %s", r.oldDependency, strings.Join(r.newDependencies, ","), r.reason),
 	}
-	if err := logger.Append(logEntry); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
+	if err := log.New(r.logPath).Append(logEntry); err != nil {
+		r.result.Warnings = append(r.result.Warnings, fmt.Sprintf("activity log write failed: %v", err))
 	}
+	return &r.result, nil
+}
 
-	return &result, nil
+// cycleRejection logs the rejected candidate and wraps the cycle with the
+// diagnostics a caller needs to repair it.
+func (r *retargetRun) cycleRejection(cycleErr *statevalidate.DependencyCycleError, err error) error {
+	cyclePath := slices.Clone(cycleErr.CyclePath)
+	recordRetargetDependencyRejection(r.logPath, r.now, r.agentID, r.taskID, r.oldDependency, r.newDependencies, cyclePath, r.reason, err)
+	return WrapLifecycleError(retargetDependencyOperation, r.observed, &OperationalError{
+		Code:    "validation",
+		Phase:   retargetDependencyCandidateValidation,
+		Message: "retarget dependency rejected because the candidate state contains a dependency cycle",
+		Details: map[string]any{
+			"operation":         retargetDependencyOperation,
+			"task_id":           r.taskID,
+			"old_dependency":    r.oldDependency,
+			"new_dependencies":  append([]string(nil), r.newDependencies...),
+			"cycle_path":        cyclePath,
+			"diagnostic_action": retargetDependencyRejectedAction,
+		},
+		Err: err,
+	}, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 }
 
 func recordRetargetDependencyRejection(logPath string, timestamp time.Time, agentID, taskID, oldDependency string, newDependencies, cyclePath []string, reason string, err error) {
@@ -310,119 +334,4 @@ func normalizeRetargetNewDependencies(values []string) ([]string, error) {
 		return nil, &PreconditionError{Reason: "at least one new dependency is required"}
 	}
 	return normalized, nil
-}
-
-// mergedPlanLineageRepair admits the one terminal retarget that repairs replan
-// lineage (D-60): a MERGED plan whose hand-off has not started keeps an edge to
-// an upstream replanned while it was MERGED (Replan skips terminal consumers).
-// The edge moves only to that upstream's MERGED successor, and only when the
-// reviewed output already targets the successor and no longer names the
-// retired lineage — otherwise the plan predates the replan and must be
-// reconciled by replan, not by metadata. Naming a direct child counts as
-// naming its parent plan (D-77). Plan-check state is left untouched.
-func mergedPlanLineageRepair(state *models.State, resolver *pipeline.Resolver, task *models.Task, oldDependency string, newDependencies []string) error {
-	if task.Status != models.TaskStatusMerged || !IsPlanningPair(task.RolePair, resolver.TransitionSourcePairs()) || len(task.Output) == 0 {
-		return fmt.Errorf("only a MERGED planning task with output can have a replan lineage edge repaired")
-	}
-	if len(task.TransitionsExecuted) > 0 || task.PlanHandoffRetired() {
-		return fmt.Errorf("its hand-off already ran, was replanned or was retired")
-	}
-	successor, ok := liveReplanSuccessor(state, oldDependency)
-	if !ok {
-		return fmt.Errorf("%s has no live replan successor", oldDependency)
-	}
-	if !slices.Equal(newDependencies, []string{successor.ID}) {
-		return fmt.Errorf("a replanned dependency can only be retargeted to its replan successor %s", successor.ID)
-	}
-	if successor.Status != models.TaskStatusMerged {
-		return fmt.Errorf("replan successor %s is %s, not MERGED", successor.ID, successor.Status)
-	}
-	targetsSuccessor := false
-	for index, entry := range task.Output {
-		for _, ref := range outputDependencyReferences(entry) {
-			// A reference targets itself and, for a generated child, each of
-			// its parents. A child exists only once its parent's hand-off ran,
-			// so naming the successor's child postdates the replan; every parent
-			// is checked first, since one may be the retired lineage.
-			referenced := []string{ref}
-			if refTask := state.FindTask(ref); refTask != nil {
-				referenced = append(referenced, refTask.EffectiveParentTasks()...)
-			}
-			for i, id := range referenced {
-				if lineage, ok := liveReplanSuccessor(state, id); ok && lineage.ID == successor.ID {
-					if i == 0 {
-						return fmt.Errorf("output[%d] still names %s, replanned into %s; replan the plan instead", index, ref, successor.ID)
-					}
-					return fmt.Errorf("output[%d] still names %s, a child of %s replanned into %s; replan the plan instead", index, ref, id, successor.ID)
-				}
-			}
-			if slices.Contains(referenced, successor.ID) {
-				targetsSuccessor = true
-			}
-		}
-	}
-	if !targetsSuccessor {
-		return fmt.Errorf("no output names replan successor %s; replan the plan instead", successor.ID)
-	}
-	return nil
-}
-
-// outputDependencyReferences lists the upstream tasks an output entry names.
-func outputDependencyReferences(entry models.OutputEntry) []string {
-	refs := slices.Clone(entry.TaskDependsOn)
-	for _, dep := range entry.ProviderDependencies {
-		refs = append(refs, dep.ProviderTask)
-	}
-	if entry.InheritInputs != nil {
-		for _, selection := range entry.InheritInputs.Selections {
-			refs = append(refs, selection.UpstreamTask)
-		}
-	}
-	return refs
-}
-
-func replaceDependency(deps []string, oldDependency string, newDependencies []string) []string {
-	replaced := make([]string, 0, len(deps)+len(newDependencies)-1)
-	for _, depID := range deps {
-		if depID == oldDependency {
-			replaced = append(replaced, newDependencies...)
-			continue
-		}
-		replaced = append(replaced, depID)
-	}
-	return dedupeStrings(replaced)
-}
-
-func matchingRetargetRepairExtra(request *models.RepairRequest, taskID, oldDependency string, canonicalDependencies []string) map[string]any {
-	if request == nil || request.Operation != retargetDependencyOperation || request.Target != taskID {
-		return nil
-	}
-	if slices.Contains(canonicalDependencies, oldDependency) {
-		return nil
-	}
-	if !repairCommandMatchesRetargetEdge(request.Command, taskID, oldDependency) {
-		return nil
-	}
-
-	return map[string]any{
-		"repair_operation":  request.Operation,
-		"repair_target":     request.Target,
-		"repair_command":    request.Command,
-		"repair_evidence":   append([]string(nil), request.Evidence...),
-		"repair_validation": append([]string(nil), request.Validation...),
-	}
-}
-
-func repairCommandMatchesRetargetEdge(command, taskID, oldDependency string) bool {
-	fields := strings.Fields(command)
-	for i := 0; i+2 < len(fields); i++ {
-		if fields[i] != retargetDependencyOperation {
-			continue
-		}
-		if fields[i+1] != taskID || fields[i+2] != oldDependency {
-			continue
-		}
-		return true
-	}
-	return false
 }

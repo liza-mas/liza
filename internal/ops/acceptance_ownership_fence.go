@@ -10,9 +10,12 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 )
 
-// acceptanceOwnershipPollInterval is how often canonical execution re-reads
-// task ownership; tests shorten it.
-var acceptanceOwnershipPollInterval = 15 * time.Second
+// defaultAcceptanceOwnershipPollInterval is how often canonical execution
+// re-reads task ownership.
+const defaultAcceptanceOwnershipPollInterval = 15 * time.Second
+
+// acceptanceOwnershipPollInterval starts at the default; tests shorten it.
+var acceptanceOwnershipPollInterval = defaultAcceptanceOwnershipPollInterval
 
 // startAcceptanceOwnershipFence returns a context cancelled once a state
 // snapshot shows the submitting claim is gone, so canonical execution stops

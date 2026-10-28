@@ -4,9 +4,37 @@ import (
 	"errors"
 	"fmt"
 
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+)
+
+// lifecycleTaskStatusUnobserved is the task status of an outcome built without
+// an observed task.
+const lifecycleTaskStatusUnobserved models.TaskStatus = "UNKNOWN"
+
+// LifecycleSafeAction is the single recovery action the server selects for a
+// lifecycle outcome. Model and wire fields stay strings; convert explicitly.
+type LifecycleSafeAction string
+
+const (
+	LifecycleSafeActionContinue LifecycleSafeAction = "continue"
+	LifecycleSafeActionStop     LifecycleSafeAction = "stop"
+	LifecycleSafeActionRequery  LifecycleSafeAction = LifecycleSafeAction(models.FieldDiagnosticRequery)
+	LifecycleSafeActionRetry    LifecycleSafeAction = "retry"
+
+	LifecycleSafeActionCorrectInput LifecycleSafeAction = LifecycleSafeAction(models.FieldDiagnosticCorrectInput)
+)
+
+// LifecycleEffects states what an operation is known to have done to durable
+// state or the outside world when it reports an outcome.
+type LifecycleEffects string
+
+const (
+	LifecycleEffectsNone      LifecycleEffects = "none"
+	LifecycleEffectsUnknown   LifecycleEffects = "unknown"
+	LifecycleEffectsCommitted LifecycleEffects = "committed"
 )
 
 // readLifecycleTask observes committed state after an operation fails. A failed
@@ -59,6 +87,11 @@ func (e *LifecycleError) Unwrap() error { return e.Err }
 
 func (e *LifecycleError) LifecycleResult() any { return e.Outcome }
 
+// LifecycleOutcomeName names the outcome for envelope classification.
+func (e *LifecycleError) LifecycleOutcomeName() string { return e.Outcome.Outcome }
+
+var _ lizaerrors.LifecycleOutcomeError = (*LifecycleError)(nil)
+
 func (e *LifecycleError) SafeDetails() map[string]any {
 	o := e.Outcome
 	details := make(map[string]any)
@@ -100,7 +133,7 @@ func (e *LifecycleError) SafeDetails() map[string]any {
 // WrapLifecycleError retains explicit command policy except for typed authority
 // rejection and lock contention known to precede all effects. It never derives
 // policy by matching error text, and keeps the original cause discoverable.
-func WrapLifecycleError(operation string, task *models.Task, err error, outcome, action, effects string) error {
+func WrapLifecycleError(operation string, task *models.Task, err error, outcome string, action LifecycleSafeAction, effects LifecycleEffects) error {
 	if err == nil {
 		return nil
 	}
@@ -114,17 +147,17 @@ func WrapLifecycleError(operation string, task *models.Task, err error, outcome,
 	}
 	if IsAgentAuthorityError(err) {
 		task = nil
-		outcome, action = models.LifecycleStaleCaller, "stop"
-	} else if effects == "none" && filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
-		outcome, action = models.LifecycleRetryable, "retry"
+		outcome, action = models.LifecycleStaleCaller, LifecycleSafeActionStop
+	} else if effects == LifecycleEffectsNone && filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+		outcome, action = models.LifecycleRetryable, LifecycleSafeActionRetry
 	}
 	return &LifecycleError{Outcome: NewLifecycleOutcome(operation, task, outcome, action, effects), Err: err}
 }
 
 // NewLifecycleOutcome requires an already-authorized task observation. Pass
 // nil when state cannot be read or authorization forbids exposing ownership.
-func NewLifecycleOutcome(operation string, task *models.Task, outcome, safeAction, effects string) models.LifecycleOutcome {
-	o := models.LifecycleOutcome{Operation: operation, Outcome: outcome, SafeAction: safeAction, Effects: effects, TaskStatus: "UNKNOWN"}
+func NewLifecycleOutcome(operation string, task *models.Task, outcome string, safeAction LifecycleSafeAction, effects LifecycleEffects) models.LifecycleOutcome {
+	o := models.LifecycleOutcome{Operation: operation, Outcome: outcome, SafeAction: string(safeAction), Effects: string(effects), TaskStatus: lifecycleTaskStatusUnobserved}
 	o.Changed = models.LifecycleChanged(outcome)
 	if task == nil {
 		return o
@@ -144,13 +177,13 @@ func NewLifecycleOutcome(operation string, task *models.Task, outcome, safeActio
 // LifecycleReplayOutcome reports the original completion separately from the
 // live task boundary. Historical completion never transfers current ownership.
 func LifecycleReplayOutcome(task *models.Task, receipt *models.LifecycleReceipt, actor string) models.LifecycleOutcome {
-	action := "stop"
+	action := LifecycleSafeActionStop
 	if task != nil && models.TaskTransitionID(task) == receipt.TransitionID &&
 		((task.AssignedTo != nil && *task.AssignedTo == actor) ||
 			(task.ReviewingBy != nil && *task.ReviewingBy == actor)) {
-		action = "continue"
+		action = LifecycleSafeActionContinue
 	}
-	o := NewLifecycleOutcome(receipt.Operation, task, models.LifecycleAlreadyCompleted, action, "committed")
+	o := NewLifecycleOutcome(receipt.Operation, task, models.LifecycleAlreadyCompleted, action, LifecycleEffectsCommitted)
 	o.CompletedTransitionID = receipt.TransitionID
 	o.RequestID = receipt.RequestID
 	return o
@@ -159,23 +192,23 @@ func LifecycleReplayOutcome(task *models.Task, receipt *models.LifecycleReceipt,
 // NewLifecycleNoChangeOutcome reports a valid, authorized request whose
 // effective result already equals durable state: nothing was appended.
 func NewLifecycleNoChangeOutcome(operation string, task *models.Task) models.LifecycleOutcome {
-	return NewLifecycleOutcome(operation, task, models.LifecycleNoChange, "stop", "none")
+	return NewLifecycleOutcome(operation, task, models.LifecycleNoChange, LifecycleSafeActionStop, LifecycleEffectsNone)
 }
 
 // NewLifecycleInvalidInputError rejects a payload before any effect, naming
 // the offending fields without echoing their values.
 func NewLifecycleInvalidInputError(operation string, task *models.Task, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
-	return newDiagnosticLifecycleError(operation, task, models.LifecycleInvalidInput, "correct_input", diagnostics, err)
+	return newDiagnosticLifecycleError(operation, task, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, diagnostics, err)
 }
 
 // NewLifecycleConflictError reports an identity or idempotency key reused
 // with a materially different payload; diagnostics name the conflict.
 func NewLifecycleConflictError(operation string, task *models.Task, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
-	return newDiagnosticLifecycleError(operation, task, models.LifecycleConflict, "stop", diagnostics, err)
+	return newDiagnosticLifecycleError(operation, task, models.LifecycleConflict, LifecycleSafeActionStop, diagnostics, err)
 }
 
-func newDiagnosticLifecycleError(operation string, task *models.Task, outcome, safeAction string, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
-	o := NewLifecycleOutcome(operation, task, outcome, safeAction, "none")
+func newDiagnosticLifecycleError(operation string, task *models.Task, outcome string, safeAction LifecycleSafeAction, diagnostics []models.FieldDiagnostic, err error) *LifecycleError {
+	o := NewLifecycleOutcome(operation, task, outcome, safeAction, LifecycleEffectsNone)
 	o.Diagnostics = models.NormalizeFieldDiagnostics(diagnostics)
 	return &LifecycleError{Outcome: o, Err: err}
 }

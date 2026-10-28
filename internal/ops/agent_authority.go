@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/liza-mas/liza/internal/db"
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/models"
 )
 
@@ -31,15 +32,20 @@ func (e *AgentAuthorityError) Error() string {
 func (e *AgentAuthorityError) SafeDetails() map[string]any {
 	return map[string]any{
 		"agent_id":    e.AgentID,
-		"outcome":     "STALE_CALLER",
-		"safe_action": "stop",
-		"effects":     "none",
+		"outcome":     models.LifecycleStaleCaller,
+		"safe_action": string(LifecycleSafeActionStop),
+		"effects":     string(LifecycleEffectsNone),
 	}
 }
 
 // LifecycleResult lets presentation adapters expose recovery even when authority
 // was rejected before a task could safely be observed.
 func (e *AgentAuthorityError) LifecycleResult() any { return e.SafeDetails() }
+
+// StaleCallerMarker marks a stale caller for envelope classification.
+func (e *AgentAuthorityError) StaleCallerMarker() {}
+
+var _ lizaerrors.StaleCallerError = (*AgentAuthorityError)(nil)
 
 // generationFingerprint remains internal provenance for quarantined evidence.
 func generationFingerprint(value string) string {

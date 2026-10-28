@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "correction_id": "arch-a-amend-1",
+      "task_id": "arch-a"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "effects": "none",
+        "operation": "supersede-task",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "",
+        "task_status": "UNKNOWN"
+      },
+      "message": "supersede-task: INVALID_INPUT (safe_action=correct_input): validation failed: recoverability command is required when superseding without replacements"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "supersede-task",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

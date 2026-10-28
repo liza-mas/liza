@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -267,6 +268,79 @@ func TestConfigureRejectsInvalidAgentToolsModeBeforeWriting(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(globalDir, "toolchain", "profile.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("profile.json stat err = %v, want not exist", statErr)
+	}
+}
+
+func TestNormalizeAgentToolsMode(t *testing.T) {
+	cases := []struct {
+		in   AgentToolsMode
+		want AgentToolsMode
+	}{
+		{"", AgentToolsModeSkip},
+		{AgentToolsModeAuto, AgentToolsModeAuto},
+		{AgentToolsModeSkip, AgentToolsModeSkip},
+		{AgentToolsModeForce, AgentToolsModeForce},
+	}
+	for _, tc := range cases {
+		got, err := normalizeAgentToolsMode(tc.in)
+		if err != nil || got != tc.want {
+			t.Fatalf("normalizeAgentToolsMode(%q) = %q, %v, want %q", tc.in, got, err, tc.want)
+		}
+	}
+
+	for _, unknown := range []AgentToolsMode{"invalid", "AUTO", " auto"} {
+		got, err := normalizeAgentToolsMode(unknown)
+		if err == nil || got != "" {
+			t.Fatalf("normalizeAgentToolsMode(%q) = %q, %v, want refusal", unknown, got, err)
+		}
+		want := fmt.Sprintf("invalid agent-tools mode %q (must be auto, skip, or force)", string(unknown))
+		if err.Error() != want {
+			t.Fatalf("normalizeAgentToolsMode(%q) error = %q, want %q", unknown, err, want)
+		}
+	}
+}
+
+func TestConfigureAgentToolsEmptyModeSkipsWriting(t *testing.T) {
+	globalDir := t.TempDir()
+
+	got, err := Configure(ConfigureOptions{
+		Profile:    ProfileLean,
+		GlobalDir:  globalDir,
+		InstallDir: filepath.Join(t.TempDir(), "bin"),
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	if got.AgentToolsPath != "" {
+		t.Fatalf("AgentToolsPath = %q, want empty for the default skip mode", got.AgentToolsPath)
+	}
+	if _, statErr := os.Stat(filepath.Join(globalDir, "AGENT_TOOLS.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("AGENT_TOOLS.md stat err = %v, want not exist", statErr)
+	}
+}
+
+func TestConfigureAgentToolsAutoKeepsExistingFile(t *testing.T) {
+	globalDir := t.TempDir()
+	toolsPath := filepath.Join(globalDir, "AGENT_TOOLS.md")
+	if err := os.WriteFile(toolsPath, []byte("custom tools\n"), 0o644); err != nil {
+		t.Fatalf("write existing AGENT_TOOLS.md: %v", err)
+	}
+
+	got, err := Configure(ConfigureOptions{
+		Profile:        ProfileLean,
+		GlobalDir:      globalDir,
+		InstallDir:     filepath.Join(t.TempDir(), "bin"),
+		AgentToolsMode: AgentToolsModeAuto,
+	})
+	if err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+	if got.AgentToolsPath != toolsPath {
+		t.Fatalf("AgentToolsPath = %q, want %q", got.AgentToolsPath, toolsPath)
+	}
+	content, err := os.ReadFile(toolsPath)
+	if err != nil || string(content) != "custom tools\n" {
+		t.Fatalf("AGENT_TOOLS.md = %q, %v, want the existing content untouched", content, err)
 	}
 }
 

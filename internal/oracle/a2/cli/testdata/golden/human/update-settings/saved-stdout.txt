@@ -1,0 +1,1 @@
+Update settings saved: check_update=false, channel=main

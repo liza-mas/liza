@@ -4,7 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
@@ -22,7 +23,7 @@ func completeValues(values ...string) cobra.CompletionFunc {
 }
 
 func completeCLINames(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return filterCompletionValues(agent.ValidCLIs(), toComplete), cobra.ShellCompDirectiveNoFileComp
+	return filterCompletionValues(agentlaunch.ValidCLIs(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
 func toolIDs() []string {
@@ -37,8 +38,11 @@ func completeToolIDs(_ *cobra.Command, _ []string, toComplete string) ([]string,
 	return filterCompletionValues(toolIDs(), toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
+// toolSelectorAll selects every tool where a tool id is expected.
+const toolSelectorAll = "all"
+
 func completeToolIDsOrAll(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	ids := append(toolIDs(), "all")
+	ids := append(toolIDs(), toolSelectorAll)
 	return filterCompletionValues(ids, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -119,10 +123,10 @@ func completeGetQueries(cmd *cobra.Command, _ []string, toComplete string) ([]st
 		"sprint.status",
 		"sprint.elapsed",
 		"sprint.metrics.tasks_done",
-		"tasks",
-		"agents",
-		"metrics",
-		"anomalies",
+		commands.InspectTargetTasks,
+		commands.InspectTargetAgents,
+		commands.InspectTargetMetrics,
+		commands.InspectTargetAnomalies,
 	}
 	if state, ok := completionState(cmd); ok {
 		values = append(values, taskIDsFromState(state)...)

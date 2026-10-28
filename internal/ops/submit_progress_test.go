@@ -2,10 +2,13 @@ package ops
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -155,13 +158,50 @@ func requireCompleted(t *testing.T, got submitOutcome) {
 	}
 }
 
+var quietMarkers atomic.Int64
+
+// stderrMarker writes a unique line to os.Stderr, the pipe production writes
+// to, and waits until the capture holds it. The pipe is FIFO, so everything
+// written before the marker is in the capture by then. It returns the captured
+// text before the marker and up to and including it.
+func stderrMarker(t testing.TB, stderr func() string) (before, through string) {
+	t.Helper()
+	marker := fmt.Sprintf("quiet-marker-%d\n", quietMarkers.Add(1))
+	if _, err := os.Stderr.WriteString(marker); err != nil {
+		t.Fatal(err)
+	}
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(5 * time.Second)
+	for {
+		text := stderr()
+		if i := strings.Index(text, marker); i >= 0 {
+			return text[:i], text[:i+len(marker)]
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline:
+			t.Fatalf("stderr marker %q not captured within 5s (%d bytes captured)", strings.TrimSpace(marker), len(text))
+		}
+	}
+}
+
 // requireQuiet fails if anything reaches stderr after the submit returned:
 // its reporter must be stopped and joined before the call returns.
-func requireQuiet(t *testing.T, stderr func() string) {
+func requireQuiet(t testing.TB, stderr func() string) {
 	t.Helper()
-	settled := stderr()
-	time.Sleep(5 * submitHeartbeatInterval)
-	if late := strings.TrimPrefix(stderr(), settled); late != "" {
+	requireQuietDuring(t, stderr, func() { time.Sleep(5 * submitHeartbeatInterval) })
+}
+
+// requireQuietDuring fails if anything reaches stderr while window runs. Markers
+// on both sides drain the capture, so output written before the call is never
+// attributed to the window.
+func requireQuietDuring(t testing.TB, stderr func() string, window func()) {
+	t.Helper()
+	_, settled := stderrMarker(t, stderr)
+	window()
+	before, _ := stderrMarker(t, stderr)
+	if late := strings.TrimPrefix(before, settled); late != "" {
 		t.Fatalf("progress written after the submit returned: %q", late)
 	}
 }
@@ -203,6 +243,56 @@ func TestSubmitProgressWithoutAdmissionClass(t *testing.T) {
 	openGate(t, scenario.Root)
 	requireCompleted(t, receive(t, done))
 	requireQuiet(t, stderr)
+}
+
+// Output written before the submit returned may still sit in the capture pipe
+// when the helper takes its snapshot; it must not be read as written after.
+func TestRequireQuietAttributesPreReturnWrites(t *testing.T) {
+	shortSubmitHeartbeat(t)
+	stderr := captureStderr(t)
+
+	// Larger than a pipe buffer, so the write returns while the capture still
+	// holds unread bytes.
+	if _, err := os.Stderr.WriteString("preparing the submission " + strings.Repeat("x", 128<<10) + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	requireQuiet(t, stderr)
+}
+
+// failureRecorder captures a fatal failure of a helper call without failing
+// the enclosing test.
+type failureRecorder struct {
+	testing.TB
+	message string
+}
+
+func (r *failureRecorder) Helper() {}
+func (r *failureRecorder) Fatalf(format string, args ...any) {
+	r.message = fmt.Sprintf(format, args...)
+	runtime.Goexit()
+}
+func (r *failureRecorder) Fatal(args ...any) { r.Fatalf("%s", fmt.Sprint(args...)) }
+
+// Draining must not hide a real late write: a line written inside the quiet
+// window still fails with the original message.
+func TestRequireQuietReportsWriteAfterReturn(t *testing.T) {
+	stderr := captureStderr(t)
+	const late = "running canonical validation, written late"
+
+	rec := &failureRecorder{TB: t}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		requireQuietDuring(rec, stderr, func() {
+			if _, err := os.Stderr.WriteString(late + "\n"); err != nil {
+				t.Error(err)
+			}
+		})
+	}()
+	<-done
+	if !strings.Contains(rec.message, "progress written after the submit returned") || !strings.Contains(rec.message, late) {
+		t.Fatalf("recorded failure = %q, want the late-write message naming %q", rec.message, late)
+	}
 }
 
 // D-188 (coder-8): a second submit for a task whose submit is still queued or

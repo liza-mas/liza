@@ -8,13 +8,17 @@ import (
 	"strings"
 )
 
+// codexManagedPermissionMode is the permission mode the managed Codex
+// configuration reports for approval_policy="never".
+const codexManagedPermissionMode = "bypassPermissions"
+
 // CodexHook applies the native Codex synchronous hook contract. Shell output
 // must be captured before execution: post hooks see truncated or final chunks.
 // Hosted tools do not traverse this boundary.
 func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([]byte, error) {
 	var event struct {
-		Event          string          `json:"hook_event_name"`
-		Tool           string          `json:"tool_name"`
+		Event          HookEvent       `json:"hook_event_name"`
+		Tool           HookTool        `json:"tool_name"`
 		PermissionMode string          `json:"permission_mode"`
 		SessionID      string          `json:"session_id"`
 		Input          json.RawMessage `json:"tool_input"`
@@ -27,12 +31,12 @@ func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([
 	if len(metadata) > 0 {
 		result = metadata[0]
 	}
-	result.Tool = event.Tool
+	result.Tool = string(event.Tool)
 	result.Command = string(event.Input)
 	result.SessionID = event.SessionID
 	switch event.Event {
-	case "PreToolUse":
-		if event.Tool != "Bash" {
+	case HookEventPreToolUse:
+		if event.Tool != HookToolBash {
 			return []byte("{}"), nil
 		}
 		// The rewrite is only sound for the permission mode the managed Codex
@@ -41,7 +45,7 @@ func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([
 		// "workspace-write". Any other mode means the session is not the
 		// managed baseline — accepting it would either elevate a constrained
 		// session or run outside the trusted posture.
-		if event.PermissionMode != "bypassPermissions" {
+		if event.PermissionMode != codexManagedPermissionMode {
 			return codexDeny("The managed tool-result boundary requires the permission mode rendered by the managed Codex configuration.")
 		}
 		var args map[string]json.RawMessage
@@ -60,12 +64,12 @@ func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([
 			" --role " + codexQuote(result.Role) + " -- \"$0\" -c " + codexQuote(command)
 		args["command"], _ = json.Marshal(replacement)
 		return json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
-			"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": args,
+			"hookEventName": string(HookEventPreToolUse), "permissionDecision": "allow", "updatedInput": args,
 		}})
-	case "PostToolUse":
+	case HookEventPostToolUse:
 		// Bash already passed through the full-output runner. Processing it again
 		// would deduplicate the digest rather than the underlying result.
-		if event.Tool == "Bash" {
+		if event.Tool == HookToolBash {
 			return []byte("{}"), nil
 		}
 		if store == nil || len(event.Response) == 0 {
@@ -94,7 +98,7 @@ func CodexHook(input []byte, runner string, store *Store, metadata ...Result) ([
 
 func codexDeny(reason string) ([]byte, error) {
 	return json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
-		"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason,
+		"hookEventName": string(HookEventPreToolUse), "permissionDecision": "deny", "permissionDecisionReason": reason,
 	}})
 }
 

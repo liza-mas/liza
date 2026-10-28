@@ -1,0 +1,3 @@
+envelopes before submit: 0
+envelopes after the contended submit: 1
+envelopes after replay: 0

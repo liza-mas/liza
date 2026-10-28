@@ -1,0 +1,51 @@
+[
+  {
+    "desc": "Close the A2 area boundary before A3 coding with G1-G8 evidence and justified issue closures",
+    "done_when": "boundary-a2.md commits passing G1-G7 evidence at the checked integration SHA, the maintainer's green G8 Linux/Windows result and macOS follow-up; failures block A3 without repairing A2 here.",
+    "scope": "A2 boundary evidence, specs/architecture/consolidation-run/boundary-a2.md, architectural-issues.md closures and acceptance manifest. No production, test, oracle or guard-data repairs.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 1: A2 area-boundary checkpoint",
+    "inherit_inputs": {"mode": "all"},
+    "rca_required": false
+  },
+  {
+    "desc": "Separate A3 claim admission, worktree preparation, assignment and cleanup concerns within ops",
+    "done_when": "All four claim ratchet entries are removed; original offender keys meet S1; integration-fix and other touched oracle gaps are covered before refactoring; make test, make lint, make test-e2e and ops race pass with existing oracle values unchanged.",
+    "scope": "claim_task, claim_task_strategy, claim_task_stranded, claim_agent, claim_failure_anomaly; concern files, tests, additive oracles, acceptance manifests, A3 ratchet and moved references. No A5/A6 policy rewrite; K7 belongs to Scope 5.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 2: Claim admission and assignment by concern",
+    "depends_on": ["0"],
+    "inherit_inputs": {"mode": "all"},
+    "rca_required": false
+  },
+  {
+    "desc": "Separate A3 blocked-episode validation, assessment, mutation and alert concerns within ops",
+    "done_when": "The four mark/assess/assess-hypothesis/unblock offender functions meet S1 and their ratchet keys are removed; touched unblock gaps gain oracle coverage first; make test, make lint, make test-e2e and ops race pass with existing oracle values unchanged.",
+    "scope": "Scope 3 blocked-episode A3 file family, private concern files, tests, additive oracles, acceptance manifests, A3 ratchet and invalidated references. Preserve A4 dependency and A5 RCA policy, generation fencing, no-change and replay; K7 belongs to Scope 5.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 3: Blocked episode management by concern",
+    "depends_on": ["1"],
+    "inherit_inputs": {"mode": "all"},
+    "rca_required": false
+  },
+  {
+    "desc": "Separate A3 ownership release, recovery, handoff and attempt concerns while preserving effect order",
+    "done_when": "The six recovery/release/handoff/rollover ratchet entries are removed; fresh recovery and touched supervisor gaps have oracle coverage first; make test, make lint, make test-e2e and ops race pass with existing oracle values unchanged.",
+    "scope": "Scope 4 ownership/recovery A3 file family, private concern files, tests, additive oracles, acceptance manifests, A3 ratchet and invalidated references. Preserve phase order and artifacts; no C1 lease change, C2 policy or C6 moves; K7 belongs to Scope 5.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 4: Ownership release and recovery by concern",
+    "depends_on": ["2"],
+    "inherit_inputs": {"mode": "all"},
+    "rca_required": false
+  },
+  {
+    "desc": "Consolidate A3 kernel vocabulary and resume concerns, leaving the area ready for its boundary check",
+    "done_when": "Resume meets S1 and A3 ratchet is empty; full A3 K7 inventory is implemented or classified dynamic; layer data is valid, shims absent, ADR/references current; make test, make lint, make test-e2e and touched-package race pass with all oracle values preserved.",
+    "scope": "Plan K7 from frozen A1 contract and current source; coding reconciles delivered symbols and all A3 occurrences after inherited waits. Remaining A3 files, X2 conformance, tests/oracles, manifests, A3 data and docs/ADR. No model wire retyping, C1-C6 behavior, mutation migration, Makefile or overview edits.",
+    "spec_ref": "specs/goals/20261023-architecture-consolidation.md",
+    "arch_ref": "specs/arch-plan/20261023-architecture-consolidation/20261023-203240-arm-1-ar-12.md#Scope 5: Kernel vocabulary and run control",
+    "depends_on": ["3"],
+    "inherit_inputs": {"mode": "all"},
+    "rca_required": false
+  }
+]

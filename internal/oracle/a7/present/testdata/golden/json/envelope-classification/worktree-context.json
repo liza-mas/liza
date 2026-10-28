@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "worktree_context",
+    "details": {
+      "operation": "fixture",
+      "task_id": "task-executing"
+    },
+    "message": "fixture worktree absent"
+  },
+  "ok": false,
+  "result": null
+}

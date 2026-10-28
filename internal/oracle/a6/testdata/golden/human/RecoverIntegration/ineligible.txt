@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: recover-integration: INVALID_INPUT (safe_action=correct_input): recovery requires a submitted analysis with a worktree and report commit

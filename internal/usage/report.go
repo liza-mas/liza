@@ -662,13 +662,19 @@ func tailRows(tails map[tailKey]*tailAcc) []PostTransitionRow {
 }
 
 // distribution uses nearest-rank percentiles: the value at rank ceil(p*n).
+// Quantiles of a reported Distribution.
+const (
+	medianQuantile = 0.5
+	p95Quantile    = 0.95
+)
+
 func distribution(values []int) Distribution {
 	if len(values) == 0 {
 		return Distribution{}
 	}
 	sorted := slices.Clone(values)
 	slices.Sort(sorted)
-	d := Distribution{Median: nearestRank(sorted, 0.5), P95: nearestRank(sorted, 0.95)}
+	d := Distribution{Median: nearestRank(sorted, medianQuantile), P95: nearestRank(sorted, p95Quantile)}
 	for _, v := range sorted {
 		d.Total += v
 	}

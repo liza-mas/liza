@@ -1,0 +1,36 @@
+=== tick 1: start CLI quota-blocked
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: [code-reviewer coder orchestrator]
+--- alerts
+[<TIME>] 🚨 NO USABLE PROVIDER: code-reviewer: 1 claimable task(s) (task-review) and no usable provider: --cli claude is quota-exhausted until <TIME>; auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent code-reviewer --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+[<TIME>] 🚨 NO USABLE PROVIDER: coder: 3 claimable task(s) (task-doer-a, task-doer-b, task-validated) and no usable provider: --cli claude is quota-exhausted until <TIME>; auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent coder --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+[<TIME>] 🚨 NO USABLE PROVIDER: orchestrator: no live orchestrator while goal is IN_PROGRESS and no usable provider: --cli claude is quota-exhausted until <TIME>; auto repair starts agents after that; to staff earlier, change the role's CLI in models.yaml or start one with `liza agent orchestrator --cli <other-cli>`, or delete .liza/provider-quota-exhausted-claude once claude has capacity again
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-provider-blocked:code-reviewer#0@claude@<TIME>
+auto-repair-agent-pool-provider-blocked:coder#0@claude@<TIME>
+auto-repair-agent-pool-provider-blocked:orchestrator#0@claude@<TIME>
+orchestrator-missing:since
+=== tick 2: same episode: no repeat alert
+--- start requests
+none
+--- outcome
+attempted: []
+suppressed: []
+blocked: [code-reviewer coder orchestrator]
+--- alerts
+none
+--- warnings
+none
+--- cache
+auto-repair-agent-pool-provider-blocked:code-reviewer#0@claude@<TIME>
+auto-repair-agent-pool-provider-blocked:coder#0@claude@<TIME>
+auto-repair-agent-pool-provider-blocked:orchestrator#0@claude@<TIME>
+orchestrator-missing:since
+=== spawn log
+none

@@ -14,6 +14,20 @@ import (
 	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
+)
+
+// updateReviewCommitOperation names the operation in lock labels, worktree
+// context errors and the runtime-input gate.
+const updateReviewCommitOperation = "update-review-commit"
+
+// History Extra keys of a review_commit_updated entry, written by the repair
+// and by the orphaned-base heal.
+const (
+	oldReviewCommitExtraKey = "old_review_commit"
+	newReviewCommitExtraKey = "new_review_commit"
+	oldBaseCommitExtraKey   = "old_base_commit"
+	newBaseCommitExtraKey   = "new_base_commit"
 )
 
 // UpdateReviewCommitResult contains the outcome of updating a task's review commit.
@@ -37,12 +51,12 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (result *UpdateRe
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
 	if changedBy == "" {
-		changedBy = "human"
+		changedBy = actorHuman
 	}
 	// The per-task lock keeps this read of worktree HEAD out of an orphaned-base
 	// heal's rebase, which holds the same lock until its boundary is published.
 	lock := filelock.New(claimTaskWorktreeLockPath(paths.New(projectRoot).StatePath(), taskID))
-	err = lock.WithLockOperation("update-review-commit", func() error {
+	err = lock.WithLockOperation(updateReviewCommitOperation, func() error {
 		var inner error
 		result, inner = updateReviewCommitLocked(projectRoot, taskID, changedBy)
 		return inner
@@ -50,188 +64,225 @@ func UpdateReviewCommit(projectRoot, taskID, changedBy string) (result *UpdateRe
 	return result, err
 }
 
+// reviewCommitUpdate carries one update-review-commit repair through its
+// phases: preconditions from a snapshot, the worktree boundary, acceptance
+// evidence outside the lock, and the final transaction.
+type reviewCommitUpdate struct {
+	projectRoot, taskID, changedBy string
+	bb                             *db.Blackboard
+	g                              *git.Git
+	submitted                      models.TaskStatus
+	reviewing                      models.TaskStatus
+	reviewing2                     models.TaskStatus
+	transitions                    map[models.TaskStatus][]models.TaskStatus
+
+	wtHEAD          string
+	effectiveBase   string
+	oldReviewCommit *string
+	oldBaseCommit   *string
+	acceptance      *acceptanceInput
+	receipt         *models.AcceptanceReceipt
+	now             time.Time
+
+	reviewerReleased bool
+}
+
 func updateReviewCommitLocked(projectRoot, taskID, changedBy string) (*UpdateReviewCommitResult, error) {
-	lp := paths.New(projectRoot)
-	bb := db.For(lp.StatePath())
+	u := &reviewCommitUpdate{projectRoot: projectRoot, taskID: taskID, changedBy: changedBy, bb: db.For(paths.New(projectRoot).StatePath()), g: git.New(projectRoot)}
 
 	// Phase 1: Read state and validate preconditions
-	state, task, err := readTaskState(bb, taskID)
+	state, task, err := readTaskState(u.bb, taskID)
 	if err != nil {
 		return nil, err
 	}
-
 	resolver, _, resolverErr := loadResolver(projectRoot)
 	if resolverErr != nil {
 		return nil, resolverErr
 	}
-	if task.RolePair == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", taskID)}
+	if err := u.checkPreconditions(task, resolver); err != nil {
+		return nil, err
 	}
-
-	submittedStatus, err := resolver.SubmittedStatus(task.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-	}
-	reviewingStatus, err := resolver.ReviewingStatus(task.RolePair)
-	if err != nil {
-		return nil, fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
-	}
-	reviewing2Status, _ := resolver.Reviewing2Status(task.RolePair)
-
-	isSubmitted := task.Status == submittedStatus
-	isReviewing := task.Status == reviewingStatus ||
-		(reviewing2Status != "" && task.Status == reviewing2Status)
-	if !isSubmitted && !isReviewing {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s must be in submitted or reviewing state (current: %s)", taskID, task.Status)}
-	}
+	u.transitions = BuildPipelineTransitions(resolver)
 
 	// Phase 2: Read worktree HEAD
-	g := git.New(projectRoot)
-	wtPath := g.GetWorktreePath(taskID)
-	if _, statErr := os.Stat(wtPath); os.IsNotExist(statErr) {
-		return nil, &errors.WorktreeContextError{
-			Operation: "update-review-commit",
-			TaskID:    taskID,
-			Reason:    "worktree directory does not exist",
-			Err:       statErr,
-		}
-	} else if statErr != nil {
-		return nil, &errors.WorktreeContextError{
-			Operation: "update-review-commit",
-			TaskID:    taskID,
-			Reason:    "failed to stat worktree",
-			Err:       statErr,
-		}
-	}
-
-	wtHEAD, err := g.GetWorktreeHEAD(taskID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get worktree HEAD: %w", err)
-	}
-	effectiveBase, err := g.GetMergeBase(wtHEAD, state.Config.IntegrationBranch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve effective review base: %w", err)
-	}
-
-	oldReviewCommit := cloneStringPtr(task.ReviewCommit)
-	oldBaseCommit := cloneStringPtr(task.BaseCommit)
-	integrationCommit, err := g.GetCommitSHA(state.Config.IntegrationBranch)
-	if err != nil {
+	if err := u.readWorktreeBoundary(state); err != nil {
 		return nil, err
 	}
-	acceptance, err := loadAcceptanceInput(projectRoot, state, task, integrationCommit)
-	if err != nil {
-		return nil, err
-	}
-	if oldReviewCommit != nil && *oldReviewCommit == wtHEAD && oldBaseCommit != nil && *oldBaseCommit == effectiveBase {
-		if acceptance == nil || validateAcceptanceForAssignment(projectRoot, state, task) == nil {
-			return nil, &PreconditionError{Reason: fmt.Sprintf("review boundary already matches worktree HEAD %s and base %s — no update needed", wtHEAD, effectiveBase)}
-		}
-	}
-	pipelineTransitions := BuildPipelineTransitions(resolver)
-	// A runtime-input refusal leaves the review boundary and receipt as they
-	// were. A reviewer repairing its own claimed task cannot review without
-	// the receipt, so the refusal releases that claim the way a successful
-	// repair does (ADR-0169); an operator or supervisor caller touches none.
-	gate := runtimeInputGate{projectRoot: projectRoot, bb: bb, actor: changedBy, operation: "update-review-commit",
-		onRefusal: func(state *models.State, task *models.Task) error {
-			if task.ReviewingBy == nil || *task.ReviewingBy != changedBy {
-				return nil
-			}
-			return releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions)
-		}}
-	receipt, err := executeAcceptanceReceipt(context.Background(), projectRoot, task, acceptance, wtHEAD, gate, state.Config, nil, nil)
-	if err != nil {
+	if err := u.prepareAcceptance(state, task); err != nil {
 		return nil, err
 	}
 
 	// Phase 3: Atomic state update
-	now := time.Now().UTC()
-	reviewerReleased := false
-
-	err = bb.Modify(func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-
-		// Re-check status inside lock
-		isSubmittedAuth := task.Status == submittedStatus
-		isReviewingAuth := task.Status == reviewingStatus ||
-			(reviewing2Status != "" && task.Status == reviewing2Status)
-		if !isSubmittedAuth && !isReviewingAuth {
-			return &PreconditionError{Reason: fmt.Sprintf("task %s must be in submitted or reviewing state (current: %s)", taskID, task.Status)}
-		}
-
-		// Update the full review boundary.
-		if !reflect.DeepEqual(task.ReviewCommit, oldReviewCommit) || !reflect.DeepEqual(task.BaseCommit, oldBaseCommit) {
-			return &PreconditionError{Reason: "review boundary changed during repair"}
-		}
-		if err := recheckAcceptanceReceipt(projectRoot, state, task, acceptance, receipt); err != nil {
-			return err
-		}
-		if receipt != nil {
-			task.AcceptanceSource = &receipt.Source
-		}
-		task.AcceptanceReceipt = receipt
-		models.AdvanceLifecycle(task)
-		task.ReviewCommit = &wtHEAD
-		task.BaseCommit = &effectiveBase
-
-		// If reviewer is claimed, release them and reset to submitted —
-		// they must re-claim and re-review the updated content.
-		if isReviewingAuth && task.ReviewingBy != nil {
-			if err := releaseReviewClaimToSubmitted(state, task, submittedStatus, reviewingStatus, reviewing2Status, pipelineTransitions); err != nil {
-				return err
-			}
-			reviewerReleased = true
-		}
-
-		oldReviewForReason := "<nil>"
-		if oldReviewCommit != nil {
-			oldReviewForReason = *oldReviewCommit
-		}
-		oldBaseForReason := "<nil>"
-		if oldBaseCommit != nil {
-			oldBaseForReason = *oldBaseCommit
-		}
-		updateReason := fmt.Sprintf(
-			"review boundary repaired from worktree HEAD: review_commit %s → %s, base_commit %s → %s",
-			oldReviewForReason,
-			wtHEAD,
-			oldBaseForReason,
-			effectiveBase,
-		)
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventReviewCommitUpdated,
-			Agent:  &changedBy,
-			Reason: &updateReason,
-			Commit: &wtHEAD,
-			Extra: map[string]any{
-				"old_review_commit": oldReviewCommit,
-				"new_review_commit": wtHEAD,
-				"old_base_commit":   oldBaseCommit,
-				"new_base_commit":   effectiveBase,
-			},
-		})
-
-		return nil
-	})
-
-	if err != nil {
+	u.now = time.Now().UTC()
+	if err := u.bb.Modify(u.apply); err != nil {
 		return nil, fmt.Errorf("failed to update review commit: %w", err)
 	}
-
 	return &UpdateReviewCommitResult{
 		TaskID:           taskID,
-		OldReviewCommit:  oldReviewCommit,
-		NewReviewCommit:  wtHEAD,
-		OldBaseCommit:    oldBaseCommit,
-		NewBaseCommit:    effectiveBase,
-		ReviewerReleased: reviewerReleased,
+		OldReviewCommit:  u.oldReviewCommit,
+		NewReviewCommit:  u.wtHEAD,
+		OldBaseCommit:    u.oldBaseCommit,
+		NewBaseCommit:    u.effectiveBase,
+		ReviewerReleased: u.reviewerReleased,
 		ChangedBy:        changedBy,
 	}, nil
+}
+
+// checkPreconditions resolves the role pair's statuses and requires the task
+// to be submitted or under review.
+func (u *reviewCommitUpdate) checkPreconditions(task *models.Task, resolver *pipeline.Resolver) error {
+	if task.RolePair == "" {
+		return &PreconditionError{Reason: fmt.Sprintf("task %s has no role_pair set", u.taskID)}
+	}
+	var err error
+	if u.submitted, err = resolver.SubmittedStatus(task.RolePair); err != nil {
+		return fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	if u.reviewing, err = resolver.ReviewingStatus(task.RolePair); err != nil {
+		return fmt.Errorf("invalid role-pair %q: %w", task.RolePair, err)
+	}
+	u.reviewing2, _ = resolver.Reviewing2Status(task.RolePair)
+	return u.requireRepairableStatus(task)
+}
+
+// requireRepairableStatus requires the task to be submitted or under review.
+// It runs on the snapshot and again inside the final transaction.
+func (u *reviewCommitUpdate) requireRepairableStatus(task *models.Task) error {
+	if task.Status != u.submitted && !u.underReview(task) {
+		return &PreconditionError{Reason: fmt.Sprintf("task %s must be in submitted or reviewing state (current: %s)", u.taskID, task.Status)}
+	}
+	return nil
+}
+
+func (u *reviewCommitUpdate) underReview(task *models.Task) bool {
+	return task.Status == u.reviewing || (u.reviewing2 != "" && task.Status == u.reviewing2)
+}
+
+// readWorktreeBoundary reads the worktree HEAD and the effective review base
+// the repaired boundary will record.
+func (u *reviewCommitUpdate) readWorktreeBoundary(state *models.State) error {
+	wtPath := u.g.GetWorktreePath(u.taskID)
+	if _, statErr := os.Stat(wtPath); statErr != nil {
+		reason := "failed to stat worktree"
+		if os.IsNotExist(statErr) {
+			reason = "worktree directory does not exist"
+		}
+		return &errors.WorktreeContextError{Operation: updateReviewCommitOperation, TaskID: u.taskID, Reason: reason, Err: statErr}
+	}
+	var err error
+	if u.wtHEAD, err = u.g.GetWorktreeHEAD(u.taskID); err != nil {
+		return fmt.Errorf("failed to get worktree HEAD: %w", err)
+	}
+	if u.effectiveBase, err = u.g.GetMergeBase(u.wtHEAD, state.Config.IntegrationBranch); err != nil {
+		return fmt.Errorf("failed to resolve effective review base: %w", err)
+	}
+	return nil
+}
+
+// prepareAcceptance refuses a repair that would change nothing, then executes
+// the acceptance evidence for the worktree HEAD outside the lock. A
+// runtime-input refusal leaves the review boundary and receipt as they were. A
+// reviewer repairing its own claimed task cannot review without the receipt, so
+// the refusal releases that claim the way a successful repair does (ADR-0169);
+// an operator or supervisor caller touches none.
+func (u *reviewCommitUpdate) prepareAcceptance(state *models.State, task *models.Task) error {
+	u.oldReviewCommit = cloneStringPtr(task.ReviewCommit)
+	u.oldBaseCommit = cloneStringPtr(task.BaseCommit)
+	integrationCommit, err := u.g.GetCommitSHA(state.Config.IntegrationBranch)
+	if err != nil {
+		return err
+	}
+	u.acceptance, err = loadAcceptanceInput(u.projectRoot, state, task, integrationCommit)
+	if err != nil {
+		return err
+	}
+	if u.oldReviewCommit != nil && *u.oldReviewCommit == u.wtHEAD && u.oldBaseCommit != nil && *u.oldBaseCommit == u.effectiveBase {
+		if u.acceptance == nil || validateAcceptanceForAssignment(u.projectRoot, state, task) == nil {
+			return &PreconditionError{Reason: fmt.Sprintf("review boundary already matches worktree HEAD %s and base %s — no update needed", u.wtHEAD, u.effectiveBase)}
+		}
+	}
+	gate := runtimeInputGate{projectRoot: u.projectRoot, bb: u.bb, actor: u.changedBy, operation: updateReviewCommitOperation,
+		onRefusal: func(state *models.State, task *models.Task) error {
+			if task.ReviewingBy == nil || *task.ReviewingBy != u.changedBy {
+				return nil
+			}
+			return releaseReviewClaimToSubmitted(state, task, u.submitted, u.reviewing, u.reviewing2, u.transitions)
+		}}
+	u.receipt, err = executeAcceptanceReceipt(context.Background(), u.projectRoot, task, u.acceptance, u.wtHEAD, gate, state.Config, nil, nil)
+	return err
+}
+
+// apply is the update transaction: it revalidates the task against the
+// snapshot, republishes the boundary and receipt, releases a claimed reviewer
+// and records the repair. K1-E8: recheckAcceptanceReceipt reads Git inside it.
+func (u *reviewCommitUpdate) apply(state *models.State) error {
+	task := state.FindTask(u.taskID)
+	if task == nil {
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: u.taskID}
+	}
+
+	// Re-check status inside lock
+	if err := u.requireRepairableStatus(task); err != nil {
+		return err
+	}
+
+	// Update the full review boundary.
+	if !reflect.DeepEqual(task.ReviewCommit, u.oldReviewCommit) || !reflect.DeepEqual(task.BaseCommit, u.oldBaseCommit) {
+		return &PreconditionError{Reason: "review boundary changed during repair"}
+	}
+	if err := recheckAcceptanceReceipt(u.projectRoot, state, task, u.acceptance, u.receipt); err != nil {
+		return err
+	}
+	if u.receipt != nil {
+		task.AcceptanceSource = &u.receipt.Source
+	}
+	task.AcceptanceReceipt = u.receipt
+	models.AdvanceLifecycle(task)
+	task.ReviewCommit = &u.wtHEAD
+	task.BaseCommit = &u.effectiveBase
+
+	// If reviewer is claimed, release them and reset to submitted —
+	// they must re-claim and re-review the updated content.
+	if u.underReview(task) && task.ReviewingBy != nil {
+		if err := releaseReviewClaimToSubmitted(state, task, u.submitted, u.reviewing, u.reviewing2, u.transitions); err != nil {
+			return err
+		}
+		u.reviewerReleased = true
+	}
+	u.recordRepair(task)
+	return nil
+}
+
+// recordRepair appends the review_commit_updated history entry.
+func (u *reviewCommitUpdate) recordRepair(task *models.Task) {
+	oldReviewForReason := "<nil>"
+	if u.oldReviewCommit != nil {
+		oldReviewForReason = *u.oldReviewCommit
+	}
+	oldBaseForReason := "<nil>"
+	if u.oldBaseCommit != nil {
+		oldBaseForReason = *u.oldBaseCommit
+	}
+	updateReason := fmt.Sprintf(
+		"review boundary repaired from worktree HEAD: review_commit %s → %s, base_commit %s → %s",
+		oldReviewForReason,
+		u.wtHEAD,
+		oldBaseForReason,
+		u.effectiveBase,
+	)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:   u.now,
+		Event:  models.TaskEventReviewCommitUpdated,
+		Agent:  &u.changedBy,
+		Reason: &updateReason,
+		Commit: &u.wtHEAD,
+		Extra: map[string]any{
+			oldReviewCommitExtraKey: u.oldReviewCommit,
+			newReviewCommitExtraKey: u.wtHEAD,
+			oldBaseCommitExtraKey:   u.oldBaseCommit,
+			newBaseCommitExtraKey:   u.effectiveBase,
+		},
+	})
 }
 
 func cloneStringPtr(value *string) *string {

@@ -1,0 +1,35 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "effects": "none",
+            "operation": "claim-task",
+            "outcome": "STATE_CHANGED",
+            "request_id": "req-1",
+            "safe_action": "requery",
+            "task_id": "task-1",
+            "task_status": "DRAFT_CODE",
+            "transition_id": "<id-1>"
+          },
+          "message": "claim-task: STATE_CHANGED (safe_action=requery): original task transition no longer matches; inspect before choosing a new request"
+        },
+        "ok": false,
+        "result": {
+          "effects": "none",
+          "operation": "claim-task",
+          "outcome": "STATE_CHANGED",
+          "request_id": "req-1",
+          "safe_action": "requery",
+          "task_id": "task-1",
+          "task_status": "DRAFT_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

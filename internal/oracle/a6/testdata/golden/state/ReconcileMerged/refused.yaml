@@ -1,0 +1,192 @@
+# before
+agents:
+    coder-1:
+        context_percent: 0
+        generation: oracle-coder
+        heartbeat: <TIME:Z>
+        iterations_total: 0
+        pid: <PID>
+        provider: codex
+        role: coder
+        status: IDLE
+        terminal: terminal-1
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned: []
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - approved_by: code-reviewer-1
+      assigned_to: coder-1
+      base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: A6 externally merged task
+      done_when: External merge reconciled
+      failed_by:
+        - code-reviewer-1
+      handoff_events:
+        - agent: coder-1
+          timestamp: <TIME:Z>
+          trigger: submission
+      history:
+        - agent: coder-1
+          commit: '<SHA:BASE>'
+          event: submitted
+          time: <TIME:Z>
+        - agent: code-reviewer-1
+          event: integration_failed
+          reason: merge conflict
+          time: <TIME:Z>
+      id: task-1
+      iteration: 1
+      lease_expires: <TIME:Z>
+      priority: 1
+      review_commit: '<SHA:BASE>'
+      role_pair: coding-pair
+      scope: A6 reconciliation fixture
+      spec_ref: README.md
+      status: INTEGRATION_FAILED
+      type: coding
+      worktree: .worktrees/task-1
+version: 1
+# after
+agents:
+    coder-1:
+        context_percent: 0
+        generation: oracle-coder
+        heartbeat: <TIME:Z>
+        iterations_total: 0
+        pid: <PID>
+        provider: codex
+        role: coder
+        status: IDLE
+        terminal: terminal-1
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned: []
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks:
+    - approved_by: code-reviewer-1
+      assigned_to: coder-1
+      base_commit: '<SHA:BASE>'
+      created: <TIME:Z>
+      description: A6 externally merged task
+      done_when: External merge reconciled
+      failed_by:
+        - code-reviewer-1
+      handoff_events:
+        - agent: coder-1
+          timestamp: <TIME:Z>
+          trigger: submission
+      history:
+        - agent: coder-1
+          commit: '<SHA:BASE>'
+          event: submitted
+          time: <TIME:Z>
+        - agent: code-reviewer-1
+          event: integration_failed
+          reason: merge conflict
+          time: <TIME:Z>
+      id: task-1
+      iteration: 1
+      lease_expires: <TIME:Z>
+      priority: 1
+      review_commit: '<SHA:BASE>'
+      role_pair: coding-pair
+      scope: A6 reconciliation fixture
+      spec_ref: README.md
+      status: INTEGRATION_FAILED
+      type: coding
+      worktree: .worktrees/task-1
+version: 1

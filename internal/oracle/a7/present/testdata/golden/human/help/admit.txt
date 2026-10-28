@@ -1,0 +1,28 @@
+exit 0
+--- stdout
+Run one command, without a shell, in the current directory. When its text
+(the words joined with spaces) contains a --match substring of a class in
+config.admission_limits, it first waits for a slot of that class from the pool
+canonical admission and the deferred runner use, so local runs of heavy
+commands stay inside the operator's cap. A local waiter queues behind every
+canonical waiter and deferred probe of the class, and never takes the class's
+last slot when it has more than one; a running command is never preempted. A
+command matching no class runs at once.
+Wrap shell syntax as sh -c '...'. With runtime inputs, put admit outside:
+liza admit -- liza run-live --task <id> -- <command>
+The command runs in its own process group with inherited stdio. Interrupts
+are forwarded to the group, and its slots are released only once the group
+is gone; if a descendant may survive, the slots stay held until it exits and
+admit fails naming the slot directories. A class still full after --max-wait
+is refused without running the command. The exit code is the command's.
+Usage:
+liza admit [--max-wait <seconds>] -- <command> [args...] [flags]
+Flags:
+-h, --help help for admit
+--max-wait int Seconds to wait for slots before refusing (0-14400) (default 3600)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

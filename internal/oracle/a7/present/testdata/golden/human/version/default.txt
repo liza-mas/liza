@@ -1,0 +1,6 @@
+exit 0
+--- stdout
+liza version dev
+commit: unknown
+built: unknown
+--- stderr

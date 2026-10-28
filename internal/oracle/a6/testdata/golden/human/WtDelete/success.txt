@@ -1,0 +1,4 @@
+exit_code: 0
+stdout:
+Deleted worktree for task-1 (was BLOCKED)
+stderr:

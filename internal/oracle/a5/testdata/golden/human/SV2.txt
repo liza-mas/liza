@@ -1,0 +1,15 @@
+# exit_code
+0
+# stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: CODE_APPROVED
+effects: committed
+task_id: task-1
+transition_id: <ID>
+completed_transition_id: <ID>
+request_id: verdict-<ID>
+current_assignee: coder-1
+APPROVED: task-1
+approved_by: code-reviewer-1
+# stderr

@@ -1,0 +1,18 @@
+exit 0
+--- stdout
+Remove a task from the state database.
+Useful for removing tasks that were created but are no longer needed. Tasks
+in MERGED state cannot be deleted by default (as they represent integrated work).
+Usage:
+liza delete task <task-id> [flags]
+Flags:
+--delete-worktree also delete the associated git worktree and branch
+--force force deletion even if task has dependencies or is in restricted state
+-h, --help help for task
+--reason string reason for deleting the task (default "manual deletion")
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

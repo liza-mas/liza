@@ -15,6 +15,7 @@ import (
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/roles"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,22 +55,22 @@ type Pipeline struct {
 
 // RoleDef defines a role's properties declaratively.
 type RoleDef struct {
-	Type              string      `yaml:"type"`
-	DisplayName       string      `yaml:"display-name"`
-	Description       string      `yaml:"description,omitempty"`
-	MaxInstances      int         `yaml:"max-instances,omitempty"`
-	Timeouts          *TimeoutDef `yaml:"timeouts,omitempty"`
-	ContextSections   []string    `yaml:"context-sections,omitempty"`
-	AllowedOperations []string    `yaml:"allowed-operations,omitempty"`
-	Skills            []string    `yaml:"skills,omitempty"`
-	MandatoryDocs     []string    `yaml:"mandatory-docs,omitempty"`
+	Type              roles.RoleType `yaml:"type"`
+	DisplayName       string         `yaml:"display-name"`
+	Description       string         `yaml:"description,omitempty"`
+	MaxInstances      int            `yaml:"max-instances,omitempty"`
+	Timeouts          *TimeoutDef    `yaml:"timeouts,omitempty"`
+	ContextSections   []string       `yaml:"context-sections,omitempty"`
+	AllowedOperations []string       `yaml:"allowed-operations,omitempty"`
+	Skills            []string       `yaml:"skills,omitempty"`
+	MandatoryDocs     []string       `yaml:"mandatory-docs,omitempty"`
 }
 
 // EffectiveRoleCapabilities is a resolver-owned projection of a role's
 // declarative authorization configuration. AllowedOperations is cloned when
 // the projection is created so callers cannot mutate the resolver config.
 type EffectiveRoleCapabilities struct {
-	RoleType          string
+	RoleType          roles.RoleType
 	AllowedOperations []string
 }
 
@@ -86,30 +87,30 @@ type TimeoutDef struct {
 }
 
 // validRoleTypes lists the allowed values for RoleDef.Type.
-var validRoleTypes = map[string]bool{
-	"doer":         true,
-	"reviewer":     true,
-	"orchestrator": true,
+var validRoleTypes = map[roles.RoleType]bool{
+	roles.RoleTypeDoer:         true,
+	roles.RoleTypeReviewer:     true,
+	roles.RoleTypeOrchestrator: true,
 }
 
 // ReviewPolicyOverrideDef defines quorum overrides for a specific impact level.
 type ReviewPolicyOverrideDef struct {
-	Quorum            int    `yaml:"quorum"`
-	ProviderDiversity string `yaml:"provider-diversity,omitempty"`
+	Quorum            int                   `yaml:"quorum"`
+	ProviderDiversity ProviderDiversityMode `yaml:"provider-diversity,omitempty"`
 }
 
 // ReviewPolicyDef defines the review quorum policy for a role-pair.
 type ReviewPolicyDef struct {
 	Quorum             int                      `yaml:"quorum"`
-	ProviderDiversity  string                   `yaml:"provider-diversity,omitempty"`
+	ProviderDiversity  ProviderDiversityMode    `yaml:"provider-diversity,omitempty"`
 	SignificantChange  *ReviewPolicyOverrideDef `yaml:"significant-change,omitempty"`
 	ArchitectureImpact *ReviewPolicyOverrideDef `yaml:"architecture-impact,omitempty"`
 }
 
 // validProviderDiversity lists the allowed values for provider-diversity.
-var validProviderDiversity = map[string]bool{
-	"":          true, // omitted / not configured
-	"preferred": true,
+var validProviderDiversity = map[ProviderDiversityMode]bool{
+	ProviderDiversityNone:      true, // omitted / not configured
+	ProviderDiversityPreferred: true,
 }
 
 var validDecompositionOutputRefs = map[string]bool{
@@ -162,13 +163,13 @@ type SubPipeline struct {
 
 // TransitionDef describes a cross-pair transition within a sub-pipeline.
 type TransitionDef struct {
-	When        string `yaml:"when,omitempty"` // empty (legacy), scope-decomposition, or coding-allocation
-	Name        string `yaml:"name"`
-	TaskSlug    string `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
-	From        string `yaml:"from"`                // e.g., "code-planning-pair.approved"
-	To          string `yaml:"to"`                  // e.g., "coding-pair.initial"
-	Trigger     string `yaml:"trigger"`             // "manual" or "auto"
-	Cardinality string `yaml:"cardinality"`         // "per-subtask", "one-to-one", or "many-to-one"
+	When        models.AllocationRoute       `yaml:"when,omitempty"` // empty (legacy), scope-decomposition, or coding-allocation
+	Name        string                       `yaml:"name"`
+	TaskSlug    string                       `yaml:"task-slug,omitempty"` // segment used in child task IDs (falls back to Name)
+	From        string                       `yaml:"from"`                // e.g., "code-planning-pair.approved"
+	To          string                       `yaml:"to"`                  // e.g., "coding-pair.initial"
+	Trigger     models.TransitionTrigger     `yaml:"trigger"`             // "manual" or "auto"
+	Cardinality models.TransitionCardinality `yaml:"cardinality"`         // "per-subtask", "one-to-one", or "many-to-one"
 }
 
 // TaskSlugOrName returns TaskSlug if set, otherwise Name.
@@ -250,104 +251,22 @@ func validate(cfg *PipelineConfig) error {
 		return fmt.Errorf("pipeline must define at least one role-pair")
 	}
 
-	// Validate roles section if present.
-	for name, role := range p.Roles {
-		if role.Type == "" {
-			return fmt.Errorf("role %q: type field is required", name)
-		}
-		if !validRoleTypes[role.Type] {
-			return fmt.Errorf("role %q: invalid type %q (must be doer, reviewer, or orchestrator)", name, role.Type)
-		}
+	if err := validateRoleDefs(p); err != nil {
+		return err
 	}
-
-	for name, rp := range p.RolePairs {
-		if rp.TaskSlug != "" && !kebabCaseRe.MatchString(rp.TaskSlug) {
-			return fmt.Errorf("role-pair %q: task-slug %q must be lowercase kebab-case (e.g. %q)", name, rp.TaskSlug, "code-planning")
-		}
-		doer, ok := p.Roles[rp.Doer]
-		if !ok {
-			return fmt.Errorf("role-pair %q: doer %q not found in roles", name, rp.Doer)
-		}
-		if doer.Type != "doer" {
-			return fmt.Errorf("role-pair %q: doer role %q has type %q, expected %q", name, rp.Doer, doer.Type, "doer")
-		}
-		reviewer, ok := p.Roles[rp.Reviewer]
-		if !ok {
-			return fmt.Errorf("role-pair %q: reviewer %q not found in roles", name, rp.Reviewer)
-		}
-		if reviewer.Type != "reviewer" {
-			return fmt.Errorf("role-pair %q: reviewer role %q has type %q, expected %q", name, rp.Reviewer, reviewer.Type, "reviewer")
-		}
-		if err := validateReviewPolicy(name, rp.ReviewPolicy); err != nil {
-			return err
-		}
-		if err := validateQuorumStates(name, rp); err != nil {
-			return err
-		}
+	if err := validateRolePairDefs(p); err != nil {
+		return err
 	}
-
-	stateOwner := make(map[string]string) // state name → role-pair name
-	for name, rp := range p.RolePairs {
-		states := []struct {
-			phase    string
-			value    string
-			required bool
-		}{
-			{"initial", rp.States.Initial, true},
-			{"executing", rp.States.Executing, true},
-			{"submitted", rp.States.Submitted, true},
-			{"reviewing", rp.States.Reviewing, true},
-			{"approved", rp.States.Approved, true},
-			{"rejected", rp.States.Rejected, true},
-			{"partially-approved", rp.States.PartiallyApproved, false},
-			{"reviewing-2", rp.States.Reviewing2, false},
-			{"clean", rp.States.Clean, false},
-		}
-		for _, s := range states {
-			if s.required && s.value == "" {
-				return fmt.Errorf("role-pair %q: %s state is empty", name, s.phase)
-			}
-			if s.value == "" {
-				continue // optional state not declared
-			}
-			if owner, exists := stateOwner[s.value]; exists {
-				return fmt.Errorf("duplicate state name %q: used by role-pairs %q and %q", s.value, owner, name)
-			}
-			stateOwner[s.value] = name
-		}
+	if err := validateRolePairStates(p); err != nil {
+		return err
 	}
 
 	transitionOwner := make(map[string]string) // transition name → sub-pipeline name
-
-	for spName, sp := range p.SubPipelines {
-		if len(sp.Steps) == 0 {
-			return fmt.Errorf("sub-pipeline %q: must have at least one step", spName)
-		}
-		for _, step := range sp.Steps {
-			if _, ok := p.RolePairs[step]; !ok {
-				return fmt.Errorf("sub-pipeline %q: step %q not found in role-pairs", spName, step)
-			}
-		}
-
-		for _, t := range sp.Transitions {
-			if err := validateTransition(t, p, sp.Steps); err != nil {
-				return fmt.Errorf("sub-pipeline %q transition %q: %w", spName, t.Name, err)
-			}
-			if owner, exists := transitionOwner[t.Name]; exists {
-				return fmt.Errorf("duplicate transition name %q: used by sub-pipelines %q and %q", t.Name, owner, spName)
-			}
-			transitionOwner[t.Name] = spName
-		}
+	if err := validateSubPipelines(p, transitionOwner); err != nil {
+		return err
 	}
-
-	for _, t := range p.PipelineTransitions {
-		if err := validatePipelineTransition(t, p); err != nil {
-			return fmt.Errorf("pipeline-transition %q: %w", t.Name, err)
-		}
-		if owner, exists := transitionOwner[t.Name]; exists {
-			return fmt.Errorf("duplicate transition name %q: used by %q and pipeline-transitions", t.Name, owner)
-		}
-		transitionOwner[t.Name] = "pipeline-transitions"
+	if err := validatePipelineTransitions(p, transitionOwner); err != nil {
+		return err
 	}
 
 	if err := validateDecompositionRoots(p); err != nil {
@@ -357,13 +276,7 @@ func validate(cfg *PipelineConfig) error {
 		return err
 	}
 
-	for epName, epValue := range p.EntryPoints {
-		if err := validateEntryPoint(epName, epValue, p); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return validateEntryPoints(p)
 }
 
 func validateDecompositionRoots(p *Pipeline) error {
@@ -416,13 +329,13 @@ func decompositionRootTransitionTargets(p *Pipeline, rootRolePair string) ([]str
 			if fromPair != rootRolePair {
 				continue
 			}
-			if fromPhase != "approved" {
+			if StateCategory(fromPhase) != StateCategoryApproved {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: from phase must be approved, got %q", rootRolePair, t.Name, fromPhase)
 			}
-			if t.Trigger != "auto" {
+			if t.Trigger != models.TransitionTriggerAuto {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: trigger must be auto, got %q", rootRolePair, t.Name, t.Trigger)
 			}
-			if t.Cardinality != "per-subtask" {
+			if t.Cardinality != models.CardinalityPerSubtask {
 				return nil, fmt.Errorf("role-pair %q decomposition-root transition %q: cardinality must be per-subtask, got %q", rootRolePair, t.Name, t.Cardinality)
 			}
 
@@ -505,10 +418,18 @@ func validateQuorumStates(rpName string, rp RolePairDef) error {
 	return nil
 }
 
+// Dotted state reference arities, and the exclusive routes of an architecture
+// role-pair's allocation (scope decomposition and coding allocation).
+const (
+	twoPartRefLen        = 2
+	threePartRefLen      = 3
+	allocationRouteCount = 2
+)
+
 // parseRef splits a dotted reference like "role-pair.phase" into its components.
 func parseRef(ref string) (string, string, error) {
-	parts := strings.SplitN(ref, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	parts := strings.SplitN(ref, ".", twoPartRefLen)
+	if len(parts) != twoPartRefLen || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid reference %q: expected format <name>.<phase>", ref)
 	}
 	return parts[0], parts[1], nil
@@ -517,8 +438,8 @@ func parseRef(ref string) (string, string, error) {
 // parse3PartRef splits a dotted reference like "sub-pipeline.role-pair.phase" into its components.
 // Used for pipeline-transitions that reference states across sub-pipeline boundaries.
 func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) {
-	parts := strings.SplitN(ref, ".", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	parts := strings.SplitN(ref, ".", threePartRefLen)
+	if len(parts) != threePartRefLen || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return "", "", "", fmt.Errorf("invalid 3-part reference %q: expected format <sub-pipeline>.<role-pair>.<phase>", ref)
 	}
 	return parts[0], parts[1], parts[2], nil
@@ -526,10 +447,15 @@ func parse3PartRef(ref string) (subPipeline, rolePair, phase string, err error) 
 
 // validPhases lists the allowed phase names for role-pair state references.
 var validPhases = map[string]bool{
-	"initial": true, "executing": true, "submitted": true,
-	"reviewing": true, "approved": true, "rejected": true,
-	"partially-approved": true, "reviewing-2": true,
-	"clean": true,
+	string(StateCategoryInitial):           true,
+	string(StateCategoryExecuting):         true,
+	string(StateCategorySubmitted):         true,
+	string(StateCategoryReviewing):         true,
+	string(StateCategoryApproved):          true,
+	string(StateCategoryRejected):          true,
+	string(StateCategoryPartiallyApproved): true,
+	string(StateCategoryReviewing2):        true,
+	string(StateCategoryClean):             true,
 }
 
 var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
@@ -537,10 +463,10 @@ var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 // validateTransitionHeader checks the common fields shared by all transition types:
 // non-empty name, valid trigger, and valid cardinality.
 func validateTransitionHeader(t TransitionDef) error {
-	if t.When != "" && t.When != "scope-decomposition" && t.When != "coding-allocation" {
+	if t.When != models.AllocationRouteNone && t.When != models.AllocationRouteScopeDecomposition && t.When != models.AllocationRouteCodingAllocation {
 		return fmt.Errorf("when must be scope-decomposition or coding-allocation, got %q", t.When)
 	}
-	if t.When != "" && t.Cardinality != "per-subtask" {
+	if t.When != models.AllocationRouteNone && t.Cardinality != models.CardinalityPerSubtask {
 		return fmt.Errorf("conditional allocation routes require per-subtask cardinality")
 	}
 	if t.Name == "" {
@@ -549,11 +475,11 @@ func validateTransitionHeader(t TransitionDef) error {
 	if t.TaskSlug != "" && !kebabCaseRe.MatchString(t.TaskSlug) {
 		return fmt.Errorf("task-slug %q must be lowercase kebab-case (e.g. %q)", t.TaskSlug, "code-planning")
 	}
-	if t.Trigger != "manual" && t.Trigger != "auto" {
-		return fmt.Errorf("trigger must be %q or %q, got %q", "manual", "auto", t.Trigger)
+	if t.Trigger != models.TransitionTriggerManual && t.Trigger != models.TransitionTriggerAuto {
+		return fmt.Errorf("trigger must be %q or %q, got %q", models.TransitionTriggerManual, models.TransitionTriggerAuto, t.Trigger)
 	}
-	if t.Cardinality != "per-subtask" && t.Cardinality != "one-to-one" && t.Cardinality != "many-to-one" {
-		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", "per-subtask", "one-to-one", "many-to-one", t.Cardinality)
+	if t.Cardinality != models.CardinalityPerSubtask && t.Cardinality != models.CardinalityOneToOne && t.Cardinality != models.CardinalityManyToOne {
+		return fmt.Errorf("cardinality must be %q, %q, or %q, got %q", models.CardinalityPerSubtask, models.CardinalityOneToOne, models.CardinalityManyToOne, t.Cardinality)
 	}
 	return nil
 }
@@ -573,28 +499,28 @@ func validateAllocationRoutes(p *Pipeline) error {
 		groups[pair] = append(groups[pair], t)
 	}
 	for source, transitions := range groups {
-		conditional := slices.ContainsFunc(transitions, func(t TransitionDef) bool { return t.When != "" })
+		conditional := slices.ContainsFunc(transitions, func(t TransitionDef) bool { return t.When != models.AllocationRouteNone })
 		if !conditional {
 			continue
 		}
-		if len(transitions) != 2 || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
+		if len(transitions) != allocationRouteCount || models.TaskTypeForRole(p.RolePairs[source].Doer) != models.TaskTypeArchitecture {
 			return fmt.Errorf("role-pair %q requires exactly two exclusive architecture allocation routes", source)
 		}
-		seen := make(map[string]bool)
+		seen := make(map[models.AllocationRoute]bool)
 		for _, t := range transitions {
-			if t.When == "" || seen[t.When] {
+			if t.When == models.AllocationRouteNone || seen[t.When] {
 				return fmt.Errorf("role-pair %q requires one scope-decomposition and one coding-allocation route", source)
 			}
 			seen[t.When] = true
 			target, _ := transitionToRolePair(t)
-			if t.When == "coding-allocation" && (t.Trigger != "manual" || models.TaskTypeForRole(p.RolePairs[target].Doer) != models.TaskTypeCoding) {
+			if t.When == models.AllocationRouteCodingAllocation && (t.Trigger != models.TransitionTriggerManual || models.TaskTypeForRole(p.RolePairs[target].Doer) != models.TaskTypeCoding) {
 				return fmt.Errorf("transition %q coding-allocation must be a manual route to coding", t.Name)
 			}
-			if targetType := models.TaskTypeForRole(p.RolePairs[target].Doer); t.When == "scope-decomposition" && targetType != models.TaskTypeArchitecture && targetType != models.TaskTypePlanning {
+			if targetType := models.TaskTypeForRole(p.RolePairs[target].Doer); t.When == models.AllocationRouteScopeDecomposition && targetType != models.TaskTypeArchitecture && targetType != models.TaskTypePlanning {
 				return fmt.Errorf("transition %q scope-decomposition must retain architecture or code planning", t.Name)
 			}
 			fromParts, toParts := strings.Split(t.From, "."), strings.Split(t.To, ".")
-			if fromParts[len(fromParts)-1] != "approved" || toParts[len(toParts)-1] != "initial" {
+			if StateCategory(fromParts[len(fromParts)-1]) != StateCategoryApproved || StateCategory(toParts[len(toParts)-1]) != StateCategoryInitial {
 				return fmt.Errorf("transition %q allocation routes require approved to initial", t.Name)
 			}
 		}

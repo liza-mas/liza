@@ -1,0 +1,14 @@
+{
+  "artifact_id": "<ID>",
+  "artifact_path": "<STORE>/<ID>.txt",
+  "command": "fixture read",
+  "content_hash": "<ID>",
+  "duplicate": false,
+  "excerpt": "synthetic API key: [REDACTED]\nfixture line 001: complete retained evidence for the oracle.\nfixture line 002: complete retained evidence for the oracle.\nfixture line 003: complete retained evidence for the oracle.\nfixture line 004: complete retained evidence for the oracle.\nfixture line 005: complete retained evidence for the oracle.\nfixture line ",
+  "exit_code": null,
+  "original_bytes": 6180,
+  "source_truncated": false,
+  "stored_bytes": 6130,
+  "tool": "Read",
+  "truncated": true
+}

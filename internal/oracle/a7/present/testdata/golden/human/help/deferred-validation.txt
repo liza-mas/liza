@@ -1,0 +1,28 @@
+exit 0
+--- stdout
+Strict admission skips canonical commands an Acceptance Contract defers or an
+operator ruling defers. The engine runs them as one batch at integration HEAD
+every config.deferred_validation.batch_every_merges merges (default 5) and
+before global integration, and bisects a failing command over the merges since
+it last passed. A red batch records an immediate discovery naming the culprit
+task, which wakes the orchestrator.
+rule, unrule, retire, settle and abort are operator-only. run and status are open.
+Usage:
+liza deferred-validation [command]
+Available Commands:
+abort End the live deferred-validation batch
+retire Remove an obsolete command from the deferred-validation set
+rule Defer an exact canonical command for every strict task listing it
+run Run the deferred-validation batch at integration HEAD
+settle Clear a predecessor runner that did not finish
+status Show deferred commands, rulings, the runner and recent batches
+unrule Withdraw an operator ruling
+Flags:
+-h, --help help for deferred-validation
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza deferred-validation [command] --help" for more information about a command.
+--- stderr

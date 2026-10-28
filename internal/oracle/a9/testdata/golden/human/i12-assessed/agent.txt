@@ -1,0 +1,17 @@
+exit_code: 0
+[stdout]
+outcome: COMPLETED
+safe_action: continue
+task_status: BLOCKED
+effects: committed
+task_id: task-1
+transition_id: <V1>
+completed_transition_id: <V1>
+Task task-1 assessed by orchestrator
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: orchestrator-1
+Agents will exit cleanly at their next check.
+[stderr]
+Warning: no Liza contract symlink found for claude. Agents may not find the behavioral contract.
+Run 'liza init --claude' to create one.

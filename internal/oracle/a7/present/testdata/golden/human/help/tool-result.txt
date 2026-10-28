@@ -1,0 +1,25 @@
+exit 0
+--- stdout
+Budget tool results and retrieve sanitized artifacts
+Usage:
+liza tool-result [command]
+Available Commands:
+acp-proxy Budget native ACP host responses before agent context
+claude-hook Apply native Claude post tool-result hooks
+codex-hook Apply the managed Codex tool-result boundary
+filter Read a complete tool result from stdin
+read Read a bounded byte range from a sanitized artifact
+run Capture a command before native truncation or streaming
+stats Report persisted tool-result budget telemetry as JSON
+Flags:
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-h, --help help for tool-result
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+Use "liza tool-result [command] --help" for more information about a command.
+--- stderr

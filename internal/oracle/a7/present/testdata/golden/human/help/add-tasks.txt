@@ -1,0 +1,45 @@
+exit 0
+--- stdout
+Add multiple tasks to state.yaml in a single batch operation.
+Reads task definitions from a JSON file. Each task must have id, desc, spec,
+done, and scope. Optional fields: priority, depends, type, role_pair, plan_ref,
+validation, destructive_db, rca_required, provider_dependencies,
+descendant_dependencies.
+provider_dependencies uses the same shape as output declarations:
+[{"provider_task":"provider-architecture","transition":"architecture-to-code-plan","outputs":[0,2]}]
+The provider must exist; transition names come from its configured per-subtask
+transitions. Selected children may be unborn, but claim requires the provider
+MERGED, transition executed, and every selected child MERGED. Ordinary downstream
+depends stays invalid. Use reviewed replacement/reauthoring for legacy prose-only
+preconditions; unblocking alone does not repair their missing declaration.
+descendant_dependencies uses the set-task-output shape; the task does not wait
+on them but adds them to every output it writes at its per-subtask transition.
+Set task-level rca_required when a direct planning objective is a defect fix.
+It is the default inherited by generated children only when an output entry does
+not provide an explicit override. Mapped code-planning decomposition roots use
+false at task level and classify rca_required independently on every output.
+Tasks are added independently; failed tasks don't block subsequent ones.
+Each added task is scoped-validated before persistence. If unrelated existing
+state corruption keeps full-state validation degraded after an add, the item
+succeeds with a warning so repair tasks can still be created.
+Example:
+cat > tasks.json <<'EOF'
+[
+{"id": "task-1", "desc": "Implement X", "spec": "specs/x.md", "done": "X works", "scope": "internal/x"},
+{"id": "task-2", "desc": "Implement Y", "spec": "specs/y.md", "done": "Y works", "scope": "internal/y", "validation": ["make test"], "destructive_db": false, "depends": ["task-1"]}
+]
+EOF
+liza add-tasks --tasks-file tasks.json
+Usage:
+liza add-tasks --tasks-file <path> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+-h, --help help for add-tasks
+--json output result as structured JSON
+--tasks-file string path to JSON file with task definitions array (required)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

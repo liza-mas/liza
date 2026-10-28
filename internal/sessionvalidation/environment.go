@@ -15,8 +15,13 @@ import (
 	"strings"
 )
 
-var fingerprintKey = randomBytes(32)
-var fingerprintDomain = hex.EncodeToString(randomBytes(16))
+const (
+	fingerprintKeyBytes    = 32
+	fingerprintDomainBytes = 16
+)
+
+var fingerprintKey = randomBytes(fingerprintKeyBytes)
+var fingerprintDomain = hex.EncodeToString(randomBytes(fingerprintDomainBytes))
 
 func randomBytes(n int) []byte {
 	value := make([]byte, n)
@@ -54,7 +59,7 @@ func ResolveEnvironment(base []string, root string, files []string, optional boo
 			if optional && os.IsNotExist(err) {
 				continue
 			}
-			return nil, &Error{Code: "env_file_unavailable", CommandIndex: -1, CheckIndex: i}
+			return nil, &Error{Code: CodeEnvFileUnavailable, CommandIndex: -1, CheckIndex: i}
 		}
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)
@@ -107,7 +112,7 @@ func environmentValue(env []string, name string) string {
 // LookPath resolves against env and cwd exclusively, including relative PATH
 // entries. The returned absolute path avoids exec.Command's ambient PATH lookup.
 func LookPath(name, cwd string, env []string) (string, error) {
-	missing := &Error{Code: "executable_missing", CommandIndex: -1, CheckIndex: -1}
+	missing := &Error{Code: CodeExecutableMissing, CommandIndex: -1, CheckIndex: -1}
 	if name == "" || !filepath.IsAbs(cwd) {
 		return "", missing
 	}

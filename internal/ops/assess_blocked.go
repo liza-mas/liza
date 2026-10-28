@@ -4,21 +4,16 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"os"
 	"sort"
-	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/liza-mas/liza/internal/alerts"
-	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
 	"github.com/liza-mas/liza/internal/roles"
-	"github.com/liza-mas/liza/internal/statevalidate"
 )
 
 // DependencyDescendantWakeSnapshotExtraKey identifies the retired assessment
@@ -225,13 +220,40 @@ func AssessBlockedWithAuthority(projectRoot, taskID, note string, authority mode
 	return assessBlockedWithOptionalAuthority(projectRoot, taskID, note, authority.ID, opts, &authority)
 }
 
+const assessBlockedOperation = "assess-blocked"
+
+// alertCategoryUnresolvedBlocked is the alert category of a blocked task whose
+// assessment leaves it unresolved.
+const alertCategoryUnresolvedBlocked = "UNRESOLVED BLOCKED"
+
+// maxBlockedQuestions is the most questions one blocker may carry (the
+// blocking protocol).
+const maxBlockedQuestions = 3
+
+// assessBlockedCall carries one assessment across its phases: caller and payload
+// validation, input normalization, the locked mutation and the post-commit alert.
+type assessBlockedCall struct {
+	projectRoot, taskID, note, agentID string
+	opts                               AssessBlockedOptions
+	authority                          *models.AgentAuthority
+
+	reconcile     bool
+	repairRequest *models.RepairRequest
+	awaited       []string
+	bb            *db.Blackboard
+	now           time.Time
+
+	result   AssessBlockedResult
+	observed *models.Task
+	effects  LifecycleEffects
+}
+
 func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID string, opts AssessBlockedOptions, authority *models.AgentAuthority) (returned *AssessBlockedResult, retErr error) {
+	call := &assessBlockedCall{projectRoot: projectRoot, taskID: taskID, note: note, agentID: agentID, opts: opts, authority: authority,
+		result: AssessBlockedResult{TaskID: taskID}, effects: LifecycleEffectsNone}
 	var invocation *LifecycleInvocation
-	const operation = "assess-blocked"
-	var observed *models.Task
-	effects := "none"
 	defer func() {
-		retErr = WrapLifecycleError(operation, observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(assessBlockedOperation, call.observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if returned != nil {
@@ -239,29 +261,13 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 			warnings = &returned.Warnings
 		}
 		if invocation != nil {
-			invocation.FinishResult(operation, outcome, &retErr, warnings)
+			invocation.FinishResult(assessBlockedOperation, outcome, &retErr, warnings)
 		}
 	}()
-	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
+	if err := call.validateCaller(); err != nil {
 		return nil, err
 	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "agent ID is required"}
-	}
-	// Defense-in-depth: orchestrator_assessment history entries suppress future wakes,
-	// so this must be restricted to orchestrator agents even though the MCP handler
-	// also gates via resolveOrchestratorID.
-	if err := identity.ValidateRole(agentID, roles.Orchestrator); err != nil {
-		return nil, WrapLifecycleError(operation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, "stop", "none")
-	}
-
-	payload := payloadschema.WithAssessBlockedHumanAction(
-		payloadschema.AssessBlockedPayload(taskID, note, opts.Reason, opts.Questions, opts.RepairRequest, opts.AwaitedTasks, opts.ClearAwaited),
-		opts.HumanAction, opts.ClearHumanAction)
-	if opts.StateLockTimeout {
-		payload["state_lock_timeout"] = true
-	}
-	if err := rejectInvalidLifecyclePayload(operation, payload); err != nil {
+	if err := call.validatePayload(); err != nil {
 		return nil, err
 	}
 	// Sprint capture reads under the state lock too. Invalid payloads must
@@ -275,219 +281,94 @@ func assessBlockedWithOptionalAuthority(projectRoot, taskID, note, agentID strin
 	if taskID == "" {
 		return nil, &PreconditionError{Reason: "task ID is required"}
 	}
-
-	reconcile := opts.Reason != "" || len(opts.Questions) > 0 || opts.RepairRequest != nil
-	var repairRequest *models.RepairRequest
-	if reconcile {
-		if opts.Reason == "" {
-			return nil, &PreconditionError{Reason: "reason is required"}
-		}
-		if len(opts.Questions) == 0 {
-			return nil, &PreconditionError{Reason: "at least 1 question is required"}
-		}
-		if len(opts.Questions) > 3 {
-			return nil, &PreconditionError{Reason: "maximum 3 questions allowed per blocking protocol"}
-		}
-		var err error
-		repairRequest, err = normalizeRepairRequest(opts.RepairRequest, taskID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	awaited, err := normalizeAwaitedTasks(opts.AwaitedTasks)
-	if err != nil {
+	if err := call.normalizeBlocker(); err != nil {
 		return nil, err
 	}
 
 	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
-	now := time.Now().UTC()
-	result := AssessBlockedResult{TaskID: taskID}
+	call.bb = RequestBlackboard(lp.StatePath(), authority, opts.Request)
+	call.now = time.Now().UTC()
 
-	err = lifecycleMutation(bb, authority)(func(state *models.State) (callbackErr error) {
-		defer func() {
-			callbackErr = WrapLifecycleError(operation, observed, callbackErr, models.LifecycleInvalidInput, "correct_input", "none")
-		}()
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		copy := *task
-		observed = &copy
-		request, err := NewLifecycleRequest(operation, task, agentID, authority, opts.Request, struct {
-			Note, Reason  string
-			Questions     []string
-			RepairRequest *models.RepairRequest
-			// Explicit inputs only, omitted when empty so earlier requests
-			// keep their identity. A carried set is derived from state and
-			// never part of identity.
-			AwaitedTasks     []string `json:",omitempty"`
-			ClearAwaited     bool     `json:",omitempty"`
-			HumanAction      string   `json:",omitempty"`
-			ClearHumanAction bool     `json:",omitempty"`
-			StateLockTimeout bool     `json:",omitempty"`
-		}{note, opts.Reason, opts.Questions, repairRequest, awaited, opts.ClearAwaited, opts.HumanAction, opts.ClearHumanAction, opts.StateLockTimeout})
-		if err != nil {
-			return err
-		}
-		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			result.LifecycleOutcome = LifecycleReplayOutcome(task, receipt, agentID)
-			return errLifecycleReplay
-		}
-
-		if task.Status != models.TaskStatusBlocked {
-			return WrapLifecycleError(operation, task, &PreconditionError{Reason: fmt.Sprintf("task must be in BLOCKED status to assess, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-		// Without --awaits the current episode's set carries forward, minus
-		// satisfied members, so a re-check does not silently widen the wake
-		// signal back to every generated descendant.
-		effective, carried := awaited, false
-		if len(effective) == 0 && !opts.ClearAwaited {
-			effective = carriedAwaitedTasks(state, task)
-			carried = len(effective) > 0
-		}
-		// Before the no-change comparison: an unchanged assessment must not be
-		// accepted once an awaited task has settled or failed, or the wait
-		// would deadlock.
-		if len(effective) > 0 {
-			if err := validateAwaitedTasks(state, task, effective); err != nil {
-				if carried {
-					return rejectCarriedAwaitedTasks(state, effective, err)
-				}
-				return err
-			}
-		}
-		result.AwaitedTasks = append([]string(nil), effective...)
-		result.AwaitedCarried = carried
-		// Without either human-ask option the current ask carries forward, so a
-		// note-only re-check neither drops nor re-raises it.
-		humanAction := strings.TrimSpace(opts.HumanAction)
-		if humanAction == "" && !opts.ClearHumanAction {
-			if current, ok := models.CurrentAwaitingHuman(task); ok {
-				humanAction = current.Ask
-			}
-		}
-		result.HumanAction = humanAction
-
-		candidate := AssessmentFingerprintCandidate{
-			Questions: task.BlockedQuestions, RepairRequest: task.RepairRequest, Note: note, Awaited: effective,
-			HumanAction: humanAction,
-		}
-		if task.BlockedReason != nil {
-			candidate.Reason = *task.BlockedReason
-		}
-		if reconcile {
-			candidate.Reason = opts.Reason
-			candidate.Questions = opts.Questions
-			candidate.RepairRequest = repairRequest
-		}
-		fingerprint := BuildAssessmentFingerprint(state, task, candidate)
-		entry := models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventOrchestratorAssessment,
-			Agent: &agentID,
-			Extra: map[string]any{
-				AssessmentFingerprintExtraKey: fingerprint,
-			},
-		}
-		if note != "" {
-			entry.Note = &note
-		}
-		if len(effective) > 0 {
-			entry.Extra[AwaitedTasksExtraKey] = append([]string(nil), effective...)
-		}
-		if humanAction != "" {
-			entry.Extra[models.AwaitingHumanExtraKey] = humanAction
-		}
-		if reconcile {
-			entry.Reason = &opts.Reason
-			entry.Extra["blocked_questions"] = append([]string(nil), opts.Questions...)
-			entry.Extra["repair_request"] = repairRequest
-		}
-		preview := *task
-		preview.BlockedReason = &candidate.Reason
-		preview.BlockedQuestions = candidate.Questions
-		preview.RepairRequest = candidate.RepairRequest
-		preview.History = append(append([]models.TaskHistoryEntry(nil), task.History...), entry)
-		adoptHold := opts.StateLockTimeout && !models.CurrentStateLockHold(&preview)
-		if opts.StateLockTimeout {
-			resolver, _, err := loadResolver(projectRoot)
-			if err != nil {
-				return err
-			}
-			if reason := stateLockHoldGate(state, &preview, resolver); reason != "" {
-				return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
-			}
-		}
-		if previous := lastOrchestratorAssessment(task); previous != nil {
-			if recorded, valid := IsAssessmentFingerprint(previous.Extra[AssessmentFingerprintExtraKey]); valid && recorded == fingerprint && !adoptHold {
-				encoded, err := yaml.Marshal(entry)
-				if err != nil {
-					return fmt.Errorf("encode suppressed assessment: %w", err)
-				}
-				result.LifecycleOutcome = NewLifecycleNoChangeOutcome(operation, task)
-				result.RequestID = request.RequestID
-				result.SuppressedEntryBytes = len(encoded)
-				return errAssessmentNoChange
-			}
-		}
-
-		if reconcile {
-			reason := opts.Reason
-			questions := append([]string(nil), opts.Questions...)
-			task.BlockedReason = &reason
-			task.BlockedQuestions = questions
-			task.RepairRequest = repairRequest
-		}
-
-		dropSupersededWakeSnapshots(task)
-		task.History = append(task.History, entry)
-		if !models.CurrentStateLockHold(task) || humanAction != "" || task.RepairRequest != nil || len(effective) > 0 {
-			task.StateLockHold = nil
-		}
-		if adoptHold {
-			installStateLockHold(state, task)
-		}
-		if reconcile {
-			if err := statevalidate.ValidateCandidate(state, bb.ReadSnapshot, projectRoot, false, os.Stderr); err != nil {
-				return err
-			}
-			result.Reason = opts.Reason
-			result.Questions = append([]string(nil), opts.Questions...)
-			result.RepairRequest = repairRequest
-		}
-		result.LifecycleOutcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-		if err == nil {
-			effects = "unknown"
-		}
-		return err
-	})
+	err := lifecycleMutation(call.bb, authority)(call.mutate)
 	if isLifecycleReplay(err) || isAssessmentNoChange(err) {
-		return &result, nil
+		return &call.result, nil
 	}
 
 	if err != nil {
-		return nil, WrapLifecycleError(operation, observed, fmt.Errorf("failed to assess blocked task: %w", err), models.LifecycleStateChanged, "requery", effects)
+		return nil, WrapLifecycleError(assessBlockedOperation, call.observed, fmt.Errorf("failed to assess blocked task: %w", err), models.LifecycleStateChanged, LifecycleSafeActionRequery, call.effects)
 	}
 
-	message := taskID
-	if note != "" {
-		message = fmt.Sprintf("%s — %s", taskID, note)
+	call.result.Warnings = call.alertUnresolved(lp)
+	return &call.result, nil
+}
+
+// validateCaller rejects a call that is not an identified orchestrator before
+// any payload is looked at.
+func (c *assessBlockedCall) validateCaller() error {
+	if err := ValidateLifecycleRequestOptions(c.opts.Request); err != nil {
+		return err
+	}
+	if c.agentID == "" {
+		return &PreconditionError{Reason: "agent ID is required"}
+	}
+	// Defense-in-depth: orchestrator_assessment history entries suppress future wakes,
+	// so this must be restricted to orchestrator agents even though the MCP handler
+	// also gates via resolveOrchestratorID.
+	if err := identity.ValidateRole(c.agentID, roles.Orchestrator); err != nil {
+		return WrapLifecycleError(assessBlockedOperation, nil, &PreconditionError{Reason: fmt.Sprintf("only orchestrator agents can assess blocked tasks: %v", err)}, models.LifecycleForbidden, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+	return nil
+}
+
+func (c *assessBlockedCall) validatePayload() error {
+	payload := payloadschema.WithAssessBlockedHumanAction(
+		payloadschema.AssessBlockedPayload(c.taskID, c.note, c.opts.Reason, c.opts.Questions, c.opts.RepairRequest, c.opts.AwaitedTasks, c.opts.ClearAwaited),
+		c.opts.HumanAction, c.opts.ClearHumanAction)
+	if c.opts.StateLockTimeout {
+		payload["state_lock_timeout"] = true
+	}
+	return rejectInvalidLifecyclePayload(assessBlockedOperation, payload)
+}
+
+// normalizeBlocker selects history-only or reconciliation mode and normalizes
+// the repair request and awaited set the assessment may replace.
+func (c *assessBlockedCall) normalizeBlocker() error {
+	c.reconcile = c.opts.Reason != "" || len(c.opts.Questions) > 0 || c.opts.RepairRequest != nil
+	if c.reconcile {
+		if c.opts.Reason == "" {
+			return &PreconditionError{Reason: "reason is required"}
+		}
+		if len(c.opts.Questions) == 0 {
+			return &PreconditionError{Reason: "at least 1 question is required"}
+		}
+		if len(c.opts.Questions) > maxBlockedQuestions {
+			return &PreconditionError{Reason: "maximum 3 questions allowed per blocking protocol"}
+		}
+		var err error
+		c.repairRequest, err = normalizeRepairRequest(c.opts.RepairRequest, c.taskID)
+		if err != nil {
+			return err
+		}
+	}
+	var err error
+	c.awaited, err = normalizeAwaitedTasks(c.opts.AwaitedTasks)
+	return err
+}
+
+// alertUnresolved raises the UNRESOLVED BLOCKED alert for a committed assessment.
+func (c *assessBlockedCall) alertUnresolved(lp paths.LizaPaths) []string {
+	message := c.taskID
+	if c.note != "" {
+		message = fmt.Sprintf("%s — %s", c.taskID, c.note)
 	}
 	var warnings []string
 	if err := alerts.Write(lp.AlertsLogPath(), alerts.Alert{
-		Timestamp: now,
+		Timestamp: c.now,
 		Level:     alerts.AlertLevelCritical,
-		Category:  "UNRESOLVED BLOCKED",
+		Category:  alertCategoryUnresolvedBlocked,
 		Message:   message,
 	}); err != nil {
 		warnings = append(warnings, fmt.Sprintf("alert write failed: %v", err))
 	}
-
-	result.Warnings = warnings
-	return &result, nil
+	return warnings
 }

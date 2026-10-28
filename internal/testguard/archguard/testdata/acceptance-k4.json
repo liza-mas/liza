@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-k4-parse", "file": "internal/testguard/archguard/k4_graph_test.go", "assertion": "TestBuildK4GraphReadsEveryNonTestFileRegardlessOfBuildConstraints, TestBuildK4GraphIgnoresTestImports, TestBuildK4GraphClassifiesOnlyModuleInternalImports, TestBuildK4GraphCountsBlankDotAndAliasedImports, TestBuildK4GraphTestOnlyDirectoryIsNoPackage", "command_index": 0},
+    {"obligation_id": "AC-k4-layer-data", "file": "internal/testguard/archguard/k4_guard_test.go", "assertion": "live TestK4ImportDirectionGuard: every production package of the 61 is mapped once (R8, R8-dup), no layer entry is stale (R8-stale) or unknown (R8-layer)", "command_index": 0},
+    {"obligation_id": "AC-k4-exempt", "file": "internal/testguard/archguard/k4_graph_test.go", "assertion": "TestK4Exempt, TestBuildK4GraphExemptPackagesAreNoProductionPackages; k4_check_test.go TestCheckK4EdgesWithAnExemptOrUnmappedEndAreNotClassified", "command_index": 0},
+    {"obligation_id": "AC-k4-rules", "file": "internal/testguard/archguard/k4_check_test.go", "assertion": "TestCheckK4ForbiddenEdgePerRule (R1 with domain, infrastructure and leaf importers, R2–R7), TestCheckK4PermittedNeighbours, TestCheckK4NewForbiddenEdgeFailsWhileAllowlistedOneStaysQuiet", "command_index": 0},
+    {"obligation_id": "AC-k4-integrity", "file": "internal/testguard/archguard/k4_check_test.go", "assertion": "TestCheckK4UnmappedProductionPackageFails, TestCheckK4StaleAllowlistEntryFails, TestCheckK4StaleLayerEntryFails, TestCheckK4PackageMappedTwiceFails, TestCheckK4UnknownLayerValueFails, TestCheckK4AllowlistEntryWithEmptyFieldFails, TestCheckK4DuplicateAllowlistEntryFails, TestCheckK4AllowlistEntryIsExactToTheEdge", "command_index": 0},
+    {"obligation_id": "AC-k4-report", "file": "internal/testguard/archguard/k4_check_test.go", "assertion": "TestCheckK4ReportsEveryViolationInOneRunSorted, TestCheckK4MessagesNameRuleEdgeLayersAndAreaFileWithoutAbsolutePath", "command_index": 0},
+    {"obligation_id": "AC-k4-baseline", "file": "internal/testguard/archguard/k4_guard_test.go", "assertion": "live TestK4ImportDirectionGuard passes with exactly the five baseline allowlist entries (A7 1, A8 1, A9 3): an extra entry is ALLOW-stale, a missing one leaves its edge reported", "command_index": 0},
+    {"obligation_id": "AC-k4-start-set", "approved_reference_id": "arch-scope0"},
+    {"obligation_id": "AC-k4-lint", "file": "Makefile", "assertion": "lint-archguard (from lint-nosync) runs the package, including TestK4ImportDirectionGuard; make lint exits 0", "command_index": 1},
+    {"obligation_id": "AC-stdlib-only", "approved_reference_id": "goal-structure"},
+    {"obligation_id": "AC-e1-proof", "file": "Makefile", "assertion": "make test under env -i runs the package through ./...; make test-e2e under env -i passes", "command_index": 2}
+  ]
+}

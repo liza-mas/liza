@@ -17,6 +17,10 @@ type MarkAgentDegradedOptions struct {
 	RecoverHint    string
 }
 
+// OperatorActor names the human operator in records a command writes on the
+// operator's behalf. The owner (A3 ops) keeps its own spelling unexported.
+const OperatorActor = "operator"
+
 func MarkAgentDegradedCommand(opts MarkAgentDegradedOptions) error {
 	if err := ops.MarkAgentDegraded(ops.MarkAgentDegradedInput{
 		ProjectRoot:    opts.ProjectRoot,
@@ -27,7 +31,7 @@ func MarkAgentDegradedCommand(opts MarkAgentDegradedOptions) error {
 		CandidateTasks: opts.CandidateTasks,
 		LastError:      opts.LastError,
 		RecoverHint:    opts.RecoverHint,
-		DegradedBy:     "operator",
+		DegradedBy:     OperatorActor,
 	}); err != nil {
 		return err
 	}

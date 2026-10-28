@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: replan failed: modification function failed: validation failed: task cp-1 is held for human action (Confirm scope); an operator must run plan-check cp-1 --clear before replanning

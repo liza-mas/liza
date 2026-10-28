@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Plan check recorded for cp-1: verdict none, class
+--- stderr

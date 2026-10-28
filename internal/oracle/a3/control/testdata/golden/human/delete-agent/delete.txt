@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+Deleted agent coder-2
+[stderr]

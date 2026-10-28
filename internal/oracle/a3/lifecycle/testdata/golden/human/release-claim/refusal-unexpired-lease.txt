@@ -1,0 +1,11 @@
+exit 1
+stdout:
+stderr:
+outcome: INVALID_INPUT
+safe_action: correct_input
+task_status: IMPLEMENTING_CODE
+effects: none
+task_id: task-1
+transition_id: <id-1>
+current_assignee: coder-1
+Error: release claim: release-claim: INVALID_INPUT (safe_action=correct_input): failed to release claim: modification function failed: validation failed: doer lease still valid until <at 20990101T000000 Z>, use --force to clear

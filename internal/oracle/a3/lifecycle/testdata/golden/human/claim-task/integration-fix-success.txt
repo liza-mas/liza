@@ -1,0 +1,17 @@
+exit 0
+stdout:
+outcome: COMPLETED
+safe_action: continue
+task_status: IMPLEMENTING_CODE
+effects: committed
+task_id: task-1
+transition_id: <id-1>
+completed_transition_id: <id-1>
+current_assignee: coder-1
+Claiming INTEGRATION_FAILED task, preserving worktree for conflict resolution
+IMPLEMENTING: task-1 by coder-1 (from INTEGRATION_FAILED)
+worktree: .worktrees/task-1
+base_commit: <commit:base>
+lease_expires: <now+30m Z>
+integration_fix: true
+stderr:

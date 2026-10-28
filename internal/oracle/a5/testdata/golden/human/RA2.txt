@@ -1,0 +1,6 @@
+# exit_code
+0
+# stdout
+Repaired parent-1 (1 history entries)
+<commit:oldplan> -> <commit:plan>
+# stderr

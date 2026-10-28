@@ -1,0 +1,58 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "base_ref": "<commit:base>",
+        "changed_files_considered": [
+          "feature.go"
+        ],
+        "current_assignee": "coder-1",
+        "effects": "none",
+        "head_ref": "<commit:candidate>",
+        "matcher_patterns": [
+          "*_test.go",
+          "*_test.py",
+          "test_*.py",
+          "*.test.{js,ts,jsx,tsx,mjs,cjs}",
+          "*.spec.{js,ts,jsx,tsx,mjs,cjs}",
+          "__tests__/*.{js,ts,jsx,tsx,mjs,cjs}",
+          "test_*.sh",
+          "*_test.sh",
+          "*_test.rb",
+          "*_spec.rb",
+          "*Test.java",
+          "Test*.java",
+          "*Tests.java",
+          "*Test.kt",
+          "Test*.kt",
+          "*Tests.kt",
+          "*Test.cs",
+          "*Tests.cs",
+          "*_test.rs",
+          "tests/*.rs"
+        ],
+        "operation": "submit-for-review",
+        "outcome": "INVALID_INPUT",
+        "safe_action": "correct_input",
+        "task_id": "task-1",
+        "task_status": "IMPLEMENTING_CODE",
+        "test_files_matched": [],
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: INVALID_INPUT (safe_action=correct_input): validation failed: task task-1: code tasks must include test files (e.g. *_test.go, *.test.ts, test_*.py) — TDD is mandatory. For non-behavioral documentation/config/spec-only work, submit a pre-execution checkpoint with --tdd-not-required <justification>; reviewers verify the justification."
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "none",
+      "operation": "submit-for-review",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "task-1",
+      "task_status": "IMPLEMENTING_CODE",
+      "transition_id": "<ID>"
+    }
+  }
+}

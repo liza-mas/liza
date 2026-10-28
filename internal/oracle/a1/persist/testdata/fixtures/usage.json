@@ -1,0 +1,4 @@
+[
+  {"SchemaVersion":1,"RecordID":"fixed-record-one","Task":"task-1","Role":"coder","Agent":"coder-1","Run":"fixed-run-1","Session":"fixed-session-1","Provider":"fixture-provider","Started":"2026-10-01T00:30:00.123+02:00","Ended":"2026-10-01T00:31:00.456+02:00","Fresh":100,"CacheRead":20,"CacheWrite":30,"Output":40,"Provenance":"terminal_authoritative","Exit":0,"Warm":false},
+  {"Task":"task-2","Role":"code-reviewer","Agent":"code-reviewer-1","Run":"fixed-run-2","Session":"fixed-session-2","Provider":"fixture-provider","Started":"2026-10-02T12:30:00.789Z","Ended":"2026-10-02T12:31:00.123Z","Fresh":50,"CacheRead":10,"CacheWrite":0,"Output":25,"Provenance":"partial","Exit":2,"Warm":true}
+]

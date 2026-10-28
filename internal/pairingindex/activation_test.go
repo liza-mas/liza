@@ -50,11 +50,11 @@ func TestPlanActivationLanguageFilterKeepsConfiguredAndReportsUnindexable(t *tes
 		t.Fatalf("PlanActivation() error = %v", err)
 	}
 
-	var languages []string
+	var languages []scipsearch.Language
 	for _, scipPlan := range plan.Install.ScipPlans {
 		languages = append(languages, scipPlan.Language)
 	}
-	if !slices.Equal(languages, []string{"go"}) {
+	if !slices.Equal(languages, []scipsearch.Language{scipsearch.LanguageGo}) {
 		t.Fatalf("planned languages = %v, want only configured and indexable go", languages)
 	}
 	if !slices.Equal(plan.Unindexable, []string{"typescript"}) {

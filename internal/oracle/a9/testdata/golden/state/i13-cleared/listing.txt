@@ -1,0 +1,5 @@
+# before
+
+# after
+agent-outputs/orchestrator-1-<STAMP>.txt
+agent-prompts/orchestrator-1-<STAMP>.txt

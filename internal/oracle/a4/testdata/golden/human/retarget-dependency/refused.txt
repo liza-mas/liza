@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: ALREADY_TRANSITIONED
+safe_action: stop
+task_status: MERGED
+effects: none
+task_id: m1
+transition_id: <DIGEST 1>
+Error: retarget dependency: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): failed to retarget dependency: modification function failed: retarget-dependency: ALREADY_TRANSITIONED (safe_action=stop): validation failed: cannot retarget dependencies on terminal task m1 (MERGED): only a MERGED planning task with output can have a replan lineage edge repaired

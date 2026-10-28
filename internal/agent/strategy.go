@@ -8,6 +8,7 @@ import (
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // RoleStrategy encapsulates all role-specific behavior in the supervisor loop.
@@ -52,11 +53,11 @@ func NewRoleStrategy(role string, resolver *pipeline.Resolver) (RoleStrategy, er
 	}
 
 	switch roleType {
-	case "doer":
+	case roles.RoleTypeDoer:
 		return &doerStrategy{role: role, resolver: resolver}, nil
-	case "reviewer":
+	case roles.RoleTypeReviewer:
 		return &reviewerStrategy{role: role, resolver: resolver}, nil
-	case "orchestrator":
+	case roles.RoleTypeOrchestrator:
 		return &orchestratorStrategy{resolver: resolver}, nil
 	default:
 		return nil, fmt.Errorf("unsupported role type %q for role %q", roleType, role)

@@ -1,0 +1,324 @@
+# before
+version: 1
+pipeline_version: 1
+goal:
+    id: persistence-oracle
+    description: Fixed persistence fixture
+    spec_ref: specs/example.md
+    created: 2026-10-01T08:00:00.123456Z
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: draft
+      description: ""
+      status: DRAFT
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 2026-10-01T10:00:00.321+02:00
+      history: []
+      future_task_key:
+        enabled: true
+        nested:
+            - first
+            - second
+      summary: bounded fixture summary
+    - id: code
+      description: ""
+      status: DRAFT_CODE
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: implementing
+      description: ""
+      status: IMPLEMENTING_CODE
+      priority: 0
+      assigned_to: coder-1
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      attempt: 2
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: to-review
+      description: ""
+      status: CODE_TO_REVIEW
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: legacy-review
+      description: ""
+      status: CODE_READY_FOR_REVIEW
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: reviewing
+      description: ""
+      status: REVIEWING_CODE
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: rejected
+      description: ""
+      status: CODE_REJECTED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      rejection_reason: bounded rejection
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: approved
+      description: ""
+      status: CODE_APPROVED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: merged
+      description: ""
+      status: MERGED
+      priority: 0
+      merge_commit: 0123456789abcdef0123456789abcdef01234567
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      handoff_events:
+        - timestamp: 2026-10-01T12:30:00.123+02:00
+          agent: coder-1
+          trigger: completion
+          succeeded:
+            - persisted output
+      created: 0001-01-01T00:00:00Z
+      history:
+        - time: 2026-10-01T05:30:00.456789-05:00
+          event: merged
+          agent: code-reviewer-1
+          commit: 0123456789abcdef0123456789abcdef01234567
+    - id: blocked
+      description: ""
+      status: BLOCKED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      blocked_reason: fixed dependency
+      created: 0001-01-01T00:00:00Z
+      history:
+        - time: 2026-10-01T10:00:00.123Z
+          event: blocked
+          reason: fixed dependency
+    - id: abandoned
+      description: ""
+      status: ABANDONED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: superseded
+      description: ""
+      status: SUPERSEDED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      superseded_by:
+        - code
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: integration-failed
+      description: ""
+      status: INTEGRATION_FAILED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: plan-draft
+      description: ""
+      status: DRAFT_CODING_PLAN
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: planning
+      description: ""
+      status: CODE_PLANNING
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: plan-to-review
+      description: ""
+      status: CODING_PLAN_TO_REVIEW
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: plan-reviewing
+      description: ""
+      status: REVIEWING_CODING_PLAN
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: plan-approved
+      description: ""
+      status: CODING_PLAN_APPROVED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: plan-rejected
+      description: ""
+      status: CODING_PLAN_REJECTED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: partial
+      description: ""
+      status: CODE_PARTIALLY_APPROVED
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+    - id: quorum
+      description: ""
+      status: REVIEWING_CODE_2
+      priority: 0
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      created: 0001-01-01T00:00:00Z
+      history: []
+agents:
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        heartbeat: 2026-10-01T10:20:00.111Z
+        terminal: terminal-2
+        iterations_total: 1
+        context_percent: 10
+    coder-1:
+        role: coder
+        status: WORKING
+        generation: fixed-generation
+        current_task: implementing
+        heartbeat: 2026-10-01T05:15:00.222-05:00
+        registered_at: 2026-10-01T09:00:00Z
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 2
+        context_percent: 35
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+    - timestamp: 2026-10-01T10:10:00.333Z
+      task: blocked
+      reporter: coder-1
+      type: retry_loop
+      details:
+        count: 3
+        error_pattern: fixed error
+sprint:
+    id: sprint-fixed
+    number: 1
+    goal_ref: persistence-oracle
+    scope:
+        planned:
+            - draft
+            - merged
+        stretch:
+            - code
+    timeline:
+        started: 2026-10-01T09:00:00Z
+        deadline: 2026-10-02T09:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 1
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: 2026-10-01T12:00:00.444+02:00
+    status: OK
+    history:
+        - timestamp: 2026-10-01T10:11:00.555Z
+          pattern: retry_cluster
+          severity: warning
+          result: TRIGGERED
+          response: WARNING
+          classification: ACKNOWLEDGED_HISTORICAL
+          resolution: fixture resolved
+          resolved_at: 2026-10-01T05:12:00.666-05:00
+config:
+    max_coder_iterations: 3
+    max_review_cycles: 3
+    max_global_integration_generations: 0
+    heartbeat_interval: 0
+    lease_duration: 600
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    integration_branch: ""
+    future_config_key: fixed-config
+future_top_level:
+    count: 7
+    labels:
+        - alpha
+        - beta
+
+# after
+{
+  "Operation": "state transcript",
+  "Refused": true,
+  "State": "version: 1\npipeline_version: 1\ngoal:\n    id: persistence-oracle\n    description: Fixed persistence fixture\n    spec_ref: specs/example.md\n    created: 2026-10-01T08:00:00.123456Z\n    status: IN_PROGRESS\n    alignment_history: []\ntasks:\n    - id: draft\n      description: \"\"\n      status: DRAFT\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 2026-10-01T10:00:00.321+02:00\n      history: []\n      future_task_key:\n        enabled: true\n        nested:\n            - first\n            - second\n      summary: bounded fixture summary\n    - id: code\n      description: \"\"\n      status: DRAFT_CODE\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: implementing\n      description: \"\"\n      status: IMPLEMENTING_CODE\n      priority: 0\n      assigned_to: coder-1\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      attempt: 2\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: to-review\n      description: \"\"\n      status: CODE_TO_REVIEW\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: legacy-review\n      description: \"\"\n      status: CODE_READY_FOR_REVIEW\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: reviewing\n      description: \"\"\n      status: REVIEWING_CODE\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: rejected\n      description: \"\"\n      status: CODE_REJECTED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      rejection_reason: bounded rejection\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: approved\n      description: \"\"\n      status: CODE_APPROVED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: merged\n      description: \"\"\n      status: MERGED\n      priority: 0\n      merge_commit: 0123456789abcdef0123456789abcdef01234567\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      handoff_events:\n        - timestamp: 2026-10-01T12:30:00.123+02:00\n          agent: coder-1\n          trigger: completion\n          succeeded:\n            - persisted output\n      created: 0001-01-01T00:00:00Z\n      history:\n        - time: 2026-10-01T05:30:00.456789-05:00\n          event: merged\n          agent: code-reviewer-1\n          commit: 0123456789abcdef0123456789abcdef01234567\n    - id: blocked\n      description: \"\"\n      status: BLOCKED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      blocked_reason: fixed dependency\n      created: 0001-01-01T00:00:00Z\n      history:\n        - time: 2026-10-01T10:00:00.123Z\n          event: blocked\n          reason: fixed dependency\n    - id: abandoned\n      description: \"\"\n      status: ABANDONED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: superseded\n      description: \"\"\n      status: SUPERSEDED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      superseded_by:\n        - code\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: integration-failed\n      description: \"\"\n      status: INTEGRATION_FAILED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: plan-draft\n      description: \"\"\n      status: DRAFT_CODING_PLAN\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: planning\n      description: \"\"\n      status: CODE_PLANNING\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: plan-to-review\n      description: \"\"\n      status: CODING_PLAN_TO_REVIEW\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: plan-reviewing\n      description: \"\"\n      status: REVIEWING_CODING_PLAN\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: plan-approved\n      description: \"\"\n      status: CODING_PLAN_APPROVED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: plan-rejected\n      description: \"\"\n      status: CODING_PLAN_REJECTED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: partial\n      description: \"\"\n      status: CODE_PARTIALLY_APPROVED\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\n    - id: quorum\n      description: \"\"\n      status: REVIEWING_CODE_2\n      priority: 0\n      spec_ref: \"\"\n      done_when: \"\"\n      scope: \"\"\n      created: 0001-01-01T00:00:00Z\n      history: []\nagents:\n    code-reviewer-1:\n        role: code-reviewer\n        status: IDLE\n        heartbeat: 2026-10-01T10:20:00.111Z\n        terminal: terminal-2\n        iterations_total: 1\n        context_percent: 10\n    coder-1:\n        role: coder\n        status: WORKING\n        generation: fixed-generation\n        current_task: implementing\n        heartbeat: 2026-10-01T05:15:00.222-05:00\n        registered_at: 2026-10-01T09:00:00Z\n        terminal: terminal-1\n        provider: fixture-provider\n        iterations_total: 2\n        context_percent: 35\ndiscovered: []\nhuman_notes: []\nspec_changes: []\nanomalies:\n    - timestamp: 2026-10-01T10:10:00.333Z\n      task: blocked\n      reporter: coder-1\n      type: retry_loop\n      details:\n        count: 3\n        error_pattern: fixed error\nsprint:\n    id: sprint-fixed\n    number: 1\n    goal_ref: persistence-oracle\n    scope:\n        planned:\n            - draft\n            - merged\n        stretch:\n            - code\n    timeline:\n        started: 2026-10-01T09:00:00Z\n        deadline: 2026-10-02T09:00:00Z\n    status: IN_PROGRESS\n    metrics:\n        planning_changes:\n            daily: []\n            unknown_attribution: 0\n            missing_created: 0\n        tasks_done: 1\n        tasks_in_progress: 0\n        tasks_blocked: 0\n        iterations_total: 0\n        review_cycles_total: 0\n        review_verdict_approvals: 0\n        review_verdict_rejections: 0\n        review_verdict_count: 0\n        review_verdict_approval_rate_percent: 0\n        task_submitted_for_review_count: 0\n        task_outcome_approval_rate_percent: 0\ncircuit_breaker:\n    last_check: 2026-10-01T12:00:00.444+02:00\n    status: OK\n    history:\n        - timestamp: 2026-10-01T10:11:00.555Z\n          pattern: retry_cluster\n          severity: warning\n          result: TRIGGERED\n          response: WARNING\n          classification: ACKNOWLEDGED_HISTORICAL\n          resolution: fixture resolved\n          resolved_at: 2026-10-01T05:12:00.666-05:00\nconfig:\n    max_coder_iterations: 3\n    max_review_cycles: 3\n    max_global_integration_generations: 0\n    heartbeat_interval: 0\n    lease_duration: 600\n    coder_poll_interval: 0\n    doer_max_wait: 0\n    orchestrator_poll_interval: 0\n    orchestrator_max_wait: 0\n    reviewer_poll_interval: 0\n    reviewer_max_wait: 0\n    integration_branch: \"\"\n    future_config_key: fixed-config\nfuture_top_level:\n    count: 7\n    labels:\n        - alpha\n        - beta\n"
+}

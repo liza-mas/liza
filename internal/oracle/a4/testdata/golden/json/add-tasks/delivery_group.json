@@ -1,0 +1,22 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "results": [
+        {
+          "error": "",
+          "success": true,
+          "task_id": "us-1",
+          "warnings": null
+        },
+        {
+          "error": "",
+          "success": true,
+          "task_id": "arch-1",
+          "warnings": null
+        }
+      ]
+    }
+  }
+}

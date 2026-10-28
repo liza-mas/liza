@@ -1,0 +1,4 @@
+exit 0
+--- stdout
+--- stderr
+First review requested a concrete example

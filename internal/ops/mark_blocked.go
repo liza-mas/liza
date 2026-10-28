@@ -7,12 +7,20 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/alerts"
-	"github.com/liza-mas/liza/internal/errors"
+	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/payloadschema"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+// alertCategoryBlocked is the alert category of a newly blocked task; the watch
+// display and the TUI match on its spelling.
+const alertCategoryBlocked = "BLOCKED"
+
+// markBlockedOperation names the mark-blocked operation.
+const markBlockedOperation = "mark-blocked"
 
 // MarkBlockedResult contains the outcome of marking a task as blocked.
 type MarkBlockedResult struct {
@@ -61,190 +69,146 @@ func MarkBlockedWithAuthority(projectRoot, taskID, reason string, questions []st
 	return markBlockedWithOptionalAuthority(projectRoot, taskID, reason, questions, authority.ID, opts, &authority)
 }
 
+// markBlockedCall carries one block transition across its phases: input
+// normalization, pipeline loading, the locked mutation and the post-commit alert.
+type markBlockedCall struct {
+	projectRoot, taskID, reason string
+	questions                   []string
+	agentID                     string
+	opts                        MarkBlockedOptions
+	authority                   *models.AgentAuthority
+
+	repairRequest       *models.RepairRequest
+	dependsOn           []string
+	bb                  *db.Blackboard
+	now                 time.Time
+	resolver            *pipeline.Resolver
+	pipelineExecuting   []models.TaskStatus
+	pipelineTransitions map[models.TaskStatus][]models.TaskStatus
+
+	mutationStarted bool
+	replay          bool
+	outcome         models.LifecycleOutcome
+	resultDependsOn []string
+}
+
 func markBlockedWithOptionalAuthority(projectRoot, taskID, reason string, questions []string, agentID string, opts MarkBlockedOptions, authority *models.AgentAuthority) (result *MarkBlockedResult, retErr error) {
-	var observed *models.Task
-	mutationStarted := false
+	call := &markBlockedCall{projectRoot: projectRoot, taskID: taskID, reason: reason, questions: questions, agentID: agentID, opts: opts, authority: authority}
 	invocation := NewLifecycleInvocation(projectRoot)
 	defer func() {
 		if retErr != nil {
-			outcome, action, effects := models.LifecycleStateChanged, "requery", "none"
-			var invalid *PreconditionError
-			if stderrors.As(retErr, &invalid) {
-				outcome, action = models.LifecycleInvalidInput, "correct_input"
-			} else if mutationStarted {
-				effects = "unknown"
-			}
-			if IsAgentAuthorityError(retErr) || filelock.IsLockErrorType(retErr, filelock.LockErrorTimeout) {
-				effects = "none"
-			}
-			observed = readLifecycleTask(projectRoot, taskID, authority, opts.Request)
-			retErr = WrapLifecycleError("mark-blocked", observed, retErr, outcome, action, effects)
+			retErr = call.classifyFailure(retErr)
 		}
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {
 			outcome, warnings = result.LifecycleOutcome, &result.Warnings
 		}
-		invocation.FinishResult("mark-blocked", outcome, &retErr, warnings)
+		invocation.FinishResult(markBlockedOperation, outcome, &retErr, warnings)
 	}()
-	if err := ValidateLifecycleRequestOptions(opts.Request); err != nil {
-		return nil, WrapLifecycleError("mark-blocked", nil, err, models.LifecycleInvalidInput, "correct_input", "none")
-	}
-	if agentID == "" {
-		return nil, &PreconditionError{Reason: "agent ID is required"}
-	}
-	// One structural verdict for the preflight and this boundary, reached
-	// before any state path is opened.
-	if err := markBlockedStructuralError(MarkBlockedPayload(taskID, reason, questions, opts)); err != nil {
-		return nil, err
-	}
-	repairRequest, err := normalizeRepairRequest(opts.RepairRequest, taskID)
-	if err != nil {
-		return nil, err
-	}
-	dependsOn, err := normalizeDependsOn(opts.DependsOn)
-	if err != nil {
+	if err := call.normalizeInput(); err != nil {
 		return nil, err
 	}
 
 	lp := paths.New(projectRoot)
-	bb := RequestBlackboard(lp.StatePath(), authority, opts.Request)
-	now := time.Now().UTC()
-	var resultDependsOn []string
-	var outcome models.LifecycleOutcome
-	var replay bool
-
-	// Load pipeline config for status checks and transitions.
-	resolver, _, err := loadResolver(projectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load pipeline config: %w", err)
+	call.bb = RequestBlackboard(lp.StatePath(), authority, opts.Request)
+	call.now = time.Now().UTC()
+	if err := call.loadPipeline(); err != nil {
+		return nil, err
 	}
-	var pipelineExecuting []models.TaskStatus
-	for _, rpName := range resolver.RolePairNames() {
-		if es, err := resolver.ExecutingStatus(rpName); err == nil {
-			pipelineExecuting = append(pipelineExecuting, es)
-		}
-	}
-	pipelineTransitions := BuildPipelineTransitions(resolver)
 
-	err = lifecycleMutation(bb, authority)(func(state *models.State) error {
-		task := state.FindTask(taskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: taskID}
-		}
-		observed = task
-		request, err := NewLifecycleRequest("mark-blocked", task, agentID, authority, opts.Request, struct {
-			Reason       string
-			Questions    []string
-			Repair       *models.RepairRequest
-			Dependencies []string
-			// Omitted when empty so earlier requests keep their identity.
-			HumanAction      string `json:",omitempty"`
-			StateLockTimeout bool   `json:",omitempty"`
-		}{reason, questions, repairRequest, dependsOn, opts.HumanAction, opts.StateLockTimeout})
-		if err != nil {
-			return err
-		}
-		receipt, err := checkOwnerEndingRequest(task, request)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			outcome, replay = LifecycleReplayOutcome(task, receipt, agentID), true
-			return errLifecycleReplay
-		}
-
-		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: fmt.Sprintf("task must be in an executing status to be marked blocked, current status: %s", task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return WrapLifecycleError("mark-blocked", task, &PreconditionError{Reason: "only the assigned agent can mark task as blocked"}, models.LifecycleStaleCaller, "stop", "none")
-		}
-		if err := validateDependsOnForBlockedTask(state, task, dependsOn); err != nil {
-			return err
-		}
-		// Validate added edges without preventing emergency blocking to repair existing metadata.
-		if err := validateDependencyDirection(state, resolver, task.ID, task.RolePair, dependsOn); err != nil {
-			return err
-		}
-		if opts.StateLockTimeout {
-			candidate := *task
-			candidate.DependsOn = append(append([]string(nil), task.DependsOn...), dependsOn...)
-			candidate.RepairRequest = repairRequest
-			if reason := stateLockHoldGate(state, &candidate, resolver); reason != "" {
-				return &PreconditionError{Reason: "state lock hold requires infrastructure-only wait: " + reason}
-			}
-		}
-
-		// Blocking ends the authorized owner's work and retires its unfinished preparation.
-		mutationStarted = true
-		models.AdvanceLifecycle(task)
-		if err := task.TransitionWith(models.TaskStatusBlocked, pipelineTransitions); err != nil {
-			return err
-		}
-		task.BlockedReason = &reason
-		task.BlockedQuestions = questions
-		task.RepairRequest = repairRequest
-		if len(dependsOn) > 0 {
-			task.DependsOn = append(task.DependsOn, dependsOn...)
-		}
-		resultDependsOn = append([]string(nil), task.DependsOn...)
-		releaseAgentsForTask(state, taskID)
-		task.AssignedTo = nil
-		task.LeaseExpires = nil
-
-		entry := models.TaskHistoryEntry{
-			Time:   now,
-			Event:  models.TaskEventBlocked,
-			Agent:  &agentID,
-			Reason: &reason,
-		}
-		if opts.HumanAction != "" {
-			entry.Extra = map[string]any{models.AwaitingHumanExtraKey: opts.HumanAction}
-		}
-		task.History = append(task.History, entry)
-		task.StateLockHold = nil
-		if opts.StateLockTimeout {
-			installStateLockHold(state, task)
-		}
-
-		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-		return err
-	})
-
-	if isLifecycleReplay(err) && replay {
+	err := lifecycleMutation(call.bb, authority)(call.mutate)
+	if isLifecycleReplay(err) && call.replay {
 		err = nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to mark task as blocked: %w", err)
 	}
-	if replay {
-		return &MarkBlockedResult{LifecycleOutcome: outcome, TaskID: taskID}, nil
+	if call.replay {
+		return &MarkBlockedResult{LifecycleOutcome: call.outcome, TaskID: taskID}, nil
 	}
+	return call.completed(lp), nil
+}
 
+// classifyFailure wraps a failed call with the outcome the result contract
+// prescribes for it, observing the task as it now stands.
+func (c *markBlockedCall) classifyFailure(err error) error {
+	outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
+	var invalid *PreconditionError
+	if stderrors.As(err, &invalid) {
+		outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
+	} else if c.mutationStarted {
+		effects = LifecycleEffectsUnknown
+	}
+	if IsAgentAuthorityError(err) || filelock.IsLockErrorType(err, filelock.LockErrorTimeout) {
+		effects = LifecycleEffectsNone
+	}
+	observed := readLifecycleTask(c.projectRoot, c.taskID, c.authority, c.opts.Request)
+	return WrapLifecycleError(markBlockedOperation, observed, err, outcome, action, effects)
+}
+
+// normalizeInput validates and normalizes the caller's input before any state
+// path is opened.
+func (c *markBlockedCall) normalizeInput() error {
+	if err := ValidateLifecycleRequestOptions(c.opts.Request); err != nil {
+		return WrapLifecycleError(markBlockedOperation, nil, err, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
+	}
+	if c.agentID == "" {
+		return &PreconditionError{Reason: "agent ID is required"}
+	}
+	// One structural verdict for the preflight and this boundary, reached
+	// before any state path is opened.
+	if err := markBlockedStructuralError(MarkBlockedPayload(c.taskID, c.reason, c.questions, c.opts)); err != nil {
+		return err
+	}
+	var err error
+	if c.repairRequest, err = normalizeRepairRequest(c.opts.RepairRequest, c.taskID); err != nil {
+		return err
+	}
+	c.dependsOn, err = normalizeDependsOn(c.opts.DependsOn)
+	return err
+}
+
+// loadPipeline loads the pipeline config for status checks and transitions.
+func (c *markBlockedCall) loadPipeline() error {
+	resolver, _, err := loadResolver(c.projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to load pipeline config: %w", err)
+	}
+	c.resolver = resolver
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			c.pipelineExecuting = append(c.pipelineExecuting, es)
+		}
+	}
+	c.pipelineTransitions = BuildPipelineTransitions(resolver)
+	return nil
+}
+
+// completed raises the BLOCKED alert for a committed block and builds its result.
+func (c *markBlockedCall) completed(lp paths.LizaPaths) *MarkBlockedResult {
 	var warnings []string
-	message := fmt.Sprintf("%s — %s", taskID, reason)
+	message := fmt.Sprintf("%s — %s", c.taskID, c.reason)
 	if err := alerts.Write(lp.AlertsLogPath(), alerts.Alert{
-		Timestamp: now,
+		Timestamp: c.now,
 		Level:     alerts.AlertLevelWarning,
-		Category:  "BLOCKED",
+		Category:  alertCategoryBlocked,
 		Message:   message,
 		// now is the blocked history entry's time, so watchers derive the same
 		// key from state and this episode is logged once between us.
-		OnceKey: alerts.BlockedEpisodeKey(taskID, now, message),
+		OnceKey: alerts.BlockedEpisodeKey(c.taskID, c.now, message),
 	}); err != nil {
 		warnings = append(warnings, fmt.Sprintf("alert write failed: %v", err))
 	}
 
 	return &MarkBlockedResult{
-		LifecycleOutcome: outcome,
-		TaskID:           taskID,
-		Reason:           reason,
-		DependsOn:        resultDependsOn,
-		RepairRequest:    repairRequest,
+		LifecycleOutcome: c.outcome,
+		TaskID:           c.taskID,
+		Reason:           c.reason,
+		DependsOn:        c.resultDependsOn,
+		RepairRequest:    c.repairRequest,
 		Warnings:         warnings,
-	}, nil
+	}
 }
 
 // MarkBlockedPayload builds the canonical object of one blocking call. The
@@ -273,7 +237,7 @@ func markBlockedStructuralError(payload payloadschema.MarkBlockedPayload) error 
 	if len(diagnostics) == 0 {
 		return nil
 	}
-	return NewLifecycleInvalidInputError("mark-blocked", nil, diagnostics, preconditionFromDiagnostics(diagnostics))
+	return NewLifecycleInvalidInputError(markBlockedOperation, nil, diagnostics, preconditionFromDiagnostics(diagnostics))
 }
 
 // preconditionFromDiagnostics restates the schema's first rejection as the

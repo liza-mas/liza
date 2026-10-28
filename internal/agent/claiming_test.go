@@ -764,7 +764,7 @@ func TestClaimDoerTask_ResumePostWorktreeCmdFailureDegradesAgent(t *testing.T) {
 			if !ok {
 				t.Fatal("AgentHealth missing entry, want degraded record")
 			}
-			if health.Reason != ops.AgentDegradedWorktreeSetupFailed {
+			if health.Reason != string(ops.AgentDegradedWorktreeSetupFailed) {
 				t.Errorf("health.Reason = %q, want %q", health.Reason, ops.AgentDegradedWorktreeSetupFailed)
 			}
 		})

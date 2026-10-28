@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: replan failed: modification function failed: validation failed: cannot replan — child tasks already created from task cp-1 output. Cancel children first

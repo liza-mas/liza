@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: unknown MAS launch preset "oracle-unknown"
+--- invocations
+none

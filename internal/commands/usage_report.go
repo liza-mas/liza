@@ -36,8 +36,7 @@ type UsageReportOptions struct {
 
 // Validate checks the format and parses every time bound before any read.
 func (opts *UsageReportOptions) Validate() error {
-	validFormats := []string{"json", "yaml", "table", "value", ""}
-	if !slices.Contains(validFormats, opts.Format) {
+	if !slices.Contains(inspectFormats, inspectFormat(opts.Format)) {
 		return fmt.Errorf("invalid format: %s (must be json, yaml, table, or value)", opts.Format)
 	}
 	var baseline usage.Window
@@ -175,10 +174,10 @@ func latest(a, b time.Time) time.Time {
 
 func formatUsageReport(report usage.Report, format string) (string, error) {
 	if format == "" {
-		format = "table"
+		format = string(inspectFormatTable)
 	}
-	if format != "table" {
-		return formatOutput(report, format)
+	if inspectFormat(format) != inspectFormatTable {
+		return formatOutput(report, inspectFormat(format))
 	}
 	headers := []string{"OUTCOME", "ROLE", "TASKS", "FRESH", "FRESH P50", "FRESH P95", "CACHE READ", "CACHE P50", "CACHE P95", "OUTPUT"}
 	var rows [][]string

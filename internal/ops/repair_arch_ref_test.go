@@ -54,7 +54,7 @@ func TestRepairArchRefSetsEmptyArchRefOnUnstartedTask(t *testing.T) {
 	if task.Status != models.TaskStatusDraftCodingPlan || task.AssignedTo != nil {
 		t.Fatalf("repair changed lifecycle: status=%s assigned=%v", task.Status, task.AssignedTo)
 	}
-	if len(task.History) != 1 || task.History[0].Event != string(models.TaskEventArchRefRepaired) {
+	if len(task.History) != 1 || task.History[0].Event != models.TaskEventArchRefRepaired {
 		t.Fatalf("history = %+v, want one arch_ref_repaired entry", task.History)
 	}
 	entry := task.History[0]
@@ -113,7 +113,7 @@ func TestRepairArchRefRefusals(t *testing.T) {
 		}, archRef: repairArchRef, want: []string{"already has arch_ref", "Scope 1: Other"}},
 		{name: "claimed once", task: func() models.Task {
 			task := unstartedCodePlan("t")
-			task.History = []models.TaskHistoryEntry{{Time: now, Event: string(models.TaskEventClaimed), Agent: &agent}}
+			task.History = []models.TaskHistoryEntry{{Time: now, Event: models.TaskEventClaimed, Agent: &agent}}
 			return task
 		}, archRef: repairArchRef, want: []string{"unstarted"}},
 		{name: "blocked", task: func() models.Task {

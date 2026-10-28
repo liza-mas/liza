@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/agentlaunch"
 )
 
 func TestDevinToolResultPlanPreservesNativeCommandAndTaskSession(t *testing.T) {
@@ -11,7 +13,7 @@ func TestDevinToolResultPlanPreservesNativeCommandAndTaskSession(t *testing.T) {
 		t.Skip("requires POSIX command paths")
 	}
 	req := LLMAgentRunRequest{ProjectRoot: "/tmp/project with space", TaskID: "TASK-778", AgentID: "coder-1"}
-	plan := LaunchPlan{ToolName: "devin-acp", ACPXAgent: "devin acp --model 'chosen model'", ACPXSessionName: "original-task", ACPXPromptArgs: []string{"--approve-all", "--agent", "devin acp --model 'chosen model'", "prompt", "-s", "original-task"}}
+	plan := agentlaunch.LaunchPlan{ToolName: "devin-acp", ACPXAgent: "devin acp --model 'chosen model'", ACPXSessionName: "original-task", ACPXPromptArgs: []string{"--approve-all", "--agent", "devin acp --model 'chosen model'", "prompt", "-s", "original-task"}}
 	got, err := prepareDevinToolResultPlan(req, plan, "/tmp/engine binary")
 	if err != nil {
 		t.Fatal(err)

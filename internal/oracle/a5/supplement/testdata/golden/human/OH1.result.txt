@@ -1,0 +1,6 @@
+outcome: healed
+error: <none>
+worktree_head: healed
+review_commit_is_head: true
+base_on_integration: true
+replayed_range: candidate

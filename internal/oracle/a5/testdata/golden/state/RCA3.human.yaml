@@ -1,0 +1,598 @@
+# before
+version: 1
+mutation_sequence: 2
+goal:
+    id: goal-1
+    description: A5 fixture
+    spec_ref: specs/goal.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Frozen A5 fixture
+      status: BLOCKED
+      priority: 1
+      worktree: .worktrees/task-1
+      base_commit: <commit:base>
+      iteration: 1
+      review_cycles_current: 4
+      review_cycles_total: 4
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      rejection_reason: A5 defect
+      blocked_reason: 'rejection_rca_required: 4 durable rejections reached the high-churn threshold 4; a classified RCA and a recovery disposition are required before this task is restored'
+      blocked_questions:
+        - 'Which cause dominated the rejections: product_defect, capability_failure, lifecycle_retry or unknown?'
+        - 'Which recovery path should resume the task: implementation_correction, capability_reroute, lifecycle_repair, rescope or human_override?'
+      rejection_rca:
+        schema_version: 1
+        threshold: 4
+        rejection_count: 4
+        gated_at: <TIME>
+        gating_commit: <commit:candidate>
+        fingerprint: <ID>
+        recorded_at: <TIME>
+        recorded_by: orchestrator-1
+        summary: Prior rejections identify product defects.
+        contributions:
+            - rejection_index: 1
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 1
+            - rejection_index: 2
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 2
+            - rejection_index: 3
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 3
+            - rejection_index: 4
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 4
+      lifecycle:
+        revision: 2
+        completion_sequence: 2
+        receipts:
+            - operation: submit-verdict
+              actor: code-reviewer-1
+              generation_digest: <ID>
+              request_id: verdict-<ID>
+              expected_transition: <ID>
+              payload_digest: <ID>
+              sequence: 1
+              transition_id: <ID>
+              projection:
+                verdict: REJECTED
+            - operation: record-rejection-rca
+              actor: orchestrator-1
+              generation_digest: <ID>
+              expected_transition: <ID>
+              payload_digest: <ID>
+              sequence: 2
+              transition_id: <ID>
+      handoff_events:
+        - timestamp: <TIME>
+          agent: coder-1
+          trigger: submission
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: pre_execution_checkpoint
+          agent: coder-1
+          extra:
+            files_to_modify:
+                - feature.go
+                - feature_test.go
+            intent: freeze A5
+            validation_plan: fixture validation
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 1
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 2
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 3
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: A5 defect
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: blocked
+          agent: code-reviewer-1
+          reason: 'rejection_rca_required: 4 durable rejections reached the high-churn threshold 4; a classified RCA and a recovery disposition are required before this task is restored'
+          blocked_class: rejection_rca_required
+          first_rejection_at: "<TIME>"
+          gated_at: "<TIME>"
+          rejection_count: 4
+          threshold: 4
+        - time: <TIME>
+          event: rejection_rca_recorded
+          agent: orchestrator-1
+          causes:
+            - product_defect
+          contribution_count: 4
+          fingerprint: <ID>
+          gated_at: "<TIME>"
+          recorded_by: orchestrator-1
+          rejection_count: 4
+          threshold: 4
+agents:
+    code-plan-reviewer-1:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-2:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-3:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-planner-1:
+        role: code-planner
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        generation: generation-1
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-2:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: generation-1
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-2:
+        role: coder
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    orchestrator-1:
+        role: orchestrator
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 10
+    max_global_integration_generations: 0
+    heartbeat_interval: 0
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    agent_tools:
+        test:
+            validation_execution: local
+    integration_branch: integration
+    mode: RUNNING
+# after
+version: 1
+mutation_sequence: 3
+goal:
+    id: goal-1
+    description: A5 fixture
+    spec_ref: specs/goal.md
+    created: <TIME>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: Frozen A5 fixture
+      status: BLOCKED
+      priority: 1
+      worktree: .worktrees/task-1
+      base_commit: <commit:base>
+      iteration: 1
+      review_cycles_current: 4
+      review_cycles_total: 4
+      spec_ref: ""
+      done_when: ""
+      scope: ""
+      rejection_reason: A5 defect
+      blocked_reason: 'rejection_rca_required: 4 durable rejections reached the high-churn threshold 4; a classified RCA and a recovery disposition are required before this task is restored'
+      blocked_questions:
+        - 'Which cause dominated the rejections: product_defect, capability_failure, lifecycle_retry or unknown?'
+        - 'Which recovery path should resume the task: implementation_correction, capability_reroute, lifecycle_repair, rescope or human_override?'
+      rejection_rca:
+        schema_version: 1
+        threshold: 4
+        rejection_count: 4
+        gated_at: <TIME>
+        gating_commit: <commit:candidate>
+        fingerprint: <ID>
+        recorded_at: <TIME>
+        recorded_by: orchestrator-1
+        summary: Prior rejections identify product defects.
+        contributions:
+            - rejection_index: 1
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 1
+            - rejection_index: 2
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 2
+            - rejection_index: 3
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 3
+            - rejection_index: 4
+              categories:
+                - product_defect
+              evidence:
+                - A5 defect 4
+        disposition:
+            recovery_path: implementation_correction
+            restore_mode: claimable
+            actor: orchestrator-1
+            lifecycle_version: 2
+            decided_at: <TIME>
+      lifecycle:
+        revision: 3
+        completion_sequence: 3
+        receipts:
+            - operation: submit-verdict
+              actor: code-reviewer-1
+              generation_digest: <ID>
+              request_id: verdict-<ID>
+              expected_transition: <ID>
+              payload_digest: <ID>
+              sequence: 1
+              transition_id: <ID>
+              projection:
+                verdict: REJECTED
+            - operation: record-rejection-rca
+              actor: orchestrator-1
+              generation_digest: <ID>
+              expected_transition: <ID>
+              payload_digest: <ID>
+              sequence: 2
+              transition_id: <ID>
+            - operation: resume-rejection-rca
+              actor: orchestrator-1
+              generation_digest: <ID>
+              expected_transition: <ID>
+              payload_digest: <ID>
+              sequence: 3
+              transition_id: <ID>
+      handoff_events:
+        - timestamp: <TIME>
+          agent: coder-1
+          trigger: submission
+      created: <TIME>
+      history:
+        - time: <TIME>
+          event: pre_execution_checkpoint
+          agent: coder-1
+          extra:
+            files_to_modify:
+                - feature.go
+                - feature_test.go
+            intent: freeze A5
+            validation_plan: fixture validation
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 1
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 2
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: prior defect 3
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: rejected
+          agent: code-reviewer-1
+          reason: A5 defect
+          commit: <commit:candidate>
+        - time: <TIME>
+          event: blocked
+          agent: code-reviewer-1
+          reason: 'rejection_rca_required: 4 durable rejections reached the high-churn threshold 4; a classified RCA and a recovery disposition are required before this task is restored'
+          blocked_class: rejection_rca_required
+          first_rejection_at: "<TIME>"
+          gated_at: "<TIME>"
+          rejection_count: 4
+          threshold: 4
+        - time: <TIME>
+          event: rejection_rca_recorded
+          agent: orchestrator-1
+          causes:
+            - product_defect
+          contribution_count: 4
+          fingerprint: <ID>
+          gated_at: "<TIME>"
+          recorded_by: orchestrator-1
+          rejection_count: 4
+          threshold: 4
+        - time: <TIME>
+          event: rejection_rca_resumed
+          agent: orchestrator-1
+          actor: orchestrator-1
+          decided_at: "<TIME>"
+          fingerprint: <ID>
+          gated_at: "<TIME>"
+          iteration_exempt: false
+          lifecycle_version: 2
+          recovery_path: implementation_correction
+          restore_mode: claimable
+agents:
+    code-plan-reviewer-1:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-2:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-plan-reviewer-3:
+        role: code-plan-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-planner-1:
+        role: code-planner
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-1:
+        role: code-reviewer
+        status: IDLE
+        generation: generation-1
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    code-reviewer-2:
+        role: code-reviewer
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-1:
+        role: coder
+        status: IDLE
+        generation: generation-1
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    coder-2:
+        role: coder
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+    orchestrator-1:
+        role: orchestrator
+        status: WAITING
+        generation: generation-1
+        lease_expires: <TIME>
+        heartbeat: <TIME>
+        terminal: test
+        provider: test
+        iterations_total: 0
+        context_percent: 0
+        pid: <pid>
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME>
+        deadline: <TIME>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 10
+    max_global_integration_generations: 0
+    heartbeat_interval: 0
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    agent_tools:
+        test:
+            validation_execution: local
+    integration_branch: integration
+    mode: RUNNING

@@ -1,0 +1,32 @@
+Multiple coders failed on same task. Re-evaluate and act NOW:
+
+REPLACEMENT LINEAGE POLICY:
+- Bind creation, consumer retargeting and supersession in one transaction: replace-task for one replacement (retain the request ID, expected transition and payload across retries), or a corrective plan output's supersedes for plan-generated ones. Never state a replacement only in prose.
+- Preserve an independently reviewable replacement lineage for each independently scoped original; one original may split into several cohesive replacements.
+- Do not map several independent originals to one shared replacement or replan.
+- A shared replan is allowed only when corrections are semantically inseparable. Record an explicit reason explaining why; convenience or a shared incident is insufficient.
+- Reason replacement dependencies within each preserved lineage, not from the shared incident. Later specialized outputs do not restore collapsed supersession provenance.
+- Supersession is not the default for ambiguity: before replacing, state why a narrower supported repair (dependency repair, unblock/rebase, in-place scope exception, owner correction, specialist investigation) cannot preserve valid authority, and what the successor's inputs or mechanism will change; record that change as `changed` (supersede-task --changed, the replace-task payload, or a plan output), required for a BLOCKED original.
+- Before another recovery, review the logical lineage when a successor blocks before the old failure point, one unresolved commitment holds several consumers, or repeated correction advanced no consumer. Record cause, effective change, remaining constraints, next observable progress, and the new evidence for another attempt; a wake with no new evidence keeps the assessment and adds no prerequisite or replacement.
+- A blocked-recovery cap refusal means the lineage is not converging: hold the task with assess-blocked for the human; never bypass it with an unlinked task.
+
+1. Read task history — understand what was tried and why it failed
+2. Determine if:
+   - Task is impossible as specified — after the owning specialist has confirmed the unsupported assumption or infeasible contract, not before → supersede with revised tasks:
+     a. Re-read the task via liza get <task-id> --json to confirm it is still in a supersedable state (BLOCKED/REJECTED/READY); take its transition_id.
+        If status changed (e.g., task was claimed), skip supersede — the task is being actively worked.
+     b. One replacement: write a payload with source_task_id, reason, changed (what differs from the failed attempts), replacement (the add-task object) and consumers (liza replace-task --help), then run: liza replace-task --replacement-file <path.json> --request-id <id> --expected-transition <transition_id> --agent-id orchestrator-1 --json
+     c. Several replacements: a corrective plan whose outputs name the task in supersedes, each with changed. Never add-tasks the replacements first: a refused replacement would leave them runnable.
+   - Missing context/docs → add to task description (update NOW)
+   - Needs different approach → update scope/guidance (execute NOW)
+   - Spec is wrong → fix spec first (update NOW)
+3. Execute changes: update task and reassign, or supersede with new approach
+4. If breaking into smaller tasks — create them all in this session
+5. After analyzing each hypothesis-exhausted task:
+   - If you resolved it (superseded, updated guidance, fixed spec): no further action needed for that task
+   - If you CANNOT resolve it now: run liza assess-hypothesis-exhausted to record your assessment
+     Run: liza assess-hypothesis-exhausted <task-id> --note "<why it cannot be resolved now>" --agent-id orchestrator-1 --json
+     This transitions unresolved exhausted work to BLOCKED so it cannot be reassigned unchanged, and prevents re-waking until new information arrives (new failures, human notes).
+6. All state modifications must be executed before you exit.
+
+Do NOT call liza sprint-checkpoint. You must either supersede the task, update its guidance, or assess it. Do NOT defer.

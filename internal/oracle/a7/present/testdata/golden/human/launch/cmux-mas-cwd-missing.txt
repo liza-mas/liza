@@ -1,0 +1,6 @@
+exit 1
+--- stdout
+--- stderr
+Error: inspect --cwd: stat <OTHER>/absent: no such file or directory
+--- invocations
+none

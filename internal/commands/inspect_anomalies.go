@@ -15,11 +15,11 @@ const anomalyDetailsSummaryLimitBytes = 200
 
 // inspectAnomaliesOptions contains options for anomaly inspection
 type inspectAnomaliesOptions struct {
-	Format         string // Output format: json, yaml, table, value
-	TypeFilter     string // Filter by anomaly type
-	TaskFilter     string // Filter by task ID
-	ReporterFilter string // Filter by reporter (agent ID)
-	Internal       bool   // Return structured data for composition
+	Format         inspectFormat // Output format: json, yaml, table, value
+	TypeFilter     string        // Filter by anomaly type
+	TaskFilter     string        // Filter by task ID
+	ReporterFilter string        // Filter by reporter (agent ID)
+	Internal       bool          // Return structured data for composition
 }
 
 // anomalyInfo represents anomaly information with computed fields
@@ -61,7 +61,7 @@ func buildAnomalyInfo(anomaly models.Anomaly) anomalyInfo {
 		Timestamp: anomaly.Timestamp,
 		Task:      anomaly.Task,
 		Reporter:  anomaly.Reporter,
-		Type:      anomaly.Type,
+		Type:      string(anomaly.Type),
 		Details:   anomaly.Details,
 	}
 
@@ -78,7 +78,7 @@ func filterAnomalies(anomalies []models.Anomaly, opts inspectAnomaliesOptions) [
 
 	for _, anomaly := range anomalies {
 		// Apply type filter
-		if opts.TypeFilter != "" && anomaly.Type != opts.TypeFilter {
+		if opts.TypeFilter != "" && string(anomaly.Type) != opts.TypeFilter {
 			continue
 		}
 
@@ -99,20 +99,20 @@ func filterAnomalies(anomalies []models.Anomaly, opts inspectAnomaliesOptions) [
 }
 
 // formatAnomaliesOutput formats a list of anomalies for output
-func formatAnomaliesOutput(anomalies []anomalyInfo, format string) (string, error) {
+func formatAnomaliesOutput(anomalies []anomalyInfo, format inspectFormat) (string, error) {
 	// Default to table format
 	if format == "" {
-		format = "table"
+		format = inspectFormatTable
 	}
 
 	switch format {
-	case "json":
+	case inspectFormatJSON:
 		return render.FormatJSON(anomalies)
-	case "yaml":
+	case inspectFormatYAML:
 		return render.FormatYAML(anomalies)
-	case "table":
+	case inspectFormatTable:
 		return formatAnomaliesTable(anomalies), nil
-	case "value":
+	case inspectFormatValue:
 		// Value format doesn't make sense for multiple anomalies
 		return "", fmt.Errorf("value format not supported for anomaly lists (use json, yaml, or table)")
 	default:

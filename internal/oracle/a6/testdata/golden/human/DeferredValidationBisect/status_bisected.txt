@@ -1,0 +1,49 @@
+exit_code: 0
+stdout:
+integrationhead: <SHA:C2>
+effective:
+- command: test ! -e bad.txt
+commandsha256: <ID>
+ruling: ""
+rulings: []
+runner: null
+latestbatches:
+- id: 1
+commit: <SHA:BASE>
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+status: passed
+results:
+- command: test ! -e bad.txt
+command_sha256: <ID>
+status: passed
+exit_code: 0
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+- id: 2
+commit: <SHA:C2>
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+status: failed
+results:
+- command: test ! -e bad.txt
+command_sha256: <ID>
+status: failed
+exit_code: 1
+started_at: <TIME:Z>
+finished_at: <TIME:Z>
+excerpt: |
+exit status 1
+culprits:
+- command_sha256: <ID>
+task_id: oracle-second
+merge_commit: <SHA:C2>
+steps:
+- commit: <SHA:BASE>
+status: passed
+exit_code: 0
+- commit: <SHA:C1>
+status: passed
+exit_code: 0
+retirements: []
+stderr:

@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: create worktree: post-worktree setup command failed in <PROJECT>/.worktrees/task-1: sh ./post-worktree-fail.sh: exit status 3 (output: <PROJECT>/.liza/worktree-setup/task-1-<SETUP-DIGEST>.log)

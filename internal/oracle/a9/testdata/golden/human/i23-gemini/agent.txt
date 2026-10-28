@@ -1,0 +1,9 @@
+exit_code: 0
+[stdout]
+System stopped
+Mode: RUNNING → STOPPED
+Changed by: coder-1
+Agents will exit cleanly at their next check.
+[stderr]
+Warning: no Liza contract symlink found for gemini. Agents may not find the behavioral contract.
+Run 'liza init --gemini' to create one.

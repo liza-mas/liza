@@ -1,0 +1,33 @@
+config:
+  deferred_validation:
+    rulings:
+      - command: "true"
+        ruling: oracle existing ruling
+        recorded_at: 2001-02-03T04:05:06Z
+goal:
+  integration:
+    deferred_validation:
+      deferrals:
+        - task_id: historical-coding
+          merge_commit: "@BASE@"
+          before_commit: "@BASE@"
+          recorded_at: 2001-02-03T04:05:06Z
+          commands:
+            - command: "true"
+              command_sha256: b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+              timeout_seconds: 30
+              authority: contract
+      last_batch_id: 1
+      batches:
+        - id: 1
+          commit: "@BASE@"
+          started_at: 2001-02-03T04:05:06Z
+          finished_at: 2001-02-03T04:05:07Z
+          status: passed
+          results:
+            - command: "true"
+              command_sha256: b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
+              status: passed
+              exit_code: 0
+              started_at: 2001-02-03T04:05:06Z
+              finished_at: 2001-02-03T04:05:07Z

@@ -1,6 +1,10 @@
 package ops
 
-import "fmt"
+import (
+	"fmt"
+
+	lizaerrors "github.com/liza-mas/liza/internal/errors"
+)
 
 // PreconditionError indicates a precondition check failed before the main
 // operation could execute. The Reason field is intentionally client-facing
@@ -17,3 +21,9 @@ func (e *PreconditionError) Error() string {
 func (e *PreconditionError) SafeDetails() map[string]any {
 	return e.Details
 }
+
+// PreconditionReason returns the client-facing reason for envelope
+// classification.
+func (e *PreconditionError) PreconditionReason() string { return e.Reason }
+
+var _ lizaerrors.PreconditionFailure = (*PreconditionError)(nil)

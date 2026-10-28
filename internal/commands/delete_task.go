@@ -34,7 +34,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 			return fmt.Errorf("deletion cancelled")
 		}
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
+		if answer != confirmAnswerY && answer != confirmAnswerYes {
 			return fmt.Errorf("deletion cancelled")
 		}
 	}
@@ -46,7 +46,7 @@ func DeleteTaskCommand(projectRoot, taskID string, force, deleteWorktree bool, r
 		scanner := bufio.NewScanner(stdin)
 		if scanner.Scan() {
 			answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-			if answer == "y" || answer == "yes" {
+			if answer == confirmAnswerY || answer == confirmAnswerYes {
 				resolvedDeleteWt = true
 			}
 		}

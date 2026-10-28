@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: checkpoint: validation failed: cannot checkpoint: sprint is COMPLETED

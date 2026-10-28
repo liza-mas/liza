@@ -1966,7 +1966,7 @@ func TestRunChecks_SuppressesAcknowledgedCircuitBreakerPattern(t *testing.T) {
 		watchProviderAuditAnomaly(watermark, "old-coder-2"),
 		watchProviderAuditAnomaly(watermark.Add(-2*time.Minute), "old-coder-3"),
 	}
-	patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state)
+	patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state, nil)
 	if patternResult.Classification != models.CircuitBreakerEvidenceAcknowledgedHistorical ||
 		patternResult.Response != models.CircuitBreakerResponseWarning || patternResult.Triggered {
 		t.Fatalf("provider-audit result = {class:%q response:%q triggered:%v}, want {ACKNOWLEDGED_HISTORICAL WARNING false}",
@@ -2022,7 +2022,7 @@ func TestCheckCircuitBreakerEscalation_ProviderAuditResponses(t *testing.T) {
 
 	t.Run("checkpoint without exact current degraded provider epoch emits no alert", func(t *testing.T) {
 		state := providerAuditState()
-		patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state)
+		patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state, nil)
 		if patternResult.Classification != models.CircuitBreakerEvidenceContinuing ||
 			patternResult.Response != models.CircuitBreakerResponseCheckpoint || patternResult.Triggered {
 			t.Fatalf("provider-audit result = {class:%q response:%q triggered:%v}, want {CONTINUING CHECKPOINT false}",
@@ -2058,7 +2058,7 @@ func TestCheckCircuitBreakerEscalation_ProviderAuditResponses(t *testing.T) {
 			},
 		}
 
-		patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state)
+		patternResult, _, _ := analysis.DetectUnacknowledgedPatterns(state, nil)
 		if patternResult.Classification != models.CircuitBreakerEvidenceContinuing ||
 			patternResult.Response != models.CircuitBreakerResponseHalt || !patternResult.Triggered {
 			t.Fatalf("provider-audit result = {class:%q response:%q triggered:%v}, want {CONTINUING HALT true}",

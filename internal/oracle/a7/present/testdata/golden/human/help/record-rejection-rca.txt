@@ -1,0 +1,26 @@
+exit 0
+--- stdout
+Record the durable root-cause analysis a high-churn rejection gate requires.
+The --rca-file content is exactly the request object: schema_version, summary
+and contributions, each contribution naming a rejection_index, one or more
+categories (product_defect, capability_failure, lifecycle_retry, unknown) and
+bounded evidence. The gate's threshold, rejection count and timing are seeded by
+the gate and cannot be sent. Resubmitting an equivalent request is NO_CHANGE.
+Requires a registered orchestrator with the record-rejection-rca capability.
+Preflight the file with `liza validate-payload record-rejection-rca --payload <file>`
+and read result.diagnostics on INVALID_INPUT.
+Usage:
+liza record-rejection-rca <task-id> --rca-file <file> [flags]
+Flags:
+--agent-id string agent identifier (overrides LIZA_AGENT_ID env var; legacy env alias is also accepted)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+-h, --help help for record-rejection-rca
+--json output result as structured JSON
+--rca-file string path to the JSON rejection RCA request
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

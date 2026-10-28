@@ -1,0 +1,169 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    provider_reservations:
+      - provider_task: cp-p
+        transition: code-plan-to-coding
+  - id: cp-p
+    type: planning
+    role_pair: code-planning-pair
+    description: Fixture cp-p
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODING_PLAN
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1, cp-p]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <INSTANT Z>
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+    provider_reservations:
+      - provider_task: cp-p
+        transition: code-plan-to-coding
+  - id: cp-p
+    type: planning
+    role_pair: code-planning-pair
+    description: Fixture cp-p
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODING_PLAN
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <INSTANT Z>
+    iteration: 1
+    history: []
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: <INSTANT Z>
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1, cp-p]
+    stretch: []
+  timeline:
+    started: <INSTANT Z>
+    deadline: <INSTANT Z>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <INSTANT Z>
+  status: OK
+  history: []
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING
+# written files

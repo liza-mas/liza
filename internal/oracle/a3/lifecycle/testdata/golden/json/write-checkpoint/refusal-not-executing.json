@@ -1,0 +1,16 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "validation",
+          "message": "task task-1 is not in an executing state (current status: BLOCKED)"
+        },
+        "ok": false,
+        "result": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+exit_code: 1
+--- stdout
+--- stderr
+outcome: STATE_CHANGED
+safe_action: requery
+task_status: SUPERSEDED
+effects: none
+task_id: p1
+transition_id: <DIGEST 1>
+Error: repair superseded dependencies: repair-superseded-dependencies: STATE_CHANGED (safe_action=requery): failed to repair superseded dependencies: modification function failed: repair-superseded-dependencies: STATE_CHANGED (safe_action=requery): validation failed: task p1 has no illegal downstream dependencies

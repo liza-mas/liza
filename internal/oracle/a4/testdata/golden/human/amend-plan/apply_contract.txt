@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Plan arch-a: correction arch-a-amend-1 (changed: true)
+--- stderr

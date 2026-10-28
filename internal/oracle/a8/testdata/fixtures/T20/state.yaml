@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "pipeline_version": 3,
+  "goal": {
+    "id": "goal",
+    "description": "Fixture goal",
+    "spec_ref": "specs/goal.md",
+    "entry_point": "functional-spec",
+    "status": "IN_PROGRESS",
+    "created": "2026-01-02T03:04:05Z",
+    "base_commit": "<base>",
+    "integration": {
+      "contributing_set": {
+        "scopes": [
+          {
+            "plan_task_id": "plan",
+            "root_task_ids": [
+              "code"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "tasks": [
+    {
+      "id": "task",
+      "role_pair": "integration-pair",
+      "status": "REVIEWING_INTEGRATION_ANALYSIS",
+      "description": "Fixture task",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [],
+      "iteration": 1,
+      "assigned_to": "integration-analyst-1",
+      "worktree": ".",
+      "base_commit": "<base>",
+      "review_commit": "<review>",
+      "reviewing_by": "integration-reviewer-1",
+      "integration_analysis": {
+        "key": "global:1",
+        "phase": "global",
+        "generation": 1,
+        "source_commit": "<review>"
+      }
+    },
+    {
+      "id": "plan",
+      "role_pair": "code-planning-pair",
+      "status": "MERGED",
+      "description": "Fixture plan",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [],
+      "iteration": 1
+    },
+    {
+      "id": "code",
+      "role_pair": "coding-pair",
+      "status": "MERGED",
+      "description": "Fixture code",
+      "done_when": "Fixture acceptance",
+      "scope": "Fixture scope",
+      "spec_ref": "specs/goal.md",
+      "created": "2026-01-02T03:04:05Z",
+      "history": [],
+      "iteration": 1,
+      "base_commit": "<base>",
+      "review_commit": "<review>",
+      "merge_commit": "<review>",
+      "parent_tasks": [
+        "plan"
+      ]
+    }
+  ],
+  "agents": {},
+  "discovered": [],
+  "human_notes": [],
+  "spec_changes": [],
+  "anomalies": [],
+  "sprint": {
+    "id": "sprint-1",
+    "number": 1,
+    "status": "IN_PROGRESS",
+    "scope": {
+      "planned": [
+        "task"
+      ]
+    }
+  },
+  "config": {
+    "integration_branch": "fixture-integration",
+    "scip_search": [
+      "go"
+    ],
+    "default_doer_cli": "claude",
+    "default_reviewer_cli": "codex",
+    "agent_tools": {
+      "claude": {
+        "validation_execution": "local"
+      },
+      "codex": {
+        "validation_execution": "local"
+      }
+    },
+    "runtime_input_registry": "config/runtime-inputs.yaml"
+  }
+}

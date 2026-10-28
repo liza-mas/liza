@@ -88,7 +88,7 @@ func validatePlanAmendment(v *violations, task *models.Task, state *models.State
 		if pending != nil && (pending.AmendmentMode == models.PlanAmendmentContract || expanded && pending.AmendmentMode != "") && task.EffectiveType() != models.TaskTypeArchitecture {
 			v.add(fmt.Errorf("task %s expanded contract amendment requires architecture type", task.ID))
 		}
-		if pending != nil && pending.AmendmentMode == "" && expanded || task.PlanHandoffRetired() || task.TransitionsExecuted["replanned"] || task.PlanCheckVerdictOf() == models.PlanCheckPassed {
+		if pending != nil && pending.AmendmentMode == "" && expanded || task.PlanHandoffRetired() || task.TransitionsExecuted[models.ReplannedTransition] || task.PlanCheckVerdictOf() == models.PlanCheckPassed {
 			v.add(fmt.Errorf("task %s pending amendment requires an unused original without a pass or retirement", task.ID))
 		}
 	}

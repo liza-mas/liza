@@ -20,7 +20,7 @@ func TestInspectPlanningChangesUsesCurrentLogicalCreationRecords(t *testing.T) {
 	// still show the new work without requiring a metrics-update mutation.
 	state.Sprint.Metrics.PlanningChanges = models.PlanningChangeMetrics{UnknownAttribution: 99}
 	for _, format := range []string{"json", "yaml", "value"} {
-		output, err := inspectMetrics(state, inspectMetricsOptions{Format: format, ProjectRoot: t.TempDir()})
+		output, err := inspectMetrics(state, inspectMetricsOptions{Format: inspectFormat(format), ProjectRoot: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}

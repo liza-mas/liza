@@ -1,0 +1,11 @@
+exit 1
+stdout:
+stderr:
+outcome: STALE_CALLER
+safe_action: stop
+task_status: IMPLEMENTING_CODE
+effects: none
+task_id: task-1
+transition_id: <id-1>
+current_assignee: coder-1
+Error: handoff: handoff: STALE_CALLER (safe_action=stop): failed to initiate handoff: modification function failed: handoff: STALE_CALLER (safe_action=stop): validation failed: task task-1 is not assigned to agent coder-2

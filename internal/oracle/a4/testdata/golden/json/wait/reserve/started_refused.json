@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "writer w1 is IMPLEMENTING_CODE and assigned or leased; placement before a writer that started is no longer possible, so the placement needs a new decision"
+    },
+    "ok": false,
+    "result": null
+  }
+}

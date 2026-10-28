@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "internal",
+    "message": "fixture safe message"
+  },
+  "ok": false,
+  "result": null
+}

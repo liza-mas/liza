@@ -3,18 +3,15 @@ package agent
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/sessionvalidation"
-	"github.com/liza-mas/liza/internal/subprocess"
+	"github.com/liza-mas/liza/internal/providers"
 )
 
 type codexLaunchConfig struct {
@@ -43,194 +40,33 @@ func NewDefaultCLIExecutor(outputsDir string) *CLIAgent {
 	return NewCLIAgent(outputsDir)
 }
 
-// emitCLIAgentUsage publishes this run's provider usage. The CLI transport
-// reports no usage object, so the empty value is emitted explicitly on every
-// exit path: the supervisor sink then pins unknown provenance instead of
-// inferring zero tokens from a missing event.
-func emitCLIAgentUsage(ctx context.Context, sink LLMAgentEventSink, base LLMAgentEvent) {
-	event := base
-	event.Kind = LLMAgentEventUsage
-	event.Payload = map[string]any{"usage": LLMAgentUsage{}}
-	emitLLMAgentEvent(ctx, sink, event)
-}
-
 func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRunResult, error) {
-	cliName := req.BackendName
-	agentID := req.AgentID
-	prompt := req.Prompt
-	projectRoot := req.ProjectRoot
-	runtimeConfig := req.RuntimeConfig
 	_ = req.AdditionalDirs // CLI execution does not use this; ACP implementations may.
 	eventBase := LLMAgentEvent{
-		BackendName: cliName,
-		AgentID:     agentID,
+		BackendName: req.BackendName,
+		AgentID:     req.AgentID,
 		TaskID:      req.TaskID,
 		SessionID:   req.SessionID,
 	}
-	cmd, cleanup, err := d.buildRunCommand(ctx, LLMAgentRunRequest{
-		BackendName:    cliName,
-		AgentID:        agentID,
-		Generation:     req.Generation,
-		TaskID:         req.TaskID,
-		SessionID:      req.SessionID,
-		ProfileName:    req.ProfileName,
-		ProfileVars:    req.ProfileVars,
-		Model:          req.Model,
-		Prompt:         prompt,
-		PromptFile:     req.PromptFile,
-		ProjectRoot:    projectRoot,
-		AdditionalDirs: req.AdditionalDirs,
-		RuntimeConfig:  runtimeConfig,
-		EventSink:      req.EventSink,
-		LaunchGate:     req.LaunchGate,
-		Environment:    req.Environment,
-		SessionScope:   req.SessionScope,
-	})
+	cmd, cleanup, err := d.buildRunCommand(ctx, req)
 	if err != nil {
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
+		return failCLIRun(ctx, req, eventBase, err)
 	}
 	defer cleanup()
 
-	var stdoutBuf, stderrBuf strings.Builder
-	var stdoutLog, stderrLog *streamingOutputFile
-	outputEventsReady := make(chan struct{})
-	progress := executionProgressCallback(ctx)
-	if d.outputsDir != "" {
-		timestamp := time.Now().UTC().Format("20060102-150405")
-		stdoutLog = newStreamingOutputFile(d.outputsDir, agentID, "txt", timestamp, d.masker)
-		stderrLog = newStreamingOutputFile(d.outputsDir, agentID, "err", timestamp, d.masker)
-		stdoutWriters := []io.Writer{os.Stdout, &stdoutBuf, stdoutLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}}
-		stderrWriters := []io.Writer{os.Stderr, &stderrBuf, stderrLog, llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}}
-		if progress != nil {
-			pw := progressWriter{mark: progress}
-			stdoutWriters = append(stdoutWriters, pw)
-			stderrWriters = append(stderrWriters, pw)
-		}
-		cmd.Stdout = io.MultiWriter(stdoutWriters...)
-		cmd.Stderr = io.MultiWriter(stderrWriters...)
-	} else {
-		stdoutEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stdout", ready: outputEventsReady}
-		stderrEventWriter := llmAgentEventWriter{ctx: ctx, sink: req.EventSink, base: eventBase, stream: "stderr", ready: outputEventsReady}
-		if progress != nil {
-			pw := progressWriter{mark: progress}
-			cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, pw, stdoutEventWriter)
-			cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf, pw, stderrEventWriter)
-		} else {
-			cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, stdoutEventWriter)
-			cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf, stderrEventWriter)
-		}
-	}
+	streams := d.attachRunStreams(ctx, cmd, req, eventBase)
+	defer closeAgentOutputLogs(streams.stdoutLog, streams.stderrLog, req.AgentID)
 
-	defer closeAgentOutputLogs(stdoutLog, stderrLog, agentID)
-
-	err = req.LaunchGate.launch(ctx, cmd.Start)
-	if err != nil {
-		close(outputEventsReady)
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
+	if err := req.LaunchGate.launch(ctx, cmd.Start); err != nil {
+		close(streams.ready)
+		return failCLIRun(ctx, req, eventBase, err)
 	}
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventStarted,
-		BackendName: cliName,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		SessionID:   req.SessionID,
-		Payload: map[string]any{
-			"mode": "run",
-		},
-	})
-	close(outputEventsReady)
-	err = cmd.Wait()
-	stdout := stdoutBuf.String()
-	stderr := stderrBuf.String()
-	output := stdout + "\n" + stderr
-	if d.masker != nil {
-		output = d.masker.MaskText(output)
-	}
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode := exitErr.ExitCode()
-			emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-			emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-				Kind:        LLMAgentEventCompleted,
-				BackendName: cliName,
-				AgentID:     agentID,
-				TaskID:      req.TaskID,
-				SessionID:   req.SessionID,
-				Payload: map[string]any{
-					"exit_code": exitCode,
-				},
-			})
-			return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
-		}
-		emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     err.Error(),
-			Payload: map[string]any{
-				"error": err.Error(),
-			},
-		})
-		return LLMAgentRunResult{Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, err
-	}
-
-	emitCLIAgentUsage(ctx, req.EventSink, eventBase)
-	// A CLI may print its quota failure and still exit 0. Report it as a failed
-	// session, as the ACPX backend does, so the supervisor's quota path runs.
-	if qe := DetectQuotaExhaustion(output, cliName); qe != nil {
-		emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-			Kind:        LLMAgentEventCompleted,
-			BackendName: cliName,
-			AgentID:     agentID,
-			TaskID:      req.TaskID,
-			SessionID:   req.SessionID,
-			Message:     qe.Message,
-			Payload: map[string]any{
-				"exit_code": 1,
-				"quota":     true,
-			},
-		})
-		return LLMAgentRunResult{ExitCode: 1, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
-	}
-	emitLLMAgentEvent(ctx, req.EventSink, LLMAgentEvent{
-		Kind:        LLMAgentEventCompleted,
-		BackendName: cliName,
-		AgentID:     agentID,
-		TaskID:      req.TaskID,
-		SessionID:   req.SessionID,
-		Payload: map[string]any{
-			"exit_code": 0,
-		},
-	})
-	return LLMAgentRunResult{ExitCode: 0, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}, nil
+	started := eventBase
+	started.Kind = LLMAgentEventStarted
+	started.Payload = map[string]any{llmAgentPayloadMode: llmAgentModeRun}
+	emitLLMAgentEvent(ctx, req.EventSink, started)
+	close(streams.ready)
+	return d.completeRun(ctx, req, eventBase, streams, cmd.Wait())
 }
 
 func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRequest) (int, error) {
@@ -238,7 +74,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	agentID := req.AgentID
 	projectRoot := req.ProjectRoot
 	_ = req.AdditionalDirs // CLI execution does not use this; ACP implementations may.
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      cliName,
 		ProfileName:   req.ProfileName,
 		ProfileVars:   req.ProfileVars,
@@ -252,7 +88,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if err != nil {
 		return 0, err
 	}
-	if plan.Backend != ToolBackendCLI {
+	if plan.Backend != providers.BackendCLI {
 		return 1, fmt.Errorf("interactive mode is not supported by %s", cliName)
 	}
 	cmdEnv, err := resolveLaunchEnvironment(plan, projectRoot, agentID, req.Generation, req.Environment)
@@ -280,7 +116,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 			TaskID:      "",
 			SessionID:   req.SessionID,
 			Payload: map[string]any{
-				"mode": "interactive",
+				llmAgentPayloadMode: llmAgentModeInteractive,
 			},
 		})
 		err = cmd.Wait()
@@ -295,7 +131,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 				TaskID:      "",
 				SessionID:   req.SessionID,
 				Payload: map[string]any{
-					"exit_code": exitCode,
+					llmAgentPayloadExitCode: exitCode,
 				},
 			})
 			return exitCode, nil
@@ -308,7 +144,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 			SessionID:   req.SessionID,
 			Message:     err.Error(),
 			Payload: map[string]any{
-				"error": err.Error(),
+				llmAgentPayloadError: err.Error(),
 			},
 		})
 		return 0, err
@@ -321,38 +157,10 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 		TaskID:      "",
 		SessionID:   req.SessionID,
 		Payload: map[string]any{
-			"exit_code": 0,
+			llmAgentPayloadExitCode: 0,
 		},
 	})
 	return 0, nil
-}
-
-type llmAgentEventWriter struct {
-	ctx    context.Context
-	sink   LLMAgentEventSink
-	base   LLMAgentEvent
-	stream string
-	ready  <-chan struct{}
-}
-
-func (w llmAgentEventWriter) Write(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	// Start activates exec's copy goroutines before its caller can emit Started.
-	// Keep output events behind that successful start observation.
-	if w.ready != nil {
-		<-w.ready
-	}
-	event := w.base
-	event.Kind = LLMAgentEventOutputChunk
-	event.Message = string(p)
-	event.Payload = map[string]any{
-		"stream": w.stream,
-		"bytes":  len(p),
-	}
-	emitLLMAgentEvent(w.ctx, w.sink, event)
-	return len(p), nil
 }
 
 // Execute is the legacy method name.
@@ -381,155 +189,6 @@ func (d *CLIAgent) ExecuteInteractive(ctx context.Context, cliName string, agent
 		AdditionalDirs: additionalDirs,
 		LaunchGate:     immediateLaunchGate,
 	})
-}
-
-func (d *CLIAgent) buildRunCommand(ctx context.Context, req LLMAgentRunRequest) (*exec.Cmd, func(), error) {
-	cmdEnv := req.Environment
-	if cmdEnv == nil {
-		cmdEnv = os.Environ()
-	}
-	disableSubagents := brandedEnvListGateValue(cmdEnv, "DISABLE_CLAUDE_SUBAGENTS") == "1"
-	promptFile := req.PromptFile
-	cleanup := func() {}
-	if promptFile == "" {
-		plan, err := ResolveLaunchPlan(LaunchPlanRequest{
-			ToolName:         req.BackendName,
-			ProfileName:      req.ProfileName,
-			ProfileVars:      req.ProfileVars,
-			Model:            req.Model,
-			Prompt:           req.Prompt,
-			ProjectRoot:      req.ProjectRoot,
-			AgentID:          req.AgentID,
-			TaskID:           req.TaskID,
-			SessionID:        req.SessionID,
-			OutputsDir:       d.outputsDir,
-			RuntimeConfig:    req.RuntimeConfig,
-			DisableSubagents: disableSubagents,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		if plan.UsesPromptFile {
-			file, err := os.CreateTemp("", brand.RuntimeValues().BinaryName+"-agent-prompt-*.md")
-			if err != nil {
-				return nil, nil, fmt.Errorf("create prompt file: %w", err)
-			}
-			promptFile = file.Name()
-			if _, err := file.WriteString(req.Prompt); err != nil {
-				_ = file.Close()
-				_ = os.Remove(promptFile)
-				return nil, nil, fmt.Errorf("write prompt file: %w", err)
-			}
-			if err := file.Close(); err != nil {
-				_ = os.Remove(promptFile)
-				return nil, nil, fmt.Errorf("close prompt file: %w", err)
-			}
-			cleanup = func() {
-				_ = os.Remove(promptFile)
-			}
-		}
-	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
-		ToolName:         req.BackendName,
-		ProfileName:      req.ProfileName,
-		ProfileVars:      req.ProfileVars,
-		Model:            req.Model,
-		Prompt:           req.Prompt,
-		PromptFile:       promptFile,
-		ProjectRoot:      req.ProjectRoot,
-		AgentID:          req.AgentID,
-		TaskID:           req.TaskID,
-		SessionID:        req.SessionID,
-		OutputsDir:       d.outputsDir,
-		RuntimeConfig:    req.RuntimeConfig,
-		DisableSubagents: disableSubagents,
-	})
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	if plan.Backend != ToolBackendCLI {
-		cleanup()
-		return nil, nil, fmt.Errorf("%s is not a CLI backend", req.BackendName)
-	}
-
-	cmdEnv, err = resolveLaunchEnvironment(plan, req.ProjectRoot, req.AgentID, req.Generation, req.Environment)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	cmdEnv = agentTaskEnv(cmdEnv, req.TaskID)
-	if d.masker != nil {
-		d.masker.AddEntries(cmdEnv)
-	}
-
-	var cmd *exec.Cmd
-	if plan.RequiresCodexWrapper {
-		codexConfig := resolveCodexLaunchConfig(req.RuntimeConfig, cmdEnv)
-		base, err := codexCommandContext(ctx, codexConfig.PackageVersion, nil)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		engine, err := os.Executable()
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		native, err := sessionvalidation.LookPath(base.Args[0], req.ProjectRoot, cmdEnv)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		launch, err := prepareCodexToolResultLaunch(req.ProjectRoot, engine, native, base.Args[1:]...)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-		cmd, err = snapshotCommand(ctx, launch.Wrapper, req.ProjectRoot, cmdEnv, plan.Args...)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-	} else {
-		args := append([]string(nil), plan.Args...)
-		executable := plan.Executable
-		if plan.ProviderKey == "claude" || plan.ToolName == "claude" {
-			if lookupDir, absErr := filepath.Abs(req.ProjectRoot); absErr == nil {
-				if resolved, lookErr := sessionvalidation.LookPath(plan.Executable, lookupDir, cmdEnv); lookErr == nil {
-					executable = resolved
-				}
-			}
-			if err := validateClaudeToolResultBoundary(ctx, executable, req.ProjectRoot, args); err != nil {
-				cleanup()
-				return nil, nil, err
-			}
-			engine, err := os.Executable()
-			if err != nil {
-				cleanup()
-				return nil, nil, err
-			}
-			settings, err := ClaudeToolResultSettings(engine, req.ProjectRoot)
-			if err != nil {
-				cleanup()
-				return nil, nil, err
-			}
-			args = append([]string{"--settings", settings}, args...)
-		}
-		cmd, err = snapshotCommand(ctx, executable, req.ProjectRoot, cmdEnv, args...)
-	}
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-
-	cmd.Dir = req.ProjectRoot
-	subprocess.ConfigureCancellation(cmd)
-	if plan.UsesStdin {
-		cmd.Stdin = strings.NewReader(req.Prompt)
-	}
-	cmd.Env = cmdEnv
-	return cmd, cleanup, nil
 }
 
 func resolveCodexLaunchConfig(config models.Config, env []string) codexLaunchConfig {
@@ -679,17 +338,4 @@ func agentTaskEnv(base []string, taskID string) []string {
 		out = append(out, legacyName+"="+taskID)
 	}
 	return out
-}
-
-func closeAgentOutputLogs(stdoutLog, stderrLog *streamingOutputFile, agentID string) {
-	if stdoutLog != nil {
-		if closeErr := stdoutLog.Close(); closeErr != nil {
-			GetLogger().Warn("Failed to stream agent stdout", "error", closeErr, "agent_id", agentID, "ext", "txt")
-		}
-	}
-	if stderrLog != nil {
-		if closeErr := stderrLog.Close(); closeErr != nil {
-			GetLogger().Warn("Failed to stream agent stderr", "error", closeErr, "agent_id", agentID, "ext", "err")
-		}
-	}
 }

@@ -6,15 +6,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 const checkpointSummaryFileName = "checkpoint-summary.md"
@@ -41,20 +44,6 @@ const (
 	checkpointSummaryOutputTailBytes = 4096
 	checkpointSummaryDetailBytes     = 512
 )
-
-// checkpointSummaryScopeLimit bounds the tasks one automatic summary covers.
-// A one-shot summary that reads everything the run produced outgrows any
-// fixed bound (#171).
-const checkpointSummaryScopeLimit = 25
-
-// checkpointSummaryScope is the slice of the run one automatic summary covers:
-// the tasks merged after Since and up to the checkpoint, newest first.
-type checkpointSummaryScope struct {
-	Since   time.Time
-	TaskIDs []string
-	// Omitted counts the tasks merged in the window beyond the limit.
-	Omitted int
-}
 
 // checkpointSummaryRunner is the function used to actually invoke a CLI for
 // the checkpoint-summary skill. It is a package var so tests can substitute
@@ -135,7 +124,7 @@ func waitForCheckpointSummary() {
 // (#171). One runs at a time; while it does, a newer obligation is left
 // unclaimed for a later poll.
 func maybeEmitCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectRoot, roleType string, state *models.State) {
-	if roleType != "orchestrator" || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
+	if roleType != string(roles.RoleTypeOrchestrator) || state == nil || state.PendingCheckpointSummary == nil || bb == nil {
 		return
 	}
 	finish, ok := beginCheckpointSummary()
@@ -143,23 +132,13 @@ func maybeEmitCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectR
 		return
 	}
 
-	var claimed *models.PendingCheckpointSummary
-	var scope checkpointSummaryScope
-	if err := bb.Modify(func(s *models.State) error {
-		// Re-read under the lock: another observation may have claimed it.
-		if s.PendingCheckpointSummary == nil {
-			return nil
-		}
-		claimed = s.PendingCheckpointSummary
-		scope = buildCheckpointSummaryScope(s, claimed)
-		s.PendingCheckpointSummary = nil
-		return nil
-	}); err != nil {
+	claim, err := ops.ClaimCheckpointSummary(bb)
+	if err != nil {
 		finish()
 		GetLogger().Warn("Failed to claim the checkpoint-summary obligation", "error", err)
 		return
 	}
-	if claimed == nil {
+	if claim == nil {
 		finish()
 		return
 	}
@@ -167,45 +146,8 @@ func maybeEmitCheckpointSummary(ctx context.Context, bb *db.Blackboard, projectR
 	cfg := state.Config
 	go func() {
 		defer finish()
-		emitCheckpointSummary(ctx, projectRoot, claimed.Trigger, scope, cfg)
+		emitCheckpointSummary(ctx, projectRoot, claim.Trigger, claim.Scope, cfg)
 	}()
-}
-
-// buildCheckpointSummaryScope selects the tasks whose latest merge falls after
-// the previous checkpoint and no later than this one, newest first. Without a
-// previous checkpoint the window starts at the sprint start.
-func buildCheckpointSummaryScope(state *models.State, pending *models.PendingCheckpointSummary) checkpointSummaryScope {
-	scope := checkpointSummaryScope{Since: state.Sprint.Timeline.Started}
-	if pending.Since != nil {
-		scope.Since = *pending.Since
-	}
-	type merge struct {
-		id string
-		at time.Time
-	}
-	var merges []merge
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		for j := len(task.History) - 1; j >= 0; j-- {
-			entry := task.History[j]
-			if entry.Event != models.TaskEventMerged {
-				continue
-			}
-			if entry.Time.After(scope.Since) && !entry.Time.After(pending.At) {
-				merges = append(merges, merge{id: task.ID, at: entry.Time})
-			}
-			break
-		}
-	}
-	sort.SliceStable(merges, func(a, b int) bool { return merges[a].at.After(merges[b].at) })
-	for i, m := range merges {
-		if i == checkpointSummaryScopeLimit {
-			scope.Omitted = len(merges) - i
-			break
-		}
-		scope.TaskIDs = append(scope.TaskIDs, m.id)
-	}
-	return scope
 }
 
 // emitCheckpointSummary runs the checkpoint-summary skill against the project
@@ -223,7 +165,7 @@ func buildCheckpointSummaryScope(state *models.State, pending *models.PendingChe
 //   - CLI is the orchestrator's, resolved through ResolveDefaultCLIForRole
 //     (doer config > doer env > global config > env > const), so the summary
 //     runs on the provider the run already uses (D-57)
-func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger string, scope checkpointSummaryScope, cfg models.Config) {
+func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger string, scope ops.CheckpointSummaryScope, cfg models.Config) {
 	logger := GetLogger()
 
 	if cfg.AutoCheckpointSummary != nil && !*cfg.AutoCheckpointSummary {
@@ -231,7 +173,7 @@ func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger stri
 		return
 	}
 
-	cliName := ResolveDefaultCLIForRole("orchestrator", cliResolutionConfig(cfg))
+	cliName := agentlaunch.ResolveDefaultCLIForRole("orchestrator", agentlaunch.CLIResolutionConfigOf(cfg))
 	prompt := buildCheckpointSummaryPrompt(trigger, scope)
 
 	if err := checkpointSummaryRunner(ctx, projectRoot, cliName, prompt, cfg); err != nil {
@@ -244,7 +186,7 @@ func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger stri
 		if alertErr := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
 			Timestamp: time.Now().UTC(),
 			Level:     alerts.AlertLevelWarning,
-			Category:  "CHECKPOINT SUMMARY FAILED",
+			Category:  alertCategoryCheckpointSummaryFailed,
 			Message:   fmt.Sprintf("%s not written (cli %s): %v; run the checkpoint-summary skill manually", checkpointSummaryRelPath(), cliName, err),
 		}); alertErr != nil {
 			logger.Warn("Failed to alert on checkpoint-summary failure", "error", alertErr)
@@ -269,7 +211,7 @@ func emitCheckpointSummary(ctx context.Context, projectRoot string, trigger stri
 // The scope and the one-turn rule bound the run: a summary told to read every
 // artifact of the run delegated the reading to subagents and ended its turn
 // before writing (#171).
-func buildCheckpointSummaryPrompt(trigger string, scope checkpointSummaryScope) string {
+func buildCheckpointSummaryPrompt(trigger string, scope ops.CheckpointSummaryScope) string {
 	occasion := "the sprint just reached a checkpoint"
 	if trigger != "" {
 		occasion = fmt.Sprintf("the sprint just reached a checkpoint (trigger: %s)", trigger)
@@ -315,7 +257,7 @@ questions.
 func runCheckpointSummaryCLI(parent context.Context, projectRoot, cliName, prompt string, cfg models.Config) error {
 	reportRelPath := checkpointSummaryRelPath()
 	reportPath := filepath.Join(projectRoot, filepath.FromSlash(reportRelPath))
-	if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(reportPath), runtimeDirMode); err != nil {
 		return fmt.Errorf("failed to prepare checkpoint-summary directory: %w", err)
 	}
 
@@ -432,19 +374,19 @@ func checkpointSummaryCLICommand(
 // catalog, the same source normal agent runs use, so every configured CLI can
 // emit a summary. An ACP tool runs through its CLI counterpart: a summary is a
 // single prompt and needs no ACP session.
-func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config) (LaunchPlan, error) {
+func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models.Config) (agentlaunch.LaunchPlan, error) {
 	if cliName == "vibe" {
 		cliName = "mistral"
 	}
-	registry := AgentToolRegistry(cfg)
-	if tool, ok := registry[cliName]; ok && tool.Backend == ToolBackendACPX {
-		counterpart := acpxAgentNameFromTool(cliName)
-		if cliTool, ok := registry[counterpart]; !ok || cliTool.Backend == ToolBackendACPX {
-			return LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
+	registry := agentlaunch.AgentToolRegistry(cfg)
+	if tool, ok := registry[cliName]; ok && providers.Backend(tool.Backend) == providers.BackendACPX {
+		counterpart := agentlaunch.ACPXAgentName(cliName)
+		if cliTool, ok := registry[counterpart]; !ok || providers.Backend(cliTool.Backend) == providers.BackendACPX {
+			return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: ACP tool %q has no CLI counterpart", cliName)
 		}
 		cliName = counterpart
 	}
-	plan, err := ResolveLaunchPlan(LaunchPlanRequest{
+	plan, err := agentlaunch.ResolveLaunchPlan(agentlaunch.LaunchPlanRequest{
 		ToolName:      cliName,
 		Prompt:        prompt,
 		ProjectRoot:   projectRoot,
@@ -454,10 +396,10 @@ func checkpointSummaryLaunchPlan(projectRoot, cliName, prompt string, cfg models
 		DisableSubagents: true,
 	})
 	if err != nil {
-		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
+		return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: %w", err)
 	}
 	if plan.UsesPromptFile {
-		return LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
+		return agentlaunch.LaunchPlan{}, fmt.Errorf("checkpoint-summary: prompt-file transport of %q is not supported", cliName)
 	}
 	return plan, nil
 }

@@ -1,0 +1,20 @@
+{
+  "id": "T07",
+  "role": "architect",
+  "role_pair": "architecture-main-pair",
+  "agent_id": "architect-1",
+  "task_id": "task",
+  "expected_wake_trigger": "",
+  "gates": false,
+  "initial_task": "",
+  "markers": [
+    "=== MASTER DECOMPOSITION MANDATE ===",
+    "=== PARENT TASKS (1) ===",
+    "PreCommitConfigExists = false"
+  ],
+  "commits": [
+    "base",
+    "review"
+  ],
+  "integration_branch": "fixture-integration"
+}

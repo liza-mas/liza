@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+--- stderr
+'cmux' 'new-workspace' '--name' 'oracle-workspace' '--cwd' '<PROJECT>' '--command' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'orchestrator'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'right' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'architect'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-1-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'down' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'architecture-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-2-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'right' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-3-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-planner'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-3-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'down' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-4-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-plan-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-4-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'right' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-5-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'coder'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-5-from-new-pane-output>' 'enter'
+'cmux' 'new-pane' '--type' 'terminal' '--direction' 'down' '--workspace' '<workspace-ref-from-new-workspace-output>'
+'cmux' 'send' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-6-from-new-pane-output>' ''"'"'liza'"'"' '"'"'agent'"'"' '"'"'code-reviewer'"'"' '"'"'--cli'"'"' '"'"'codex'"'"''
+'cmux' 'send-key' '--workspace' '<workspace-ref-from-new-workspace-output>' '--surface' '<surface-ref-6-from-new-pane-output>' 'enter'
+--- invocations
+none

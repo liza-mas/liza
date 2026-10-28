@@ -1,0 +1,72 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "assigned_to": "coder-1",
+        "attempt": 1,
+        "id": "task-executing",
+        "lease_expires": "<REL>",
+        "output_count": 1,
+        "priority": 1,
+        "rejection_reason": "First review requested a concrete example",
+        "role_pair": "coding-pair",
+        "status": "IMPLEMENTING_CODE",
+        "transition_id": "<ID>"
+      },
+      {
+        "attempt": 1,
+        "id": "task-review",
+        "priority": 1,
+        "reviewing_by": "code-reviewer-1",
+        "role_pair": "coding-pair",
+        "status": "REVIEWING_CODE",
+        "transition_id": "<ID>"
+      },
+      {
+        "attempt": 1,
+        "blocked_questions": [
+          "When is the dependency available?"
+        ],
+        "blocked_reason": "Waiting for fixture dependency",
+        "depends_on": [
+          "task-executing"
+        ],
+        "id": "task-blocked",
+        "priority": 1,
+        "role_pair": "coding-pair",
+        "status": "BLOCKED",
+        "transition_id": "<ID>",
+        "waiting_on": {
+          "heads": [
+            {
+              "claimable": false,
+              "id": "task-executing",
+              "reason": "unsatisfied_pending",
+              "status": "IMPLEMENTING_CODE"
+            }
+          ],
+          "unmet": [
+            {
+              "blocking": [
+                "task-executing"
+              ],
+              "dependency": "task-executing",
+              "kind": "unsatisfied_pending"
+            }
+          ]
+        }
+      },
+      {
+        "attempt": 1,
+        "id": "task-approved",
+        "priority": 1,
+        "role_pair": "architecture-pair",
+        "status": "ARCHITECTURE_APPROVED",
+        "transition_id": "<ID>"
+      }
+    ]
+  }
+}

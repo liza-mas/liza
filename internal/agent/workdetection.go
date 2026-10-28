@@ -246,7 +246,7 @@ func projectIntegrationWakeResult(projection prompts.EffectiveIntegrationComplet
 		WakeTriggerIntegrationUnavailable:
 	default:
 		projection = prompts.ProjectEffectiveIntegrationCompletion(
-			ops.IntegrationProgressDecision{},
+			models.IntegrationProgressDecision{},
 			nil,
 			fmt.Errorf("unknown integration wake projection %q", projection.WakeTrigger),
 		)
@@ -255,7 +255,7 @@ func projectIntegrationWakeResult(projection prompts.EffectiveIntegrationComplet
 	if count == 0 {
 		count = len(projection.TaskIDs)
 	}
-	if projection.Status == "complete" {
+	if projection.Status == prompts.IntegrationViewComplete {
 		count = plannedCount
 	} else if count == 0 {
 		count = 1
@@ -270,7 +270,7 @@ func projectIntegrationWakeResult(projection prompts.EffectiveIntegrationComplet
 func countImmediateDiscoveries(state *models.State) int {
 	count := 0
 	for _, disc := range state.Discovered {
-		if disc.Urgency == "immediate" && disc.ConvertedToTask == nil {
+		if disc.Urgency == models.DiscoveryUrgencyImmediate && disc.ConvertedToTask == nil {
 			count++
 		}
 	}

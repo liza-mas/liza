@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "a deferred-validation runner holds the lock; it is live and cannot be settled"
+    },
+    "ok": false,
+    "result": null
+  }
+}

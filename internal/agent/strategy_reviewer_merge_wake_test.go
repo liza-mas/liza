@@ -159,12 +159,12 @@ func TestReviewerPreWork_PendingMergeStallRecordsAnomaly(t *testing.T) {
 	}
 	var found *models.Anomaly
 	for i := range state.Anomalies {
-		if state.Anomalies[i].Type == pendingMergeStallAnomalyType && state.Anomalies[i].Reporter == config.AgentID {
+		if state.Anomalies[i].Type == models.AnomalyTypePendingMergeStalled && state.Anomalies[i].Reporter == config.AgentID {
 			found = &state.Anomalies[i]
 		}
 	}
 	if found == nil {
-		t.Fatalf("no %s anomaly recorded; anomalies = %+v", pendingMergeStallAnomalyType, state.Anomalies)
+		t.Fatalf("no %s anomaly recorded; anomalies = %+v", models.AnomalyTypePendingMergeStalled, state.Anomalies)
 	}
 	if !found.IsValidType() {
 		t.Errorf("anomaly type %q is not accepted by the state model", found.Type)

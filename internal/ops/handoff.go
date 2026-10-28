@@ -9,7 +9,11 @@ import (
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/pipeline"
 )
+
+// handoffOperation names the handoff operation.
+const handoffOperation = "handoff"
 
 // HandoffResult contains the outcome of a successful handoff initiation.
 type HandoffResult struct {
@@ -44,18 +48,18 @@ type HandoffInput struct {
 // the initiating agent to HANDOFF status. No terminal I/O.
 func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	if input == nil {
-		return nil, WrapLifecycleError("handoff", nil, fmt.Errorf("handoff input is required"), models.LifecycleInvalidInput, "correct_input", "none")
+		return nil, WrapLifecycleError(handoffOperation, nil, fmt.Errorf("handoff input is required"), models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 	}
 	invocation := NewLifecycleInvocation(input.ProjectRoot)
 	var observed *models.Task
 	defer func() {
-		retErr = WrapLifecycleError("handoff", observed, retErr, models.LifecycleInvalidInput, "correct_input", "none")
+		retErr = WrapLifecycleError(handoffOperation, observed, retErr, models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput, LifecycleEffectsNone)
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
 		if result != nil {
 			outcome, warnings = result.LifecycleOutcome, &result.Warnings
 		}
-		invocation.FinishResult("handoff", outcome, &retErr, warnings)
+		invocation.FinishResult(handoffOperation, outcome, &retErr, warnings)
 	}()
 	if err := ValidateLifecycleRequestOptions(input.Request); err != nil {
 		return nil, err
@@ -65,7 +69,7 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	}
 	// Structural validation first: a malformed payload is rejected before the
 	// boundary opens the blackboard or reads state.
-	if err := rejectInvalidLifecyclePayload("handoff", HandoffPayload(input)); err != nil {
+	if err := rejectInvalidLifecyclePayload(handoffOperation, HandoffPayload(input)); err != nil {
 		return nil, err
 	}
 	agentID, err := lifecycleAgentID(input.AgentID, input.Authority)
@@ -89,89 +93,21 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 	if resolverErr != nil {
 		return nil, fmt.Errorf("failed to load pipeline config: %w", resolverErr)
 	}
-	var pipelineExecuting []models.TaskStatus
-	for _, rpName := range resolver.RolePairNames() {
-		if es, err := resolver.ExecutingStatus(rpName); err == nil {
-			pipelineExecuting = append(pipelineExecuting, es)
-		}
-	}
+	pipelineExecuting := handoffExecutingStatuses(resolver)
 
 	// Build HandoffEvent with backward-compat mapping
 	succeeded := input.Succeeded
 	if len(succeeded) == 0 {
 		succeeded = []string{input.Summary}
 	}
+	run := handoffRun{input: input, agentID: agentID, runtimeRole: runtimeRole, succeeded: succeeded, pipelineExecuting: pipelineExecuting, now: now}
 
 	if handoffBeforeModifyTestHook != nil {
 		handoffBeforeModifyTestHook()
 	}
 	var outcome models.LifecycleOutcome
 	err = modifyLifecycleState(bb, input.Authority, func(state *models.State) error {
-		task := state.FindTask(input.TaskID)
-		if task == nil {
-			return &errors.NotFoundError{Entity: "task", ID: input.TaskID}
-		}
-		observed = task
-		payload := struct {
-			Summary, NextAction, Hypothesis       string
-			Succeeded, Failed, KeyFiles, DeadEnds []string
-		}{input.Summary, input.NextAction, input.Hypothesis, succeeded, input.Failed, input.KeyFiles, input.DeadEnds}
-		request, err := NewLifecycleRequest("handoff", task, agentID, input.Authority, input.Request, payload)
-		if err != nil {
-			return err
-		}
-		receipt, err := CheckLifecycleRequest(task, request, state.Agents)
-		if err != nil {
-			return err
-		}
-		if receipt != nil {
-			outcome = LifecycleReplayOutcome(task, receipt, agentID)
-			return errLifecycleReplay
-		}
-
-		if !isExecutingStatus(task.Status, pipelineExecuting) {
-			return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			return WrapLifecycleError("handoff", task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}, models.LifecycleStaleCaller, "stop", "none")
-		}
-		if task.HandoffPending {
-			return WrapLifecycleError("handoff", task, fmt.Errorf("handoff is already pending"), models.LifecycleAlreadyTransitioned, "stop", "none")
-		}
-
-		task.HandoffPending = true
-		note := fmt.Sprintf("summary: %s | next_action: %s", input.Summary, input.NextAction)
-		task.History = append(task.History, models.TaskHistoryEntry{
-			Time:  now,
-			Event: models.TaskEventHandoffInitiated,
-			Agent: &agentID,
-			Note:  &note,
-		})
-
-		task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
-			Timestamp:  now,
-			Agent:      agentID,
-			Trigger:    models.HandoffTriggerContextExhaustion,
-			Succeeded:  succeeded,
-			Failed:     input.Failed,
-			Hypothesis: input.Hypothesis,
-			NextStep:   input.NextAction,
-			KeyFiles:   input.KeyFiles,
-			DeadEnds:   input.DeadEnds,
-		})
-
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			agent = models.Agent{Role: runtimeRole}
-		}
-		agent.Status = models.AgentStatusHandoff
-		agent.CurrentTask = &input.TaskID
-		agent.Heartbeat = now
-		state.Agents[agentID] = agent
-
-		outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
-		return err
+		return handoffTransaction(state, run, &observed, &outcome)
 	})
 	if err != nil && !isLifecycleReplay(err) {
 		return nil, fmt.Errorf("failed to initiate handoff: %w", err)
@@ -185,6 +121,104 @@ func Handoff(input *HandoffInput) (result *HandoffResult, retErr error) {
 }
 
 var handoffBeforeModifyTestHook func()
+
+// handoffRun is the validated input of one handoff, resolved before the state lock.
+type handoffRun struct {
+	input             *HandoffInput
+	agentID           string
+	runtimeRole       string
+	succeeded         []string
+	pipelineExecuting []models.TaskStatus
+	now               time.Time
+}
+
+func handoffExecutingStatuses(resolver *pipeline.Resolver) []models.TaskStatus {
+	var executing []models.TaskStatus
+	for _, rpName := range resolver.RolePairNames() {
+		if es, err := resolver.ExecutingStatus(rpName); err == nil {
+			executing = append(executing, es)
+		}
+	}
+	return executing
+}
+
+// handoffTransaction is the one atomic callback: receipt check, status,
+// assignee and pending checks, history, event, agent state and completion.
+func handoffTransaction(state *models.State, run handoffRun, observed **models.Task, outcome *models.LifecycleOutcome) error {
+	input, agentID := run.input, run.agentID
+	task := state.FindTask(input.TaskID)
+	if task == nil {
+		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: input.TaskID}
+	}
+	*observed = task
+	payload := struct {
+		Summary, NextAction, Hypothesis       string
+		Succeeded, Failed, KeyFiles, DeadEnds []string
+	}{input.Summary, input.NextAction, input.Hypothesis, run.succeeded, input.Failed, input.KeyFiles, input.DeadEnds}
+	request, err := NewLifecycleRequest(handoffOperation, task, agentID, input.Authority, input.Request, payload)
+	if err != nil {
+		return err
+	}
+	receipt, err := CheckLifecycleRequest(task, request, state.Agents)
+	if err != nil {
+		return err
+	}
+	if receipt != nil {
+		*outcome = LifecycleReplayOutcome(task, receipt, agentID)
+		return errLifecycleReplay
+	}
+
+	if !isExecutingStatus(task.Status, run.pipelineExecuting) {
+		return WrapLifecycleError(handoffOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s is not in an executing status (current status: %s)", input.TaskID, task.Status)}, models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+
+	if task.AssignedTo == nil || *task.AssignedTo != agentID {
+		return WrapLifecycleError(handoffOperation, task, &PreconditionError{Reason: fmt.Sprintf("task %s is not assigned to agent %s", input.TaskID, agentID)}, models.LifecycleStaleCaller, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+	if task.HandoffPending {
+		return WrapLifecycleError(handoffOperation, task, fmt.Errorf("handoff is already pending"), models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
+	}
+
+	handoffRecord(state, task, run)
+
+	*outcome, err = CompleteLifecycleRequest(task, request, models.LifecycleProjection{}, state.Agents)
+	return err
+}
+
+// handoffRecord marks the task pending, appends its history and event, and
+// moves the initiating agent to HANDOFF.
+func handoffRecord(state *models.State, task *models.Task, run handoffRun) {
+	input, agentID, now := run.input, run.agentID, run.now
+	task.HandoffPending = true
+	note := fmt.Sprintf("summary: %s | next_action: %s", input.Summary, input.NextAction)
+	task.History = append(task.History, models.TaskHistoryEntry{
+		Time:  now,
+		Event: models.TaskEventHandoffInitiated,
+		Agent: &agentID,
+		Note:  &note,
+	})
+
+	task.HandoffEvents = append(task.HandoffEvents, models.HandoffEvent{
+		Timestamp:  now,
+		Agent:      agentID,
+		Trigger:    models.HandoffTriggerContextExhaustion,
+		Succeeded:  run.succeeded,
+		Failed:     input.Failed,
+		Hypothesis: input.Hypothesis,
+		NextStep:   input.NextAction,
+		KeyFiles:   input.KeyFiles,
+		DeadEnds:   input.DeadEnds,
+	})
+
+	agent, exists := state.Agents[agentID]
+	if !exists {
+		agent = models.Agent{Role: run.runtimeRole}
+	}
+	agent.Status = models.AgentStatusHandoff
+	agent.CurrentTask = &input.TaskID
+	agent.Heartbeat = now
+	state.Agents[agentID] = agent
+}
 
 // HandoffPayload builds the canonical object of the handoff operation. The
 // preflight command and this mutation boundary validate the same object

@@ -1,0 +1,25 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "effects": "committed",
+          "operation": "release-claim",
+          "outcome": "COMPLETED",
+          "released_doer": true,
+          "released_reviewer": false,
+          "role": "doer",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "DRAFT_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+roles:
+  code-reviewer:
+    - {cli: claude, model: m1}
+    - {cli: codex, model: m2}

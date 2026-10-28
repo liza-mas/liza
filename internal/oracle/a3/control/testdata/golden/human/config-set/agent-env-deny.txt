@@ -1,0 +1,4 @@
+exit 0
+[stdout]
+[stderr]
+config.agent_env_deny: set

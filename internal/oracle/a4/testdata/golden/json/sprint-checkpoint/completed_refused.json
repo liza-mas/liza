@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "cannot checkpoint: sprint is COMPLETED"
+    },
+    "ok": false,
+    "result": null
+  }
+}

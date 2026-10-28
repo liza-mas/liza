@@ -182,7 +182,7 @@ func validateNoZombieAgents(state *models.State, projectRoot string, warnings io
 	for _, zombie := range scan.Zombies {
 		role := zombie.Role
 		if role == "" {
-			role = "unknown"
+			role = unknownRoleLabel
 		}
 		parts = append(parts, fmt.Sprintf("pid %d role %s", zombie.PID, role))
 	}
@@ -223,7 +223,7 @@ func writeUnknownScopeWarning(w io.Writer, processes []procscan.AgentProcess) {
 	for _, process := range processes {
 		role := process.Role
 		if role == "" {
-			role = "unknown"
+			role = unknownRoleLabel
 		}
 		reason := process.Reason
 		if reason == "" {

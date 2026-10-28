@@ -1119,12 +1119,12 @@ func validRejectionRCARequest() models.RejectionRCARequest {
 		Contributions: []models.RejectionRCAContribution{
 			{
 				RejectionIndex: 1,
-				Categories:     []string{models.RejectionCauseProductDefect},
+				Categories:     []models.RejectionCause{models.RejectionCauseProductDefect},
 				Evidence:       []string{"review-1: identity scalar mismatch"},
 			},
 			{
 				RejectionIndex: 2,
-				Categories:     []string{models.RejectionCauseCapabilityFailure},
+				Categories:     []models.RejectionCause{models.RejectionCauseCapabilityFailure},
 				Evidence:       []string{"review-2: no real Postgres available"},
 			},
 		},
@@ -1216,7 +1216,7 @@ func TestValidateRejectionRCARequestDiagnostics(t *testing.T) {
 				for i := 1; i <= 33; i++ {
 					r.Contributions = append(r.Contributions, models.RejectionRCAContribution{
 						RejectionIndex: i,
-						Categories:     []string{models.RejectionCauseProductDefect},
+						Categories:     []models.RejectionCause{models.RejectionCauseProductDefect},
 					})
 				}
 			},
@@ -1248,7 +1248,7 @@ func TestValidateRejectionRCARequestDiagnostics(t *testing.T) {
 		{
 			name: "too many categories",
 			mutate: func(r *models.RejectionRCARequest) {
-				r.Contributions[0].Categories = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
+				r.Contributions[0].Categories = []models.RejectionCause{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
 			},
 			field:      "/contributions/0/categories",
 			constraint: "8",
@@ -1256,14 +1256,16 @@ func TestValidateRejectionRCARequestDiagnostics(t *testing.T) {
 		},
 		{
 			name:       "blank category entry",
-			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = []string{"  "} },
+			mutate:     func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = []models.RejectionCause{"  "} },
 			field:      "/contributions/0/categories/0",
 			constraint: "required",
 			valueClass: models.FieldValueClassMissing,
 		},
 		{
-			name:          "oversized category entry",
-			mutate:        func(r *models.RejectionRCARequest) { r.Contributions[0].Categories = []string{oversizedCategory} },
+			name: "oversized category entry",
+			mutate: func(r *models.RejectionRCARequest) {
+				r.Contributions[0].Categories = []models.RejectionCause{models.RejectionCause(oversizedCategory)}
+			},
 			field:         "/contributions/0/categories/0",
 			constraint:    "64",
 			valueClass:    models.FieldValueClassOversized,
@@ -1311,7 +1313,7 @@ func TestValidateRejectionRCARequestDiagnostics(t *testing.T) {
 
 	t.Run("unrecognized cause is structurally valid", func(t *testing.T) {
 		request := validRejectionRCARequest()
-		request.Contributions[0].Categories = []string{"toolchain_drift"}
+		request.Contributions[0].Categories = []models.RejectionCause{"toolchain_drift"}
 		if diagnostics := ValidateRejectionRCARequest(request); diagnostics != nil {
 			t.Fatalf("ValidateRejectionRCARequest() = %+v, want nil for an extensible cause", diagnostics)
 		}
@@ -1393,7 +1395,7 @@ func TestValidateRejectionRCADispositionRequestDiagnostics(t *testing.T) {
 	}
 
 	t.Run("every recovery path is accepted", func(t *testing.T) {
-		for _, path := range []string{
+		for _, path := range []models.RecoveryPath{
 			models.RecoveryImplementationCorrection,
 			models.RecoveryCapabilityReroute,
 			models.RecoveryLifecycleRepair,
@@ -1414,9 +1416,10 @@ func TestValidateVerdictPayloadShapeDiagnostics(t *testing.T) {
 	oversizedReason := strings.Repeat("x", 4097)
 
 	cases := []struct {
-		name                                                string
-		taskID, verdict, reason, agentID, impact, reviewSHA string
-		field, constraint, valueClass, rejectedValue        string
+		name                                         string
+		taskID, verdict, reason, agentID, reviewSHA  string
+		impact                                       pipeline.ReviewImpact
+		field, constraint, valueClass, rejectedValue string
 	}{
 		{
 			name: "missing task id", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit,
@@ -1457,11 +1460,15 @@ func TestValidateVerdictPayloadShapeDiagnostics(t *testing.T) {
 
 	t.Run("valid payloads", func(t *testing.T) {
 		valid := []struct {
-			name                                                string
-			taskID, verdict, reason, agentID, impact, reviewSHA string
+			name                                        string
+			taskID, verdict, reason, agentID, reviewSHA string
+			impact                                      pipeline.ReviewImpact
 		}{
 			{name: "approved", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", reviewSHA: reviewCommit},
 			{name: "rejected with reason", taskID: "task-1", verdict: "REJECTED", reason: "identity mismatch", agentID: "code-reviewer-1", impact: "significant", reviewSHA: reviewCommit},
+			{name: "standard impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactStandard, reviewSHA: reviewCommit},
+			{name: "significant impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactSignificant, reviewSHA: reviewCommit},
+			{name: "architecture impact constant", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1", impact: pipeline.ReviewImpactArchitecture, reviewSHA: reviewCommit},
 			{name: "legacy unauthenticated call without review commit", taskID: "task-1", verdict: "APPROVED", agentID: "code-reviewer-1"},
 		}
 		for _, tc := range valid {

@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "result": {
+    "activation_env": [
+      "LIZA_ENABLE_SCIP_SEARCH=1",
+      "LIZA_ENABLE_STACKLIT=1"
+    ],
+    "agent_tools_path": "<GLOBAL>/AGENT_TOOLS.md",
+    "env_path": "<GLOBAL>/toolchain/env.sh",
+    "install_dir": "<INSTALL>",
+    "profile": "lean",
+    "profile_path": "<GLOBAL>/toolchain/profile.json",
+    "selected_tools": [
+      "ast-grep",
+      "gh",
+      "jq",
+      "mdq",
+      "mdtoc",
+      "pre-commit",
+      "rg",
+      "rtk",
+      "scip-go",
+      "scip-python",
+      "scip-search",
+      "scip-typescript",
+      "stacklit",
+      "yq"
+    ],
+    "toolchain_dir": "<GLOBAL>/toolchain"
+  }
+}

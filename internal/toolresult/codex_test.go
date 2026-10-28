@@ -71,6 +71,9 @@ func TestCodexHookNeverElevatesConstrainedSession(t *testing.T) {
 // other mode: those sessions are either more constrained (an allow rewrite
 // would elevate them) or outside the managed baseline posture.
 func TestCodexHookAcceptsOnlyManagedConfigurationMode(t *testing.T) {
+	if codexManagedPermissionMode != "bypassPermissions" {
+		t.Fatalf("codexManagedPermissionMode = %q, want bypassPermissions", codexManagedPermissionMode)
+	}
 	runner := filepath.Join(t.TempDir(), "engine")
 	if err := os.WriteFile(runner, []byte("#!/bin/sh\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -154,5 +157,42 @@ func TestCodexHookTelemetryMetadata(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("native post telemetry omitted task/agent/role/session")
+	}
+}
+
+func TestCodexHookRefusesUnsupportedEvents(t *testing.T) {
+	for _, event := range []HookEvent{"", "SessionStart", "PostToolUseFailure", "PostToolBatch", "pretooluse"} {
+		input, _ := json.Marshal(map[string]any{"hook_event_name": event, "tool_name": "Bash", "permission_mode": "bypassPermissions", "tool_input": map[string]any{"command": "echo ok"}})
+		data, err := CodexHook(input, "/engine", testStore(t))
+		if err == nil || err.Error() != "unsupported Codex hook event" || data != nil {
+			t.Fatalf("event %q: data=%s err=%v", event, data, err)
+		}
+	}
+}
+
+func TestCodexHookRefusesNonManagedPermissionWithExactText(t *testing.T) {
+	const want = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",` +
+		`"permissionDecisionReason":"The managed tool-result boundary requires the permission mode rendered by the managed Codex configuration."}}`
+	for _, mode := range []string{"", "default", "plan", "BypassPermissions"} {
+		input, _ := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "permission_mode": mode, "tool_input": map[string]any{"command": "echo ok"}})
+		data, err := CodexHook(input, "/engine", testStore(t))
+		if err != nil || string(data) != want {
+			t.Fatalf("mode %q: %s %v", mode, data, err)
+		}
+	}
+}
+
+// Only Bash is rewritten before execution; every other tool, including the
+// Claude-native names, passes through whatever the permission mode is.
+func TestCodexHookPreToolUsePassesThroughOtherTools(t *testing.T) {
+	for _, tool := range []HookTool{HookToolRead, HookToolGrep, HookToolGlob, "apply_patch", "mcp__fixture__read"} {
+		input, _ := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "tool_name": tool, "permission_mode": "default", "tool_input": map[string]any{"path": "a"}})
+		data, err := CodexHook(input, "/engine", testStore(t))
+		if err != nil || string(data) != "{}" {
+			t.Fatalf("tool %q: %s %v", tool, data, err)
+		}
+	}
+	if _, err := CodexHook([]byte(`{"hook_event_name":"PreToolUse","tool_name":""}`), "/engine", testStore(t)); err == nil || err.Error() != "invalid Codex tool hook input" {
+		t.Fatalf("empty tool: %v", err)
 	}
 }

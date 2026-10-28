@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "agent_id": "code-reviewer-1",
+      "blocked_reason": "rejection_rca_required: 4 durable rejections reached the high-churn threshold 4; a classified RCA and a recovery disposition are required before this task is restored",
+      "changed": true,
+      "completed_transition_id": "<ID>",
+      "effects": "committed",
+      "escalated_to_blocked": true,
+      "new_attempt_triggered": false,
+      "operation": "submit-verdict",
+      "outcome": "COMPLETED",
+      "reason": "A5 defect",
+      "rejection_rca_gated": true,
+      "request_id": "verdict-<ID>",
+      "safe_action": "continue",
+      "task_id": "task-1",
+      "task_status": "BLOCKED",
+      "transition_id": "<ID>",
+      "verdict": "REJECTED"
+    }
+  }
+}

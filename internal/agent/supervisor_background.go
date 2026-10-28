@@ -8,6 +8,8 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // backgroundTaskStoppedStatus is the provider's report for a background job
@@ -55,14 +57,14 @@ func detectAbandonedBackgroundTask(output string) *abandonedBackgroundTask {
 
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "task_notification") {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, string(streamTaskNotification)) {
 			continue
 		}
 		var env backgroundTaskEnvelope
 		if err := json.Unmarshal([]byte(line), &env); err != nil {
 			continue
 		}
-		if env.Subtype != "task_notification" || env.TaskID == "" || env.Status == "" {
+		if streamEventKind(env.Subtype) != streamTaskNotification || env.TaskID == "" || env.Status == "" {
 			continue
 		}
 		if _, seen := lastStatus[env.TaskID]; !seen {
@@ -99,7 +101,7 @@ func deliberatelyStoppedTaskIDs(output string) map[string]struct{} {
 	stopped := make(map[string]struct{})
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "tool_result") {
+		if !strings.HasPrefix(line, streamJSONObjectPrefix) || !strings.Contains(line, string(streamToolResult)) {
 			continue
 		}
 		for _, match := range deliberateStopPattern.FindAllStringSubmatch(line, -1) {
@@ -122,7 +124,7 @@ func handleAbandonedBackgroundTaskRetry(
 	taskID string,
 	runtimeConfig models.Config,
 	abandoned abandonedBackgroundTask,
-	released releasedTaskClaim,
+	released ops.ReleasedTaskClaim,
 	backgroundTracker *runtimeFailureTracker,
 	spinTracker *spinningTracker,
 ) bool {
@@ -153,7 +155,7 @@ func handleAbandonedBackgroundTaskRetry(
 			"threshold", threshold)
 		message := fmt.Sprintf("%s's session on %s ended while background job %s (%s) was still running; the provider killed it. Claim preserved for a re-run (%d/%d). Check what the job consumed or left half-applied.",
 			config.AgentID, taskID, abandoned.TaskID, abandoned.Summary, count, threshold)
-		if alertErr := LogAlert(config.ProjectRoot, "⚠️", "ABANDONED BACKGROUND JOB", message); alertErr != nil {
+		if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelWarning, alertCategoryAbandonedBackgroundJob, message); alertErr != nil {
 			GetLogger().Warn("Failed to write abandoned background job alert", "error", alertErr)
 		}
 		return false
@@ -166,7 +168,7 @@ func handleAbandonedBackgroundTaskRetry(
 		"agent_id", config.AgentID,
 		"background_task_id", abandoned.TaskID,
 		"count", count)
-	if alertErr := LogAlert(config.ProjectRoot, "🚨", "ABANDONED BACKGROUND JOB LOOP", reason); alertErr != nil {
+	if alertErr := providersignal.LogAlert(config.ProjectRoot, alertLevelCritical, alertCategoryAbandonedBackgroundLoop, reason); alertErr != nil {
 		GetLogger().Warn("Failed to write abandoned background job alert", "error", alertErr)
 	}
 	if err := blockReleasedTaskFromSupervisor(bb, config.ProjectRoot, taskID, config.Authority, released, reason); err != nil {
@@ -190,7 +192,7 @@ func preserveClaimForBackgroundJob(
 	taskID string,
 	runtimeConfig models.Config,
 	output string,
-	released releasedTaskClaim,
+	released ops.ReleasedTaskClaim,
 	backgroundTracker *runtimeFailureTracker,
 	spinTracker *spinningTracker,
 ) bool {

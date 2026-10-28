@@ -1,0 +1,6 @@
+# before
+provider: codex
+detected: <T1:sZ>
+message: thread/start failed: error creating thread using .codex/sessions
+# after
+

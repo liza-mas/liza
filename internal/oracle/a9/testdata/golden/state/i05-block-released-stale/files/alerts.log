@@ -1,0 +1,4 @@
+# before
+
+# after
+[<T1:sZ>] 🚨 CRASH RESTART LOOP — crash restart loop detected: 2 consecutive crashes for task task-1 without progress (threshold=1, last exit code=1)

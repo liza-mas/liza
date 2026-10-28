@@ -1,0 +1,44 @@
+goal:
+  base_commit: '@BASE@'
+  integration:
+    contributing_set:
+      scopes: []
+config:
+  mode: PAUSED
+tasks:
+  - id: epic
+    type: epic-planning
+    role_pair: epic-planning-pair
+    description: Plan remaining work
+    status: DRAFT_EPIC_PLAN
+    priority: 1
+    spec_ref: README.md
+    done_when: Plan reviewed
+    scope: planning
+    created: 2001-02-03T04:05:06Z
+    history: []
+  - id: integration-global-1
+    type: integration
+    role_pair: integration-pair
+    description: Premature integration analysis
+    status: '@ANALYSIS_STATUS@'
+    priority: 1
+    spec_ref: README.md
+    done_when: Integration analysis reviewed
+    scope: integration
+    created: 2001-02-03T04:05:06Z
+    base_commit: '@BASE@'
+    review_commit: '@REPORT@'
+    worktree: .worktrees/integration-global-1
+    integration_analysis:
+      key: global:1
+      phase: global
+      generation: 1
+      source_commit: '@BASE@'
+    history:
+      - time: 2001-02-03T04:05:06Z
+        event: submitted_for_review
+        commit: '@REPORT@'
+sprint:
+  scope:
+    planned: [epic, integration-global-1]

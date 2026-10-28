@@ -263,12 +263,16 @@ func GetProjectRootFromDir(dir string) (string, error) {
 // git directory in one process; rev-parse prints one line per query, in order.
 // A path containing a line break makes that output ambiguous, so any answer
 // that is not exactly two lines falls back to one query per process.
+// revParseOutputLines is the line count of `git rev-parse --show-toplevel
+// --git-common-dir`: one line per requested value.
+const revParseOutputLines = 2
+
 func gitToplevelAndCommonDir(dir string) (string, string, error) {
 	out, err := gitenv.Output(dir, "rev-parse", "--show-toplevel", "--git-common-dir")
 	if err != nil {
 		return "", "", fmt.Errorf("not a git repository or git command failed: %w", err)
 	}
-	if lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"); len(lines) == 2 {
+	if lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"); len(lines) == revParseOutputLines {
 		return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1]), nil
 	}
 

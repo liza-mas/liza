@@ -1,0 +1,33 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "AgentID": "",
+          "AgentRecovered": false,
+          "AgentRole": "",
+          "BranchRemoved": true,
+          "ClaimReleased": false,
+          "FreshReset": false,
+          "InState": false,
+          "PreservedWorktree": false,
+          "TaskID": "task-9",
+          "Warnings": null,
+          "WorktreeCreated": false,
+          "WorktreeRecovered": false,
+          "WorktreeRemoved": true,
+          "changed": true,
+          "effects": "committed",
+          "operation": "recover-task",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-9",
+          "task_status": "UNKNOWN"
+        }
+      }
+    }
+  ]
+}

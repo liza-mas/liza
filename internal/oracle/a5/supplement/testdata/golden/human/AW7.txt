@@ -1,0 +1,8 @@
+# exit_code
+0
+# stdout
+Verdict: NEW_ATTEMPT
+Status: CODE_REJECTED
+Reason: A5 defect
+Reviewer: code-reviewer-1
+# stderr

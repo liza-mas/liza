@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "mappings": [
+    {"obligation_id": "AC-stdlib-regen", "file": "internal/testhelpers/oracle/import_test.go", "assertion": "TestHarnessImportsStdlibOnly walks all command sources and tests", "command_index": 0},
+    {"obligation_id": "AC-ledger", "file": "internal/testhelpers/oracle/cmd/regen/ledger_test.go", "assertion": "TestLedger rejects malformed shapes including SHA reasons and fourth fields with line numbers", "command_index": 0},
+    {"obligation_id": "AC-change-points", "file": "internal/testhelpers/oracle/cmd/regen/scenario_test.go", "assertion": "TestRegenHistoryChains uses records committed with changes, no-ff merges, and rebased second branches; TestRegenRejectsUnexplained rejects unrecorded, record-only, and merge changes", "command_index": 0},
+    {"obligation_id": "AC-comparison-rule", "file": "internal/testhelpers/oracle/cmd/regen/scenario_test.go", "assertion": "TestRegenHistoryChains and TestRegenRejectsUnexplained prove H1, pre-change and per-point reproduction, last-blob equality and reason/SHA reporting; TestRegenRejectsDeletedChainedGolden refuses a missing chained golden even when its driver emits nothing; TestRegenMissingExtraAndWriteNew proves missing/extra diagnostics", "command_index": 0},
+    {"obligation_id": "AC-materialise", "file": "internal/testhelpers/oracle/cmd/regen/scenario_test.go", "assertion": "TestRegenBaselineFixAndHistoricalOverlay proves fix exclusion, historical overlay and baseline tag; scenario.run checks refs, worktrees and temp-root cleanup on success/failure; TestRegenCleanupOnRegeneratorError proves error cleanup", "command_index": 0},
+    {"obligation_id": "AC-modes", "file": "internal/testhelpers/oracle/cmd/regen/scenario_test.go", "assertion": "TestRegenMissingExtraAndWriteNew proves absent-only writes and unchanged existing bytes; TestRegenPackageFilter bounds selected goldens", "command_index": 0},
+    {"obligation_id": "AC-regen-at-head", "file": "internal/testhelpers/oracle/cmd/regen/main.go", "assertion": "go run ./internal/testhelpers/oracle/cmd/regen materialises the recorded starting commit and reports both sample goldens ok H1 with exit 0", "command_index": 4},
+    {"obligation_id": "AC-regen-altered", "file": "internal/testhelpers/oracle/cmd/regen/regenerate_test.go", "assertion": "TestRegenNamesAlteredSampleGolden uses real regeneration in a shared disposable clone and requires exit 1, the altered JSON golden path, and the passing human H1 golden", "command_index": 0},
+    {"obligation_id": "AC-adr", "approved_reference_id": "arch-scope3"},
+    {"obligation_id": "AC-env-safe-regen", "file": "internal/testhelpers/oracle/cmd/regen/regenerate_test.go", "assertion": "TestRegenCommandEnvironment compares exact ChildEnv name sets for Git, sync and write-mode Go tests and rejects host-only inheritance", "command_index": 0},
+    {"obligation_id": "AC-e1-regen", "file": "internal/testhelpers/oracle/cmd/regen/scenario_test.go", "assertion": "Standard-runner scenario tests and TestRegenNamesAlteredSampleGolden execute with the existing repository regression suite", "command_index": 2}
+  ]
+}

@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: proceed failed: many-to-one cohort incomplete: member "us-2" is at US_TO_REVIEW (need US_APPROVED or MERGED)

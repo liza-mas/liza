@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/embedded"
@@ -19,6 +18,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 	"gopkg.in/yaml.v3"
 )
@@ -300,11 +300,11 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 
 	// An expired quota signal no longer blocks; resume removes it.
 	writeExpiredQuotaSignal(t, tmpDir, "codex")
-	quotaSignalPath := agent.QuotaSignalPath(tmpDir, "codex")
-	if err := agent.WriteProviderUnavailableSignal(tmpDir, "codex", "session access denied"); err != nil {
+	quotaSignalPath := providersignal.QuotaSignalPath(tmpDir, "codex")
+	if err := providersignal.WriteProviderUnavailableSignal(tmpDir, &providersignal.ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
 		t.Fatal(err)
 	}
-	unavailableSignalPath := agent.ProviderUnavailableSignalPath(tmpDir, "codex")
+	unavailableSignalPath := providersignal.ProviderUnavailableSignalPath(tmpDir, "codex")
 	if _, err := os.Stat(unavailableSignalPath); err != nil {
 		t.Fatalf("provider unavailable signal file should exist before resume: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestResumeSystemCmd_KeepsUnexpiredQuotaSignal(t *testing.T) {
 	testhelpers.WriteInitialState(t, stateFile, state)
 
 	resetsAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
-	if err := agent.RaiseQuotaExhaustion(tmpDir, &agent.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
+	if err := providersignal.RaiseQuotaExhaustion(tmpDir, &providersignal.QuotaExhaustion{Provider: "codex", Message: "You've hit your usage limit", ResetsAt: resetsAt}); err != nil {
 		t.Fatal(err)
 	}
 	writeExpiredQuotaSignal(t, tmpDir, "claude")
@@ -351,13 +351,13 @@ func TestResumeSystemCmd_KeepsUnexpiredQuotaSignal(t *testing.T) {
 		t.Fatalf("resume result = %#v, want success", result)
 	}
 
-	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "codex")); err != nil {
+	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "codex")); err != nil {
 		t.Errorf("unexpired codex quota signal should survive resume: %v", err)
 	}
-	if !agent.CheckQuotaSignal(tmpDir, "codex") {
+	if !providersignal.CheckQuotaSignal(tmpDir, "codex") {
 		t.Error("codex should still be blocked after resume")
 	}
-	if _, err := os.Stat(agent.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
+	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
 		t.Error("expired claude quota signal should have been removed after resume")
 	}
 	until := resetsAt.Add(time.Minute).Format(time.RFC3339)
@@ -370,7 +370,7 @@ func writeExpiredQuotaSignal(t *testing.T, projectRoot, provider string) {
 	t.Helper()
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	content := "provider: " + provider + "\ndetected: " + past + "\nmessage: limit\nresets_at: unknown\nexpires: " + past + "\n"
-	if err := os.WriteFile(agent.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(providersignal.QuotaSignalPath(projectRoot, provider), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -407,10 +407,10 @@ func TestResumeSystemCmd_ReportsStoppedHaltAcknowledgement(t *testing.T) {
 	})
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	if err := agent.WriteQuotaSignal(tmpDir, "codex", "quota hit"); err != nil {
+	if err := providersignal.WriteQuotaSignal(tmpDir, "codex", "quota hit"); err != nil {
 		t.Fatal(err)
 	}
-	quotaSignalPath := agent.QuotaSignalPath(tmpDir, "codex")
+	quotaSignalPath := providersignal.QuotaSignalPath(tmpDir, "codex")
 
 	msg := resumeSystemCmd(tmpDir)()
 	result, ok := msg.(CmdResultMsg)
@@ -452,7 +452,7 @@ func TestResumeSystemCmd_WarnsOnQuotaClearFailure(t *testing.T) {
 	// ("directory not empty") without affecting state.yaml writes. A quota
 	// path that cannot be read counts as still blocking and is kept, so the
 	// clear-failure branch is driven through the provider-unavailable signal.
-	signalPath := agent.ProviderUnavailableSignalPath(tmpDir, "codex")
+	signalPath := providersignal.ProviderUnavailableSignalPath(tmpDir, "codex")
 	if err := os.MkdirAll(signalPath, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -483,10 +483,10 @@ func TestResumeSystemCmd_FailurePreservesQuotaSignals(t *testing.T) {
 	// No state written — ops.Resume will fail because state.yaml doesn't exist
 
 	// Create a quota signal file
-	if err := agent.WriteQuotaSignal(tmpDir, "codex", "quota hit"); err != nil {
+	if err := providersignal.WriteQuotaSignal(tmpDir, "codex", "quota hit"); err != nil {
 		t.Fatal(err)
 	}
-	signalPath := agent.QuotaSignalPath(tmpDir, "codex")
+	signalPath := providersignal.QuotaSignalPath(tmpDir, "codex")
 
 	cmd := resumeSystemCmd(tmpDir)
 	msg := cmd()
@@ -651,5 +651,26 @@ func TestSuppressMissingRoleAlertsAfterRepair(t *testing.T) {
 	}
 	if filtered[0].Category != "BLOCKED" {
 		t.Fatalf("remaining category = %q, want BLOCKED", filtered[0].Category)
+	}
+}
+
+func TestC6ToggleAutoResumeCmdMessagesAndErrorPrefix(t *testing.T) {
+	stateFile, _ := testhelpers.SetupLizaDir(t, t.TempDir())
+	state := testhelpers.CreateValidState()
+	state.Config.AutoResume = false
+	testhelpers.WriteInitialState(t, stateFile, state)
+	bb := db.For(stateFile)
+
+	for _, want := range []string{"Auto-resume: ON", "Auto-resume: OFF"} {
+		result, ok := toggleAutoResumeCmd(bb)().(CmdResultMsg)
+		if !ok || !result.Success || result.Message != want {
+			t.Fatalf("toggle result = %#v, want success %q", result, want)
+		}
+	}
+
+	missing := db.For(filepath.Join(t.TempDir(), "missing", "state.yaml"))
+	result, ok := toggleAutoResumeCmd(missing)().(CmdResultMsg)
+	if !ok || result.Success || !strings.HasPrefix(result.Message, "toggle auto-resume: ") {
+		t.Fatalf("failed toggle result = %#v, want error prefix %q", result, "toggle auto-resume: ")
 	}
 }

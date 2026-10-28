@@ -1,0 +1,7 @@
+exit_code: 0
+--- stdout
+Replanned: cp-1 → cp-1-replan-1
+Role pair: code-planning-pair
+Spec ref: specs/vision.md
+Sprint resumed. Planner agents will pick up the new task.
+--- stderr

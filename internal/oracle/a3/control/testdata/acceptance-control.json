@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "obligation_id": "AC-c1-mode-change",
+      "file": "internal/oracle/a3/control/mode_change_test.go",
+      "assertion": "TestOracleModeChange: seven D-8 mode changes and principal refusals",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c2-config-set",
+      "file": "internal/oracle/a3/control/config_set_test.go",
+      "assertion": "TestOracleConfigSet: supported keys, replace, existing/unsupported/agent refusals",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c3-admission-limit",
+      "file": "internal/oracle/a3/control/admission_limit_test.go",
+      "assertion": "TestOracleAdmissionLimit: set, replace, remove, unknown remove and differing-definition refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c4-admit",
+      "file": "internal/oracle/a3/control/admit_test.go",
+      "assertion": "TestOracleAdmit: exit propagation, matching free slot, max-wait refusal; byte-identical state",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c5-agent-health",
+      "file": "internal/oracle/a3/control/agent_health_test.go",
+      "assertion": "TestOracleAgentHealth: mark/clear, unregistered/not-degraded successes",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c6-delete-agent",
+      "file": "internal/oracle/a3/control/delete_agent_test.go",
+      "assertion": "TestOracleDeleteAgent: expired dead-PID deletion and active-lease refusal",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-c7-cleanup",
+      "file": "internal/oracle/a3/control/cleanup_test.go",
+      "assertion": "TestOracleCleanup: yes and EOF refusal; manifest records contents, permissions, refs and worktrees",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-mode-parity",
+      "file": "internal/oracle/a3/control/project_test.go",
+      "assertion": "runCases/assertParity: fresh human and JSON runs compare normalised after-state per config-set and admission-limit case",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-determinism",
+      "file": "internal/oracle/a3/control/normalise_test.go",
+      "assertion": "TestDeterminismLayer: all D-4 transformations and PID collisions survive harness normalisers",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-env-safe",
+      "file": "internal/oracle/a3/control/fixtures_test.go",
+      "assertion": "TestChildEnvNames: exact environment names, host-only variable withheld, disposable cwd and restricted PATH",
+      "command_index": 0
+    },
+    {
+      "obligation_id": "AC-fixtures-validate",
+      "file": "internal/oracle/a3/control/fixtures_test.go",
+      "assertion": "TestFixtureStatesValidate: all nine states, including cleanup worktree, pass the baseline tree's validate",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-reproduce-start",
+      "file": "internal/testhelpers/oracle/cmd/regen/main.go",
+      "assertion": "regen check with package filter reproduces all control goldens from the ledger starting commit",
+      "command_index": 4
+    },
+    {
+      "obligation_id": "AC-live-head",
+      "file": "internal/oracle/a3/control/main_test.go",
+      "assertion": "TestMain and all TestOracle tests run against the live tree through make test",
+      "command_index": 2
+    },
+    {
+      "obligation_id": "AC-review-boundary",
+      "approved_reference_id": "arch-scope2"
+    }
+  ]
+}

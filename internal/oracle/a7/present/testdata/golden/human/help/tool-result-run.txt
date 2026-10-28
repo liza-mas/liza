@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+Capture a command before native truncation or streaming
+Usage:
+liza tool-result run [flags] -- EXECUTABLE [ARGS...]
+Flags:
+--agent-id string Agent identifier
+--command string Original command identity
+--command-class string Command class
+-h, --help help for run
+--role string Agent role
+--session-id string Session identifier
+--task-id string Task identifier
+--tool string Tool name (default "exec")
+Global Flags:
+--check-update check for a Liza update before running
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-C, --project-root string Liza project root for state commands
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

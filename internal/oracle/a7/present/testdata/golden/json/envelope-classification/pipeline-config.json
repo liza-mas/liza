@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "pipeline_config",
+    "details": {
+      "operation": "fixture"
+    },
+    "message": "fixture: failed to load pipeline config"
+  },
+  "ok": false,
+  "result": null
+}

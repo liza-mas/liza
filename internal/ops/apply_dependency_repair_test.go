@@ -2,9 +2,11 @@ package ops
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -408,5 +410,171 @@ func TestInTransactionCores_ApplyDependencyUpdatesInStateMatchesCommand(t *testi
 
 	for _, taskID := range []string{"repair-source", "consumer", "old-source", "old-consumer", "replacement-new"} {
 		assertCoreMatchesCommand(t, coreState, commandState, taskID)
+	}
+}
+
+func TestConsumeRepairRequest_RefusesOtherOperationAndBindsDigest(t *testing.T) {
+	t.Parallel()
+
+	source := &models.Task{ID: "source", RepairRequest: &models.RepairRequest{
+		Operation: models.RepairOperationApplyDependencyRepair,
+		Target:    "source",
+		DependencyUpdates: []models.DependencyUpdate{
+			{TaskID: "consumer", ExpectedDependsOn: []string{"old"}, DesiredDependsOn: []string{"new"}},
+		},
+		Evidence:   []string{"error=dependency selection no longer matches scope"},
+		Validation: []string{"validate --json"},
+	}}
+	first, err := consumeRepairRequest(source)
+	if err != nil {
+		t.Fatalf("consumeRepairRequest: %v", err)
+	}
+	second, err := consumeRepairRequest(source)
+	if err != nil || first.digest == "" || first.digest != second.digest {
+		t.Fatalf("digest not stable: %q vs %q (%v)", first.digest, second.digest, err)
+	}
+	source.RepairRequest.DependencyUpdates[0].DesiredDependsOn = []string{"other"}
+	changed, err := consumeRepairRequest(source)
+	if err != nil || changed.digest == first.digest {
+		t.Fatalf("digest ignores the consumed lists: %q (%v)", changed.digest, err)
+	}
+
+	other := &models.Task{ID: "source", RepairRequest: &models.RepairRequest{
+		Operation:  "retarget-dependency",
+		Target:     "source",
+		Command:    "liza retarget-dependency source old new --reason x",
+		Evidence:   []string{"error=stale edge"},
+		Validation: []string{"validate --json"},
+	}}
+	_, err = consumeRepairRequest(other)
+	var precondition *PreconditionError
+	if !errors.As(err, &precondition) || !strings.Contains(precondition.Reason, `repair request operation is "retarget-dependency", want "apply-dependency-repair"`) {
+		t.Fatalf("want operation mismatch precondition, got %v", err)
+	}
+}
+
+func TestConsumedRepairAuditSource_OnlyWhenSourceListUnchanged(t *testing.T) {
+	t.Parallel()
+
+	consumed := consumedRepair{
+		request: &models.RepairRequest{Evidence: []string{"evidence"}, Validation: []string{"validate --json"}},
+		digest:  "digest-1",
+	}
+	now := time.Date(2026, 10, 25, 1, 2, 3, 0, time.UTC)
+	updates := []AppliedDependencyUpdate{{TaskID: "a"}, {TaskID: "b"}}
+
+	rewritten := &models.Task{ID: "a"}
+	consumed.auditSource(rewritten, updates, "orchestrator-1", "why", now)
+	if len(rewritten.History) != 0 {
+		t.Fatalf("rewritten source must not gain a second entry: %+v", rewritten.History)
+	}
+
+	untouched := &models.Task{ID: "src"}
+	consumed.auditSource(untouched, updates, "orchestrator-1", "why", now)
+	if len(untouched.History) != 1 {
+		t.Fatalf("want one source entry, got %+v", untouched.History)
+	}
+	entry := untouched.History[0]
+	if entry.Event != models.TaskEventDependencyRepairApplied || !entry.Time.Equal(now) {
+		t.Fatalf("unexpected entry: %+v", entry)
+	}
+	if got := entry.Extra["affected_task_ids"]; !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("affected_task_ids = %v", got)
+	}
+	if entry.Extra["repair_request_digest"] != "digest-1" || entry.Extra["repair_request_cleared"] != true || entry.Extra["manual"] != true {
+		t.Fatalf("audit keys = %v", entry.Extra)
+	}
+	if _, ok := entry.Extra["repair_source_task"]; ok {
+		t.Fatalf("source entry must not carry repair_source_task: %v", entry.Extra)
+	}
+}
+
+// writeApplyRepairState stores a source task in the given status holding the
+// request, beside the consumer and the merged lists the request names.
+func writeApplyRepairState(t *testing.T, status models.TaskStatus, request *models.RepairRequest) (string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	now := time.Now().UTC()
+	source := testhelpers.BuildTaskByStatus("repair-source", status, now)
+	source.DependsOn = []string{"old-source"}
+	source.RepairRequest = request
+	consumer := testhelpers.BuildTaskByStatus("consumer", models.TaskStatusBlocked, now)
+	consumer.DependsOn = []string{"old-consumer"}
+	state := testhelpers.CreateValidState()
+	state.Goal.SpecRef = "README.md"
+	state.Tasks = []models.Task{
+		source,
+		consumer,
+		testhelpers.BuildTaskByStatus("old-source", models.TaskStatusMerged, now),
+		testhelpers.BuildTaskByStatus("old-consumer", models.TaskStatusMerged, now),
+		testhelpers.BuildTaskByStatus("new-consumer", models.TaskStatusMerged, now),
+	}
+	testhelpers.WriteInitialState(t, stateFile, state)
+	return tmpDir, stateFile
+}
+
+func TestApplyDependencyRepair_LifecycleDecisions(t *testing.T) {
+	t.Parallel()
+	valid := []models.DependencyUpdate{{TaskID: "consumer", ExpectedDependsOn: []string{"old-consumer"}, DesiredDependsOn: []string{"new-consumer"}}}
+	for _, tc := range []struct {
+		name       string
+		status     models.TaskStatus
+		request    *models.RepairRequest
+		wantOutput string
+		wantAction string
+		wantErr    string
+	}{
+		{"source not blocked", models.TaskStatusReady, dependencyRepairRequest(valid), models.LifecycleAlreadyTransitioned, "stop", "must be BLOCKED"},
+		{"no repair request", models.TaskStatusBlocked, nil, models.LifecycleStateChanged, "requery", "has no repair request"},
+		{"stale expected list", models.TaskStatusBlocked, dependencyRepairRequest([]models.DependencyUpdate{{TaskID: "consumer", ExpectedDependsOn: []string{"stale"}, DesiredDependsOn: []string{"new-consumer"}}}), models.LifecycleStateChanged, "requery", "dependencies changed since the repair request was created"},
+		{"unknown desired dependency", models.TaskStatusBlocked, dependencyRepairRequest([]models.DependencyUpdate{{TaskID: "consumer", ExpectedDependsOn: []string{"old-consumer"}, DesiredDependsOn: []string{"nowhere"}}}), models.LifecycleInvalidInput, "correct_input", `desired dependency "nowhere"`},
+		{"cyclic candidate", models.TaskStatusBlocked, dependencyRepairRequest([]models.DependencyUpdate{
+			{TaskID: "repair-source", ExpectedDependsOn: []string{"old-source"}, DesiredDependsOn: []string{"consumer"}},
+			{TaskID: "consumer", ExpectedDependsOn: []string{"old-consumer"}, DesiredDependsOn: []string{"repair-source"}},
+		}), models.LifecycleInvalidInput, "correct_input", "circular dependency"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir, _ := writeApplyRepairState(t, tc.status, tc.request)
+			_, err := ApplyDependencyRepair(tmpDir, "repair-source", "Apply stored graph repair", "orchestrator-1")
+			testhelpers.RequireErrorContains(t, err, tc.wantErr)
+			requireLifecycleError(t, err, tc.wantOutput, tc.wantAction, string(LifecycleEffectsNone))
+		})
+	}
+}
+
+// An identified request completes once; its exact repeat returns the original
+// completion without a second history entry or a second rewrite.
+func TestApplyDependencyRepair_IdentifiedRequestReplaysOriginalCompletion(t *testing.T) {
+	t.Parallel()
+	valid := []models.DependencyUpdate{{TaskID: "consumer", ExpectedDependsOn: []string{"old-consumer"}, DesiredDependsOn: []string{"new-consumer"}}}
+	tmpDir, stateFile := writeApplyRepairState(t, models.TaskStatusBlocked, dependencyRepairRequest(valid))
+	stored, err := db.New(stateFile).Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := LifecycleRequestOptions{RequestID: "repair-replay", ExpectedTransition: models.TaskTransitionID(stored.FindTask("repair-source"))}
+
+	first, err := ApplyDependencyRepairWithOptions(tmpDir, "repair-source", "Apply stored graph repair", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Outcome != models.LifecycleCompleted || first.SafeAction != string(LifecycleSafeActionContinue) || first.Effects != string(LifecycleEffectsCommitted) || first.Changed == nil || !*first.Changed {
+		t.Fatalf("first outcome = %+v, want committed COMPLETED/continue", first.LifecycleOutcome)
+	}
+	committed := readDependencyUpdateState(t, stateFile)
+	historyLen := len(committed.FindTask("consumer").History)
+
+	replay, err := ApplyDependencyRepairWithOptions(tmpDir, "repair-source", "Apply stored graph repair", "orchestrator-1", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.Outcome != models.LifecycleAlreadyCompleted || replay.Changed == nil || *replay.Changed {
+		t.Fatalf("replay outcome = %+v, want ALREADY_COMPLETED changed=false", replay.LifecycleOutcome)
+	}
+	if got := len(readDependencyUpdateState(t, stateFile).FindTask("consumer").History); got != historyLen {
+		t.Fatalf("replay appended history: %d, want %d", got, historyLen)
 	}
 }

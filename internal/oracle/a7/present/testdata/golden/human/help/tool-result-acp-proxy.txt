@@ -1,0 +1,20 @@
+exit 0
+--- stdout
+Budget native ACP host responses before agent context
+Usage:
+liza tool-result acp-proxy [flags] -- EXECUTABLE [ARGS...]
+Flags:
+--agent-id string Agent identifier
+-h, --help help for acp-proxy
+--role string Agent role
+--session-id string Engine session identifier (native session retained when available)
+--task-id string Task identifier
+Global Flags:
+--check-update check for a Liza update before running
+--digest-bytes int Maximum externalized result digest bytes (default 4096)
+-C, --project-root string Liza project root for state commands
+--root string Artifact directory (default: project state directory/tool-results)
+--threshold-bytes int Externalize results larger than this many bytes (default 32768)
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

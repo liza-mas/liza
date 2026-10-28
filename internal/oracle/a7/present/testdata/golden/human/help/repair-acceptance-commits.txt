@@ -1,0 +1,23 @@
+exit 0
+--- stdout
+Restore the acceptance evidence of merged planning parents whose commits were
+rewritten out of the integration branch, typically by a rebase performed after
+those parents had merged.
+Each orphaned commit is replaced by the commit on the integration branch whose
+diff is identical (matched by patch id). Replacements are derived internally;
+this command takes no commit arguments, because accepting one would let any
+commit be declared reviewed. A parent is repaired only when every one of its
+commits has an identical replacement; anything else is skipped with a reason.
+Use --dry-run to audit the mapping before writing it.
+Usage:
+liza repair-acceptance-commits [flags]
+Flags:
+--dry-run derive and print the mapping without writing it
+-h, --help help for repair-acceptance-commits
+--integration string integration branch whose history is authoritative (default: the run's integration branch)
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

@@ -13,6 +13,14 @@ import (
 	"runtime"
 )
 
+// Permissions of installed archive directories and objects.
+const (
+	objectDirMode  = 0o755
+	objectFileMode = 0o644
+	// shardPrefixLen is the digest prefix naming an object's shard directory.
+	shardPrefixLen = 2
+)
+
 // ErrConflict means an existing digest-named object has different bytes.
 var ErrConflict = errors.New("archive object conflict: existing object differs")
 
@@ -40,7 +48,7 @@ func Path(archiveDir, digest string) (string, error) {
 	if !IsDigest(digest) {
 		return "", fmt.Errorf("invalid archive object digest %q", digest)
 	}
-	return filepath.Join(archiveDir, "objects", digest[:2], digest+".json"), nil
+	return filepath.Join(archiveDir, "objects", digest[:shardPrefixLen], digest+".json"), nil
 }
 
 // Write installs bytes without overwriting evidence and completes durability
@@ -60,7 +68,7 @@ func Write(archiveDir string, data []byte, syncDir func(string) error) (string, 
 			return "", fmt.Errorf("%w: %s", ErrConflict, path)
 		}
 	case errors.Is(err, os.ErrNotExist):
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, objectDirMode); err != nil {
 			return "", fmt.Errorf("create archive directory: %w", err)
 		}
 		if err := install(dir, path, data); err != nil {
@@ -90,7 +98,7 @@ func install(dir, path string, data []byte) error {
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
-	if err := f.Chmod(0o644); err != nil {
+	if err := f.Chmod(objectFileMode); err != nil {
 		f.Close()
 		return fmt.Errorf("set archive object permissions: %w", err)
 	}

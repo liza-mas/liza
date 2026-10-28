@@ -1,0 +1,5 @@
++ .opencode directory 0755 -
++ .opencode/plugins directory 0755 -
++ .opencode/plugins/liza-tool-result-budget.ts file 0644 c8616379e3310c8d721962a91cdcc527fded14080f5efdfec885c869ceaec85f
++ .opencode/tools directory 0755 -
++ .opencode/tools/exec.ts file 0644 3fd0ebc87f7effe6bd28bd2cebfc8768a41c222e2777aeb6041f3ebccaa456d9

@@ -1,0 +1,16 @@
+{
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": {
+      "effects": "none",
+      "operation": "validate-payload",
+      "outcome": "COMPLETED",
+      "safe_action": "continue",
+      "schema_version": 1,
+      "task_id": "",
+      "task_status": "UNKNOWN"
+    }
+  }
+}

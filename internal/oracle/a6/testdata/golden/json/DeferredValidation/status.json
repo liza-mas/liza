@@ -1,0 +1,40 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "effective": [
+        {
+          "command": "true",
+          "command_sha256": "<ID>"
+        }
+      ],
+      "integration_head": "<SHA:BASE>",
+      "latest_batches": [
+        {
+          "commit": "<SHA:BASE>",
+          "finished_at": "<TIME:Z>",
+          "id": 1,
+          "results": [
+            {
+              "command": "true",
+              "command_sha256": "<ID>",
+              "exit_code": 0,
+              "finished_at": "<TIME:Z>",
+              "started_at": "<TIME:Z>",
+              "status": "passed"
+            }
+          ],
+          "started_at": "<TIME:Z>",
+          "status": "passed"
+        }
+      ],
+      "rulings": [
+        {
+          "command": "true",
+          "ruling": "oracle existing ruling"
+        }
+      ]
+    }
+  }
+}

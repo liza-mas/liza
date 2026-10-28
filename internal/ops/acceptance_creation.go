@@ -22,6 +22,15 @@ import (
 // ref.
 const acceptanceValidationMismatchReason = "validation must equal the reviewed ordered canonical commands"
 
+const (
+	// acceptanceDiagnosticSchemaVersion is the schema of the field diagnostics a
+	// creation refusal carries.
+	acceptanceDiagnosticSchemaVersion = 1
+	// acceptanceCreationCommitLength abbreviates the integration commit a
+	// creation refusal names.
+	acceptanceCreationCommitLength = 12
+)
+
 // acceptanceCreationCheck is the outcome of running claim's acceptance
 // predicate on a task that does not exist yet. The error is built at the
 // return site so it reports the caller's current task observation.
@@ -76,7 +85,7 @@ func checkCreatedTaskAcceptance(root string, state *models.State, task *models.T
 // untouched never depend on state or integration being readable at creation.
 func acceptanceCreationApplies(task *models.Task) bool {
 	ref := acceptanceAllocationRef(task)
-	path, _, _ := strings.Cut(ref, "#")
+	path, _, _ := strings.Cut(ref, referenceAnchorSeparator)
 	return task.EffectiveType() == models.TaskTypeCoding && ref != "" && referencecontract.ValidateAcceptancePath(path) == nil
 }
 
@@ -85,7 +94,7 @@ func acceptanceCreationApplies(task *models.Task) bool {
 func (c acceptanceCreationCheck) lifecycleError(operation string, observed *models.Task) error {
 	if c.unavailable != nil {
 		return &LifecycleError{
-			Outcome: NewLifecycleOutcome(operation, observed, models.LifecycleRetryable, "retry", "none"),
+			Outcome: NewLifecycleOutcome(operation, observed, models.LifecycleRetryable, LifecycleSafeActionRetry, LifecycleEffectsNone),
 			Err:     fmt.Errorf("the acceptance check of task %s could not run; retry: %w", c.taskID, c.unavailable),
 		}
 	}
@@ -101,15 +110,15 @@ func (c acceptanceCreationCheck) lifecycleError(operation string, observed *mode
 		field = "runtime_inputs"
 	}
 	commit := c.commit
-	if len(commit) > 12 {
-		commit = commit[:12]
+	if len(commit) > acceptanceCreationCommitLength {
+		commit = commit[:acceptanceCreationCommitLength]
 	}
 	message := fmt.Sprintf("task %s acceptance.source (%s %q): %s — refused at creation: claim at integration %s would refuse this task. "+
 		"Use the exact heading text of the reviewed section, not a slug, and its ordered validation commands; "+
 		"a section carrying an Acceptance Contract is allocated only by its planning transition or a same-pair %s of an allocated child",
 		c.taskID, c.refField, c.ref, c.reason, commit, brand.Command("replace-task"))
 	return NewLifecycleInvalidInputError(operation, observed, []models.FieldDiagnostic{{
-		SchemaVersion: 1,
+		SchemaVersion: acceptanceDiagnosticSchemaVersion,
 		Field:         field,
 		Constraint:    mask("acceptance.source: " + c.reason),
 		ValueClass:    models.FieldValueClassConflict,

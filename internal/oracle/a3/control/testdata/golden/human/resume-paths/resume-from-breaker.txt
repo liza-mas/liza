@@ -1,0 +1,7 @@
+exit 0
+[stdout]
+System resumed
+Resumed from: CIRCUIT_BREAKER_TRIPPED mode
+Changed by: human
+Agents will resume at their next check.
+[stderr]

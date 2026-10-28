@@ -1777,7 +1777,7 @@ clusters:
       intent_hypothesis: "Stop specs going stale while a self-declared Doc Impact of 'none' passes unexamined."
       solution_detected: "Two falsifying questions in the Doc Impact declaration and a review-checklist item testing it, with severity left to reviewer judgment."
       rationale_status: "Commit-evidenced; no separate user intent supplied."
-  - id: 218
+  - id: 231
     title: "Submission Refuses What Reference Consumers Would Refuse"
     commit_shas: ["e0cbc16eb","e7e205ab9","fab54f2da","e6504c085","1830329de","5a0295ea2","1a837e148","b720929dc","4a715e0d0"]
     date_range: "2026-09-23 to 2026-10-23"
@@ -1785,8 +1785,8 @@ clusters:
     confidence: 0.85
     status: "adr_generated"
     recommendation: "recommended"
-    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0218-submission-refuses-what-reference-consumers-would-refuse.md"
-    adr_path: "specs/architecture/ADR/0218-submission-refuses-what-reference-consumers-would-refuse.md"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0231-submission-refuses-what-reference-consumers-would-refuse.md"
+    adr_path: "specs/architecture/ADR/0231-submission-refuses-what-reference-consumers-would-refuse.md"
     user_context:
       selection: "2026-10-25: user approved all five Tier A records."
       intent: "Confirmed without further alternatives or trade-offs."
@@ -1795,7 +1795,7 @@ clusters:
     analysis:
       intent_hypothesis: "Stop carrier mistakes surfacing only after the author's session ends."
       solution_detected: "Submit-for-review runs the consumers' own reference checks through shared referencecontract code; validate warns."
-  - id: 219
+  - id: 232
     title: "Provider-Native Tool-Result Budgets"
     commit_shas: ["997ae78a2","5049f50a0"]
     date_range: "2026-09-24 to 2026-09-26"
@@ -1803,8 +1803,8 @@ clusters:
     confidence: 0.85
     status: "adr_generated"
     recommendation: "recommended"
-    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0219-provider-native-tool-result-budgets.md"
-    adr_path: "specs/architecture/ADR/0219-provider-native-tool-result-budgets.md"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0232-provider-native-tool-result-budgets.md"
+    adr_path: "specs/architecture/ADR/0232-provider-native-tool-result-budgets.md"
     user_context:
       selection: "2026-10-25: user approved all five Tier A records."
       intent: "Context flooding; built downstream first by mistake."
@@ -1813,7 +1813,7 @@ clusters:
     analysis:
       intent_hypothesis: "Bound what tool results put into the model's context."
       solution_detected: "Sanitized content-addressed artifacts above a byte threshold, bounded digest, one boundary per provider."
-  - id: 220
+  - id: 233
     title: "Bounds, Not Benchmarks: Unnamed Assurance Is the Human's Decision"
     commit_shas: ["c1619f04f","5704e5c83"]
     date_range: "2026-09-27 to 2026-09-27"
@@ -1821,8 +1821,8 @@ clusters:
     confidence: 0.85
     status: "adr_generated"
     recommendation: "recommended"
-    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0220-bounds-not-benchmarks.md"
-    adr_path: "specs/architecture/ADR/0220-bounds-not-benchmarks.md"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0233-bounds-not-benchmarks.md"
+    adr_path: "specs/architecture/ADR/0233-bounds-not-benchmarks.md"
     user_context:
       selection: "2026-10-25: user approved all five Tier A records."
       intent: "Human-decides is intended; benchmarks tend to be overkill in common situations."
@@ -1831,7 +1831,7 @@ clusters:
     analysis:
       intent_hypothesis: "Stop authors escalating approximate bounds into assurance frameworks."
       solution_detected: "Least costly reading; unnamed guarantees and machinery are the human's to add via an Open Question."
-  - id: 221
+  - id: 234
     title: "Skill Invocation as a Standing Delegation"
     commit_shas: ["0f0180404"]
     date_range: "2026-10-16 to 2026-10-16"
@@ -1839,8 +1839,8 @@ clusters:
     confidence: 0.85
     status: "adr_generated"
     recommendation: "recommended"
-    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0221-skill-invocation-as-standing-delegation.md"
-    adr_path: "specs/architecture/ADR/0221-skill-invocation-as-standing-delegation.md"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0234-skill-invocation-as-standing-delegation.md"
+    adr_path: "specs/architecture/ADR/0234-skill-invocation-as-standing-delegation.md"
     user_context:
       selection: "2026-10-25: user approved all five Tier A records."
       intent: "Protection against prompt injection; delegation framed once in a controlled way rather than restated per run."
@@ -1849,7 +1849,7 @@ clusters:
     analysis:
       intent_hypothesis: "Let unattended runs proceed through rulings without opening an injection path."
       solution_detected: "Only a human-invoked skill grants a standing delegation; the operator settles rulings by default with a hold list."
-  - id: 222
+  - id: 235
     title: "Shared CI Core Merged Upstream, and CI-Gated Releases"
     commit_shas: ["8e117e1fa","63596d743"]
     date_range: "2026-10-22 to 2026-10-23"
@@ -1857,8 +1857,8 @@ clusters:
     confidence: 0.85
     status: "adr_generated"
     recommendation: "recommended"
-    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0222-shared-ci-core-and-ci-gated-releases.md"
-    adr_path: "specs/architecture/ADR/0222-shared-ci-core-and-ci-gated-releases.md"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0235-shared-ci-core-and-ci-gated-releases.md"
+    adr_path: "specs/architecture/ADR/0235-shared-ci-core-and-ci-gated-releases.md"
     user_context:
       selection: "2026-10-25: user approved all five Tier A records."
       intent: "Easier to maintain along the upstream merge flow; macOS-off-PR was the user's call to speed up CI."
@@ -1870,15 +1870,15 @@ clusters:
 processing_cursor:
   step: "complete"
   substep: "post_0155_selected_adrs_generated"
-  cluster_index: 222
+  cluster_index: 235
   last_triaged_commit: "97ccf330c"
-  selected_ids: [218, 219, 220, 221, 222]
+  selected_ids: [231, 232, 233, 234, 235]
   not_selected_ids: []
   note: "285 commits since d12866d8b triaged: 62 added ADR-0156..0217 in-session, 89 amended existing ADRs, 157 triaged by subject. Five Tier A records generated and ADR-0151 amended (observation reads use lock-free snapshots). Tier B pi/Copilot providers (6aca8a8a1/9ad0c936d) and the Claude Stop hook holding turns for background jobs (16971d7fd/293574d13) were presented and not selected."
   covered_by_in_session_adrs: "0156-0217"
   amended_existing: [151]
   inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0155-inventory.yml"
-  numbering_policy: "Keep existing IDs; selected candidates numbered compactly from 0218 by earliest author timestamp."
+  numbering_policy: "Keep existing IDs; selected candidates numbered compactly by earliest author timestamp, first from 0218, renumbered 0231-0235 when main merged into global-refactoring (its consolidation ADRs hold 0218-0230)."
   user_confirmation: "2026-10-25: resume from d12866d8b; generate all five Tier A records and amend ADR-0151; decline the two Tier B candidates; 0218 as one record; compact numbering. Intent supplied for 0219-0222; 0218 confirmed without additions."
   previous_batch:
     substep: "post_0132_tier_a_adrs_generated"

@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
+	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
@@ -135,11 +138,11 @@ func TestACPXSessionNameUsesBrandedBinaryName(t *testing.T) {
 		brand.BinaryName = "acme"
 	})
 
-	if got := acpxSessionName("coder-1"); got != "acme-coder-1" {
-		t.Fatalf("acpxSessionName() = %q, want acme-coder-1", got)
+	if got := agentlaunch.ACPXSessionName("coder-1"); got != "acme-coder-1" {
+		t.Fatalf("agentlaunch.ACPXSessionName() = %q, want acme-coder-1", got)
 	}
-	if got := acpxSessionName(""); got != "acme-agent" {
-		t.Fatalf("acpxSessionName(empty) = %q, want acme-agent", got)
+	if got := agentlaunch.ACPXSessionName(""); got != "acme-agent" {
+		t.Fatalf("agentlaunch.ACPXSessionName(empty) = %q, want acme-agent", got)
 	}
 }
 
@@ -197,9 +200,9 @@ func TestACPXAgentRunUsesConfiguredQwenTarget(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"qwen-acp": {
-				Backend:             ToolBackendACPX,
+				Backend:             string(providers.BackendACPX),
 				Executable:          "acpx",
-				PromptTransport:     PromptTransportStdin,
+				PromptTransport:     string(providers.PromptTransportStdin),
 				RequiredExecutables: []string{"acpx"},
 				ContractKey:         "qwen",
 				ACPXAgent:           "qwen",
@@ -249,9 +252,9 @@ func TestACPXAgentEnsureSessionFallbackUsesProjectRoot(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"custom-acp": {
-				Backend:         ToolBackendACPX,
+				Backend:         string(providers.BackendACPX),
 				Executable:      "acpx",
-				PromptTransport: PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 				ACPXAgent:       "custom",
 				ACPXSessionName: "liza-custom-{{agentID}}",
 				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
@@ -292,9 +295,9 @@ func TestACPXAgentEnsureSessionFailsFastWithoutProjectRootOrEnsureArgs(t *testin
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"custom-acp": {
-				Backend:         ToolBackendACPX,
+				Backend:         string(providers.BackendACPX),
 				Executable:      "acpx",
-				PromptTransport: PromptTransportStdin,
+				PromptTransport: string(providers.PromptTransportStdin),
 				ACPXAgent:       "custom",
 				ACPXSessionName: "liza-custom-{{agentID}}",
 				ACPXPromptArgs:  []string{"--cwd", "{{projectRoot}}", "--format", "json", "{{acpxAgent}}", "prompt", "-s", "{{sessionName}}", "--file", "-"},
@@ -336,9 +339,9 @@ func TestACPXAgentRunUsesConfiguredDevinACPServerCommand(t *testing.T) {
 		LaunchGate:  immediateLaunchGate,
 		RuntimeConfig: models.Config{AgentTools: map[string]models.AgentToolConfig{
 			"devin-acp": {
-				Backend:             ToolBackendACPX,
+				Backend:             string(providers.BackendACPX),
 				Executable:          "acpx",
-				PromptTransport:     PromptTransportStdin,
+				PromptTransport:     string(providers.PromptTransportStdin),
 				RequiredExecutables: []string{"acpx", "devin"},
 				ContractKey:         "devin",
 				ACPXAgent:           "devin acp",
@@ -519,7 +522,7 @@ func TestACPXAgentReturnsOnlyClassifiableProviderUnavailableDiagnostic(t *testin
 			if (err != nil) != tt.wantError {
 				t.Fatalf("Run() error = %v, wantError %t", err, tt.wantError)
 			}
-			if got := DetectProviderUnavailable(result.Output, tt.backend); (got != nil) != tt.wantProviderFailure {
+			if got := providersignal.DetectProviderUnavailable(result.Output, tt.backend); (got != nil) != tt.wantProviderFailure {
 				t.Fatalf("DetectProviderUnavailable(Output, %q) = %+v, want detected %t; output=%q", tt.backend, got, tt.wantProviderFailure, result.Output)
 			}
 			if tt.wantOutput != "" && !strings.Contains(result.Output, tt.wantOutput) {
@@ -554,7 +557,7 @@ func TestACPXAgentDoesNotClassifyProviderFailureFromAgentMessage(t *testing.T) {
 	if result.Output != "" {
 		t.Fatalf("failed prompt returned agent-controlled output: %q", result.Output)
 	}
-	if got := DetectProviderUnavailable(result.Output, "codex-acp"); got != nil {
+	if got := providersignal.DetectProviderUnavailable(result.Output, "codex-acp"); got != nil {
 		t.Fatalf("agent-controlled transcript triggered provider-unavailable classification: %+v; output=%q", got, result.Output)
 	}
 }
@@ -577,7 +580,7 @@ func TestACPXAgentClassifiesProviderUnavailableAtSessionEnsureBoundary(t *testin
 	if err == nil {
 		t.Fatal("Run() error = nil, want session ensure failure")
 	}
-	if got := DetectProviderUnavailable(result.Output, "codex-acp"); got == nil {
+	if got := providersignal.DetectProviderUnavailable(result.Output, "codex-acp"); got == nil {
 		t.Fatalf("session ensure failure was not classifiable; output=%q", result.Output)
 	}
 	for _, forbidden := range []string{"/Users/private-account", "private transport context", "--approve-all"} {
@@ -668,10 +671,10 @@ func TestACPXAgentRunInteractiveDelegatesToUnderlyingCLI(t *testing.T) {
 }
 
 func TestInteractiveExecutableForACPXEmptyAgentIsUnsupported(t *testing.T) {
-	if got := interactiveExecutableForACPX(LaunchPlan{}); got != "" {
+	if got := interactiveExecutableForACPX(agentlaunch.LaunchPlan{}); got != "" {
 		t.Fatalf("interactiveExecutableForACPX(empty) = %q, want empty", got)
 	}
-	if got := interactiveExecutableForACPX(LaunchPlan{ACPXAgent: "   "}); got != "" {
+	if got := interactiveExecutableForACPX(agentlaunch.LaunchPlan{ACPXAgent: "   "}); got != "" {
 		t.Fatalf("interactiveExecutableForACPX(whitespace) = %q, want empty", got)
 	}
 }

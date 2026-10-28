@@ -3,10 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
-	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
@@ -15,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // validateIdentity validates agent ID format: {role}-{number}
@@ -74,209 +72,38 @@ func registerAgentWithAuthority(bb *db.Blackboard, projectRoot, agentID, role, t
 
 func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal string, leaseDuration int, provider, model string, resolver *pipeline.Resolver) (models.AgentAuthority, error) {
 	logger := GetLogger()
-	now := time.Now().UTC()
-	leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
-	var authority models.AgentAuthority
 
 	// Single atomic registration - skip STARTING state, go directly to IDLE
-	err := bb.Modify(func(state *models.State) error {
-		livenessWindow := models.AgentLivenessWindow(state.Config)
-		// Check for collision
-		if existing, exists := state.Agents[agentID]; exists {
-			observation := ops.AgentProcessOwnership(agentID, existing, now, livenessWindow)
-			if observation.Occupied() {
-				return fmt.Errorf("%w; %s", &errors.AgentCollisionError{AgentID: agentID}, observation.Diagnostic(existing.PID))
-			} else {
-				logger.Info("Taking over expired or stale agent lease", "agent_id", agentID, "ownership_state", observation.Effective)
-			}
-		}
-
-		// Singularity check via resolver: at most N instances per role.
-		// For orchestrator roles, singularity is enforced by resolved type
-		// (not role key) so that two different orchestrator role keys cannot
-		// coexist. Non-orchestrator roles use per-role-key counting, capped
-		// by the role's max-instances or else the project default.
-		if resolver != nil {
-			roleMax, err := resolver.MaxInstances(role)
-			if err == nil {
-				maxInst := models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances)
-				roleType, _ := resolver.RoleType(role)
-				occupiedDetails := occupiedRolePeers(state, resolver, role, roleType, agentID, now, livenessWindow)
-				occupiedCount := len(occupiedDetails)
-				if occupiedCount >= maxInst {
-					if roleType == "orchestrator" {
-						return fmt.Errorf("type orchestrator already has %d live agent(s); only %d instance(s) allowed; %s",
-							occupiedCount, maxInst, strings.Join(occupiedDetails, "; "))
-					}
-					return fmt.Errorf("role %s already has %d live agent(s) (max %d); only %d instance(s) allowed; %s",
-						role, occupiedCount, maxInst, maxInst, strings.Join(occupiedDetails, "; "))
-				}
-			}
-		}
-
-		generation, err := models.NewAgentGeneration()
-		if err != nil {
-			return err
-		}
-
-		// Register agent directly as IDLE (atomic operation)
-		pid := os.Getpid()
-		state.Agents[agentID] = models.Agent{
-			Role:         role,
-			Status:       models.AgentStatusIdle,
-			Generation:   generation,
-			Heartbeat:    now,
-			RegisteredAt: now,
-			Terminal:     terminal,
-			Provider:     provider,
-			Model:        model,
-			LeaseExpires: &leaseExpires,
-			PID:          pid,
-		}
-		authority = models.AgentAuthority{ID: agentID, Generation: generation}
-
-		// Under the state lock, so every other row's record is kept; the
-		// sweep's ceilings are documented on SweepLivenessRecords.
-		if err := db.SweepLivenessRecords(bb.GetStatePath(), state); err != nil {
-			logger.Warn("Failed to sweep liveness records", "error", err, "agent_id", agentID)
-		}
-
-		return nil
+	registered, err := ops.RegisterAgent(bb, ops.RegisterAgentInput{
+		AgentID:              agentID,
+		Role:                 role,
+		Terminal:             terminal,
+		Provider:             provider,
+		Model:                model,
+		LeaseDurationSeconds: leaseDuration,
+		Resolver:             resolver,
 	})
-
 	if err != nil {
 		return models.AgentAuthority{}, err
+	}
+	if registered.TookOver {
+		logger.Info("Taking over expired or stale agent lease", "agent_id", agentID, "ownership_state", registered.PreviousOwnership)
+	}
+	if registered.SweepErr != nil {
+		logger.Warn("Failed to sweep liveness records", "error", registered.SweepErr, "agent_id", agentID)
 	}
 
 	// If reviewer role: clear stale review claims
 	if resolver != nil {
 		roleType, rtErr := resolver.RoleType(role)
-		if rtErr == nil && roleType == "reviewer" {
+		if rtErr == nil && roleType == roles.RoleTypeReviewer {
 			if _, err := ops.ClearStaleReviewClaims(projectRoot); err != nil {
 				logger.Warn("Failed to clear stale review claims", "error", err, "role", role)
 			}
 		}
 	}
 
-	return authority, nil
-}
-
-// occupiedRolePeers returns a diagnostic for each registration other than
-// selfID that holds capacity for role, in ID order. Orchestrator roles count
-// by resolved type, so different orchestrator role keys share one cap; other
-// roles count by role key. Occupancy is lease-first (AgentProcessOwnership),
-// so a leased registration whose process died still holds its slot.
-func occupiedRolePeers(state *models.State, resolver *pipeline.Resolver, role, roleType, selfID string, now time.Time, livenessWindow time.Duration) []string {
-	agentIDs := make([]string, 0, len(state.Agents))
-	for id := range state.Agents {
-		agentIDs = append(agentIDs, id)
-	}
-	sort.Strings(agentIDs)
-
-	var occupied []string
-	for _, id := range agentIDs {
-		if id == selfID {
-			continue
-		}
-		agent := state.Agents[id]
-		matchesRole := agent.Role == role
-		if roleType == "orchestrator" {
-			resolvedType, resolveErr := resolver.RoleType(agent.Role)
-			matchesRole = resolveErr == nil && resolvedType == "orchestrator"
-		}
-		if !matchesRole {
-			continue
-		}
-		observation := ops.AgentProcessOwnership(id, agent, now, livenessWindow)
-		if !observation.Occupied() {
-			continue
-		}
-		occupied = append(occupied, fmt.Sprintf("%s: %s", id, observation.Diagnostic(agent.PID)))
-	}
-	return occupied
-}
-
-// poolSurplus reports whether agentID should leave its role's pool: the role
-// is not an orchestrator, its other live registrations already fill the
-// effective max-instances, and the agent holds no in-flight ownership.
-// In-flight ownership is a current task, an executing (or handoff) doer
-// assignment, rejected rework under an unexpired lease (reserved for this
-// agent), any review claim, or a pending approved merge it owns. Retained
-// attribution on submitted, approved or terminal tasks does not pin capacity:
-// retirement releases it exactly as an idle exit does. A nil resolver or an
-// unresolvable role fails closed.
-func poolSurplus(state *models.State, resolver *pipeline.Resolver, agentID string, now time.Time) bool {
-	if state == nil || resolver == nil {
-		return false
-	}
-	agent, ok := state.Agents[agentID]
-	if !ok || (agent.CurrentTask != nil && *agent.CurrentTask != "") {
-		return false
-	}
-	roleType, err := resolver.RoleType(agent.Role)
-	if err != nil || roleType == "orchestrator" {
-		return false
-	}
-	roleMax, err := resolver.MaxInstances(agent.Role)
-	if err != nil {
-		return false
-	}
-	// Count peers first: it is the cheap test, and waiting agents evaluate
-	// this on every state read.
-	peers := occupiedRolePeers(state, resolver, agent.Role, roleType, agentID, now, models.AgentLivenessWindow(state.Config))
-	if len(peers) < models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) {
-		return false
-	}
-	for i := range state.Tasks {
-		task := &state.Tasks[i]
-		if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
-			return false
-		}
-		if task.AssignedTo == nil || *task.AssignedTo != agentID {
-			continue
-		}
-		if models.IsExecutingStatus(task, resolver) {
-			return false
-		}
-		if rejected, err := resolver.RejectedStatus(task.RolePair); err == nil && task.Status == rejected &&
-			task.LeaseExpires != nil && task.LeaseExpires.After(now) {
-			return false
-		}
-	}
-	return ownedPendingMergeFingerprint(state, agentID, resolver) == ""
-}
-
-// releaseIfSurplus retires the agent when poolSurplus holds under the state
-// lock: in one generation-fenced transaction it re-evaluates the predicate on
-// the locked state and, if still true, applies the same release-and-remove
-// mutation as unregisterAgent. Serial transactions mean each surplus decision
-// sees the removals before it, so concurrent retirements cannot take a role
-// below its cap. Returns false with state unchanged when the agent is not
-// surplus. resolver is the caller's, so the locked recheck evaluates the
-// same pipeline as the caller's snapshot check.
-func releaseIfSurplus(bb *db.Blackboard, authority models.AgentAuthority, resolver *pipeline.Resolver) (bool, error) {
-	if resolver == nil {
-		return false, nil
-	}
-	pipelineTransitions := ops.BuildPipelineTransitions(resolver)
-	released := false
-	err := ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		// Read the clock under the lock: a peer whose lease expired while this
-		// call waited must not count toward the cap.
-		now := time.Now().UTC()
-		if !poolSurplus(state, resolver, authority.ID, now) {
-			return nil
-		}
-		if err := unregisterInState(state, authority.ID, pipelineTransitions, resolver, now); err != nil {
-			return err
-		}
-		released = true
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-	return released, nil
+	return registered.Authority, nil
 }
 
 // AutoAssignAgentID reads state, picks the first available <role>-N, and calls
@@ -309,195 +136,27 @@ func AutoAssignAgentID(bb *db.Blackboard, role string, maxRetries int, tryFn fun
 }
 
 // unregisterAgent releases any task claim held by the agent, then removes
-// the agent from state. Both operations happen in a single atomic modify
-// so that an interrupt between them cannot leave a stuck task. The modify
-// uses the patient lock wait: a supervisor usually exits because an ordinary
-// wait timed out, and failing here too would strand its claim until the
-// lease expires.
+// the agent from state in one atomic operation. It uses the patient lock wait:
+// a supervisor usually exits because an ordinary wait timed out, and failing
+// here too would strand its claim until the lease expires.
 func unregisterAgent(bb *db.Blackboard, authority models.AgentAuthority, projectRoot string) error {
-	now := time.Now().UTC()
-	agentID := authority.ID
-
-	// Load pipeline config outside the lock to avoid disk I/O under bb.Modify
-	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
-
-	err := ops.ModifyWithAgentAuthority(bb.Patient(), authority, func(state *models.State) error {
-		return unregisterInState(state, agentID, pipelineTransitions, resolver, now)
-	})
-
-	return err
-}
-
-// unregisterInState releases every claim the agent holds, agent-side and
-// task-side, then removes its row. It runs inside the caller's transaction.
-func unregisterInState(state *models.State, agentID string, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, resolver *pipeline.Resolver, now time.Time) error {
-	agent, exists := state.Agents[agentID]
-	if !exists {
-		return nil
-	}
-
-	taskIDs := make(map[string]bool)
-	if agent.CurrentTask != nil {
-		taskIDs[*agent.CurrentTask] = true
-	}
-	doerTaskIDs, reviewerTaskIDs := ops.TaskClaimsForAgent(state, agentID)
-	for _, taskID := range doerTaskIDs {
-		taskIDs[taskID] = true
-	}
-	for _, taskID := range reviewerTaskIDs {
-		taskIDs[taskID] = true
-	}
-	for taskID := range taskIDs {
-		if task := state.FindTask(taskID); task != nil {
-			if err := releaseTaskClaim(state, task, agent.Role, agentID, pipelineTransitions, resolver, now); err != nil {
-				return err
-			}
-		}
-	}
-
-	delete(state.Agents, agentID)
-	return nil
-}
-
-// releaseTaskClaim transitions a task back to its unclaimed status and clears
-// the claim fields. It fails closed when an active claim cannot be safely
-// released, so callers preserve both task-side and agent-side ownership.
-// pipelineTransitions and resolver are pre-loaded by the caller (outside bb.Modify)
-// to avoid disk I/O under the state lock.
-// Uses resolver.RoleType() for doer/reviewer classification.
-func releaseTaskClaim(state *models.State, task *models.Task, role, agentID string, pipelineTransitions map[models.TaskStatus][]models.TaskStatus, resolver *pipeline.Resolver, now time.Time) error {
-	reason := "agent interrupted"
-
-	activeExecuting, releasedInitial := ops.ResolveDoerReleaseStatus(task, resolver)
-
-	resolveReviewerRelease := func() (models.TaskStatus, models.TaskStatus, error) {
-		if resolver == nil {
-			return "", "", fmt.Errorf("cannot release reviewer claim for task %s: pipeline resolver not loaded", task.ID)
-		}
-		return ops.ResolveReviewerReleaseStatus(task, resolver)
-	}
-
-	transitionTask := func(to models.TaskStatus) error {
-		if pipelineTransitions == nil {
-			return fmt.Errorf("cannot transition task %s on claim release: pipeline transitions not loaded", task.ID)
-		}
-		if err := task.TransitionWith(to, pipelineTransitions); err != nil {
-			return fmt.Errorf("transition task %s on claim release: %w", task.ID, err)
-		}
-		return nil
-	}
-
-	// Classify role using resolver for doer/reviewer determination.
-	roleType := ""
-	if resolver != nil {
-		if rt, err := resolver.RoleType(role); err == nil {
-			roleType = rt
-		}
-	}
-
-	switch roleType {
-	case "doer":
-		if task.Status == activeExecuting {
-			if err := transitionTask(releasedInitial); err != nil {
-				return err
-			}
-			// An interrupted session continues its existing work cycle. Only
-			// actual rework or an explicit new-iteration recovery consumes one.
-			task.Continuation = task.Iteration > 0
-		}
-		task.AssignedTo = nil
-		task.LeaseExpires = nil
-		models.AdvanceLifecycle(task)
-
-	case "reviewer":
-		if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
-			activeReviewing, releasedSubmitted, err := resolveReviewerRelease()
-			if err != nil {
-				return err
-			}
-			if task.Status == activeReviewing {
-				if err := transitionTask(releasedSubmitted); err != nil {
-					return err
-				}
-			}
-			task.ReviewingBy = nil
-			task.ReviewLeaseExpires = nil
-			models.AdvanceLifecycle(task)
-		}
-
-	default:
-		if task.AssignedTo != nil && *task.AssignedTo == agentID {
-			if task.Status == activeExecuting {
-				if err := transitionTask(releasedInitial); err != nil {
-					return err
-				}
-				task.Continuation = task.Iteration > 0
-			}
-			task.AssignedTo = nil
-			task.LeaseExpires = nil
-			models.AdvanceLifecycle(task)
-		} else if task.ReviewingBy != nil && *task.ReviewingBy == agentID {
-			activeReviewing, releasedSubmitted, err := resolveReviewerRelease()
-			if err != nil {
-				return err
-			}
-			if task.Status == activeReviewing {
-				if err := transitionTask(releasedSubmitted); err != nil {
-					return err
-				}
-			}
-			task.ReviewingBy = nil
-			task.ReviewLeaseExpires = nil
-			models.AdvanceLifecycle(task)
-		} else {
-			return nil
-		}
-	}
-
-	state.ReleaseAgent(agentID)
-
-	task.History = append(task.History, models.TaskHistoryEntry{
-		Time:   now,
-		Event:  models.TaskEventClaimReleased,
-		Agent:  &agentID,
-		Reason: &reason,
-	})
-	return nil
+	// Load pipeline config outside the lock to avoid disk I/O under the state lock
+	return ops.UnregisterAgent(bb.Patient(), authority, loadPipelineForRelease(projectRoot))
 }
 
 // loadPipelineForRelease loads pipeline resolver and transitions, logging
-// warnings on failure. Returns nil values when pipeline config is unreadable.
-func loadPipelineForRelease(projectRoot string) (map[models.TaskStatus][]models.TaskStatus, *pipeline.Resolver) {
+// warnings on failure. Returns nil parts when pipeline config is unreadable.
+func loadPipelineForRelease(projectRoot string) ops.ClaimReleasePipeline {
 	if projectRoot == "" {
-		return nil, nil
+		return ops.ClaimReleasePipeline{}
 	}
 	cfg, err := pipeline.LoadFrozen(projectRoot)
 	if err != nil {
 		GetLogger().Warn("Failed to load pipeline config for claim release", "error", err)
-		return nil, nil
+		return ops.ClaimReleasePipeline{}
 	}
 	resolver := pipeline.NewResolver(cfg)
-	return ops.BuildPipelineTransitions(resolver), resolver
-}
-
-// resetAgentToIdle resets an agent's status to IDLE and clears CurrentTask
-func resetAgentToIdle(bb *db.Blackboard, authority models.AgentAuthority) error {
-	now := time.Now().UTC()
-	agentID := authority.ID
-
-	return ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
-		}
-
-		agent.Status = models.AgentStatusIdle
-		agent.CurrentTask = nil
-		agent.Heartbeat = now
-
-		state.Agents[agentID] = agent
-		return nil
-	})
+	return ops.ClaimReleasePipeline{Transitions: ops.BuildPipelineTransitions(resolver), Resolver: resolver}
 }
 
 // resetAgentAfterExit clears transient runtime states after CLI exit while preserving
@@ -507,81 +166,11 @@ func resetAgentAfterExit(bb *db.Blackboard, authority models.AgentAuthority, pro
 	return err
 }
 
-// releasedTaskClaim names the task whose claim an exit released and that
-// task's lifecycle token right after the release. A block decided after the
-// release may act on exactly that unowned continuation and nothing else.
-type releasedTaskClaim struct {
-	TaskID       string
-	TransitionID string
-}
-
 // releaseAgentAfterExit is resetAgentAfterExit reporting the claim it
 // released, if any.
-func releaseAgentAfterExit(bb *db.Blackboard, authority models.AgentAuthority, projectRoot string) (releasedTaskClaim, error) {
-	now := time.Now().UTC()
-	agentID := authority.ID
-
-	// Load pipeline config outside the lock to avoid disk I/O under bb.Modify
-	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
-
-	var released releasedTaskClaim
-	err := ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		released = releasedTaskClaim{}
-		release := func(task *models.Task, role string) error {
-			before := len(task.History)
-			if err := releaseTaskClaim(state, task, role, agentID, pipelineTransitions, resolver, now); err != nil {
-				return err
-			}
-			if len(task.History) > before {
-				released = releasedTaskClaim{TaskID: task.ID, TransitionID: models.TaskTransitionID(task)}
-			}
-			return nil
-		}
-
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
-		}
-
-		switch agent.Status {
-		case models.AgentStatusWaiting:
-			// A session never resumes after exit, so a WAITING agent holding a
-			// task has nothing to come back to: fall through and release the
-			// claim rather than pinning the task to a departed agent.
-			if agent.CurrentTask != nil {
-				task := state.FindTask(*agent.CurrentTask)
-				if task != nil && task.ReviewingBy != nil && *task.ReviewingBy == agentID {
-					return release(task, agent.Role)
-				}
-			}
-		case models.AgentStatusHandoff:
-			if agent.CurrentTask != nil {
-				agent.Heartbeat = now
-				state.Agents[agentID] = agent
-				return nil
-			}
-			// CurrentTask already cleared — fall through to reset to IDLE
-		}
-
-		// Release any held task claim before clearing CurrentTask
-		if agent.CurrentTask != nil {
-			if task := state.FindTask(*agent.CurrentTask); task != nil {
-				if err := release(task, agent.Role); err != nil {
-					return err
-				}
-			}
-		}
-
-		agent.Status = models.AgentStatusIdle
-		agent.CurrentTask = nil
-		agent.Heartbeat = now
-		state.Agents[agentID] = agent
-		return nil
-	})
-	if err != nil {
-		return releasedTaskClaim{}, err
-	}
-	return released, nil
+func releaseAgentAfterExit(bb *db.Blackboard, authority models.AgentAuthority, projectRoot string) (ops.ReleasedTaskClaim, error) {
+	// Load pipeline config outside the lock to avoid disk I/O under the state lock
+	return ops.ReleaseAgentAfterExit(bb, authority, loadPipelineForRelease(projectRoot))
 }
 
 // supervisorCleanupBlackboard lets exit bookkeeping finish after cancellation,
@@ -595,7 +184,7 @@ func supervisorCleanupBlackboard(statePath string) (*db.Blackboard, context.Canc
 func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID string, halted, contended bool) error {
 	if halted {
 		GetLogger().Info("Provider start refused by halt, releasing claim", "agent_id", config.AgentID, "task_id", taskID)
-		if err := releaseClaimForHalt(bb, config.Authority, config.ProjectRoot, taskID); err != nil {
+		if err := ops.ReleaseClaimForHalt(bb, config.Authority, loadPipelineForRelease(config.ProjectRoot), taskID); err != nil {
 			return fmt.Errorf("release claim after halted launch: %w", err)
 		}
 		return nil
@@ -609,69 +198,4 @@ func releaseUnstartedTurn(bb *db.Blackboard, config SupervisorConfig, taskID str
 		return fmt.Errorf("reset after uncompleted provider turn: %w", err)
 	}
 	return nil
-}
-
-// releaseClaimForHalt releases the claim of a provider that a halt refused to
-// start. Only a claim this agent still holds on taskID is released. A doer's
-// claim already started its iteration, so the task is marked as a continuation:
-// the next claim resumes that iteration instead of charging a new one.
-func releaseClaimForHalt(bb *db.Blackboard, authority models.AgentAuthority, projectRoot, taskID string) error {
-	now := time.Now().UTC()
-	agentID := authority.ID
-	pipelineTransitions, resolver := loadPipelineForRelease(projectRoot)
-
-	return ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
-		}
-		if task := state.FindTask(taskID); task != nil && agent.CurrentTask != nil && *agent.CurrentTask == taskID {
-			heldAsDoer := task.AssignedTo != nil && *task.AssignedTo == agentID
-			heldAsReviewer := task.ReviewingBy != nil && *task.ReviewingBy == agentID
-			if heldAsDoer || heldAsReviewer {
-				if err := releaseTaskClaim(state, task, agent.Role, agentID, pipelineTransitions, resolver, now); err != nil {
-					return err
-				}
-				if heldAsDoer && task.AssignedTo == nil && task.Iteration > 0 {
-					task.Continuation = true
-				}
-			}
-		}
-		agent = state.Agents[agentID]
-		agent.Status = models.AgentStatusIdle
-		agent.CurrentTask = nil
-		agent.Heartbeat = now
-		state.Agents[agentID] = agent
-		return nil
-	})
-}
-
-// setAgentToOrchestratingStatus sets an orchestrator agent's status to PLANNING
-func setAgentToOrchestratingStatus(bb *db.Blackboard, authority models.AgentAuthority) error {
-	now := time.Now().UTC()
-	agentID := authority.ID
-
-	return ops.ModifyWithAgentAuthority(bb, authority, func(state *models.State) error {
-		agent, exists := state.Agents[agentID]
-		if !exists {
-			return &errors.NotFoundError{Entity: "agent", ID: agentID}
-		}
-
-		// Set to PLANNING state
-		agent.Status = models.AgentStatusPlanning
-		planning := "planning"
-		agent.CurrentTask = &planning
-		agent.Heartbeat = now
-
-		// Renew lease
-		leaseDuration := state.Config.LeaseDuration
-		if leaseDuration <= 0 {
-			leaseDuration = models.DefaultLeaseDurationSeconds
-		}
-		leaseExpires := now.Add(time.Duration(leaseDuration) * time.Second)
-		agent.LeaseExpires = &leaseExpires
-
-		state.Agents[agentID] = agent
-		return nil
-	})
 }

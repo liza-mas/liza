@@ -5,10 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/paths"
-	"github.com/liza-mas/liza/internal/referencecontract"
 )
 
 // validateBoundedContractCorrection checks the real candidate tree at both
@@ -18,108 +15,25 @@ func validateBoundedContractCorrection(root string, state *models.State, origina
 	if correction.AmendmentMode == "" {
 		return nil
 	}
-	refuse := func(reason string) error { return &PreconditionError{Reason: "bounded contract amendment: " + reason} }
 	if original == nil || correction.BaseCommit == nil {
-		return refuse("missing original or candidate base")
+		return refuseBoundedContract("missing original or candidate base")
 	}
 	if err := models.ValidateAmendmentOutputForMode(original.Output, correction.Output, correction.AmendmentMode); err != nil {
 		return err
 	}
 	previous, err := EffectivePlanReview(state, original)
 	if err != nil || previous.ReviewCommit == nil {
-		return refuse("missing prior effective reviewed authority")
+		return refuseBoundedContract("missing prior effective reviewed authority")
 	}
 	if err := ValidatePlanReviewHistory(root, state, original, candidate); err != nil {
 		return err
 	}
 	architecture := original.EffectiveType() == models.TaskTypeArchitecture
-	allowed := map[string][]string{}
-	add := func(ref string) {
-		if ref != "" {
-			path, heading := paths.SplitRefFile(ref), paths.SplitRefFragment(ref)
-			allowed[path] = append(allowed[path], heading)
-		}
-	}
-	add(original.ArchRef)
-	if correction.AmendmentMode == models.PlanAmendmentPreserveIdentity && !architecture {
-		add(original.PlanRef)
-	}
-	for _, output := range original.Output {
-		add(output.ArchRef)
-		if correction.AmendmentMode == models.PlanAmendmentPreserveIdentity && !architecture {
-			add(output.PlanRef)
-		}
-		ref := output.PlanRef
-		if ref == "" {
-			ref = output.SpecRef
-		}
-		path, heading := paths.SplitRefFile(ref), paths.SplitRefFragment(ref)
-		if referencecontract.ValidateAcceptancePath(path) != nil {
-			continue
-		}
-		before, _, err := readAcceptanceBlob(root, *previous.ReviewCommit, path)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		contract, err := referencecontract.ParseAcceptance(before, heading)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		if contract == nil {
-			continue
-		}
-		after, _, err := readAcceptanceBlob(root, candidate, path)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		oldSpan, ok := carrierSpan(before, heading)
-		newSpan, newOK := carrierSpan(after, heading)
-		if !ok || !newOK || oldSpan != newSpan {
-			return refuse("acceptance allocation changed: " + ref)
-		}
-		if alike, _ := compareReviewedReferences(&models.State{}, original.ID, root, *previous.ReviewCommit, candidate, path, heading, contract); !alike {
-			return refuse("approved proof content changed: " + ref)
-		}
-	}
-	g := git.New(root)
-	changed, err := g.DiffFiles(root, *correction.BaseCommit, candidate)
-	if err != nil {
+	allowed := allowedContractSections(original, correction.AmendmentMode, architecture)
+	if err := compareReviewedAcceptance(root, original, *previous.ReviewCommit, candidate); err != nil {
 		return err
 	}
-	for _, path := range changed {
-		headings, ok := allowed[path]
-		if !ok {
-			return refuse("candidate changes a file outside referenced contract prose: " + path)
-		}
-		before, _, err := readAcceptanceBlob(root, *correction.BaseCommit, path)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		after, _, err := readAcceptanceBlob(root, candidate, path)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		oldEntry, _, err := g.TreeEntryAt(*correction.BaseCommit, path)
-		if err != nil {
-			return err
-		}
-		newEntry, _, err := g.TreeEntryAt(candidate, path)
-		if err != nil {
-			return err
-		}
-		if oldEntry.Mode != newEntry.Mode {
-			return refuse("contract file mode changed: " + path)
-		}
-		oldOutside, err := contractOutsideSections(before, headings, architecture || correction.AmendmentMode == models.PlanAmendmentContract)
-		if err != nil {
-			return refuse(err.Error())
-		}
-		newOutside, err := contractOutsideSections(after, headings, architecture || correction.AmendmentMode == models.PlanAmendmentContract)
-		if err != nil || oldOutside != newOutside {
-			return refuse("candidate changes text outside referenced contract sections: " + path)
-		}
-	}
-	return nil
+	return compareChangedContractFiles(root, correction, candidate, allowed, architecture || correction.AmendmentMode == models.PlanAmendmentContract)
 }
 
 // Architecture allows only the exact CONTRACT subsection inside an anchored

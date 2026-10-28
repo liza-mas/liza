@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/testhelpers"
@@ -13,7 +14,7 @@ import (
 // consumes the plan's output[] can run declared checks; otherwise declarations
 // would fail closed at the coder's or the reviewer's claim.
 func TestBuildPromptWithContext_ValidationPrerequisitesFollowConsumerPolicy(t *testing.T) {
-	local := models.AgentToolConfig{ValidationExecution: ValidationExecutionLocal}
+	local := models.AgentToolConfig{ValidationExecution: agentlaunch.ValidationExecutionLocal}
 	pairCLIs := models.Config{DefaultDoerCLI: "claude", DefaultReviewerCLI: "codex"}
 	withTools := func(tools map[string]models.AgentToolConfig) models.Config {
 		c := pairCLIs
@@ -50,7 +51,7 @@ func TestBuildPromptWithContext_ValidationPrerequisitesFollowConsumerPolicy(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// GIVEN a code-planning task and a policy for the consuming pair's CLIs
-			clearCLIEnv(t)
+			testhelpers.ClearCLIEnv(t)
 			projectRoot := t.TempDir()
 			testhelpers.SetupTestGitRepo(t, projectRoot)
 			config := tt.config

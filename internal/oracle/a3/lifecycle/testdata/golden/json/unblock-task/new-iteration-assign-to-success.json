@@ -1,0 +1,29 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "assigned_to": "coder-1",
+          "changed": true,
+          "claimable": false,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "from_status": "BLOCKED",
+          "lease_expires": "<now+30m Z>",
+          "new_iteration": true,
+          "operation": "unblock-task",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "IMPLEMENTING_CODE",
+          "to_status": "IMPLEMENTING_CODE",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

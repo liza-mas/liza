@@ -1,0 +1,205 @@
+# before
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A9 oracle fixture
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: <T1:fZ>
+  status: IN_PROGRESS
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A9 blocked fixture
+    done_when: A9 oracle records note consumption
+    status: BLOCKED
+    priority: 1
+    spec_ref: specs/vision.md
+    created: <T1:fZ>
+    iteration: 1
+    base_commit: 'f7ac18786dbc179615fd0acab229b4a42ecca4b2'
+    blocked_reason: fixture blocked
+    blocked_questions: [fixture question]
+    history:
+      - time: <T1:fZ>
+        agent: coder-1
+        event: blocked
+        reason: fixture blocked
+  - id: task-2
+    type: coding
+    role_pair: coding-pair
+    description: A9 unassessed fixture
+    done_when: A9 oracle leaves this target unassessed
+    status: DRAFT_CODE
+    priority: 2
+    spec_ref: specs/vision.md
+    created: <T1:fZ>
+    iteration: 0
+    history: []
+agents: {}
+discovered: []
+human_notes:
+  - timestamp: <T1:fZ>
+    message: Note for the assessed target.
+    for: task-1
+  - timestamp: <T1+1s:fZ>
+    message: Note for a target the turn does not assess.
+    for: task-2
+  - timestamp: <T1+2s:fZ>
+    message: Note for all targets.
+    for: all
+spec_changes: []
+anomalies: []
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [task-1, task-2]
+    stretch: []
+  timeline:
+    started: <T1:fZ>
+    deadline: <T1+2493072000s:fZ>
+  status: IN_PROGRESS
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 1
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: <T1:fZ>
+  status: OK
+  history: []
+config:
+  heartbeat_interval: 60
+  lease_duration: 1800
+  integration_branch: integration
+  mode: RUNNING
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 7
+goal:
+    id: goal-1
+    description: A9 oracle fixture
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: <T1:fZ>
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: task-1
+      type: coding
+      role_pair: coding-pair
+      description: A9 blocked fixture
+      status: BLOCKED
+      priority: 1
+      base_commit: f7ac18786dbc179615fd0acab229b4a42ecca4b2
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: A9 oracle records note consumption
+      scope: ""
+      blocked_reason: fixture blocked
+      blocked_questions:
+        - fixture question
+      lifecycle:
+        revision: 1
+        completion_sequence: 1
+        receipts:
+            - operation: assess-blocked
+              actor: orchestrator-1
+              generation_digest: <V1>
+              expected_transition: <V2>
+              payload_digest: <V3>
+              sequence: 1
+              transition_id: <V4>
+      created: <T1:fZ>
+      history:
+        - time: <T1:fZ>
+          event: blocked
+          agent: coder-1
+          reason: fixture blocked
+        - time: <T5:fZ>
+          event: orchestrator_assessment
+          agent: orchestrator-1
+          note: oracle-assessment
+          assessment_fingerprint_v2: <V5>
+    - id: task-2
+      type: coding
+      role_pair: coding-pair
+      description: A9 unassessed fixture
+      status: DRAFT_CODE
+      priority: 2
+      spec_ref: specs/vision.md
+      done_when: A9 oracle leaves this target unassessed
+      scope: ""
+      created: <T1:fZ>
+      history: []
+agents: {}
+discovered: []
+human_notes:
+    - timestamp: <T1:fZ>
+      message: Note for the assessed target.
+      for: task-1
+      orchestrator_seen_at: "<T6:sZ>"
+    - timestamp: <T1+1s:fZ>
+      message: Note for a target the turn does not assess.
+      for: task-2
+    - timestamp: <T1+2s:fZ>
+      message: Note for all targets.
+      for: all
+      orchestrator_seen_at: "<T6:sZ>"
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - task-1
+            - task-2
+        stretch: []
+    timeline:
+        started: <T1:fZ>
+        deadline: <T1+2493072000s:fZ>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 1
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <T1:fZ>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 0
+    max_review_cycles: 0
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 0
+    doer_max_wait: 0
+    orchestrator_poll_interval: 0
+    orchestrator_max_wait: 0
+    reviewer_poll_interval: 0
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: STOPPED
+    mode_changed_at: <T7:fO>
+    mode_changed_by: orchestrator-1

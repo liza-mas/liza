@@ -1,0 +1,24 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": true,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "replace-task",
+      "outcome": "COMPLETED",
+      "replacement_task_id": "t1b",
+      "request_id": "replace-1",
+      "retargeted_consumers": [
+        "t2"
+      ],
+      "safe_action": "continue",
+      "source_original_status": "DRAFT_CODE",
+      "source_task_id": "t1",
+      "task_id": "t1",
+      "task_status": "SUPERSEDED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

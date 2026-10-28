@@ -1,0 +1,20 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": false,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "cancel-task",
+      "original_status": "DRAFT_CODE",
+      "outcome": "ALREADY_COMPLETED",
+      "request_id": "cancel-1",
+      "safe_action": "stop",
+      "task_id": "t3",
+      "task_status": "ABANDONED",
+      "transition_id": "<DIGEST 1>",
+      "warnings": null
+    }
+  }
+}

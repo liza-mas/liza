@@ -59,19 +59,10 @@ type RuntimePlanOptions struct {
 // stacklit.json so concurrent lifecycle hooks do not race on git index state.
 var taskWorktreeStacklitGitStateMu sync.Mutex
 
-func parseEnvGate(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true":
-		return true
-	default:
-		return false
-	}
-}
-
 // RuntimeEnabled reports whether runtime Stacklit behavior is active for the
 // current process.
 func RuntimeEnabled() bool {
-	return parseEnvGate(envgate.Value(EnvEnableStacklit))
+	return envgate.Truthy(envgate.Value(EnvEnableStacklit))
 }
 
 // RefreshIndex copies the repo-root stacklit.json into one task worktree; it

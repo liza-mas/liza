@@ -1,0 +1,44 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "effects": "committed",
+          "operation": "mark-blocked",
+          "outcome": "COMPLETED",
+          "reason": "oracle-reason",
+          "request_id": "req-1",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    },
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "changed": false,
+          "completed_transition_id": "<id-1>",
+          "effects": "committed",
+          "operation": "mark-blocked",
+          "outcome": "ALREADY_COMPLETED",
+          "reason": "",
+          "request_id": "req-1",
+          "safe_action": "stop",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

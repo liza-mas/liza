@@ -14,7 +14,7 @@ func TestTaskEventNameConstants(t *testing.T) {
 	tests := []struct {
 		name     string
 		constant TaskEventName
-		want     string
+		want     TaskEventName
 	}{
 		// Constants defined by coding-3
 		{"Planning", TaskEventPlanning, "planning"},
@@ -69,7 +69,7 @@ func TestAnomalyIsValidTypeVocabulary(t *testing.T) {
 	if AnomalyTypeReviewerClaimCircuitOpen != "reviewer_claim_circuit_open" {
 		t.Fatalf("AnomalyTypeReviewerClaimCircuitOpen = %q, want %q", AnomalyTypeReviewerClaimCircuitOpen, "reviewer_claim_circuit_open")
 	}
-	valid := []string{
+	valid := []AnomalyType{
 		"retry_loop", "trade_off", "spec_ambiguity", "external_blocker",
 		"assumption_violated", "scope_deviation", "workaround", "debt_created",
 		"spec_changed", "hypothesis_exhaustion", "spec_gap", "review_budget_exhausted",
@@ -85,7 +85,7 @@ func TestAnomalyIsValidTypeVocabulary(t *testing.T) {
 		}
 	}
 	// AND near-miss and empty names are rejected
-	for _, typ := range []string{"reviewer_claim_open", ""} {
+	for _, typ := range []AnomalyType{"reviewer_claim_open", ""} {
 		a := Anomaly{Type: typ}
 		if a.IsValidType() {
 			t.Errorf("Anomaly type %q should not be valid", typ)

@@ -1,0 +1,106 @@
+version: 1
+pipeline_version: 3
+mutation_sequence: 1
+goal:
+    id: goal-1
+    description: A4 oracle
+    spec_ref: specs/vision.md
+    entry_point: technical-spec
+    created: 2020-01-01T00:00:00Z
+    status: IN_PROGRESS
+    alignment_history: []
+tasks:
+    - id: t1
+      type: coding
+      role_pair: coding-pair
+      description: Fixture t1
+      status: DRAFT_CODE
+      priority: 1
+      iteration: 1
+      spec_ref: specs/vision.md
+      done_when: Observable outcome
+      scope: Bounded oracle scope
+      created: 2020-01-01T00:00:00Z
+      history: []
+    - created: 2020-01-01T00:00:00Z
+      id: m1
+      status: MERGED
+      terminal_archive:
+        sha256: 80e865ee0ae615baf4f315e942a8fdbe17dce49b702808efb4de77fdd6cdc814
+        archived_at: 2020-01-03T00:00:00Z
+    - created: 2020-01-01T00:00:00Z
+      id: m2
+      status: MERGED
+      terminal_archive:
+        sha256: 688e4f37ae594776ad8037fe711c7f954b69be09cf4f687906e181289037fa1a
+        archived_at: 2020-01-03T00:00:00Z
+    - created: 2020-01-01T00:00:00Z
+      id: m3
+      status: MERGED
+      terminal_archive:
+        sha256: af4626b6eef282c92d863b7cabf9bb8015f0bd0f1f37b1e1d0a0d466d4c3df26
+        archived_at: 2020-01-03T00:00:00Z
+agents:
+    orchestrator-1:
+        role: orchestrator
+        status: IDLE
+        generation: gen-1
+        heartbeat: 2020-01-01T00:00:00Z
+        terminal: terminal-1
+        provider: fixture-provider
+        iterations_total: 0
+        context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: goal-1
+    scope:
+        planned:
+            - t1
+            - m1
+            - m2
+            - m3
+        stretch: []
+    timeline:
+        started: 2020-01-01T00:00:00Z
+        deadline: 2099-01-01T00:00:00Z
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: 2020-01-01T00:00:00Z
+    status: OK
+    history: []
+config:
+    terminal_task_archival: true
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 0
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 0
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 0
+    integration_branch: integration
+    mode: RUNNING

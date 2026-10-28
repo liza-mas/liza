@@ -16,10 +16,10 @@ func TestPlanAmendmentFencesEveryCardinalityAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolver := pipeline.NewResolver(config)
-	for _, cardinality := range []string{"per-subtask", "one-to-one", "many-to-one"} {
+	for _, cardinality := range []models.TransitionCardinality{models.CardinalityPerSubtask, models.CardinalityOneToOne, models.CardinalityManyToOne} {
 		for _, status := range []models.TaskStatus{models.TaskStatusCodingPlanApproved, models.TaskStatusMerged} {
 			for _, correction := range []bool{false, true} {
-				t.Run(string(status)+"/"+cardinality+"/"+map[bool]string{false: "pending original", true: "correction"}[correction], func(t *testing.T) {
+				t.Run(string(status)+"/"+string(cardinality)+"/"+map[bool]string{false: "pending original", true: "correction"}[correction], func(t *testing.T) {
 					task := models.Task{ID: "source", RolePair: "code-planning-pair", Status: status, Output: []models.OutputEntry{{Desc: "existing slot"}}}
 					if correction {
 						task.AmendsPlan = "original"

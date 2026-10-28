@@ -28,6 +28,12 @@ import (
 
 const healOrphanedReviewBaseOperation = "heal-orphaned-review-base"
 
+// History Extra keys only the heal writes, beside the shared review_commit_updated keys.
+const (
+	orphanedBaseHealExtraKey = "orphaned_base_heal"
+	preparedByExtraKey       = "prepared_by"
+)
+
 // Test hooks. orphanHealAfterRebaseTestHook returning true simulates a
 // process that ends as soon as its rebase returns: no restore, no retirement.
 // orphanHealPublishTestHook wraps the publication transaction.
@@ -36,6 +42,10 @@ var (
 	orphanHealPublishTestHook     func(bb *db.Blackboard, publish func() error) error
 	errOrphanHealAbandonedForTest = stderrors.New("orphaned-base heal abandoned by test hook")
 )
+
+// orphanedBaseHealCauseLimit bounds the failure cause quoted in the diagnostic
+// of a deterministic INTEGRATION_FAILED routing.
+const orphanedBaseHealCauseLimit = 500
 
 // OrphanedBaseHealOutcome is what one heal invocation did to the task.
 type OrphanedBaseHealOutcome string
@@ -207,7 +217,7 @@ func (h *orphanHeal) admit(state *models.State, task *models.Task) error {
 		}
 	}
 	if task == nil {
-		return &lizaerrors.NotFoundError{Entity: "task", ID: h.in.TaskID}
+		return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: h.in.TaskID}
 	}
 	if _, err := requireRegisteredClaimAgent(state, h.in.AgentID, h.in.Role); err != nil {
 		return err
@@ -517,7 +527,7 @@ func (h *orphanHeal) publish(observed *models.Task, request LifecycleRequest, ta
 	return modifyLifecycleState(h.bb, h.in.Authority, func(state *models.State) error {
 		live := state.FindTask(h.in.TaskID)
 		if live == nil {
-			return &lizaerrors.NotFoundError{Entity: "task", ID: h.in.TaskID}
+			return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: h.in.TaskID}
 		}
 		if err := ValidateLifecyclePreparation(live, request); err != nil {
 			return err
@@ -537,14 +547,14 @@ func (h *orphanHeal) publish(observed *models.Task, request LifecycleRequest, ta
 		live.BaseCommit = &target
 		reason := fmt.Sprintf("orphaned base %s healed: task commits replayed onto integration %s", oldBase, target)
 		extra := map[string]any{
-			"old_review_commit":  oldReview,
-			"new_review_commit":  newHead,
-			"old_base_commit":    oldBase,
-			"new_base_commit":    target,
-			"orphaned_base_heal": true,
+			oldReviewCommitExtraKey:  oldReview,
+			newReviewCommitExtraKey:  newHead,
+			oldBaseCommitExtraKey:    oldBase,
+			newBaseCommitExtraKey:    target,
+			orphanedBaseHealExtraKey: true,
 		}
 		if adoptedFrom != "" && adoptedFrom != h.in.AgentID {
-			extra["prepared_by"] = adoptedFrom
+			extra[preparedByExtraKey] = adoptedFrom
 		}
 		agentID := h.in.AgentID
 		live.History = append(live.History, models.TaskHistoryEntry{
@@ -576,7 +586,7 @@ func (h *orphanHeal) fail(observed *models.Task, request LifecycleRequest, oldHe
 	}
 	if deterministic {
 		if cause != nil {
-			reason = fmt.Sprintf("%s: %s", reason, truncateForDiagnostics(cause.Error(), 500))
+			reason = fmt.Sprintf("%s: %s", reason, truncateForDiagnostics(cause.Error(), orphanedBaseHealCauseLimit))
 		}
 		return h.routeIntegrationFailed(observed, &request, nil, reason)
 	}
@@ -586,7 +596,7 @@ func (h *orphanHeal) fail(observed *models.Task, request LifecycleRequest, oldHe
 			preparation = *live
 		}
 	}
-	return OrphanedBaseHealNotApplicable, retireOrDeferFailedLifecyclePreparation(h.in.ProjectRoot, h.in.TaskID, h.in.Authority, &preparation, cause, "none")
+	return OrphanedBaseHealNotApplicable, retireOrDeferFailedLifecyclePreparation(h.in.ProjectRoot, h.in.TaskID, h.in.Authority, &preparation, cause, LifecycleEffectsNone)
 }
 
 // restore returns the task branch to its submitted HEAD and proves it.
@@ -671,7 +681,7 @@ func (h *orphanHeal) routeIntegrationFailed(observed *models.Task, request *Life
 // retireSettled retires a heal preparation proven absent whose task no longer
 // needs healing.
 func (h *orphanHeal) retireSettled(prepared *models.LifecyclePreparation) error {
-	err := retireOrDeferFailedLifecyclePreparation(h.in.ProjectRoot, h.in.TaskID, h.in.Authority, prepared, errOrphanHealSettled, "none")
+	err := retireOrDeferFailedLifecyclePreparation(h.in.ProjectRoot, h.in.TaskID, h.in.Authority, prepared, errOrphanHealSettled, LifecycleEffectsNone)
 	if retirementUncommitted(err) || !stderrors.Is(err, errOrphanHealSettled) {
 		return err
 	}
@@ -684,7 +694,7 @@ var errOrphanHealSettled = stderrors.New("orphaned-base heal preparation settled
 // TaskTransitionID does not cover.
 func sameOrphanHealBoundary(observed, live *models.Task) error {
 	if live == nil {
-		return &lizaerrors.NotFoundError{Entity: "task", ID: observed.ID}
+		return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: observed.ID}
 	}
 	if live.Status != observed.Status ||
 		!reflect.DeepEqual(live.ReviewingBy, observed.ReviewingBy) ||

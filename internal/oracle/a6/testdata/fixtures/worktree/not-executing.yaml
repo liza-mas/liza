@@ -1,0 +1,12 @@
+tasks:
+  - id: task-1
+    type: coding
+    role_pair: coding-pair
+    description: A6 unclaimed worktree task
+    done_when: Worktree refusal observed
+    scope: A6 worktree fixture
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: README.md
+    created: 2020-01-01T00:00:00Z
+    history: []

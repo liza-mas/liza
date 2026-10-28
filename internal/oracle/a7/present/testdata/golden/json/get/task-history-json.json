@@ -1,0 +1,20 @@
+{
+  "exit": 0,
+  "stderr": "",
+  "stdout": {
+    "ok": true,
+    "result": [
+      {
+        "agent": "coder-1",
+        "event": "claimed",
+        "time": "<TIME>"
+      },
+      {
+        "agent": "code-reviewer-1",
+        "event": "rejected",
+        "reason": "Add example",
+        "time": "<TIME>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "id": "AA1",
+  "base": "legacy",
+  "state_delta": {
+    "tasks": [
+      {
+        "id": "task-1",
+        "type": "coding",
+        "description": "Frozen A5 fixture",
+        "status": "MERGED",
+        "role_pair": "coding-pair",
+        "priority": 1,
+        "assigned_to": "coder-1",
+        "lease_expires": null,
+        "worktree": ".worktrees/task-1",
+        "base_commit": "{{commit:base}}",
+        "iteration": 1,
+        "created": "2020-01-01T00:00:00Z",
+        "history": [
+          {
+            "time": "2020-01-01T00:00:00Z",
+            "event": "pre_execution_checkpoint",
+            "agent": "coder-1",
+            "extra": {
+              "intent": "freeze A5",
+              "validation_plan": "fixture validation",
+              "files_to_modify": [
+                "feature.go",
+                "feature_test.go"
+              ]
+            }
+          }
+        ],
+        "review_commit": "{{commit:candidate}}",
+        "merge_commit": "{{commit:candidate}}",
+        "approved_by": "code-reviewer-1",
+        "handoff_events": [
+          {
+            "timestamp": "2020-01-01T00:00:00Z",
+            "agent": "coder-1",
+            "trigger": "submission"
+          },
+          {
+            "timestamp": "2020-01-01T00:00:00Z",
+            "agent": "code-reviewer-1",
+            "trigger": "completion"
+          }
+        ],
+        "acceptance_receipt": {
+          "version": 1,
+          "task_id": "task-1",
+          "review_commit": "{{commit:candidate}}",
+          "started_at": "2020-01-01T00:00:00Z",
+          "finished_at": "2020-01-01T00:00:00Z"
+        }
+      }
+    ]
+  },
+  "prepare": [],
+  "step": {
+    "operator": true,
+    "args": [
+      "archive-acceptance-receipts"
+    ],
+    "exit": 0,
+    "contains": ""
+  },
+  "modes": [
+    "json",
+    "human",
+    "state"
+  ]
+}

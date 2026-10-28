@@ -270,7 +270,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		{
 			name: "orchestrator status",
 			mutate: func(bb *db.Blackboard, _, _ string) error {
-				return setAgentToOrchestratingStatus(bb, stale)
+				return ops.EnterOrchestration(bb, stale)
 			},
 		},
 		{
@@ -282,7 +282,7 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 		{
 			name: "reviewer worktree blocking",
 			mutate: func(bb *db.Blackboard, _, _ string) error {
-				return blockReviewerTask(bb, "task-1", stale, "worktree missing")
+				return ops.ForceBlockReviewerTask(bb, stale, "task-1", "worktree missing")
 			},
 		},
 		{
@@ -360,11 +360,12 @@ func TestSupervisorOwnedMutationGenerationFence(t *testing.T) {
 	fences := map[string][]string{
 		"heartbeat.go":             {"CheckAgentAuthoritySnapshot", "db.WriteLivenessRecord"},
 		"supervisor.go":            {}, // still barred from direct .Modify(
-		"supervisor_restart.go":    {"ModifyWithAgentAuthority"},
-		"claiming.go":              {"ModifyWithAgentAuthority"},
-		"strategy_orchestrator.go": {"ModifyWithAgentAuthority"},
-		"provider_audit.go":        {"ModifyWithAgentAuthority"},
-		"worktree_check.go":        {"ModifyWithAgentAuthority"},
+		"supervisor_restart.go":    {"ops.PersistExit42Restart"},
+		"claiming.go":              {"ops.FinalizeCleanTerminalTask"},
+		"strategy_orchestrator.go": {"ops.ClearResumedTransitionCheckpoint", "ops.ConsumeRenderedHumanNotes", "ops.RecordUndecidedPlans"},
+		"provider_audit.go":        {"ops.RecordProviderAuditDegraded"},
+		"worktree_check.go":        {"ops.RecordWorktreeRecovered", "ops.ForceBlockReviewerTask"},
+		"strategy_reviewer.go":     {"ops.RecordPendingMergeStall"},
 	}
 	for name, required := range fences {
 		data, err := os.ReadFile(filepath.Join(filepath.Dir(sourceFile), name))

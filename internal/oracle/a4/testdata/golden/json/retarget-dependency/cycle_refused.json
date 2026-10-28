@@ -1,0 +1,40 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "details": {
+        "cycle_path": [
+          "t1",
+          "t2",
+          "t3",
+          "t1"
+        ],
+        "diagnostic_action": "retarget_dependency_rejected",
+        "effects": "none",
+        "new_dependencies": [
+          "t2"
+        ],
+        "old_dependency": "m1",
+        "operation": "retarget-dependency",
+        "outcome": "INVALID_INPUT",
+        "phase": "candidate-state-validation",
+        "safe_action": "correct_input",
+        "task_id": "t1",
+        "task_status": "DRAFT_CODE",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "retarget-dependency: INVALID_INPUT (safe_action=correct_input): retarget dependency rejected because the candidate state contains a dependency cycle"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "retarget-dependency",
+      "outcome": "INVALID_INPUT",
+      "safe_action": "correct_input",
+      "task_id": "t1",
+      "task_status": "DRAFT_CODE",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

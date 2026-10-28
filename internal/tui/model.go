@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/agentlaunch"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/log"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
+	"github.com/liza-mas/liza/internal/roles"
 )
 
 // InputMode represents the current input mode of the TUI.
@@ -34,6 +35,22 @@ const (
 	InlineActionTerminate                     // t — collecting agent ID
 	InlineActionTerminateConfirm              // t (phase 2) — collecting y/n confirmation
 )
+
+// isConfirmation reports whether the action collects a y/n answer, accepted as
+// a single keypress.
+func (a InlineAction) isConfirmation() bool {
+	return a == InlineActionStopConfirm || a == InlineActionTerminateConfirm
+}
+
+// hasCompletions reports whether Tab cycles completion candidates for the action.
+func (a InlineAction) hasCompletions() bool {
+	switch a {
+	case InlineActionSpawn, InlineActionSpawnWith, InlineActionSpawnCLI, InlineActionTerminate:
+		return true
+	default:
+		return false
+	}
+}
 
 // rolesMsg carries loaded role metadata and terminal states from pipeline config.
 type rolesMsg struct {
@@ -127,7 +144,7 @@ func (e errMsg) Error() string { return e.err.Error() }
 // anomaly alerts, and blackboard anomalies into a single chronological list.
 type ActivityEntry struct {
 	Timestamp time.Time
-	Source    string // "log", "alert", "anomaly"
+	Source    ActivityKind
 	Agent     string // empty for alerts/anomalies
 	Action    string
 	Task      string // empty if not task-specific
@@ -147,14 +164,21 @@ const (
 	ColumnTierFull                       // ≥ 160 cols: + PID / REVIEWING_BY, DEPS, TIME_IN_STATUS
 )
 
+// Minimum terminal widths of the column tiers above minimal.
+const (
+	columnTierFullMinWidth     = 160
+	columnTierWideMinWidth     = 120
+	columnTierStandardMinWidth = 80
+)
+
 // ColumnTierForWidth returns the column tier for a given terminal width.
 func ColumnTierForWidth(width int) ColumnTier {
 	switch {
-	case width >= 160:
+	case width >= columnTierFullMinWidth:
 		return ColumnTierFull
-	case width >= 120:
+	case width >= columnTierWideMinWidth:
 		return ColumnTierWide
-	case width >= 80:
+	case width >= columnTierStandardMinWidth:
 		return ColumnTierStandard
 	default:
 		return ColumnTierMinimal
@@ -177,13 +201,19 @@ func (f TaskFilter) Next() TaskFilter {
 	return (f + 1) % taskFilterCount
 }
 
+// Task panel title suffixes of the task filters.
+const (
+	taskFilterLabelActive        = "active"
+	taskFilterLabelActiveBlocked = "active+blocked"
+)
+
 // Label is the task panel title suffix for f; empty when unfiltered.
 func (f TaskFilter) Label() string {
 	switch f {
 	case TaskFilterActive:
-		return "active"
+		return taskFilterLabelActive
 	case TaskFilterActiveBlocked:
-		return "active+blocked"
+		return taskFilterLabelActiveBlocked
 	default:
 		return ""
 	}
@@ -266,9 +296,9 @@ type Model struct {
 // resolvedDefaultCLI returns the effective global default CLI from config, with nil-safe fallback.
 func (m Model) resolvedDefaultCLI() string {
 	if m.state == nil {
-		return agent.ResolveDefaultCLI("")
+		return agentlaunch.ResolveDefaultCLI("")
 	}
-	return agent.ResolveDefaultCLI(m.state.Config.DefaultCLI)
+	return agentlaunch.ResolveDefaultCLI(m.state.Config.DefaultCLI)
 }
 
 // resolvedDefaultCLIForRole returns the effective default CLI for a role name.
@@ -291,20 +321,20 @@ func (m Model) roleLaunchDefault(role string) (cli string, fromConfig bool, ok b
 	if m.state != nil {
 		config = m.state.Config
 	}
-	if roleModels, err := agent.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
+	if roleModels, err := agentlaunch.LoadValidatedRoleModels(m.projectRoot, m.roleTypes, config); err == nil {
 		// A reviewer list starts with item 1, like an agent started without flags.
-		if selection, covered := roleModels.For(role, roleType); covered {
+		if selection, covered := roleModels.For(role, roles.RoleType(roleType)); covered {
 			return selection.First().CLI, true, true
 		}
 	}
-	return agent.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true
+	return agentlaunch.ResolveDefaultCLIForRole(roleType, m.cliResolutionConfig()), false, true
 }
 
-func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {
+func (m Model) cliResolutionConfig() agentlaunch.CLIResolutionConfig {
 	if m.state == nil {
-		return agent.CLIResolutionConfig{}
+		return agentlaunch.CLIResolutionConfig{}
 	}
-	return agent.CLIResolutionConfig{
+	return agentlaunch.CLIResolutionConfig{
 		DefaultCLI:         m.state.Config.DefaultCLI,
 		DefaultDoerCLI:     m.state.Config.DefaultDoerCLI,
 		DefaultReviewerCLI: m.state.Config.DefaultReviewerCLI,
@@ -313,9 +343,9 @@ func (m Model) cliResolutionConfig() agent.CLIResolutionConfig {
 
 func (m Model) availableCLIs() []string {
 	if m.state == nil {
-		return agent.ValidCLIs()
+		return agentlaunch.ValidCLIs()
 	}
-	return agent.AvailableCLIs(m.state.Config)
+	return agentlaunch.AvailableCLIs(m.state.Config)
 }
 
 // New creates a new Model. Creates the fsnotify watcher and blackboard.

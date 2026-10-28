@@ -1,0 +1,24 @@
+exit 0
+--- stdout
+Recover a crashed agent by performing full cleanup:
+- Release task claims (executing → initial for doers, reviewing → submitted for reviewers)
+- Remove git worktree and branch (doers only)
+- Delete agent from state
+Idempotent: safe to run multiple times (no error if agent already gone).
+By default, refuses to recover agents whose PID is still alive.
+Usage:
+liza recover-agent <agent-id> [flags]
+Flags:
+--cli string respawn the agent after cleanup using this CLI (e.g., claude, codex)
+--expected-transition string current task transition_id captured before the request; requires --request-id
+--force override PID liveness check (refuse by default if process is alive)
+-h, --help help for recover-agent
+--json output result as structured JSON
+--reason string reason for recovering the agent (default "agent recovery")
+--request-id string logical request ID; preserve with its original --expected-transition across retries
+Global Flags:
+--check-update check for a Liza update before running
+-C, --project-root string Liza project root for state commands
+--update-channel string update check channel: stable or main (default "stable")
+-v, --verbose verbose output
+--- stderr

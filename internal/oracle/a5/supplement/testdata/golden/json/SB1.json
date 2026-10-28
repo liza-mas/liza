@@ -1,0 +1,30 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "already_transitioned",
+      "details": {
+        "current_assignee": "coder-1",
+        "effects": "none",
+        "operation": "submit-for-review",
+        "outcome": "ALREADY_TRANSITIONED",
+        "safe_action": "stop",
+        "task_id": "task-1",
+        "task_status": "READY_FOR_REVIEW",
+        "transition_id": "<ID>"
+      },
+      "message": "submit-for-review: ALREADY_TRANSITIONED (safe_action=stop): validation failed: task task-1 is not IMPLEMENTING_CODE (current status: READY_FOR_REVIEW)"
+    },
+    "ok": false,
+    "result": {
+      "current_assignee": "coder-1",
+      "effects": "none",
+      "operation": "submit-for-review",
+      "outcome": "ALREADY_TRANSITIONED",
+      "safe_action": "stop",
+      "task_id": "task-1",
+      "task_status": "READY_FOR_REVIEW",
+      "transition_id": "<ID>"
+    }
+  }
+}

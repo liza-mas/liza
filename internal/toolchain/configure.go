@@ -17,13 +17,32 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// AgentToolsMode selects how Configure treats the global AGENT_TOOLS.md. The
+// empty value means AgentToolsModeSkip; any other unlisted value is refused.
+type AgentToolsMode string
+
+const (
+	AgentToolsModeAuto  AgentToolsMode = "auto"
+	AgentToolsModeSkip  AgentToolsMode = "skip"
+	AgentToolsModeForce AgentToolsMode = "force"
+)
+
+// Shell and PowerShell host names that select profile files.
+const (
+	shellBash       = "bash"
+	shellBashExe    = "bash.exe"
+	shellZsh        = "zsh"
+	shellPwsh       = "pwsh"
+	shellPowerShell = "powershell"
+)
+
 type ConfigureOptions struct {
 	Profile           Profile
 	Include           []string
 	Exclude           []string
 	GlobalDir         string
 	InstallDir        string
-	AgentToolsMode    string
+	AgentToolsMode    AgentToolsMode
 	WriteShellProfile bool
 	HomeDir           string
 	Shell             string
@@ -148,21 +167,21 @@ func Configure(opts ConfigureOptions) (ConfigureResult, error) {
 	return result, nil
 }
 
-func configureAgentTools(globalDir, mode string) (string, error) {
+func configureAgentTools(globalDir string, mode AgentToolsMode) (string, error) {
 	mode, err := normalizeAgentToolsMode(mode)
 	if err != nil {
 		return "", err
 	}
-	if mode == "skip" {
+	if mode == AgentToolsModeSkip {
 		return "", nil
 	}
 	target := filepath.Join(globalDir, "AGENT_TOOLS.md")
-	if _, err := os.Stat(target); err == nil && mode == "auto" {
+	if _, err := os.Stat(target); err == nil && mode == AgentToolsModeAuto {
 		return target, nil
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("inspect AGENT_TOOLS.md: %w", err)
 	}
-	if mode == "force" {
+	if mode == AgentToolsModeForce {
 		if content, err := os.ReadFile(target); err == nil {
 			if err := os.WriteFile(target+".bak", content, 0o644); err != nil {
 				return "", fmt.Errorf("backup AGENT_TOOLS.md: %w", err)
@@ -184,11 +203,11 @@ func configureAgentTools(globalDir, mode string) (string, error) {
 	return target, nil
 }
 
-func normalizeAgentToolsMode(mode string) (string, error) {
+func normalizeAgentToolsMode(mode AgentToolsMode) (AgentToolsMode, error) {
 	if mode == "" {
-		mode = "skip"
+		mode = AgentToolsModeSkip
 	}
-	if mode != "auto" && mode != "skip" && mode != "force" {
+	if mode != AgentToolsModeAuto && mode != AgentToolsModeSkip && mode != AgentToolsModeForce {
 		return "", fmt.Errorf("invalid agent-tools mode %q (must be auto, skip, or force)", mode)
 	}
 	return mode, nil
@@ -328,9 +347,9 @@ func shellProfileNames(shell string) []string {
 		shell = os.Getenv("SHELL")
 	}
 	switch filepath.Base(shell) {
-	case "bash", "bash.exe":
+	case shellBash, shellBashExe:
 		return []string{".bashrc", ".profile"}
-	case "zsh":
+	case shellZsh:
 		return []string{".zshrc"}
 	default:
 		return []string{".profile"}
@@ -373,7 +392,7 @@ func powerShellProfilePaths(homeDir string, query func(string, ...string) ([]byt
 
 	var profilePaths []string
 	seen := make(map[string]struct{})
-	for _, host := range []string{"pwsh", "powershell"} {
+	for _, host := range []string{shellPwsh, shellPowerShell} {
 		out, err := query(host, "-NoProfile", "-NonInteractive", "-Command", "$PROFILE.CurrentUserAllHosts")
 		if err != nil {
 			continue

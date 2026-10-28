@@ -1,0 +1,4 @@
+exit 1
+[stdout]
+[stderr]
+Error: resume: failed to resume system: modification function failed: validation failed: cannot resume from STOPPED state (system must be restarted)

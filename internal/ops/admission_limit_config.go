@@ -43,18 +43,18 @@ func SetAdmissionLimit(projectRoot string, input SetAdmissionLimitInput) (*Confi
 		switch {
 		case i < 0:
 			state.Config.AdmissionLimits = append(limits, input.Limit)
-			result.Outcome = "set"
+			result.Outcome = string(configSetSet)
 		case limits[i].MaxConcurrent == input.Limit.MaxConcurrent && slices.Equal(limits[i].Match, input.Limit.Match):
-			result.Outcome = "unchanged"
+			result.Outcome = string(configSetUnchanged)
 		case !input.Replace:
-			result.Outcome = "conflict"
+			result.Outcome = string(configSetConflict)
 			return &PreconditionError{
 				Reason:  key + " is already set differently; use --replace with --reason to replace it",
-				Details: map[string]any{"key": key, "conflict": "existing_value"},
+				Details: map[string]any{"key": key, "conflict": configConflictExistingValue},
 			}
 		default:
 			limits[i] = input.Limit
-			result.Outcome = "replaced"
+			result.Outcome = string(configSetReplaced)
 		}
 		return nil
 	})
@@ -67,7 +67,7 @@ func RemoveAdmissionLimit(projectRoot, class, reason string) (*ConfigSetResult, 
 	if strings.TrimSpace(reason) == "" {
 		return nil, &PreconditionError{Reason: "removing an admission limit requires a non-empty --reason"}
 	}
-	result := &ConfigSetResult{Key: AdmissionLimitsConfigKey + "." + class, Outcome: "unchanged"}
+	result := &ConfigSetResult{Key: AdmissionLimitsConfigKey + "." + class, Outcome: string(configSetUnchanged)}
 	err := db.For(paths.New(projectRoot).StatePath()).Modify(func(state *models.State) error {
 		before := len(state.Config.AdmissionLimits)
 		state.Config.AdmissionLimits = slices.DeleteFunc(state.Config.AdmissionLimits, func(l models.AdmissionLimit) bool { return l.Class == class })
@@ -75,7 +75,7 @@ func RemoveAdmissionLimit(projectRoot, class, reason string) (*ConfigSetResult, 
 			state.Config.AdmissionLimits = nil
 		}
 		if len(state.Config.AdmissionLimits) != before {
-			result.Outcome = "removed"
+			result.Outcome = string(configSetRemoved)
 		}
 		return nil
 	})
@@ -83,12 +83,12 @@ func RemoveAdmissionLimit(projectRoot, class, reason string) (*ConfigSetResult, 
 }
 
 func finishAdmissionLimitWrite(result *ConfigSetResult, limit models.AdmissionLimit, reason string, err error) (*ConfigSetResult, error) {
-	if err != nil && result.Outcome != "conflict" {
-		result.Outcome = "failed"
+	if err != nil && result.Outcome != string(configSetConflict) {
+		result.Outcome = string(configSetFailed)
 	}
 	mask := secretmask.New()
 	log.Printf("config_set key=%s outcome=%s actor=%q max_concurrent=%d match=%q reason=%q",
-		result.Key, result.Outcome, "operator", limit.MaxConcurrent, mask.MaskText(strings.Join(limit.Match, "\x1f")), boundPostWorktreeCmd(mask.MaskText(reason)))
+		result.Key, result.Outcome, actorOperator, limit.MaxConcurrent, mask.MaskText(strings.Join(limit.Match, "\x1f")), boundPostWorktreeCmd(mask.MaskText(reason)))
 	if err != nil {
 		return nil, fmt.Errorf("set %s: %w", result.Key, err)
 	}

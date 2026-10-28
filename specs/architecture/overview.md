@@ -167,6 +167,172 @@ Agents don't discover and claim their own work. Each agent's supervisor (the Go 
 
 TDD is mandatory for all code tasks in MAS. Tests must be written first against `done_when` criteria, encoding spec intent before implementation exists. This prevents the failure mode where tests validate what code does rather than what the spec requires. See ADR-0007.
 
+## Go Code Structure
+
+The `liza` binary is one Go module. After the architecture consolidation run (2026-10, closed in
+[run-close.md](consolidation-run/run-close.md)) its production packages sit in layers with an
+enforced import direction, and each kind of new code has an owner. Three guards keep it so
+(`make lint-archguard`, which `make lint` runs and `make test` covers through `./...`; see
+[ADR-0218](ADR/0218-architecture-guard-package-and-ratchet-data-seam.md)): the size guard S1, the
+import-direction guard K4 and the mutation-boundary guard C6, all in
+[`internal/testguard/archguard`](../../internal/testguard/archguard/). Packages under
+`internal/testhelpers/**`, `internal/testguard/**`, `internal/integration` and
+`internal/prompts/promptbench` are test support and exempt: they are not in the layer map.
+`internal/prompts/rolebudget` is test support that is mapped, to a test-support layer no rule
+touches.
+
+### Layers
+
+Every other production package under `cmd/` and `internal/` has exactly one layer entry (63 at the
+close, the `rolebudget` entry included). Layers are exact package paths: a new sub-package needs
+its own entry.
+
+| Layer | Packages | Role |
+|---|---|---|
+| domain (5) | `models`, `pipeline`, `roles`, `taskkind`, `referencecontract` | State model, declarative pipeline, role and task-kind vocabulary; imports no higher layer |
+| application (1) | `ops` | Named, validated operations over the blackboard: the only place state transitions and mutations are decided |
+| runtime (2) | `agent`, `process` | Agent supervision, provider sessions, child-process management |
+| prompts (1) | `prompts` | Prompt rendering from already-resolved data |
+| presentation (5) | `cmd/liza`, `commands`, `tui`, `interactive`, `jsonout` | CLI, terminal UI and output shaping |
+| leaf (6) | `paths`, `identity`, `errors`, `render`, `log`, `brand` | Utilities importable from any layer |
+| infrastructure (42) | every other production package, e.g. `db`, `filelock`, `git`, `gitenv`, `agentlaunch`, `providersignal`, `providers`, `toolchain`, `embedded` | Persistence mechanics and adapters to external tools |
+
+(`internal/` prefix omitted except for `cmd/liza`.)
+
+### Import direction
+
+The rules, evaluated over the production import graph (build constraints ignored) by
+`TestK4ImportDirectionGuard`:
+
+| Rule | Forbidden unless allowlisted |
+|---|---|
+| R1 | domain, infrastructure or leaf importing application, runtime, presentation or prompts |
+| R2 | application importing runtime, presentation or prompts |
+| R3 | prompts importing application, runtime or presentation |
+| R4 | runtime importing presentation |
+| R5 | presentation other than `cmd/liza` importing `agent` or its sub-packages |
+| R6 | `jsonout` importing application |
+| R7 | `agent` or its sub-packages importing `db` |
+| R8 | a production package with no layer entry (and a layer entry naming no package) |
+
+A crossing passes only through an allowlist entry carrying importer, imported, owner and a
+rationale; an entry whose edge no longer exists is stale and fails, so the list only shrinks unless
+an owner adds a rationale-carrying entry. Three crossings are retained, below.
+
+### Composition root
+
+`cmd/liza` is the composition root. It binds the cobra command tree to `commands`, `tui`, `agent`
+and the rest, and may import any layer. No other presentation package may import `agent` without
+an allowlist entry (R5).
+
+### Mutation boundary
+
+No production code outside `ops` and `db` mutates the blackboard or hands it a mutation callback.
+`ops` owns every named persistence operation and its locked state decision; `db` retains locking,
+archive publication, encoding, the liveness overlay and the other persistence mechanics
+([ADR-0021](ADR/0021-ops-service-layer-for-mutations.md)). Callers pass typed intent and identities,
+and receive typed results; they never supply a `func(*models.State)`-style callback or a patch map.
+`TestC6MutationGuard` (`c6_mutation_guard_test.go`) type-checks the whole production tree and
+rejects any use of a mutating `*db.Blackboard` method (`Modify`, `Write`, `UpdateTask`,
+`UpdateAgent`, `ArchiveTerminalTask`) outside `ops` and `db`, any interface method with the same
+signature, any ops or db function taking a state-mutation callback, a new exported `Blackboard`
+method missing from its read-only/mutating classification table, and a file no build configuration
+type-checked. It has no baseline exception.
+
+### Where new code goes
+
+New code joins the permanent group owning its responsibility, never a new numbered run area.
+
+| New code | Goes to |
+|---|---|
+| A new blackboard mutation or state transition | A named operation in `internal/ops`, in the concern family owning the capability (groups A3 to A6 below); never a closure in `agent`, `commands` or `tui` |
+| A domain type, status, role or other control-flow vocabulary | Typed constants in the owning domain package (`models`, `roles`, `pipeline`, `taskkind`); user-configured identities stay dynamic |
+| A CLI command | Handler in `internal/commands`, registration in `cmd/liza`, output shaping in `jsonout`; the decision itself in `ops` |
+| Terminal UI | `internal/tui`; read-only queries of the runtime need an allowlist rationale |
+| Supervisor loop, claim timing, provider session handling | `internal/agent`; it decides when to ask, `ops` decides and records |
+| Provider launch resolution, tool registry, canonical provider keys | `internal/agentlaunch` |
+| Provider stop signals (quota, unavailable), their matching and reset | `internal/providersignal` |
+| Child-process management | `internal/process` |
+| Prompt text, templates, builders | `internal/prompts`, fed resolved data; the runtime-side assembly of those inputs stays in the prompt files of `internal/agent` (group A8) |
+| An adapter to an external tool or platform facility | An infrastructure package of group A2 |
+| Locking, encoding, archive and persistence mechanics | `internal/db` and the group A1 packages next to it |
+| A shared utility with no upward import | A leaf package, only when every layer needs it |
+| Behaviour-preservation tests | Oracle packages under `internal/oracle/` with the harness in `internal/testhelpers/oracle`; goldens change only by the rules of [ADR-0219](ADR/0219-oracle-harness-and-chained-provenance.md) |
+
+A new production package is assigned to one group and gets one layer entry in that group's data
+file; `TestK4ImportDirectionGuard` fails (R8) until it has one. A cross-group import is governed by
+the layer rules above, not by the historical order of the groups.
+
+### Permanent component groups
+
+The run split the guard data into nine files, `area_a1_test.go` to `area_a9_test.go`, one `Area`
+value each with layer entries, allowlist entries, ratchet entries and S2 exceptions. The run is
+over; the split stays as the component groups that new packages join. `areas_test.go` lists the nine
+values and is never edited. Group A3 holds the single layer entry of the `ops` package shared by
+groups A3 to A6.
+
+| Group | Data file | Responsibility | Packages (layer) |
+|---|---|---|---|
+| A1 State core | `area_a1_test.go` | State model, validation, persistence mechanics, leaf utilities | domain `models`, `pipeline`, `referencecontract`, `roles`, `taskkind`; infrastructure `db`, `filelock`, `archiveobject`, `atomicfile`, `statevalidate`, `statehygiene`, `payloadschema`, `runtimeinputs`, `rolemodels`, `envgate`, `alerts`, `analysis`, `usage`; leaf `paths`, `identity`, `errors`, `render`, `log`, `brand` |
+| A2 Platform adapters and distribution | `area_a2_test.go` | Git and subprocess adapters, provider catalog, repository-intelligence tools, embedded artifacts, installer pieces | infrastructure `git`, `gitenv`, `gitbash`, `worktreeexclude`, `subprocess`, `procscan`, `secretmask`, `toolresult`, `toolresultacp`, `sessionvalidation`, `precommit`, `projectdetect`, `initcheck`, `codexconfig`, `bash-policy-cli`, `providers`, `embedded`, `brandrender`, `brandrender/cmd/sync-embedded`, `scipsearch`, `stacklit`, `semble`, `functionalclusters`, `pairingindex`, `toolchain`, `updater`, `termutil` |
+| A3 to A6 Ops | `area_a3_test.go` (layer entry); `area_a4_test.go` to `area_a6_test.go` (empty) | The one `internal/ops` package, owned by capability below | application `ops` |
+| A7 Presentation | `area_a7_test.go` | CLI, TUI, output shaping | presentation `cmd/liza`, `commands`, `interactive`, `jsonout`, `tui` |
+| A8 Prompts | `area_a8_test.go` | Prompt rendering and the runtime-side assembly of its inputs | prompts `prompts`; test-support `prompts/rolebudget`; files `prompt.go`, `prompt_task_context.go`, `prompt_intelligence.go`, `prompt_integration.go`, `prompt_task_graph.go`, `prompt_planner_context.go`, `prompt_corrective_context.go`, `reference_context.go`, `orchestrator_dashboard.go` of `internal/agent` |
+| A9 Agent runtime | `area_a9_test.go` | Supervision, provider launch and signals, process management | runtime `agent` (all other files), `process`; infrastructure `agentlaunch`, `providersignal` |
+
+The ops groups share one package, so their ownership is by capability and file, not by layer entry
+(representative files; the ADRs list most of them, while 47 files have no family yet — see
+[Ops Concern-Family Ownership Is Nominal](architectural-issues.md#ops-concern-family-ownership-is-nominal)):
+
+| Group | Capability | Concern families in `internal/ops` | Record |
+|---|---|---|---|
+| A3 Kernel and execution lifecycle | Claim, release, handoff, recovery, blocked episode, generation authority, receipts, locks, admission, run control | claim (`claim_task*.go`), blocked episode (`mark_blocked*.go`, `assess_blocked*.go`, `unblock_*.go`), ownership release and recovery (`release_claim*.go`, `handoff.go`, `recover_*.go`), kernel (`lifecycle_*.go`, `agent_authority.go`, `*_lock.go`, `admission_slot.go`, `runtime_input_*.go`), run control (`mode_change.go`, `set_auto_resume.go`) | [ADR-0222](ADR/0222-a3-ops-kernel-concerns-and-vocabulary.md) |
+| A4 Planning and task graph | Transition expansion, plan governance, graph repair, replacement and retirement, sprint coordination | `proceed.go` with `transition_*.go`, `plan_*.go`, `amend_plan.go`, dependency repair (`retarget_dependency*.go`, `apply_dependency_repair.go`), `replace_task*.go`, `supersede_task.go`, `cancel_task.go`, `delete_task*.go`, sprint (`advance_sprint.go`, `sprint_checkpoint.go`, `update_sprint_metrics.go`) | [ADR-0223](ADR/0223-a4-ops-planning-concerns-and-vocabulary.md) |
+| A5 Review and acceptance | Acceptance evidence, submission, verdict recording, await protocols, review ownership | `acceptance_*.go`, `submit_review.go` with `submission_*.go`, `submit_verdict.go` with `verdict_*.go`, `await_*.go`, `claim_reviewer_task.go`, `reviewer_claim_*.go`, `review_*.go` | [ADR-0224](ADR/0224-a5-ops-review-acceptance-concerns-and-vocabulary.md) |
+| A6 Merge and integration | Deferred and live validation, integration progress, merge execution, worktree provisioning | `deferred_validation*.go`, `integration_*.go`, `wt_merge.go` with `merge_*.go`, `reconcile_merged.go`, `wt_create.go`, `wt_delete.go`, `post_worktree_setup*.go`, repository-intelligence indexing (`*_indexing.go`) | [ADR-0225](ADR/0225-a6-ops-merge-integration-concerns-and-vocabulary.md) |
+
+The other groups' records are [ADR-0220](ADR/0220-a1-typed-vocabulary.md) and
+[ADR-0221](ADR/0221-a2-typed-vocabulary-ownership.md) (A1, A2),
+[ADR-0226](ADR/0226-a7-presentation-concerns-and-classification-contract.md) (A7),
+[ADR-0227](ADR/0227-a8-resolved-prompt-inputs-and-assembly-concerns.md) (A8) and
+[ADR-0228](ADR/0228-a9-runtime-concerns-and-launch-signal-capabilities.md) (A9). The C-scope
+decisions that changed behaviour are [ADR-0229](ADR/0229-policy-time-canonical-provider-keys.md)
+(canonical provider keys) and [ADR-0230](ADR/0230-canonical-provider-unavailable-signals.md)
+(provider-unavailable signals).
+
+### Size guard and S2 exceptions
+
+`TestS1SizeGuard` holds the size thresholds: no production function over 100 lines (declaration
+line to closing brace) and no production file over 800 lines. An offender is either in a group's
+`Ratchet` list, which may only shrink, or an S2 exception: data-like code (a table, a registration
+or generated code) with a recorded rationale, or an entry with a human ruling. All nine `Ratchet`
+slices are empty. `s1_snapshot_test.go` is not active debt: it is the immutable record of the 33
+files and 93 functions over the thresholds at the starting commit
+(`96c9ad69aee983ce2b929dd681b6ba43bf920535`), and the guard uses it to refuse a ratchet entry that
+was never there.
+
+The S2 list equals the nine S2 slices. It holds one entry:
+
+| Group | Key (file, function) | Category | Rationale | Ruling |
+|---|---|---|---|---|
+| A2 | `internal/toolchain/catalog.go`, `Catalog` (153 lines) | table | declarative tool catalog: one literal entry per tool | none needed (data-like) |
+
+The S2 slices of A1 and A3 to A9 are empty. A code change that adds an S2 entry must update this
+table in the same change.
+
+### Retained import crossings
+
+The allowlist holds three entries, all in group A9's data file, and no entry is a mutation exemption:
+
+| Importer → imported | Rationale |
+|---|---|
+| `commands` → `agent` | `commands/status_orchestrator.go` reads the runtime's read-only wake projection (`DetectOrchestratorWakeTriggersForProject`, `OrchestratorWakeResult`); duplicating the wake precedence would be worse, and the edge grants no mutation authority |
+| `tui` → `agent` | `tui/view_agents.go` shows `RolePauseReason`, a snapshot-only pause reason; no waiting, resume or mutation side effect crosses the interface |
+| `agent` → `db` | The runtime holds the blackboard handle for non-mutating use only: snapshot, cached and watch reads, handle construction and acquisition configuration passed to named `ops` operations, and generation-scoped liveness record publication ([ADR-0177](ADR/0177-liveness-side-records.md)), which rewrites no canonical state. Every persisted-state mutation lives in `ops`, and C6 rejects one anywhere else |
+
+The corresponding finding stays open in the registry:
+[Commands Layer Imports Agent Runtime](architectural-issues.md#commands-layer-imports-agent-runtime).
+
 ## Directory Structure
 
 ### Project Repository
@@ -240,7 +406,7 @@ for the canonical contract root and ADR-0111 for active-path selection.
 
 ### Go CLI (`liza`)
 
-All system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](ADR/0012-go-cli-replaces-bash-scripts.md).
+All system mechanics are provided by the `liza` Go binary (assumed in PATH). See [ADR-0012](ADR/0012-go-cli-replaces-bash-scripts.md). Its source is organized as described in [Go Code Structure](#go-code-structure): `cmd/liza` is the entry point and composition root, commands live in `internal/commands`, and state changes are decided in `internal/ops`.
 
 | Command | Purpose |
 |---------|---------|
@@ -298,4 +464,7 @@ Merge to main is human-triggered, not part of Liza flow.
 - [State Machines](state-machines.md) — task and agent states
 - [Blackboard Schema](blackboard-schema.md) — state.yaml structure
 - [Supervision Model](supervision-model.md) — supervisor vs MCP tool responsibility
+- [ADR index](ADR/README.md) — structural decisions, including [ADR-0218](ADR/0218-architecture-guard-package-and-ratchet-data-seam.md) (the guards) and ADRs 0219 to 0230 (the consolidation run)
+- [Architectural Issues](architectural-issues.md) — the lifecycle authority for open and resolved findings
+- [Consolidation run close](consolidation-run/run-close.md) — evidence for the structure described in Go Code Structure
 - [Worktree Management](../protocols/worktree-management.md) — worktree lifecycle

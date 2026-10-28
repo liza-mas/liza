@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "effects": "none",
+        "operation": "resume-rejection-rca",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "task-1",
+        "task_status": "BLOCKED",
+        "transition_id": "<ID>"
+      },
+      "message": "resume-rejection-rca: STATE_CHANGED (safe_action=requery): failed to run resume-rejection-rca: modification function failed: resume-rejection-rca: STATE_CHANGED (safe_action=requery): validation failed: task has no recorded RCA; run record-rejection-rca first"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "resume-rejection-rca",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "task-1",
+      "task_status": "BLOCKED",
+      "transition_id": "<ID>"
+    }
+  }
+}

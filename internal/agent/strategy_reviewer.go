@@ -16,8 +16,6 @@ import (
 
 const defaultMaxMergeRetries = 3
 
-const pendingMergeStallAnomalyType = models.AnomalyTypePendingMergeStalled
-
 // Overridable in tests, which must not spend the production cadence to observe
 // one round of it.
 var (
@@ -186,7 +184,7 @@ func (s *reviewerStrategy) parkPendingMerges(bb *db.Blackboard, agentID string, 
 	if err != nil {
 		return // Unparked: the wait re-runs merge handling once, which is safe.
 	}
-	s.parkedMergeFingerprint = ownedPendingMergeFingerprint(state, agentID, pr)
+	s.parkedMergeFingerprint = ops.OwnedPendingMergeFingerprint(state, agentID, pr)
 }
 
 // errPreWorkWake declines the claim step after a wait that ended for merge
@@ -232,20 +230,7 @@ func (s *reviewerStrategy) awaitPendingMergeWake(ctx context.Context, bb *db.Bla
 // recordPendingMergeStall leaves durable evidence that automatic merge
 // convergence gave up, so the stall is visible without reading supervisor logs.
 func (s *reviewerStrategy) recordPendingMergeStall(bb *db.Blackboard, config SupervisorConfig) {
-	err := ops.ModifyWithAgentAuthority(bb, config.Authority, func(state *models.State) error {
-		state.Anomalies = append(state.Anomalies, models.Anomaly{
-			Timestamp: time.Now().UTC(),
-			Reporter:  config.AgentID,
-			Type:      pendingMergeStallAnomalyType,
-			Details: map[string]any{
-				"agent_id": config.AgentID,
-				"role":     s.role,
-				"rounds":   s.mergeStallRounds,
-				"impact":   models.PendingMergeStallImpact,
-			},
-		})
-		return nil
-	})
+	err := ops.RecordPendingMergeStall(bb, config.Authority, config.AgentID, s.role, s.mergeStallRounds)
 	if err != nil {
 		GetLogger().Warn("Failed to record pending merge stall anomaly", "agent_id", config.AgentID, "error", err)
 	}
@@ -265,7 +250,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			// Merges run only in PreWork, and an owned merge is not reviewable
 			// work: without this, a reviewer that inherits a merge sleeps for
 			// reviewer_max_wait while downstream work waits on it.
-			if fingerprint := ownedPendingMergeFingerprint(state, config.AgentID, pr); fingerprint != "" && fingerprint != s.parkedMergeFingerprint {
+			if fingerprint := ops.OwnedPendingMergeFingerprint(state, config.AgentID, pr); fingerprint != "" && fingerprint != s.parkedMergeFingerprint {
 				s.preWorkWake = true
 				return true, "Owned pending merge changed; returning to merge handling"
 			}
@@ -316,7 +301,7 @@ func (s *reviewerStrategy) WaitForWork(ctx context.Context, bb *db.Blackboard, c
 			}
 
 			// Use richer diagnostics for code-reviewer role
-			if s.role == "code-reviewer" {
+			if s.role == models.RoleCodeReviewer {
 				return false, models.GetReviewerWorkDiagnostics(state, pr)
 			}
 			return false, fmt.Sprintf("No %s-reviewable tasks", s.role)
@@ -390,7 +375,11 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 	if err != nil {
 		return "", "", err
 	}
-	result, err := claimReviewerTaskForRoleWithOptionalAuthority(config.ProjectRoot, config.Authority.ID, s.role, config.InitialTask, 1800, &config.Authority, bb, session)
+	state, err := bb.ReadSnapshot()
+	if err != nil {
+		return "", "", err
+	}
+	result, err := claimReviewerTaskForRoleWithOptionalAuthority(config.ProjectRoot, config.Authority.ID, s.role, config.InitialTask, ops.LeaseDurationSeconds(state.Config), &config.Authority, bb, session)
 	if err != nil {
 		return "", "", err
 	}
@@ -420,7 +409,7 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 			"task_id", taskID, "error", wtErr)
 		if !errors.Is(wtErr, errTaskBlocked) {
 			// Transient error (bb.Read, BranchExists, AttachWorktree) or a
-			// post_worktree_cmd failure. blockReviewerTask was NOT called, so the
+			// post_worktree_cmd failure. ops.ForceBlockReviewerTask was NOT called, so the
 			// reviewer claim and agent state are still dangling — release them.
 			// Release restores the task to its reviewable status, preserving the
 			// doer's completed work for the next reviewer.
@@ -428,7 +417,7 @@ func (s *reviewerStrategy) ClaimTask(config SupervisorConfig, bb *db.Blackboard)
 				return "", "", releaseErr
 			}
 		}
-		// For errTaskBlocked, blockReviewerTask already cleared
+		// For errTaskBlocked, ops.ForceBlockReviewerTask already cleared
 		// claim fields and released agent state.
 		//
 		// A failed setup command is project-level, so this reviewer cannot make

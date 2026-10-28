@@ -3,12 +3,8 @@ package prompts
 import (
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/liza-mas/liza/internal/brand"
-	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
-	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 // D-94: these tests establish rendered duties and routing for settling
@@ -129,38 +125,9 @@ func TestCorrectivePlacementRendersForBothAllocators(t *testing.T) {
 	}
 }
 
-func TestPlanningCompleteRequiresAppliedCorrectivePlacement(t *testing.T) {
-	now := time.Now().UTC()
-	task := testhelpers.BuildTaskByStatus("fix-cp", models.TaskStatusMerged, now)
-	task.RolePair = "code-planning-pair"
-	task.Output = []models.OutputEntry{{Desc: "one", DoneWhen: "d", Scope: "s", PlanRef: "specs/plans/fix-cp.md#Task 1"}}
-	state := testhelpers.CreateValidState()
-	state.Tasks = []models.Task{task}
-	state.Sprint.Scope.Planned = []string{"fix-cp"}
-
-	_, instruction, err := RenderOrchestratorDashboard(state, setupPipelineConfig(t), "orchestrator-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := strings.Join(strings.Fields(instruction), " ")
-	for _, want := range []string{
-		"f. A correction writer joining an ordered shared-file chain (not an ordinary admission) needs Placement; absent → amend-plan/replan.",
-		"recheck each successor was never claimed and is unstarted, then " + brand.Command("reserve-provider") + " it onto this task; pass only once all hold.",
-		"On failure keep it unpassed and its reservations:",
-		"STALE_CALLER → stop;",
-		"lock → bounded retry;",
-		"bad transition/cap/cycle → amend-plan/replan;",
-		"started successor, no legal slot or no rule correction case → plan-check --hold.",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("instruction missing %q", want)
-		}
-	}
-}
-
 func TestBlockedWakeLeavesCorrectivePlacementToReviewedPlanner(t *testing.T) {
 	t.Parallel()
-	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1")
+	rendered, err := RenderWakeInstructions("BLOCKED_TASKS", "orchestrator-1", testMatcherText())
 	if err != nil {
 		t.Fatal(err)
 	}

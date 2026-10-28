@@ -1,0 +1,16 @@
++ .claude directory 0755 -
++ .claude/hooks directory 0755 -
++ .claude/hooks/enforce-init.sh file 0755 e2b64dd591326238a4dccf78a13481a471bf5c79ae23a46801cae3db14c01950
++ .claude/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
++ .claude/hooks/rtk-guard.sh file 0755 602000939876fb901511e44636c0320d20540eb1e5a69a7c5f4309f8a42bbcd4
++ .claude/hooks/session-context.sh file 0755 79caabcec2bdf6e25bface168f4b5db7878b3693ee6b2176adcc1da0d7652767
++ .claude/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393
++ .claude/settings.json file 0644 1a7a727ee24332f25d6fbb092b80d07a0d5ea57eb8f835ada0914af569c9e806
++ .claudeignore file 0644 b092f9f9b1817e1d963094f4807d14c1e1eaf4e5d0e507f2fdf50ecb095ac8a2
++ .liza directory 0755 -
++ .liza/SUPPORT.md file 0644 3a39ac9092a1170b7d321a4daeedf5288515d3fcafec8040cb165233ed356008
++ .liza/archive directory 0755 -
++ .liza/models.yaml file 0644 9826f15fddd49a1c62b6479e832d6724824be3c039bc452a454fc0342f9c47dd
++ .liza/pipeline.yaml file 0644 4fe3c7c5b49dc6815d885cfb3efeba57179f0599ded9388e4e87078b8aa328a9
++ .liza/state.yaml file 0644 state-golden
++ GUARDRAILS.md file 0644 787372ed0dce7217f159ba84b16c3ff7d499145fc90a5893d715fa6ae6b1c9e0

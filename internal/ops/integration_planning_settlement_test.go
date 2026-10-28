@@ -27,7 +27,7 @@ func TestIntegrationPlanningWaitNamesPendingTasksAndLever(t *testing.T) {
 	}
 
 	waiting := decision.Waiting
-	if waiting == nil || waiting.Code != integrationProgressWaitingPlanning {
+	if waiting == nil || waiting.Code != string(integrationProgressWaitingPlanning) {
 		t.Fatalf("waiting = %+v, want planning_unsettled", waiting)
 	}
 	if !reflect.DeepEqual(waiting.TaskIDs, []string{"story-a", "story-b"}) {
@@ -77,7 +77,7 @@ func TestIntegrationWaitsForUpstreamPlanning(t *testing.T) {
 				if decision.PlanningSettled || decision.FreezeContributingSet || decision.GlobalRequest != nil || decision.IntegrationComplete {
 					t.Fatalf("frozen=%v: premature integration decision: %+v", frozen, decision)
 				}
-				if decision.Waiting == nil || decision.Waiting.Code != integrationProgressWaitingPlanning {
+				if decision.Waiting == nil || decision.Waiting.Code != string(integrationProgressWaitingPlanning) {
 					t.Fatalf("frozen=%v: waiting = %+v, want planning_unsettled", frozen, decision.Waiting)
 				}
 			}

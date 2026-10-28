@@ -169,7 +169,7 @@ func TestAssessmentDependencyOutcomeCoversDeclaredStatuses(t *testing.T) {
 	}
 	// Read declarations so a new engine-owned outcome requires an explicit
 	// decision here, even though pipeline-defined nonempty states are pending.
-	source, err := parser.ParseFile(token.NewFileSet(), "../models/task.go", nil, 0)
+	source, err := parser.ParseFile(token.NewFileSet(), "../models/task_status.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestAssessmentDependencyOutcomeCoversDeclaredStatuses(t *testing.T) {
 			if !ok {
 				t.Fatalf("declare assessment outcome for new task status %s", status)
 			}
-			if got := assessmentDependencyOutcome(&models.Task{Status: status}); got != outcome {
+			if got := assessmentDependencyOutcome(&models.Task{Status: status}); string(got) != outcome {
 				t.Errorf("%s outcome = %s, want %s", status, got, outcome)
 			}
 			declared++

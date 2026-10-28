@@ -1,0 +1,18 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "-p",
+        "--verbose",
+        "--output-format",
+        "stream-json"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "kimi",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "kimi"
+}

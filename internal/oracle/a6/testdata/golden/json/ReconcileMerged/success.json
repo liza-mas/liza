@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "merge_commit": "<SHA:BASE>",
+      "original_status": "INTEGRATION_FAILED",
+      "task_id": "task-1",
+      "warnings": null
+    }
+  }
+}

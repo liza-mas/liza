@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "task p1 has downstream dependency t3: role_pair coding-pair is downstream of code-planning-pair"
+    },
+    "ok": false,
+    "result": null
+  }
+}

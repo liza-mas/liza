@@ -1,0 +1,28 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "state_changed",
+      "details": {
+        "effects": "none",
+        "operation": "apply-dependency-repair",
+        "outcome": "STATE_CHANGED",
+        "safe_action": "requery",
+        "task_id": "b1",
+        "task_status": "BLOCKED",
+        "transition_id": "<DIGEST 1>"
+      },
+      "message": "apply-dependency-repair: STATE_CHANGED (safe_action=requery): failed to apply dependency repair: modification function failed: apply-dependency-repair: STATE_CHANGED (safe_action=requery): validation failed: task t2 dependencies changed since the repair request was created: got [t3], expected [t1]"
+    },
+    "ok": false,
+    "result": {
+      "effects": "none",
+      "operation": "apply-dependency-repair",
+      "outcome": "STATE_CHANGED",
+      "safe_action": "requery",
+      "task_id": "b1",
+      "task_status": "BLOCKED",
+      "transition_id": "<DIGEST 1>"
+    }
+  }
+}

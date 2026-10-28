@@ -1,0 +1,9 @@
+exit_code: 0
+# stdout
+outcome: COMPLETED
+safe_action: continue
+task_status: UNKNOWN
+effects: none
+schema_version: 1
+# stderr
+

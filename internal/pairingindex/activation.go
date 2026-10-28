@@ -99,13 +99,13 @@ func PlanActivation(opts ActivationPlanOptions) (ActivationPlan, error) {
 	}
 
 	for _, scipPlan := range result.Plans {
-		if slices.Contains(opts.ScipLanguageFilter, scipPlan.Language) {
+		if slices.Contains(opts.ScipLanguageFilter, string(scipPlan.Language)) {
 			plan.Install.ScipPlans = append(plan.Install.ScipPlans, scipPlan)
 		}
 	}
 	for _, language := range opts.ScipLanguageFilter {
 		covered := slices.ContainsFunc(plan.Install.ScipPlans, func(p scipsearch.LanguageAggregatePlan) bool {
-			return p.Language == language
+			return string(p.Language) == language
 		})
 		if !covered {
 			plan.Unindexable = append(plan.Unindexable, language)

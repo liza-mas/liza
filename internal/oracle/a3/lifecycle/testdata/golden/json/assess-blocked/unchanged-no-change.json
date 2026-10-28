@@ -1,0 +1,42 @@
+{
+  "runs": [
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "changed": true,
+          "completed_transition_id": "<id-1>",
+          "current_assignee": "coder-1",
+          "effects": "committed",
+          "operation": "assess-blocked",
+          "outcome": "COMPLETED",
+          "safe_action": "continue",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    },
+    {
+      "exit_code": 0,
+      "stderr": [],
+      "stdout": {
+        "ok": true,
+        "result": {
+          "changed": false,
+          "current_assignee": "coder-1",
+          "effects": "none",
+          "operation": "assess-blocked",
+          "outcome": "NO_CHANGE",
+          "safe_action": "stop",
+          "suppressed_entry_bytes": "<entry-bytes>",
+          "task_id": "task-1",
+          "task_status": "BLOCKED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

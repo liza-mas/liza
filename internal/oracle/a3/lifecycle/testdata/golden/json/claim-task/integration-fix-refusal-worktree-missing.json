@@ -1,0 +1,33 @@
+{
+  "runs": [
+    {
+      "exit_code": 1,
+      "stderr": [],
+      "stdout": {
+        "error": {
+          "code": "state_changed",
+          "details": {
+            "effects": "unknown",
+            "operation": "claim-task",
+            "outcome": "STATE_CHANGED",
+            "safe_action": "requery",
+            "task_id": "task-1",
+            "task_status": "INTEGRATION_FAILED",
+            "transition_id": "<id-1>"
+          },
+          "message": "claim-task: STATE_CHANGED (safe_action=requery): worktree .worktrees/task-1 missing for INTEGRATION_FAILED task"
+        },
+        "ok": false,
+        "result": {
+          "effects": "unknown",
+          "operation": "claim-task",
+          "outcome": "STATE_CHANGED",
+          "safe_action": "requery",
+          "task_id": "task-1",
+          "task_status": "INTEGRATION_FAILED",
+          "transition_id": "<id-1>"
+        }
+      }
+    }
+  ]
+}

@@ -96,3 +96,18 @@ func TestTerminalArchiveEnableWithoutBacklogPublishesConfig(t *testing.T) {
 		t.Fatalf("enable did not publish configuration: state=%v error=%v", state, err)
 	}
 }
+
+// TestArchiveVocabularySpelling pins each constant against the literal it
+// replaced, written independently of the constant: lock holders report the
+// operation labels and the deferred drain wires the effects value.
+func TestArchiveVocabularySpelling(t *testing.T) {
+	for _, tc := range []struct{ name, got, want string }{
+		{"archive lock operation", archiveTerminalTasksLockOperation, "archive-terminal-tasks"},
+		{"restore lock operation", restoreTerminalTasksLockOperation, "restore-terminal-tasks"},
+		{"drain retirement effects", string(LifecycleEffectsUnknown), "unknown"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s spells %q, want %q", tc.name, tc.got, tc.want)
+		}
+	}
+}

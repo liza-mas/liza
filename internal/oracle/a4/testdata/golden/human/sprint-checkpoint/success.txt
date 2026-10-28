@@ -1,0 +1,9 @@
+exit_code: 0
+--- stdout
+Sprint checkpoint created
+Status: IN_PROGRESS → CHECKPOINT
+Checkpoint at: <INSTANT +02:00>
+Sprint summary written to: <FIXTURE>/.liza/sprint_summary.md
+Agents will pause at their next check.
+Review the sprint summary, then use 'liza resume' to continue.
+--- stderr

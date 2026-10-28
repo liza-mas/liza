@@ -35,6 +35,12 @@ const (
 	recordLineByteBudget = 64 * 1024
 )
 
+// Permissions of usage record directories and day files: owner-only.
+const (
+	recordDirMode  = 0700
+	recordFileMode = 0600
+)
+
 // recordFileByteCap is the size above which a day file rolls to the next
 // numbered part. A variable so tests can lower it; production uses the constant.
 var recordFileByteCap = defaultFileByteCap
@@ -133,7 +139,7 @@ func Append(projectRoot string, r Record) error {
 	}
 
 	dir := Dir(projectRoot)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, recordDirMode); err != nil {
 		return fmt.Errorf("usage store: %w", err)
 	}
 	day := r.StartedAt.UTC().Format(recordDayLayout)
@@ -143,7 +149,7 @@ func Append(projectRoot string, r Record) error {
 		if err != nil {
 			return err
 		}
-		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, recordFileMode)
 		if err != nil {
 			return err
 		}

@@ -10,6 +10,13 @@ import (
 	"github.com/liza-mas/liza/internal/pipeline"
 )
 
+// Approval-rate sanity thresholds: a rate is flagged only when it exceeds
+// suspiciousRatePercent over at least suspiciousRateMinCount samples.
+const (
+	suspiciousRateMinCount = 3
+	suspiciousRatePercent  = 95
+)
+
 // UpdateSprintMetrics recomputes sprint metrics from current task and agent state.
 // Returns the computed metrics. No terminal I/O.
 func UpdateSprintMetrics(projectRoot string) (models.SprintMetrics, error) {
@@ -66,7 +73,7 @@ func CheckSuspiciousRates(metrics models.SprintMetrics) []string {
 	var warnings []string
 
 	// Check review verdict approval rate
-	if metrics.ReviewVerdictCount >= 3 && metrics.ReviewVerdictApprovalRatePercent > 95 {
+	if metrics.ReviewVerdictCount >= suspiciousRateMinCount && metrics.ReviewVerdictApprovalRatePercent > suspiciousRatePercent {
 		warnings = append(warnings, fmt.Sprintf(
 			"⚠️  Review verdict approval rate is %d%% (%d/%d) - suspiciously high",
 			metrics.ReviewVerdictApprovalRatePercent,
@@ -76,7 +83,7 @@ func CheckSuspiciousRates(metrics models.SprintMetrics) []string {
 	}
 
 	// Check task outcome approval rate
-	if metrics.TaskSubmittedForReviewCount >= 3 && metrics.TaskOutcomeApprovalRatePercent > 95 {
+	if metrics.TaskSubmittedForReviewCount >= suspiciousRateMinCount && metrics.TaskOutcomeApprovalRatePercent > suspiciousRatePercent {
 		// Calculate approved/merged count for the message
 		approvedOrMergedCount := (metrics.TaskOutcomeApprovalRatePercent * metrics.TaskSubmittedForReviewCount) / 100
 		warnings = append(warnings, fmt.Sprintf(

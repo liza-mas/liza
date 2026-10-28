@@ -395,7 +395,7 @@ func TestFilterAnomalies(t *testing.T) {
 			// Check that filtered results have expected types
 			gotTypes := make([]string, len(filtered))
 			for i, a := range filtered {
-				gotTypes[i] = a.Type
+				gotTypes[i] = string(a.Type)
 			}
 
 			for _, wantType := range tt.wantTypes {

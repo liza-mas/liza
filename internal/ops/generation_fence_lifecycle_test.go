@@ -366,7 +366,7 @@ func TestAwaitMutationGenerationFence(t *testing.T) {
 			AwaitVerdictOptions{AbortPollInterval: time.Hour},
 		)
 		assertLifecycleAuthorityError(t, err, doerID)
-		if result == nil || result.Verdict != VerdictTimeout {
+		if result == nil || result.Verdict != string(VerdictTimeout) {
 			t.Fatalf("result = %#v, want TIMEOUT with authority error", result)
 		}
 		if after := readStateBytes(t, statePath); !bytes.Equal(after, before) {
@@ -418,7 +418,7 @@ func TestAwaitMutationGenerationFence(t *testing.T) {
 			AwaitResubmissionOptions{AbortPollInterval: time.Hour},
 		)
 		assertLifecycleAuthorityError(t, err, reviewerID)
-		if result == nil || result.Verdict != ResubmissionTimeout {
+		if result == nil || result.Verdict != string(ResubmissionTimeout) {
 			t.Fatalf("result = %#v, want TIMEOUT with authority error", result)
 		}
 		if after := readStateBytes(t, statePath); !bytes.Equal(after, before) {

@@ -1,0 +1,14 @@
+{
+  "error": {
+    "code": "project_root",
+    "details": {
+      "current_dir": "/fixture/current",
+      "message": "fixture root unavailable",
+      "operation": "fixture",
+      "project_root": "/fixture/project"
+    },
+    "message": "fixture: fixture root unavailable"
+  },
+  "ok": false,
+  "result": null
+}

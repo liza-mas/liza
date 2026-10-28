@@ -1,0 +1,225 @@
+# before
+agents: {}
+anomalies: []
+circuit_breaker:
+    history: []
+    status: OK
+config:
+    agent_progress_timeout: 600
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    heartbeat_interval: 60
+    integration_branch: integration
+    lease_duration: 1800
+    max_coder_iterations: 10
+    max_global_integration_generations: 5
+    max_review_cycles: 5
+    mode: RUNNING
+    orchestrator_max_wait: 1800
+    orchestrator_poll_interval: 60
+    reviewer_max_wait: 1800
+    reviewer_poll_interval: 30
+discovered: []
+goal:
+    alignment_history:
+        - event: initialization
+          summary: Oracle fixture
+          timestamp: <TIME:Z>
+    created: <TIME:Z>
+    description: Oracle fixture
+    id: oracle
+    integration:
+        deferred_validation:
+            batches:
+                - commit: '<SHA:BASE>'
+                  finished_at: <TIME:Z>
+                  id: 1
+                  results:
+                    - command: test ! -e bad.txt
+                      command_sha256: <ID>
+                      exit_code: 0
+                      finished_at: <TIME:Z>
+                      started_at: <TIME:Z>
+                      status: passed
+                  started_at: <TIME:Z>
+                  status: passed
+            deferrals:
+                - before_commit: '<SHA:BASE>'
+                  commands:
+                    - authority: contract
+                      command: test ! -e bad.txt
+                      command_sha256: <ID>
+                      timeout_seconds: 30
+                  merge_commit: '<SHA:BASE>'
+                  recorded_at: <TIME:Z>
+                  task_id: historical-coding
+            last_batch_id: 1
+        mutation_receipts:
+            - after_commit: '<SHA:C1>'
+              before_commit: '<SHA:BASE>'
+              task_id: oracle-first
+            - after_commit: '<SHA:C2>'
+              before_commit: '<SHA:C1>'
+              task_id: oracle-second
+    spec_ref: README.md
+    status: IN_PROGRESS
+human_notes: []
+pipeline_version: 3
+spec_changes: []
+sprint:
+    goal_ref: oracle
+    id: sprint-1
+    metrics:
+        iterations_total: 0
+        review_cycles_total: 0
+        tasks_blocked: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+    number: 1
+    scope:
+        planned: []
+        stretch: []
+    status: IN_PROGRESS
+    timeline:
+        started: <TIME:Z>
+sprint_history: []
+tasks: []
+version: 1
+# after
+version: 1
+pipeline_version: 3
+mutation_sequence: 2
+goal:
+    id: oracle
+    description: Oracle fixture
+    spec_ref: README.md
+    integration:
+        mutation_receipts:
+            - task_id: oracle-first
+              before_commit: <SHA:BASE>
+              after_commit: <SHA:C1>
+            - task_id: oracle-second
+              before_commit: <SHA:C1>
+              after_commit: <SHA:C2>
+        deferred_validation:
+            deferrals:
+                - task_id: historical-coding
+                  merge_commit: <SHA:BASE>
+                  before_commit: <SHA:BASE>
+                  recorded_at: <TIME:Z>
+                  commands:
+                    - command: test ! -e bad.txt
+                      command_sha256: <ID>
+                      timeout_seconds: 30
+                      authority: contract
+            batches:
+                - id: 1
+                  commit: <SHA:BASE>
+                  started_at: <TIME:Z>
+                  finished_at: <TIME:Z>
+                  status: passed
+                  results:
+                    - command: test ! -e bad.txt
+                      command_sha256: <ID>
+                      status: passed
+                      exit_code: 0
+                      started_at: <TIME:Z>
+                      finished_at: <TIME:Z>
+                - id: 2
+                  commit: <SHA:C2>
+                  started_at: <TIME:Z>
+                  finished_at: <TIME:Z>
+                  status: failed
+                  results:
+                    - command: test ! -e bad.txt
+                      command_sha256: <ID>
+                      status: failed
+                      exit_code: 1
+                      started_at: <TIME:Z>
+                      finished_at: <TIME:Z>
+                      excerpt: |
+                        exit status 1
+                      output_sha256: <ID>
+                  culprits:
+                    - command_sha256: <ID>
+                      task_id: oracle-second
+                      merge_commit: <SHA:C2>
+                      steps:
+                        - commit: <SHA:BASE>
+                          status: passed
+                          exit_code: 0
+                        - commit: <SHA:C1>
+                          status: passed
+                          exit_code: 0
+            last_batch_id: 2
+    created: <TIME:Z>
+    status: IN_PROGRESS
+    alignment_history:
+        - timestamp: <TIME:Z>
+          event: initialization
+          summary: Oracle fixture
+tasks: []
+agents: {}
+discovered:
+    - id: deferred-validation-2-1
+      by: deferred-validation
+      during: oracle-second
+      description: 'Deferred-validation batch 2 at <SHA:C2>: "test ! -e bad.txt" fails; bisect reproduced a pass→fail transition at task oracle-second (merge <SHA:C2>). Bisect assumes the failure persists once introduced.'
+      severity: high
+      urgency: immediate
+      recommendation: 'Create a correction for oracle-second that makes the command pass. If the command is obsolete (renamed or removed), ask the operator to retire it. Details: liza deferred-validation status'
+      created: <TIME:Z>
+      batch: 2
+      batch_commit: <SHA:C2>
+      command_sha256: <ID>
+      culprit_task: oracle-second
+      merge_commit: <SHA:C2>
+human_notes: []
+spec_changes: []
+anomalies: []
+sprint:
+    id: sprint-1
+    number: 1
+    goal_ref: oracle
+    scope:
+        planned: []
+        stretch: []
+    timeline:
+        started: <TIME:Z>
+        deadline: <TIME:Z>
+    status: IN_PROGRESS
+    metrics:
+        planning_changes:
+            daily: []
+            unknown_attribution: 0
+            missing_created: 0
+        tasks_done: 0
+        tasks_in_progress: 0
+        tasks_blocked: 0
+        iterations_total: 0
+        review_cycles_total: 0
+        review_verdict_approvals: 0
+        review_verdict_rejections: 0
+        review_verdict_count: 0
+        review_verdict_approval_rate_percent: 0
+        task_submitted_for_review_count: 0
+        task_outcome_approval_rate_percent: 0
+circuit_breaker:
+    last_check: <TIME:Z>
+    status: OK
+    history: []
+config:
+    max_coder_iterations: 10
+    max_review_cycles: 5
+    max_global_integration_generations: 5
+    heartbeat_interval: 60
+    lease_duration: 1800
+    coder_poll_interval: 30
+    doer_max_wait: 1800
+    orchestrator_poll_interval: 60
+    orchestrator_max_wait: 1800
+    reviewer_poll_interval: 30
+    reviewer_max_wait: 1800
+    agent_progress_timeout: 600
+    integration_branch: integration
+    mode: RUNNING

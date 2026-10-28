@@ -55,10 +55,13 @@ type AgentAuthority struct {
 	Generation string `json:"generation"`
 }
 
+// agentGenerationBytes is the entropy of one registration generation.
+const agentGenerationBytes = 16
+
 // NewAgentGeneration returns an opaque generation suitable for fencing one
 // successful agent registration from every earlier registration of the same ID.
 func NewAgentGeneration() (string, error) {
-	var token [16]byte
+	var token [agentGenerationBytes]byte
 	if _, err := rand.Read(token[:]); err != nil {
 		return "", fmt.Errorf("mint agent generation: %w", err)
 	}

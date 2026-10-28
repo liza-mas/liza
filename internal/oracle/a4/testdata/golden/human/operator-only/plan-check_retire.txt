@@ -1,0 +1,4 @@
+exit_code: 1
+--- stdout
+--- stderr
+Error: plan-check --clear/--replaced-by/--retire is operator-only; agent sessions cannot release a hold or retire a hand-off

@@ -12,15 +12,37 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/payloadschema"
 )
 
-const maxPendingVerdictBytes = 16 * 1024
+const (
+	maxPendingVerdictBytes = 16 * 1024
+	// pendingVerdictDirName is the private outbox directory under the runtime
+	// directory; pendingVerdictDirMode keeps it owner-only.
+	pendingVerdictDirName = "pending-verdicts"
+	pendingVerdictDirMode = 0o700
+	// A drain retries a contended state lock from the initial delay, doubling it
+	// up to the maximum.
+	pendingVerdictRetryInitialDelay = 100 * time.Millisecond
+	pendingVerdictRetryMaxDelay     = 5 * time.Second
+	// An envelope is named by the hex SHA-256 of its bytes; the drain reads back
+	// only files with the extension and rejects a name that is not its digest.
+	pendingVerdictFileExt        = ".json"
+	pendingVerdictFileNameFormat = "%x" + pendingVerdictFileExt
+	// pendingVerdictRequestIDFormat names a request the outbox mints for a
+	// verdict that carried none.
+	pendingVerdictRequestIDFormat = "verdict-%x"
+	// The two lock labels order publication and cleanup of the outbox directory.
+	publishPendingVerdictLockOperation = "publish-pending-verdict"
+	removePendingVerdictLockOperation  = "remove-pending-verdict"
+)
 
 // This private outbox includes the original generation so a replacement can
 // replay only as the original caller (and be quarantined), never impersonate it.
@@ -32,8 +54,16 @@ type pendingVerdict struct {
 	GenerationDigest                              string // Public lifecycle JSON intentionally omits this private fence.
 }
 
+// notDirectoryError is the refusal of a non-directory outbox. Its text is the
+// same on every OS, and it matches syscall.ENOTDIR, whose own text varies.
+type notDirectoryError struct{}
+
+func (notDirectoryError) Error() string { return "not a directory" }
+
+func (notDirectoryError) Is(target error) bool { return target == syscall.ENOTDIR }
+
 func pendingVerdictDir(projectRoot string) string {
-	return filepath.Join(paths.New(projectRoot).LizaDir(), "pending-verdicts")
+	return filepath.Join(paths.New(projectRoot).LizaDir(), pendingVerdictDirName)
 }
 
 func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority models.AgentAuthority, impact, reviewCommit string, opts LifecycleRequestOptions) (*VerdictResult, error) {
@@ -54,14 +84,14 @@ func submitDurableVerdict(projectRoot, taskID, verdict, reason string, authority
 		return nil, fmt.Errorf("read verdict boundary: %w", err)
 	}
 	verdict, reviewCommit = strings.ToUpper(verdict), strings.ToLower(reviewCommit)
-	request, err := NewLifecycleRequest("submit-verdict", state.FindTask(taskID), authority.ID, &authority, opts,
-		map[string]string{"verdict": verdict, "reason": reason, "impact": impact, "review_commit": reviewCommit})
+	request, err := NewLifecycleRequest(payloadschema.SubmitVerdictOperation, state.FindTask(taskID), authority.ID, &authority, opts,
+		verdictRequestPayload(verdict, reason, impact, reviewCommit))
 	if err != nil {
 		return nil, err
 	}
 	if request.RequestID == "" {
 		identity, _ := json.Marshal(request)
-		request.RequestID = fmt.Sprintf("verdict-%x", sha256.Sum256(identity))
+		request.RequestID = fmt.Sprintf(pendingVerdictRequestIDFormat, sha256.Sum256(identity))
 	}
 	entry := pendingVerdict{TaskID: taskID, Verdict: verdict, Reason: sanitizeVerdictReason(reason, state, authority),
 		Impact: impact, ReviewCommit: reviewCommit, Authority: authority, Request: request}
@@ -85,8 +115,8 @@ func (p pendingVerdict) submit(projectRoot string, retryContexts ...context.Cont
 		return nil, fmt.Errorf("read pending verdict boundary: %w", err)
 	}
 	if state.FindTask(p.TaskID) == nil {
-		return nil, WrapLifecycleError("submit-verdict", nil, &PreconditionError{Reason: "task is no longer in live state"},
-			models.LifecycleAlreadyTransitioned, "stop", "none")
+		return nil, WrapLifecycleError(payloadschema.SubmitVerdictOperation, nil, &PreconditionError{Reason: "task is no longer in live state"},
+			models.LifecycleAlreadyTransitioned, LifecycleSafeActionStop, LifecycleEffectsNone)
 	}
 	opts := LifecycleRequestOptions{RequestID: p.Request.RequestID, ExpectedTransition: p.Request.ExpectedTransition,
 		verdictPayloadDigest: p.Request.PayloadDigest}
@@ -105,16 +135,17 @@ func (p pendingVerdict) settled(result *VerdictResult, err error) bool {
 		return true
 	}
 	var lifecycle *LifecycleError
-	if errors.As(err, &lifecycle) && lifecycle.Outcome.Effects == "none" && lifecycle.Outcome.Outcome == models.LifecycleInvalidInput {
+	noEffects := string(LifecycleEffectsNone)
+	if errors.As(err, &lifecycle) && lifecycle.Outcome.Effects == noEffects && lifecycle.Outcome.Outcome == models.LifecycleInvalidInput {
 		return true // A deterministic refusal requires a corrected request.
 	}
 	var precondition *PreconditionError
-	if errors.As(err, &precondition) && (!errors.As(err, &lifecycle) || lifecycle.Outcome.Effects == "none") {
+	if errors.As(err, &precondition) && (!errors.As(err, &lifecycle) || lifecycle.Outcome.Effects == noEffects) {
 		return true // Invalid input/state cannot improve by replaying this request.
 	}
 	return errors.As(err, &lifecycle) && (lifecycle.Outcome.Outcome == models.LifecycleAlreadyTransitioned ||
 		lifecycle.Outcome.Outcome == models.LifecycleStaleCaller ||
-		(lifecycle.Outcome.Outcome == models.LifecycleStateChanged && lifecycle.Outcome.Effects == "none" &&
+		(lifecycle.Outcome.Outcome == models.LifecycleStateChanged && lifecycle.Outcome.Effects == noEffects &&
 			lifecycle.Outcome.TransitionID != "" && lifecycle.Outcome.TransitionID != p.Request.ExpectedTransition))
 }
 
@@ -125,12 +156,12 @@ func savePendingVerdict(projectRoot string, entry pendingVerdict) (string, error
 		return "", fmt.Errorf("private verdict envelope exceeds its bounded encoding")
 	}
 	dir := pendingVerdictDir(projectRoot)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, pendingVerdictDirMode); err != nil {
 		return "", err
 	}
-	filename := filepath.Join(dir, fmt.Sprintf("%x.json", sha256.Sum256(data)))
+	filename := filepath.Join(dir, fmt.Sprintf(pendingVerdictFileNameFormat, sha256.Sum256(data)))
 	var published string
-	err = filelock.New(dir).WithLockOperation("publish-pending-verdict", func() error {
+	err = filelock.New(dir).WithLockOperation(publishPendingVerdictLockOperation, func() error {
 		var publishErr error
 		published, publishErr = publishPendingVerdictFile(filename, data)
 		return publishErr
@@ -195,7 +226,13 @@ func publishPendingVerdictFile(filename string, data []byte) (string, error) {
 // Unreadable or invalid envelopes are retained for manual recovery, without
 // preventing unrelated agents from registering or valid verdicts from draining.
 func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) error {
-	entries, err := os.ReadDir(pendingVerdictDir(projectRoot))
+	outbox := pendingVerdictDir(projectRoot)
+	// Windows lists a regular file as an empty directory, which would let the
+	// supervisor register over a corrupt outbox; refuse it as Linux and macOS do.
+	if info, statErr := os.Stat(outbox); statErr == nil && !info.IsDir() {
+		return fmt.Errorf("read private verdict outbox: %w", &os.PathError{Op: "open", Path: outbox, Err: notDirectoryError{}})
+	}
+	entries, err := os.ReadDir(outbox)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -206,7 +243,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), pendingVerdictFileExt) {
 			continue
 		}
 		filename := filepath.Join(pendingVerdictDir(projectRoot), entry.Name())
@@ -228,7 +265,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 		if _, err := savePendingVerdict(projectRoot, pending); err != nil {
 			return fmt.Errorf("finish pending verdict publication: %w", err)
 		}
-		delay := 100 * time.Millisecond
+		delay := pendingVerdictRetryInitialDelay
 		for {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -250,7 +287,7 @@ func ReplayPendingVerdicts(ctx context.Context, projectRoot, agentID string) err
 				return ctx.Err()
 			case <-timer.C:
 			}
-			delay = min(delay*2, 5*time.Second)
+			delay = min(delay*2, pendingVerdictRetryMaxDelay)
 		}
 	}
 	return nil
@@ -265,7 +302,7 @@ func readPendingVerdictFile(filename string) (data []byte, err error) {
 
 func removePendingVerdictFile(filename string) error {
 	// Publication and cleanup share a lock; submission runs outside it.
-	return filelock.New(filepath.Dir(filename)).WithLockOperation("remove-pending-verdict", func() error {
+	return filelock.New(filepath.Dir(filename)).WithLockOperation(removePendingVerdictLockOperation, func() error {
 		return retrySharingViolation(func() error { return os.Remove(filename) })
 	})
 }
@@ -284,7 +321,7 @@ func readPendingVerdict(filename string) (pendingVerdict, error) {
 	if len(data) > maxPendingVerdictBytes || json.Unmarshal(data, &pending) != nil {
 		return pending, fmt.Errorf("invalid private verdict envelope")
 	}
-	if filepath.Base(filename) != fmt.Sprintf("%x.json", sha256.Sum256(data)) {
+	if filepath.Base(filename) != fmt.Sprintf(pendingVerdictFileNameFormat, sha256.Sum256(data)) {
 		return pending, fmt.Errorf("private verdict envelope checksum mismatch")
 	}
 	pending.Request.GenerationDigest = pending.GenerationDigest
@@ -292,7 +329,7 @@ func readPendingVerdict(filename string) (pendingVerdict, error) {
 		return pending, fmt.Errorf("invalid private verdict identity")
 	}
 	if pending.Authority.Generation == "" || pending.Request.RequestID == "" || pending.Request.Actor != pending.Authority.ID ||
-		pending.Request.Operation != "submit-verdict" || !lifecycleDigestValid(pending.Request.PayloadDigest) ||
+		pending.Request.Operation != payloadschema.SubmitVerdictOperation || !lifecycleDigestValid(pending.Request.PayloadDigest) ||
 		pending.Request.GenerationDigest != generationFingerprint(pending.Authority.Generation) {
 		return pending, fmt.Errorf("invalid private verdict authority")
 	}

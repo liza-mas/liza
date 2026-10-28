@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "error": {
+      "code": "validation",
+      "message": "cannot delete worktree for task task-1 (status: IMPLEMENTING_CODE), deletion only allowed for: BLOCKED, ABANDONED, SUPERSEDED, MERGED, or pipeline clean states"
+    },
+    "ok": false,
+    "result": null
+  }
+}

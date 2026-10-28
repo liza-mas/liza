@@ -11,7 +11,7 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 | `make test-fast` | Short-mode iteration; skips guarded integration tests |
 | `make test` | Required routine full-suite check, without race or coverage instrumentation |
 | `make test-race` | Full suite with the race detector; required once during final pre-commit/merge validation |
-| `make coverage` | Full suite with per-package coverage, then an HTML report |
+| `make coverage` | Full suite with whole-module coverage (`-coverpkg=./...`), then an HTML report |
 | `go test -run TestFoo ./internal/db/` | Specific test |
 | `go test -run "TestBlackboard.*" ./internal/db/` | Pattern match |
 | `go test -tags e2e ./internal/integration/` | Run e2e full sprint test (gated by `//go:build e2e`, ~40s) |
@@ -40,9 +40,11 @@ make coverage
 
 The target creates a unique profile under `${TMPDIR:-/tmp}`, keeps it through
 `go tool cover -html`, and removes it on success, failure, or interruption.
-Coverage remains package-local because the target does not use
-`-coverpkg=./...`; do not treat its aggregate as the cross-package coverage
-basis documented in the architecture review.
+Coverage is measured on the whole-module basis (`-coverpkg=./...`): every test
+binary instruments every package of the module, so a package exercised only
+through its callers is credited. `go test` writes one profile and `go tool cover`
+merges duplicate blocks. This is the basis of the architecture review's figures.
+The measurement is local and gates nothing.
 
 ### Race Detection
 

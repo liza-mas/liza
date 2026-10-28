@@ -67,7 +67,7 @@ func CleanupProjectCommand(params CleanupParams) (*CleanupResult, error) {
 		if readErr != nil {
 			return nil, fmt.Errorf("read cleanup confirmation: %w; rerun with --yes or leave the workspace unchanged", readErr)
 		}
-		if response != "y" {
+		if response != confirmAnswerY {
 			return nil, ErrProjectCleanupDeclined
 		}
 	}

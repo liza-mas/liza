@@ -1,0 +1,55 @@
+{
+  "invocations": [
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "qwen",
+        "sessions",
+        "show",
+        "--name",
+        "liza-qwen-coder-1-task-1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "qwen",
+        "sessions",
+        "ensure",
+        "--name",
+        "liza-qwen-coder-1-task-1"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": false,
+      "prompt_transport": "none"
+    },
+    {
+      "arguments": [
+        "--cwd",
+        "<PROJECT>",
+        "--format",
+        "json",
+        "--approve-all",
+        "qwen",
+        "prompt",
+        "-s",
+        "liza-qwen-coder-1-task-1",
+        "--file",
+        "-"
+      ],
+      "directory": "<PROJECT>",
+      "executable": "acpx",
+      "prompt_equal": true,
+      "prompt_transport": "stdin",
+      "stdin": "<PROMPT>"
+    }
+  ],
+  "tool": "qwen-acp"
+}

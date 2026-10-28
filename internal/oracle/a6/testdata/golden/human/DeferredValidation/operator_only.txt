@@ -1,0 +1,4 @@
+exit_code: 1
+stdout:
+stderr:
+Error: liza deferred-validation rule is operator-only; agent sessions cannot change deferred-validation authority

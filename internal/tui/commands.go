@@ -7,12 +7,10 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/liza-mas/liza/internal/agent"
 	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/commands"
@@ -22,6 +20,7 @@ import (
 	"github.com/liza-mas/liza/internal/ops"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/process"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"gopkg.in/yaml.v3"
 )
 
@@ -219,9 +218,12 @@ func recentlySpawnedAgentPIDs(spawned []commands.SpawnedAgent) []int {
 	return pids
 }
 
-// tickCmd returns a tea.Cmd that fires a TickMsg after 10 seconds.
+// tickInterval is the poll period for anomaly checks and heartbeat refresh.
+const tickInterval = 10 * time.Second
+
+// tickCmd returns a tea.Cmd that fires a TickMsg after tickInterval.
 func tickCmd() tea.Cmd {
-	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }
@@ -260,7 +262,7 @@ func spawnWith(spawn func(string, string, string, ...string) (*exec.Cmd, error),
 // Returns CmdResultMsg with result.
 func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := ops.Pause(projectRoot, reason, "operator")
+		_, err := ops.Pause(projectRoot, reason, commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("pause: %v", err)}
 		}
@@ -275,20 +277,17 @@ func pauseSystemCmd(projectRoot, reason string) tea.Cmd {
 // Returns CmdResultMsg with result.
 func resumeSystemCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := ops.Resume(projectRoot, "operator")
+		result, err := ops.Resume(projectRoot, commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("resume: %v", err)}
 		}
 
 		// Clear provider-scoped stop signals (mirrors CLI resume behavior).
-		sweep := agent.ClearExpiredQuotaSignals(projectRoot)
+		sweep := providersignal.ClearExpiredQuotaSignals(projectRoot)
 		clearErrors := sweep.Failures
-		if matches, err := filepath.Glob(agent.ProviderUnavailableSignalGlob(projectRoot)); err == nil {
-			for _, m := range matches {
-				provider := agent.ProviderFromUnavailableSignalFile(m)
-				if clearErr := agent.ClearProviderUnavailableSignal(projectRoot, provider); clearErr != nil {
-					clearErrors = append(clearErrors, fmt.Sprintf("unavailable/%s: %v", provider, clearErr))
-				}
+		for _, cleared := range providersignal.ClearProviderUnavailableSignals(projectRoot) {
+			if cleared.Err != nil {
+				clearErrors = append(clearErrors, fmt.Sprintf("unavailable/%s: %v", cleared.Provider, cleared.Err))
 			}
 		}
 
@@ -323,12 +322,7 @@ func checkpointCmd(projectRoot string) tea.Cmd {
 // Returns CmdResultMsg with the new value displayed for 3s.
 func toggleAutoResumeCmd(bb *db.Blackboard) tea.Cmd {
 	return func() tea.Msg {
-		var newVal bool
-		err := bb.Modify(func(s *models.State) error {
-			s.Config.AutoResume = !s.Config.AutoResume
-			newVal = s.Config.AutoResume
-			return nil
-		})
+		newVal, err := ops.ToggleAutoResume(bb)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("toggle auto-resume: %v", err)}
 		}
@@ -346,7 +340,7 @@ func toggleAutoResumeCmd(bb *db.Blackboard) tea.Cmd {
 // Returns CmdResultMsg with error on failure.
 func stopSystemCmd(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := ops.Stop(projectRoot, "TUI stop", "operator")
+		_, err := ops.Stop(projectRoot, "TUI stop", commands.OperatorActor)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("stop: %v", err)}
 		}
@@ -354,12 +348,15 @@ func stopSystemCmd(projectRoot string) tea.Cmd {
 	}
 }
 
+// terminateWait bounds how long terminateAgentCmd waits for the agent process to stop.
+const terminateWait = 5 * time.Second
+
 // terminateAgentCmd stops an agent process before removing its state entry.
 // Uses force=true and allowRunningPID=true since the TUI is an interactive context.
 // Returns CmdResultMsg with result.
 func terminateAgentCmd(projectRoot, agentID string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := terminateAgent(projectRoot, agentID, true, true, "terminated via TUI", 5*time.Second)
+		_, err := terminateAgent(projectRoot, agentID, true, true, "terminated via TUI", terminateWait)
 		if err != nil {
 			return CmdResultMsg{Success: false, Message: fmt.Sprintf("terminate %s: %v", agentID, err)}
 		}
@@ -388,7 +385,7 @@ func loadRolesCmd(projectRoot string) tea.Cmd {
 			if err != nil {
 				return rolesMsg{}
 			}
-			roleTypes[role] = roleType
+			roleTypes[role] = string(roleType)
 		}
 		return rolesMsg{
 			Roles:           roles,

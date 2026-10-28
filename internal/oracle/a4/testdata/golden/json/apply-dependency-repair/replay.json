@@ -1,0 +1,20 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": false,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "operation": "apply-dependency-repair",
+      "outcome": "ALREADY_COMPLETED",
+      "request_id": "replay-1",
+      "safe_action": "stop",
+      "source_task_id": "b1",
+      "task_id": "b1",
+      "task_status": "BLOCKED",
+      "transition_id": "<DIGEST 1>",
+      "updates": null
+    }
+  }
+}

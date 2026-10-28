@@ -1,0 +1,101 @@
+version: 1
+pipeline_version: 3
+goal:
+  id: goal-1
+  description: A4 oracle
+  spec_ref: specs/vision.md
+  entry_point: technical-spec
+  created: 2020-01-01T00:00:00Z
+  status: IN_PROGRESS
+tasks:
+  - id: t1
+    type: coding
+    role_pair: coding-pair
+    description: Fixture t1
+    done_when: Observable outcome
+    scope: Bounded oracle scope
+    status: DRAFT_CODE
+    priority: 1
+    spec_ref: specs/vision.md
+    created: 2020-01-01T00:00:00Z
+    iteration: 1
+    history: []
+agents:
+  orchestrator-1:
+    role: orchestrator
+    status: IDLE
+    generation: gen-1
+    heartbeat: 2020-01-01T00:00:00Z
+    terminal: terminal-1
+    provider: fixture-provider
+    iterations_total: 0
+    context_percent: 0
+discovered: []
+human_notes: []
+spec_changes: []
+anomalies:
+  - id: audit-1
+    type: provider_audit_degraded
+    task: t1
+    reporter: orchestrator-1
+    timestamp: 2020-01-02T00:00:00Z
+    details: {provider: fixture-provider, agent_id: agent-a, message: fixture audit degradation}
+  - id: audit-2
+    type: provider_audit_degraded
+    task: t1
+    reporter: orchestrator-1
+    timestamp: 2020-01-02T00:01:00Z
+    details: {provider: fixture-provider, agent_id: agent-b, message: fixture audit degradation}
+  - id: audit-3
+    type: provider_audit_degraded
+    task: t1
+    reporter: orchestrator-1
+    timestamp: 2020-01-02T00:02:00Z
+    details: {provider: fixture-provider, agent_id: agent-a, message: fixture audit degradation}
+sprint:
+  id: sprint-1
+  number: 1
+  goal_ref: goal-1
+  scope:
+    planned: [t1]
+    stretch: []
+  timeline:
+    started: 2020-01-01T00:00:00Z
+    deadline: 2099-01-01T00:00:00Z
+  status: CHECKPOINT
+  metrics:
+    tasks_done: 0
+    tasks_in_progress: 0
+    tasks_blocked: 0
+    iterations_total: 0
+    review_cycles_total: 0
+circuit_breaker:
+  last_check: 2020-01-01T00:00:00Z
+  status: OK
+  current_response:
+    timestamp: 2020-01-03T00:00:00Z
+    pattern: provider_audit_degradation
+    severity: OBSERVABILITY_DEGRADED
+    response: CHECKPOINT
+    classification: NEW
+    explanation: fixture active provider-audit checkpoint
+    report_file: .liza/circuit_breaker_report.md
+  history:
+    - timestamp: 2020-01-03T00:00:00Z
+      pattern: provider_audit_degradation
+      severity: OBSERVABILITY_DEGRADED
+      result: CHECKPOINT
+      response: CHECKPOINT
+      classification: NEW
+      explanation: fixture active provider-audit checkpoint
+config:
+  max_coder_iterations: 10
+  max_review_cycles: 5
+  heartbeat_interval: 60
+  lease_duration: 1800
+  coder_poll_interval: 30
+  orchestrator_poll_interval: 60
+  orchestrator_max_wait: 1800
+  reviewer_poll_interval: 30
+  integration_branch: integration
+  mode: RUNNING

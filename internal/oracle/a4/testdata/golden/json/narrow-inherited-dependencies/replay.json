@@ -1,0 +1,24 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "ok": true,
+    "result": {
+      "changed": false,
+      "children": null,
+      "completed_transition_id": "<DIGEST 1>",
+      "effects": "committed",
+      "narrowed": 0,
+      "operation": "narrow-inherited-dependencies",
+      "outcome": "ALREADY_COMPLETED",
+      "producer_id": "cp-b",
+      "request_id": "replay-1",
+      "safe_action": "stop",
+      "skipped": 0,
+      "task_id": "cp-b",
+      "task_status": "MERGED",
+      "transition": "code-plan-to-coding",
+      "transition_id": "<DIGEST 1>",
+      "unchanged": 0
+    }
+  }
+}

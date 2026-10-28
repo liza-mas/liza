@@ -7,7 +7,7 @@ import (
 
 func TestInVerdictHandoffBoundaries(t *testing.T) {
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
-	withLast := func(event string, at time.Time) *Task {
+	withLast := func(event TaskEventName, at time.Time) *Task {
 		return &Task{History: []TaskHistoryEntry{
 			{Time: now.Add(-time.Hour), Event: TaskEventSubmittedForReview},
 			{Time: at, Event: event},

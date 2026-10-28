@@ -1,0 +1,4 @@
+exit_code: 0
+--- stdout
+Added task t3
+--- stderr
