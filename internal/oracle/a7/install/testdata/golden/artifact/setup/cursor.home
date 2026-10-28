@@ -157,7 +157,7 @@
 + .liza/skills/liza-logs/tools directory 0755 -
 + .liza/skills/liza-logs/tools/liza-session-analyzer.html file 0644 09dff6fbe764434844e9fc45743dd391a8932132a550e36a381abd9dd9b2dbdb
 + .liza/skills/liza-operator directory 0755 -
-+ .liza/skills/liza-operator/SKILL.md file 0644 fb08d990772774a155cee4f7c5d03aa440af94fd091a3ef9225380c50a7a5235
++ .liza/skills/liza-operator/SKILL.md file 0644 d639cfe2cc57225823acd2512d5611924019d3640f0c0c87d731391a77bd7c72
 + .liza/skills/liza-operator/scripts directory 0755 -
 + .liza/skills/liza-operator/scripts/critical-paths.py file 0644 8def847c34266a5323023eb5d67f376d7c495078ecff84b62aaf840bf4daeea5
 + .liza/skills/liza-operator/scripts/test_critical_paths.py file 0644 3a942ecd86c81ea51e514d68d99569e8dd30d98eecaea74b30f85204cd0bc650
