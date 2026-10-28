@@ -224,7 +224,7 @@ Example:
 		}
 
 		if explainLaunch {
-			return explainAgentLaunch(cmd, selection, projectRoot, outputsDir, runtimeConfig)
+			return explainAgentLaunch(cmd, selection, projectRoot, outputsDir, agentID, runtimeConfig)
 		}
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -274,8 +274,11 @@ Example:
 	},
 }
 
-func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelection, projectRoot, outputsDir string, runtimeConfig models.Config) error {
+func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelection, projectRoot, outputsDir, agentID string, runtimeConfig models.Config) error {
 	cliName, profile := selection.CLI, selection.Profile
+	if agentID == "" {
+		agentID = "<agent-id>" // auto-assigned at launch; every agent launch has one
+	}
 	promptFile := ""
 	if tool, ok := agentlaunch.AgentToolRegistry(runtimeConfig)[cliName]; ok && providers.PromptTransport(tool.PromptTransport) == providers.PromptTransportFile {
 		promptFile = "<prompt-file>"
@@ -288,8 +291,10 @@ func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelectio
 		Prompt:        "<prompt>",
 		PromptFile:    promptFile,
 		ProjectRoot:   projectRoot,
+		AgentID:       agentID,
 		OutputsDir:    outputsDir,
 		RuntimeConfig: runtimeConfig,
+		Explain:       true,
 	})
 	if err != nil {
 		return err
@@ -305,7 +310,7 @@ func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelectio
 	}
 	fmt.Fprintf(out, "backend: %s\n", plan.Backend)
 	fmt.Fprintf(out, "executable: %s\n", plan.Executable)
-	fmt.Fprintf(out, "args: %s\n", strings.Join(plan.Args, " "))
+	fmt.Fprintf(out, "args: %s\n", strings.Join(explainArgs(plan.Args), " "))
 	fmt.Fprintf(out, "prompt_transport: %s\n", plan.PromptTransport)
 	if plan.PromptFile != "" {
 		fmt.Fprintf(out, "prompt_file: %s\n", plan.PromptFile)
@@ -317,6 +322,18 @@ func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelectio
 		fmt.Fprintf(out, "contract_key: %s\n", plan.ContractKey)
 	}
 	return nil
+}
+
+// explainArgs abbreviates arguments too long to read, such as Codex's injected contracts.
+func explainArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, arg := range args {
+		if runes := []rune(arg); len(runes) > 120 {
+			arg = fmt.Sprintf("%s… (%d bytes)", string(runes[:80]), len(arg))
+		}
+		out[i] = arg
+	}
+	return out
 }
 
 func contractInitCommandForProvider(cliName string) string {

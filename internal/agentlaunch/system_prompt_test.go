@@ -133,6 +133,30 @@ func TestResolveLaunchPlanRejectsOversizeCodexContracts(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPlanExplainWritesNothing(t *testing.T) {
+	root := systemPromptModeProject(t, true)
+	promptFile := embedded.SystemPromptFilePath(root, embedded.SystemPromptModeMultiAgent)
+	if err := os.Remove(promptFile); err != nil {
+		t.Fatal(err)
+	}
+	claude, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "claude", ProjectRoot: root, AgentID: "coder-1", Explain: true})
+	if err != nil || !claude.SystemPromptContracts || !slices.Contains(claude.Args, promptFile) {
+		t.Fatalf("explain must show the injection: args=%v err=%v", claude.Args, err)
+	}
+	if _, err := os.Stat(promptFile); !os.IsNotExist(err) {
+		t.Fatalf("explain wrote %s (stat err=%v)", promptFile, err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if err := os.WriteFile(filepath.Join(root, "GUARDRAILS.md"), []byte(strings.Repeat("lesson\n", maxCodexArgBytes/7)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "codex", ProjectRoot: root, AgentID: "coder-1", Explain: true}); err == nil || !strings.Contains(err.Error(), "too large for a codex argument") {
+		t.Fatalf("explain must report the argv size error: %v", err)
+	}
+}
+
 func TestTOMLBasicStringRoundTrip(t *testing.T) {
 	in := "quote \" backslash \\ tab\t cr\r nl\n bell\a del\x7f ünïcode ''' \"\"\""
 	var parsed struct{ V string }

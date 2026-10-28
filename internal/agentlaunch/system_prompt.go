@@ -49,8 +49,15 @@ func SystemPromptContractsApply(projectRoot, agentID, cliName string, config mod
 // and moves cwd/env/git status out of it so the prefix is identical across agents.
 // codex gets an additive developer message; a -c before the subcommand is a
 // root-level override, the same place model flags go.
-func injectSystemPromptArgs(args []string, provider, projectRoot string) ([]string, error) {
-	path, content, err := embedded.EnsureSystemPromptFile(projectRoot, embedded.SystemPromptModeMultiAgent)
+// write is false for an explanation: the file is built in memory, not refreshed.
+func injectSystemPromptArgs(args []string, provider, projectRoot string, write bool) ([]string, error) {
+	mode := embedded.SystemPromptModeMultiAgent
+	path, content, err := embedded.SystemPromptFilePath(projectRoot, mode), []byte(nil), error(nil)
+	if write {
+		path, content, err = embedded.EnsureSystemPromptFile(projectRoot, mode)
+	} else {
+		content, _, err = embedded.BuildSystemPrompt(projectRoot, mode)
+	}
 	if err != nil {
 		return nil, err
 	}

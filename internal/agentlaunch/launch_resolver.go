@@ -110,6 +110,8 @@ type LaunchPlanRequest struct {
 	RuntimeConfig    models.Config
 	DisableSubagents bool
 	Interactive      bool
+	// Explain resolves the plan without writing anything (--explain-launch).
+	Explain bool
 }
 
 // UseRuntimeCatalog replaces the memoised runtime catalog and returns the
@@ -238,7 +240,7 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	}
 	systemPromptContracts := false
 	if provider := systemPromptProvider(req.ProjectRoot, req.AgentID, toolName, tool); provider != "" {
-		args, err = injectSystemPromptArgs(args, provider, req.ProjectRoot)
+		args, err = injectSystemPromptArgs(args, provider, req.ProjectRoot, !req.Explain)
 		if err != nil {
 			return LaunchPlan{}, fmt.Errorf("%s system prompt contracts: %w", toolName, err)
 		}

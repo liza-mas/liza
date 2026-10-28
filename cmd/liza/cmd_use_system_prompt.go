@@ -17,7 +17,7 @@ var useSystemPromptCmd = &cobra.Command{
 Builds the contract files under %[2]s/system-prompts/ from the installed
 contracts (multi_agent.md, pairing.md, subagent.md) and writes the marker
 %[2]s/system-prompt-mode.json. Hook configuration is not edited; installed
-enforce-init.sh/session-context.sh scripts older than this binary are refreshed.
+enforce-init.sh/session-context.sh scripts that predate the bypass are refreshed.
 
 Multi-agent sessions launched on claude or codex then receive multi_agent.md in
 their system prompt, run with %[3]s=1 (which lets them past the

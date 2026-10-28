@@ -38,7 +38,7 @@ form a prefix that is the same for every agent.
    replaces its read instruction with "the contracts are in your system
    prompt". Hook configuration is not edited, so ACPX, other providers, Codex
    on Windows and pairing sessions keep the forced reads. Installed copies of
-   those two scripts from an older binary are refreshed on enable, because
+   those two scripts that predate the bypass are refreshed on enable, because
    they would still gate injected sessions. A pairing user may set
    the variable themself when they launch with `pairing.md`.
 4. **Same weight as read files.** The built file's header says the contracts

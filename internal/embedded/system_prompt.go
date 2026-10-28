@@ -68,7 +68,7 @@ type SystemPromptModeReport struct {
 	MarkerPath   string
 	WasEnabled   bool
 	FileContents map[string][]byte // mode → content (Enable only)
-	// RefreshedHooks: installed gate scripts older than this binary, rewritten
+	// RefreshedHooks: installed gate scripts that predate the bypass, rewritten
 	// so they honour the bypass (Enable only).
 	RefreshedHooks []string
 }
@@ -156,7 +156,7 @@ func EnsureSystemPromptFile(projectRoot, mode string) (string, []byte, error) {
 // EnableSystemPromptMode builds the mode files and writes the marker. Hook
 // configuration is left alone: enforce-init.sh lets a session through only
 // when its launcher injected the contracts, so ACPX and pairing sessions stay
-// gated. Installed gate scripts from an older binary are refreshed, since they
+// gated. Installed gate scripts that predate the bypass are refreshed, since they
 // would still gate injected sessions. Re-running is idempotent.
 func EnableSystemPromptMode(projectRoot string, dryRun bool) (SystemPromptModeReport, error) {
 	report := SystemPromptModeReport{MarkerPath: SystemPromptMarkerPath(projectRoot), FileContents: map[string][]byte{}}
@@ -183,7 +183,9 @@ func EnableSystemPromptMode(projectRoot string, dryRun bool) (SystemPromptModeRe
 		for name, content := range map[string][]byte{"enforce-init.sh": enforceInitHookContent, "session-context.sh": sessionContextHookContent} {
 			path := filepath.Join(projectRoot, dir, name)
 			rendered := renderEmbeddedAsset(content)
-			if installed, err := os.ReadFile(path); err == nil && !bytes.Equal(installed, rendered) {
+			// Only a script without the bypass still gates injected sessions; a
+			// customised or newer one that has it is left alone.
+			if installed, err := os.ReadFile(path); err == nil && !bytes.Contains(installed, []byte("_SYSTEM_PROMPT_CONTRACTS")) {
 				staleHooks[path] = rendered
 				report.RefreshedHooks = append(report.RefreshedHooks, path)
 			}

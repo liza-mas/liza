@@ -184,6 +184,13 @@ func TestEnableSystemPromptModeRefreshesStaleGateHooks(t *testing.T) {
 	if again, err := EnableSystemPromptMode(root, false); err != nil || len(again.RefreshedHooks) != 0 {
 		t.Fatalf("rerun refreshed %v err=%v", again.RefreshedHooks, err)
 	}
+	customised := readFile(t, stale) + "# local addition\n"
+	if err := os.WriteFile(stale, []byte(customised), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := EnableSystemPromptMode(root, false); err != nil || len(again.RefreshedHooks) != 0 || readFile(t, stale) != customised {
+		t.Fatalf("a script with the bypass must be left alone: refreshed %v err=%v", again.RefreshedHooks, err)
+	}
 }
 
 func TestEnforceInitHookPassesOnlyInjectedSessions(t *testing.T) {
