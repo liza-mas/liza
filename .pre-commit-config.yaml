@@ -97,6 +97,13 @@ repos:
         files: \.go$
         pass_filenames: false
 
+      - id: oracle-goldens
+        name: oracle goldens (embedded assets, prompts, CLI help)
+        entry: bash -c 'export PATH="/usr/local/go/bin:$PATH" && make oracle-check'
+        language: system
+        files: ^(skills/|contracts/|support-docs/|internal/embedded/(hooks/|claude-settings\.json$)|internal/prompts/templates/|cmd/liza/|internal/oracle/)
+        pass_filenames: false
+
       - id: staticcheck
         name: staticcheck (advanced static analysis)
         entry: bash -c 'home_native="$HOME"; command -v cygpath >/dev/null 2>&1 && home_native="/$(cygpath -m "$HOME")"; export PATH="/usr/local/go/bin:$PATH"; export GOPATH="${HOME}/.cache/go" GOMODCACHE="${HOME}/.cache/go/pkg/mod" GOCACHE="${HOME}/.cache/go/build" GOPROXY="file://${home_native}/.cache/go/pkg/mod/cache/download,off" GOSUMDB=off; mkdir -p "$GOPATH" "$GOMODCACHE" "$GOCACHE"; make sync-embedded && go run honnef.co/go/tools/cmd/staticcheck@latest ./...'

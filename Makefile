@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -119,6 +119,20 @@ sync-embedded:
 	@echo "Syncing files to internal/embedded/..."
 	@go run ./internal/brandrender/cmd/sync-embedded --repo-root .
 	@echo "Files synced successfully"
+
+# Oracle packages whose goldens capture embedded assets, prompt templates or CLI help.
+ORACLE_ASSET_PKGS := ./internal/oracle/a2/artifact/ ./internal/oracle/a7/install/ \
+	./internal/oracle/a7/present/ ./internal/oracle/a8/ ./internal/oracle/sample/
+
+# Check asset-capturing oracle goldens (live mode never writes)
+oracle-check: sync-embedded
+	@env -i HOME="$$HOME" PATH="$$PATH" TMPDIR=/tmp go test -count=1 $(ORACLE_ASSET_PKGS) || \
+		{ echo "Stale oracle goldens: run 'make oracle-regen', review the golden diff, stage it." >&2; exit 1; }
+
+# Regenerate asset-capturing oracle goldens for review
+oracle-regen: sync-embedded
+	@env -i HOME="$$HOME" PATH="$$PATH" TMPDIR=/tmp ORACLE_WRITE=1 go test -count=1 $(ORACLE_ASSET_PKGS)
+	@git diff --stat -- internal/oracle
 
 # Build the binaries
 build: sync-embedded
@@ -380,6 +394,8 @@ help:
 	@echo "  vet                - Run go vet for linux, windows and darwin"
 	@echo "  check-testhelpers  - Verify testhelpers not in production code"
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
+	@echo "  oracle-check       - Check oracle goldens for embedded assets, prompts and CLI help"
+	@echo "  oracle-regen       - Regenerate those goldens for review (ORACLE_WRITE=1)"
 	@echo "  tidy               - Tidy dependencies"
 	@echo "  run                - Build and run the $(BINARY_NAME) binary"
 	@echo "  build-all          - Build $(BINARY_NAME) for multiple platforms"
