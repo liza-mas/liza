@@ -84,6 +84,14 @@ go test -bench=. -benchtime=10s -count=5 ./internal/db/   # Stability
 
 See [PERFORMANCE.md](PERFORMANCE.md) for benchmark targets and regression detection.
 
+### Oracle goldens
+
+Goldens that capture embedded assets, prompts and CLI help are checked at commit
+by the `oracle-goldens` pre-commit hook (`make oracle-check`). When it fails, run
+`make oracle-regen`, read the golden diff (every line must trace to your change),
+and stage it. Nothing regenerates goldens automatically; see
+[ADR-0219](../specs/architecture/ADR/0219-oracle-harness-and-chained-provenance.md).
+
 ## Test Organization
 
 ```
