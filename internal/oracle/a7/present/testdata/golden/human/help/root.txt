@@ -84,6 +84,7 @@ unblock-task Restore a repaired BLOCKED task to its initial or executing state
 update-review-commit Update review boundary to current worktree HEAD after external rebase
 update-sprint-metrics Recompute sprint metrics from current state
 usage Report provider token usage by task outcome
+use-system-prompt Deliver the agent contracts in the CLI system prompt instead of forced reads (opt-in)
 validate Validate state.yaml against schema rules
 validate-payload Check a command's payload structurally before invoking it
 version Print version information
