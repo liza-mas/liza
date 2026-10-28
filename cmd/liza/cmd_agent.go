@@ -324,11 +324,12 @@ func explainAgentLaunch(cmd *cobra.Command, selection agentlaunch.LaunchSelectio
 	return nil
 }
 
-// explainArgs abbreviates arguments too long to read, such as Codex's injected contracts.
+// explainArgs abbreviates arguments too long to read, such as Codex's injected
+// contracts; the limit (Linux PATH_MAX) keeps every path whole.
 func explainArgs(args []string) []string {
 	out := make([]string, len(args))
 	for i, arg := range args {
-		if runes := []rune(arg); len(runes) > 120 {
+		if runes := []rune(arg); len(arg) > 4096 {
 			arg = fmt.Sprintf("%s… (%d bytes)", string(runes[:80]), len(arg))
 		}
 		out[i] = arg
