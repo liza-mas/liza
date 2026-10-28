@@ -88,7 +88,8 @@ func runProviderUnavailableSupervisor(
 ) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// Crash backoffs consume 15s before the final idle wait and cleanup.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
 	lizaPaths := paths.New(fixture.projectRoot)
