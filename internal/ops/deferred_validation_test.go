@@ -508,7 +508,7 @@ func TestDeferredValidationLiveRunnerMakesSecondInvocationNoOp(t *testing.T) {
 }
 
 func TestDeferredValidationInheritedLockOutlivesDeadRunner(t *testing.T) {
-	t.Parallel()
+	// Prevent unrelated test forks from inheriting the held descriptor.
 	requireShellRunner(t)
 	dir := t.TempDir()
 	lock := filelock.New(filepath.Join(dir, "runner"))
