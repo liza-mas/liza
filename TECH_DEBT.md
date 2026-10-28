@@ -1421,3 +1421,21 @@ per-transaction cost (archived-object decoding and validation).
 a profile showing live decode and emission above 30% of a state-lock hold.
 Then define per-record retention (cap, archive to immutable objects like
 terminal tasks, or move to side records) with each reader's window.
+
+## Real-repo regen check is pinned to the consolidation start
+
+**What:** H1 in `internal/testhelpers/oracle/cmd/regen` compares every
+non-chained golden with the output of the ledger's `start` commit (96c9ad69),
+and the ledger is append-only, so `start` cannot move. Any post-consolidation
+behaviour change (a new CLI command, a hook edit) makes
+`go run ./internal/testhelpers/oracle/cmd/regen` report that golden
+unexplained. The D56 proof tests no longer depend on it: their clone gets an
+orphan root and a ledger that starts there.
+
+**Why deferred:** the manual check is not in CI, and fixing it means deciding
+whether the consolidation regime (D24/D56) is retired or rebased. Found when
+`use-system-prompt` became the first post-consolidation change to CLI help.
+
+**Payback trigger:** the next time the manual regen check is relied on, or a
+decision on the consolidation regime. Then retire H1 or define an explicit
+post-consolidation baseline the ledger can express.
