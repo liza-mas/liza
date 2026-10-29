@@ -85,7 +85,7 @@ def watch(
                 return [f"EVENT {stamp()}", *hits]
         if passes % probe_every == 0:
             progress = parse_progress(run_cli(binary, root, "status"))
-            if progress and progress[0] == progress[1]:
+            if progress and progress[1] > 0 and progress[0] == progress[1]:
                 return [f"RUN COMPLETE {stamp()} {progress[0]}/{progress[1]}"]
             lines = run_cli(binary, root, "get", "config.mode").strip().splitlines()
             mode = lines[-1] if lines else mode

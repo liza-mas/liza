@@ -87,6 +87,11 @@ def test_run_complete(tmp_path: Path) -> None:
     assert out[0].startswith("RUN COMPLETE ") and out[0].endswith("979/979")
 
 
+def test_zero_tasks_is_not_complete(tmp_path: Path) -> None:
+    out = run(make_root(tmp_path), FakeRun(tmp_path, progress="0/0"), tick=60)
+    assert out[0].startswith("TICK ") and "(0/0, RUNNING)" in out[0]
+
+
 def test_mode_change(tmp_path: Path) -> None:
     out = run(make_root(tmp_path), FakeRun(tmp_path, modes=["RUNNING", "PAUSED"]))
     assert out[0].startswith("MODE CHANGE ") and out[0].endswith("RUNNING -> PAUSED")
