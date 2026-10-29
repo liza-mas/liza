@@ -88,7 +88,13 @@ func parentAllocationReview(g *git.Git, root string, state *models.State, task, 
 }
 
 func independentlyApprovedPlan(parent *models.Task) bool {
-	if (parent.EffectiveType() != models.TaskTypePlanning && parent.EffectiveType() != models.TaskTypeArchitecture) || parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
+	// Epic planning is amendable too (amend-plan admits every planning role-pair).
+	switch parent.EffectiveType() {
+	case models.TaskTypePlanning, models.TaskTypeEpicPlanning, models.TaskTypeArchitecture:
+	default:
+		return false
+	}
+	if parent.Status != models.TaskStatusMerged || parent.BaseCommit == nil || parent.ReviewCommit == nil || parent.MergeCommit == nil {
 		return false
 	}
 	author := acceptanceParentAuthor(parent)

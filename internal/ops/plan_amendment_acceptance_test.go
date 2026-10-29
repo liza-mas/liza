@@ -63,6 +63,32 @@ func appendAcceptanceAmendment(t *testing.T, f replacementFixture, state *models
 	return state.FindTask(id)
 }
 
+// amend-plan admits every planning role-pair original, epic planning included,
+// so applying a reviewed amendment must accept the same original types.
+func TestIndependentlyApprovedPlanAcceptsEveryAmendableOriginalType(t *testing.T) {
+	t.Parallel()
+	author, reviewer := "planner-1", "reviewer-1"
+	commit := strings.Repeat("a", 40)
+	for _, c := range []struct {
+		typ      models.TaskType
+		approver string
+		want     bool
+	}{
+		{models.TaskTypePlanning, reviewer, true},
+		{models.TaskTypeEpicPlanning, reviewer, true},
+		{models.TaskTypeArchitecture, reviewer, true},
+		{models.TaskTypeEpicPlanning, author, false},
+		{models.TaskTypeCoding, reviewer, false},
+	} {
+		approver := c.approver
+		task := &models.Task{ID: "p", Type: c.typ, Status: models.TaskStatusMerged, AssignedTo: &author, ApprovedBy: &approver,
+			BaseCommit: &commit, ReviewCommit: &commit, MergeCommit: &commit}
+		if got := independentlyApprovedPlan(task); got != c.want {
+			t.Fatalf("type %s approved by %s: got %v, want %v", c.typ, c.approver, got, c.want)
+		}
+	}
+}
+
 func TestPlanAmendmentAcceptanceUnchangedAndRepeatedAllocations(t *testing.T) {
 	for _, changed := range []bool{false, true} {
 		t.Run(fmt.Sprintf("changed=%t", changed), func(t *testing.T) {
