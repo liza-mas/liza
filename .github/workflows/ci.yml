@@ -29,8 +29,8 @@ jobs:
     uses: ./.github/workflows/ci-core.yml
     with:
       setup_python: true
-      # macOS runs on main pushes and tags, and releases wait for it; pull
-      # requests wait on Linux and Windows only.
+      # macOS and Windows run on main pushes, tags, and manual runs;
+      # pull requests run Linux only.
       macos_on_pr: false
 
   release:
@@ -55,6 +55,7 @@ jobs:
   # Update the shard counts here only; `total` must match the entries listed.
   test-windows-shard:
     name: Test (windows, ${{ matrix.shard }})
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     # go test -timeout is 30m; the pending ops stdio-handle issue
     # (TECH_DEBT.md) can outlive it, so the test step is bounded at 35m and
@@ -229,7 +230,7 @@ jobs:
 
   test-windows:
     name: Test (windows)
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     needs: test-windows-shard
     runs-on: ubuntu-latest
     timeout-minutes: 10
