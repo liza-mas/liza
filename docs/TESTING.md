@@ -17,6 +17,25 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 | `go test -tags e2e ./internal/integration/` | Run e2e full sprint test (gated by `//go:build e2e`, ~40s) |
 | `make test-e2e` | Same as above via Makefile target |
 
+### Linux CI
+
+Linux tests run on three independent runners:
+
+| Shard | Makefile target | Coverage |
+|-------|-----------------|----------|
+| Core | `ci-test-core-nosync` | All Go packages except oracle, integration, and CLI |
+| Oracle | `ci-test-oracle-nosync` | All packages under `internal/oracle/` |
+| Integration | `ci-test-slow-race-nosync` | Integration with the `e2e` tag, then CLI tests |
+
+Each runner executes `make ci-prepare` first. All Go tests retain race
+instrumentation; core and oracle limit package concurrency to two. CI sets
+`GOFLAGS=-count=1` so restored build caches cannot replay test results. Python
+tests run after integration/CLI when enabled. The `Linux tests` aggregate check
+fails unless all three shards succeed.
+
+For a combined local run, use `make ci-prepare` followed by
+`GOFLAGS=-count=1 make ci-test-nosync` (or `ci-test-go-nosync` without Python).
+
 ### Windows compatibility
 
 The Windows CI job runs the Go suite natively with Git for Windows on `PATH`.
@@ -56,9 +75,9 @@ obviously use goroutines or locks:
 make test-race
 ```
 
-This is enforced by the project-local worktree validation instructions. CI
-wiring is currently deferred; the existing workflow still invokes `make test`,
-so it is not the race gate.
+This is enforced by the project-local worktree validation instructions. Linux
+CI also runs every Go test shard with race instrumentation, including the E2E
+integration suite.
 
 ### Faster temporary storage
 
