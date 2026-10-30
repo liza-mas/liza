@@ -124,12 +124,12 @@
 + .liza/skills/liza-logs/tools directory 0755 -
 + .liza/skills/liza-logs/tools/liza-session-analyzer.html file 0644 09dff6fbe764434844e9fc45743dd391a8932132a550e36a381abd9dd9b2dbdb
 + .liza/skills/liza-operator directory 0755 -
-+ .liza/skills/liza-operator/SKILL.md file 0644 d639cfe2cc57225823acd2512d5611924019d3640f0c0c87d731391a77bd7c72
++ .liza/skills/liza-operator/SKILL.md file 0644 0f1f8c4136287f26161747d32cf82c12e2de2ca502cb78dd899647ba7f728509
 + .liza/skills/liza-operator/scripts directory 0755 -
 + .liza/skills/liza-operator/scripts/critical-paths.py file 0644 8def847c34266a5323023eb5d67f376d7c495078ecff84b62aaf840bf4daeea5
 + .liza/skills/liza-operator/scripts/test_critical_paths.py file 0644 3a942ecd86c81ea51e514d68d99569e8dd30d98eecaea74b30f85204cd0bc650
-+ .liza/skills/liza-operator/scripts/test_watch_until.py file 0644 b6f8aa977444bf893bc2b99599de3beafade4b6fb04c5009785ad92bede0d93a
-+ .liza/skills/liza-operator/scripts/watch-until.py file 0644 2dd6067fa2015451bc89740afec3fdaab7ac5b33734665f48b1da97dd1fa11bb
++ .liza/skills/liza-operator/scripts/test_watch_until.py file 0644 ec56a00192367b143940f6d093a1aeb9581b9d9995627c37e0d0d9a5dad0850a
++ .liza/skills/liza-operator/scripts/watch-until.py file 0644 0d513b4537d67c878c78f2998fb2fdc3ce349a3f73a3c92d78e071229b998db8
 + .liza/skills/shared directory 0755 -
 + .liza/skills/shared/references directory 0755 -
 + .liza/skills/shared/references/acceptance-evidence.md file 0644 f975326965c1995011fc21bbb76ee48f55c907837354b98960820613900e8b31

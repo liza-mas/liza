@@ -59,7 +59,7 @@ def make_root(tmp_path: Path, initial: str = "") -> Path:
     return tmp_path
 
 
-def run(root: Path, fake: FakeRun, on_sleep: Any = None, tick: int = 1000) -> list[str]:
+def run(root: Path, fake: FakeRun, on_sleep: Any = None, tick: int = 1000, from_offset: int | None = None) -> list[str]:
     clock = {"t": 0.0}
 
     def sleep(seconds: float) -> None:
@@ -67,7 +67,9 @@ def run(root: Path, fake: FakeRun, on_sleep: Any = None, tick: int = 1000) -> li
         if on_sleep:
             on_sleep()
 
-    return wu.watch(root, "cli", tick, 20, 3, wu.DEFAULT_NOISE, run_cli=fake, sleep=sleep, now=lambda: clock["t"])
+    return wu.watch(
+        root, "cli", tick, 20, 3, wu.DEFAULT_NOISE, run_cli=fake, sleep=sleep, now=lambda: clock["t"], from_offset=from_offset
+    )
 
 
 def test_alert_appended_after_start_ends_the_leg_and_earlier_alerts_do_not(tmp_path: Path) -> None:
@@ -116,3 +118,21 @@ def test_noise_only_does_not_end_the_leg(tmp_path: Path, noise_line: str) -> Non
 
     out = run(root, FakeRun(root), on_sleep=append_once, tick=60)
     assert out[0].startswith("TICK ")
+
+
+def test_from_offset_replays_alerts_written_between_legs(tmp_path: Path) -> None:
+    root = make_root(tmp_path, "[t1] 🚨 BLOCKED: handled by the previous leg\n")
+    log = root / PROJECT_DIR / "alerts.log"
+    handled = log.stat().st_size
+    with log.open("a") as handle:
+        handle.write("[t2] 🚨 AWAITING HUMAN: written between legs\n")
+    out = run(root, FakeRun(root), from_offset=handled)
+    assert out[1:] == ["[t2] 🚨 AWAITING HUMAN: written between legs"]
+    assert out[0].endswith(f"offset={log.stat().st_size}")
+
+
+def test_exit_offset_resumes_without_replaying_handled_alerts(tmp_path: Path) -> None:
+    root = make_root(tmp_path, "[t1] 🚨 BLOCKED: x\n")
+    first = run(root, FakeRun(root), tick=60)
+    resume = int(first[0].split("offset=")[1].split()[0])
+    assert run(root, FakeRun(root), tick=60, from_offset=resume)[0].startswith("TICK ")

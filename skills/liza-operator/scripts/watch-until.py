@@ -5,13 +5,14 @@ Exits on the first event worth an operator turn and prints one header line
 (EVENT / RUN COMPLETE / MODE CHANGE / TICK) plus any alert lines:
 
 - any severity-marked alert line (🚨 or ⚠️) appended to alerts.log since the leg
-  started, except lines matching a noise pattern;
+  started (or since `--from-offset`), except lines matching a noise pattern;
 - a run-mode change;
 - run completion (status progress N/N);
 - the round tick.
 
 Relaunch it after handling each exit, so the watch lives for the run instead of
-a timer. Alerts are matched by severity marker rather than by an allow-list of
+a timer. Every header carries `offset=N`; pass it back as `--from-offset N` so the
+next leg first replays alerts written while the previous exit was handled. Alerts are matched by severity marker rather than by an allow-list of
 alert types, so a new alert type cannot slip through unnoticed.
 """
 
@@ -65,9 +66,10 @@ def watch(
     run_cli: Callable[..., str] = cli_output,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.monotonic,
+    from_offset: int | None = None,
 ) -> list[str]:
     log = root / "§BRAND_PROJECT_DIRNAME§" / "alerts.log"
-    offset = log.stat().st_size if log.exists() else 0
+    offset = from_offset if from_offset is not None else (log.stat().st_size if log.exists() else 0)
     start = now()
     mode0 = run_cli(binary, root, "get", "config.mode").strip().splitlines()[-1:] or [""]
     progress, mode = None, mode0[0]
@@ -82,19 +84,19 @@ def watch(
                 hits = new_alerts(handle.read(size - offset), noise)
             offset = size
             if hits:
-                return [f"EVENT {stamp()}", *hits]
+                return [f"EVENT {stamp()} offset={offset}", *hits]
         if passes % probe_every == 0:
             progress = parse_progress(run_cli(binary, root, "status"))
             if progress and progress[1] > 0 and progress[0] == progress[1]:
-                return [f"RUN COMPLETE {stamp()} {progress[0]}/{progress[1]}"]
+                return [f"RUN COMPLETE {stamp()} offset={offset} {progress[0]}/{progress[1]}"]
             lines = run_cli(binary, root, "get", "config.mode").strip().splitlines()
             mode = lines[-1] if lines else mode
             if mode and mode != mode0[0]:
-                return [f"MODE CHANGE {stamp()} {mode0[0]} -> {mode}"]
+                return [f"MODE CHANGE {stamp()} offset={offset} {mode0[0]} -> {mode}"]
         passes += 1
         if now() - start >= tick:
             shown = f"{progress[0]}/{progress[1]}" if progress else "?"
-            return [f"TICK {stamp()} watch round due ({shown}, {mode})"]
+            return [f"TICK {stamp()} offset={offset} watch round due ({shown}, {mode})"]
         sleep(poll)
 
 
@@ -106,9 +108,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--poll", type=int, default=20, help="seconds between alerts.log polls")
     parser.add_argument("--probe-every", type=int, default=3, help="CLI state probe every N polls (heavy CLI)")
     parser.add_argument("--noise", action="append", help="substring of alert lines to ignore (repeatable)")
+    parser.add_argument("--from-offset", type=int, help="alerts.log byte offset to start from (a previous exit's offset=N)")
     args = parser.parse_args(argv)
     noise = tuple(args.noise) if args.noise else DEFAULT_NOISE
-    for line in watch(args.project_root, args.binary, args.tick, args.poll, args.probe_every, noise):
+    for line in watch(
+        args.project_root, args.binary, args.tick, args.poll, args.probe_every, noise, from_offset=args.from_offset
+    ):
         print(line, flush=True)
     return 0
 

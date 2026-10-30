@@ -39,7 +39,7 @@ version-specific guidance "(as of <build/date>; verify)".
    only when explicitly requested. Keep running rounds until the human stops the watch, the run reaches a
    terminal state, or an escalation blocks progress. Between rounds, run event legs of
    `python3 ~/§BRAND_GLOBAL_DIRNAME§/skills/§BRAND_BINARY_NAME§-operator/scripts/watch-until.py` in the background
-   and relaunch one after each exit: a leg ends on any severity-marked alert, a mode change, run completion
+   and relaunch one after each exit with that exit's `--from-offset`: a leg ends on any severity-marked alert, a mode change, run completion
    or the round tick, so the watch lasts for the run, not for a tool timer. Smoke-test one short leg
    (`--tick 30`) at session start. A watch rebuilt ad hoc in session scratch space is not a fix.
    Before the human leaves the operator unattended, pre-flight one harmless relay in exactly the command form
