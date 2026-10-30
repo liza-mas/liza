@@ -133,6 +133,9 @@ func renderCodexHooksJSON(hooksPath string, reader *bufio.Reader, opts ConfirmOp
 			return nil, false, fmt.Errorf("failed to parse existing codex hooks.json: %w", err)
 		}
 		reconcileCodexHookRegistrations(lizaHooks, existingHooks)
+		if err := refreshDriftedHookEntries(lizaHooks, existingHooks, hooksPath, reader, opts); err != nil {
+			return nil, false, err
+		}
 		finalHooks = mergeSettings(lizaHooks, existingHooks)
 	} else if err != nil && !os.IsNotExist(err) {
 		return nil, false, fmt.Errorf("failed to read codex hooks.json: %w", err)

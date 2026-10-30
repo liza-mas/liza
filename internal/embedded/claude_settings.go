@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"reflect"
+	"slices"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
@@ -53,6 +56,9 @@ func WriteClaudeSettingsWithOptions(projectRoot string, reader *bufio.Reader, op
 	if existingSettings != nil {
 		if mode, ok := existingDefaultMode(existingSettings); ok {
 			fmt.Printf("Removing permissions.defaultMode (%q) from %s — project-scope settings do not reliably set the permission mode; set it in your own Claude settings instead.\n", mode, settingsPath)
+		}
+		if err := refreshDriftedHookEntries(lizaSettings, existingSettings, settingsPath, reader, opts); err != nil {
+			return err
 		}
 		finalSettings = mergeSettings(lizaSettings, existingSettings)
 	} else {
@@ -222,6 +228,149 @@ func hookEntryCommands(entry any) []string {
 		}
 	}
 	return commands
+}
+
+type hookDrift struct {
+	event   string
+	index   int
+	managed any
+	summary string
+}
+
+// refreshDriftedHookEntries replaces existing hook entries that share event,
+// matcher and commands with a managed entry but differ in other fields (such
+// as timeout), after one confirmation. Declining keeps existing entries
+// verbatim, so mergeHooks then preserves them as customizations.
+func refreshDriftedHookEntries(managed, existing map[string]any, label string, reader *bufio.Reader, opts ConfirmOptions) error {
+	drifts := findDriftedHookEntries(managed, existing)
+	if len(drifts) == 0 {
+		return nil
+	}
+	var prompt strings.Builder
+	fmt.Fprintf(&prompt, "%s hooks differ from the managed %s version:\n", label, brand.NameTitle)
+	for _, drift := range drifts {
+		fmt.Fprintf(&prompt, "  %s\n", drift.summary)
+	}
+	prompt.WriteString("Replace them with the managed version? (y/n): ")
+	ok, err := confirmMergeWithOptions(prompt.String(), reader, opts)
+	if err != nil || !ok {
+		return err
+	}
+	existingHooks := existing["hooks"].(map[string]any)
+	for _, drift := range drifts {
+		existingHooks[drift.event].([]any)[drift.index] = drift.managed
+	}
+	return nil
+}
+
+// findDriftedHookEntries pairs entries by event plus hookEntryIdentity. A
+// managed identity repeated within one event is ambiguous and never paired.
+func findDriftedHookEntries(managed, existing map[string]any) []hookDrift {
+	managedHooks, managedOK := managed["hooks"].(map[string]any)
+	existingHooks, existingOK := existing["hooks"].(map[string]any)
+	if !managedOK || !existingOK {
+		return nil
+	}
+	var drifts []hookDrift
+	for _, event := range slices.Sorted(maps.Keys(existingHooks)) {
+		existingEntries, existingOK := existingHooks[event].([]any)
+		managedEntries, managedOK := managedHooks[event].([]any)
+		if !existingOK || !managedOK {
+			continue
+		}
+		byIdentity := make(map[string]any)
+		counts := make(map[string]int)
+		for _, entry := range managedEntries {
+			if id := hookEntryIdentity(entry); id != "" {
+				byIdentity[id] = entry
+				counts[id]++
+			}
+		}
+		for i, entry := range existingEntries {
+			id := hookEntryIdentity(entry)
+			want, found := byIdentity[id]
+			if !found || counts[id] != 1 || reflect.DeepEqual(entry, want) {
+				continue
+			}
+			drifts = append(drifts, hookDrift{
+				event:   event,
+				index:   i,
+				managed: want,
+				summary: fmt.Sprintf("%s %s", hookEntryLabel(event, entry), describeHookDrift(entry, want)),
+			})
+		}
+	}
+	return drifts
+}
+
+// hookEntryIdentity keys an entry by matcher and commands; "" when it has no
+// command. Several managed entries share a command and differ only by matcher.
+func hookEntryIdentity(entry any) string {
+	commands := hookEntryCommands(entry)
+	if len(commands) == 0 {
+		return ""
+	}
+	matcher, _ := entry.(map[string]any)["matcher"].(string)
+	return matcher + "\x00" + strings.Join(commands, "\x00")
+}
+
+func hookEntryLabel(event string, entry any) string {
+	commands := hookEntryCommands(entry)
+	command := commands[len(commands)-1]
+	script := strings.Trim(command[strings.LastIndex(command, "/")+1:], `"`)
+	if matcher, _ := entry.(map[string]any)["matcher"].(string); matcher != "" {
+		return fmt.Sprintf("%s[%s] %s:", event, matcher, script)
+	}
+	return fmt.Sprintf("%s %s:", event, script)
+}
+
+// describeHookDrift lists the differing entry-level and per-hook fields, e.g.
+// "timeout 5 → 40". Paired entries have equal commands, so hooks align by index.
+func describeHookDrift(existing, managed any) string {
+	existingEntry, managedEntry := existing.(map[string]any), managed.(map[string]any)
+	diffs := appendFieldDiffs(nil, existingEntry, managedEntry, "hooks")
+	existingList, _ := existingEntry["hooks"].([]any)
+	managedList, _ := managedEntry["hooks"].([]any)
+	if len(existingList) == len(managedList) {
+		for i := range managedList {
+			existingHook, _ := existingList[i].(map[string]any)
+			managedHook, _ := managedList[i].(map[string]any)
+			diffs = appendFieldDiffs(diffs, existingHook, managedHook, "command")
+		}
+	}
+	if len(diffs) == 0 {
+		return "settings differ"
+	}
+	return strings.Join(diffs, ", ")
+}
+
+func appendFieldDiffs(diffs []string, existing, managed map[string]any, skip string) []string {
+	keys := make(map[string]bool)
+	for key := range existing {
+		keys[key] = true
+	}
+	for key := range managed {
+		keys[key] = true
+	}
+	for _, key := range slices.Sorted(maps.Keys(keys)) {
+		if key == skip || reflect.DeepEqual(existing[key], managed[key]) {
+			continue
+		}
+		diffs = append(diffs, fmt.Sprintf("%s %s → %s", key, hookFieldValue(existing, key), hookFieldValue(managed, key)))
+	}
+	return diffs
+}
+
+func hookFieldValue(fields map[string]any, key string) string {
+	value, ok := fields[key]
+	if !ok {
+		return "unset"
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
+	}
+	return string(encoded)
 }
 
 // unionHookEntries preserves every existing entry verbatim. Existing commands
