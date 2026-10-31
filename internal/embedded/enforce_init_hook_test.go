@@ -662,13 +662,23 @@ func TestEnforceInitHook_PairingModeListsCompanionDocsUntilRead(t *testing.T) {
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 
 	output := runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "git diff --cached"), 2)
-	if !strings.Contains(output, "REPOSITORY.md (repo root)") ||
-		!strings.Contains(output, "docs/USAGE.md (from repo root)") ||
+	repositoryPath := filepath.ToSlash(projectRoot) + "/REPOSITORY.md"
+	usagePath := filepath.ToSlash(projectRoot) + "/docs/USAGE.md"
+	if !strings.Contains(output, "  - "+repositoryPath+"\n") ||
+		!strings.Contains(output, "  - "+usagePath+"\n") ||
 		!strings.Contains(output, "~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md") {
 		t.Fatalf("missing-doc message should mention Pairing companion docs after Pairing mode is selected, got:\n%s", output)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); !os.IsNotExist(err) {
 		t.Fatalf("pairing mode should remain blocked until companion docs are read, stat err: %v", err)
+	}
+
+	// The listed paths must be readable as given.
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat "+repositoryPath), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat "+usagePath), 0)
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md"), 0)
+	if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
+		t.Fatalf("reading the listed companion paths should clear the gate: %v", err)
 	}
 }
 
@@ -688,8 +698,8 @@ func TestEnforceInitHook_PairingModeOmitsAbsentProjectCompanionDocs(t *testing.T
 	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat ~/"+paths.GlobalDirName()+"/PAIRING_MODE.md"), 0)
 
 	output := runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "git diff --cached"), 2)
-	if strings.Contains(output, "REPOSITORY.md (repo root)") ||
-		strings.Contains(output, "docs/USAGE.md (from repo root)") {
+	if strings.Contains(output, "REPOSITORY.md") ||
+		strings.Contains(output, "docs/USAGE.md") {
 		t.Fatalf("missing-doc message should omit absent Pairing project companion docs, got:\n%s", output)
 	}
 	if !strings.Contains(output, "~/"+paths.GlobalDirName()+"/COLLABORATION_CONTINUITY.md") {
@@ -760,7 +770,7 @@ func TestEnforceInitHook_ListsPresentGuardrailsInMissingList(t *testing.T) {
 	defer os.RemoveAll(stateDir)
 
 	output := runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "git diff --cached"), 2)
-	if !strings.Contains(output, "GUARDRAILS.md (project root)") {
+	if !strings.Contains(output, "  - "+filepath.ToSlash(projectRoot)+"/GUARDRAILS.md\n") {
 		t.Fatalf("missing-doc message should mention present GUARDRAILS.md, got:\n%s", output)
 	}
 	if strings.Contains(output, "confirm absent") {

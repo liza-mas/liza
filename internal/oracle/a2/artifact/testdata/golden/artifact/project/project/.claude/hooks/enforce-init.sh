@@ -475,15 +475,15 @@ missing=""
   - The applicable mode contract from the Mode Selection Gate"
 if requires_pairing_companion_docs; then
   [[ -f "$project_dir/REPOSITORY.md" ]] && [[ ! -f "$STATE_DIR/REPOSITORY.done" ]] && missing="$missing
-  - REPOSITORY.md (repo root)"
+  - $project_dir/REPOSITORY.md"
   [[ -f "$project_dir/docs/USAGE.md" ]] && [[ ! -f "$STATE_DIR/USAGE.done" ]] && missing="$missing
-  - docs/USAGE.md (from repo root)"
+  - $project_dir/docs/USAGE.md"
   [[ ! -f "$STATE_DIR/COLLABORATION_CONTINUITY.done" ]] && missing="$missing
   - ~/.liza/COLLABORATION_CONTINUITY.md"
 fi
 if [[ -f "$project_dir/GUARDRAILS.md" ]] && [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]]; then
   missing="$missing
-  - GUARDRAILS.md (project root)"
+  - $project_dir/GUARDRAILS.md"
 fi
 
 cat <<EOF >&2

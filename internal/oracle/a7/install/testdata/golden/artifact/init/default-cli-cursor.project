@@ -1,6 +1,6 @@
 + .claude directory 0755 -
 + .claude/hooks directory 0755 -
-+ .claude/hooks/enforce-init.sh file 0755 09fecfa5cc714179be0a3128a51a52aea4438df7ecf0f14d3e224ee3b2a1489f
++ .claude/hooks/enforce-init.sh file 0755 c4b9c2ae313f8682611fbc6cef908e0648af37951117ff03c391c7779d143b41
 + .claude/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
 + .claude/hooks/rtk-guard.sh file 0755 602000939876fb901511e44636c0320d20540eb1e5a69a7c5f4309f8a42bbcd4
 + .claude/hooks/session-context.sh file 0755 1ab908249b62f30bdd826e5eedcb6b08110a77ae12236659e899034e9dcd5537
