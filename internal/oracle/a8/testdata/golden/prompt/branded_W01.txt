@@ -95,17 +95,7 @@ SESSION EXIT CODES (observed by supervisor — not Bash commands):
 TIMESTAMPS: YYYY-MM-DDTHH:MM:SSZ (ISO 8601 UTC). Generate: date -u +%Y-%m-%dT%H:%M:%SZ
 
 FIRST ACTIONS:
-⚠️  A session-init hook BLOCKS all non-read tool calls until the contract files are read.
-    Any Bash command other than cat/head/tail/sed/wc will be rejected.
-    Use file-read tools (Read, filesystem MCP) or cat — nothing else until step 1 is done.
-1. Read these contract files before anything else:
-   - ~/.acme/MULTI_AGENT_MODE.md
-   - ~/.acme/AGENT_TOOLS.md
-   - <ROOT>/project/GUARDRAILS.md   (may be absent)
-   Read all three in ONE call via filesystem/read_multiple_files or equivalent tolerating per-path errors,
-   or read them one at a time sequentially. Do NOT use cat if file-read tools are available.
-   Do NOT pre-check existence with Bash as a separate step; use a tolerant multi-read or sequential reads.
-   The session-init hook only tolerates a narrow GUARDRAILS.md compatibility wrapper.
+1. Complete the CORE init sequence before anything else.
 2. Use the orchestrator dashboard and active-task digest below first.
    Query specific tasks with acme get <task-id> --json.
    Refresh active summaries only if the prompt context appears stale.

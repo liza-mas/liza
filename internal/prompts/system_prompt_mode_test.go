@@ -16,10 +16,16 @@ func TestBuildBasePromptSystemPromptModeDropsContractReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(forced, "1. Read these contract files before anything else:") {
+	if !strings.Contains(forced, "1. Complete the CORE init sequence before anything else.") {
 		t.Fatal("default prompt lost the contract-read step")
 	}
-	for _, unwanted := range []string{"Read these contract files", "session-init hook BLOCKS", "read_multiple_files"} {
+	// CORE names the documents and the init hook reports its read rules when it blocks.
+	for _, unwanted := range []string{"Read these contract files", "head/tail", "read_multiple_files", "session-init hook BLOCKS"} {
+		if strings.Contains(forced, unwanted) {
+			t.Errorf("default prompt still restates the init sequence %q", unwanted)
+		}
+	}
+	for _, unwanted := range []string{"Complete the CORE init sequence", "session-init hook BLOCKS", "read_multiple_files"} {
 		if strings.Contains(injected, unwanted) {
 			t.Errorf("system-prompt mode prompt still contains %q", unwanted)
 		}
