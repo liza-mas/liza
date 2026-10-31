@@ -21,7 +21,7 @@ func TestSessionContextHook_NamesGlobalCore(t *testing.T) {
 	projectRoot := t.TempDir()
 	output := runSessionContextHook(t, hook, sessionStartPayload(t, projectRoot), nil, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if !strings.Contains(context, "MANDATORY: Read ~/.acme-contracts/CORE.md") {
+	if !strings.Contains(context, "~/.acme-contracts/CORE.md is already in your system prompt") {
 		t.Fatalf("startup context does not name branded global CORE path: %s", context)
 	}
 }
@@ -52,7 +52,7 @@ func TestSessionContextHook_EmitsSessionStartContextForIndexedRepo(t *testing.T)
 
 	context := got.HookSpecificOutput.AdditionalContext
 	for _, want := range []string{
-		"MANDATORY: Read ~/" + paths.GlobalDirName() + "/CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete.",
+		"~/" + paths.GlobalDirName() + "/CORE.md is already in your system prompt; do not re-read it at session start. MANDATORY: Read the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete.",
 		"complete. ~/" + paths.GlobalDirName() + "/PAIRING_MODE.md",
 		"~/" + paths.GlobalDirName() + "/AGENT_TOOLS.md",
 		"REPOSITORY.md",
@@ -146,7 +146,7 @@ func TestSessionContextHook_StillEmitsContextWhenStacklitFails(t *testing.T) {
 		"PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if !strings.Contains(context, "MANDATORY: Read ~/"+paths.GlobalDirName()+"/CORE.md") ||
+	if !strings.Contains(context, "MANDATORY: Read the documents listed as required") ||
 		!strings.Contains(context, "stacklit derive --ai-summary") {
 		t.Fatalf("startup context should remain useful after stacklit failure, got:\n%s", context)
 	}
@@ -190,7 +190,7 @@ func TestSessionContextHook_EmitsInitContextWithoutLizaIndexHook(t *testing.T) {
 
 	output := runSessionContextHook(t, hookPath, sessionStartPayload(t, projectRoot), nil, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if !strings.Contains(context, "MANDATORY: Read ~/"+paths.GlobalDirName()+"/CORE.md") {
+	if !strings.Contains(context, "MANDATORY: Read the documents listed as required") {
 		t.Fatalf("startup context should include initialization reminder, got:\n%s", context)
 	}
 	if strings.Contains(context, brand.NameTitle+" repository indexes detected") {
@@ -215,7 +215,7 @@ func TestSessionContextHook_EmitsInitContextWithoutIndexes(t *testing.T) {
 
 	output := runSessionContextHook(t, hookPath, sessionStartPayload(t, projectRoot), nil, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if !strings.Contains(context, "MANDATORY: Read ~/"+paths.GlobalDirName()+"/CORE.md") {
+	if !strings.Contains(context, "MANDATORY: Read the documents listed as required") {
 		t.Fatalf("startup context should include initialization reminder, got:\n%s", context)
 	}
 	if strings.Contains(context, brand.NameTitle+" repository indexes detected") {
@@ -495,7 +495,7 @@ func TestSessionContextHook_OmitsDisabledIndexesForAgentSessions(t *testing.T) {
 		"LIZA_ENABLE_FUNCTIONAL_CLUSTERS=false",
 	}, 0)
 	context := sessionStartAdditionalContext(t, output)
-	if !strings.Contains(context, "MANDATORY: Read ~/"+paths.GlobalDirName()+"/CORE.md") {
+	if !strings.Contains(context, "MANDATORY: Read the documents listed as required") {
 		t.Fatalf("startup context should include initialization reminder for Liza agents, got:\n%s", context)
 	}
 	if strings.Contains(context, brand.NameTitle+" repository indexes detected") {

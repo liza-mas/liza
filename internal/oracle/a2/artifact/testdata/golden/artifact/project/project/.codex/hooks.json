@@ -40,7 +40,7 @@
           {
             "command": "root=$(git rev-parse --show-toplevel 2\u003e/dev/null) || exit 0; bash \"$root/.codex/hooks/session-context.sh\"",
             "statusMessage": "Loading Liza repository indexes",
-            "timeout": 5,
+            "timeout": 40,
             "type": "command"
           }
         ],

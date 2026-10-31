@@ -146,3 +146,15 @@ basis for deleting an instruction link.
   decision remains active.
 - ADR-0050's repo-first/global-fallback ordering; its brownfield no-overwrite
   invariant remains active.
+
+## Amendment (2026-10-30): CORE read no longer gated
+
+The init gate no longer requires a CORE read, and startup context states that
+CORE is already in the system prompt instead of asking for it. Providers load
+CORE through the activated link, and placement fails closed before hooks deploy,
+so the required read only duplicated the system prompt at session start. A CORE
+read stays an accepted initialization read for post-compaction recovery.
+
+Accepted risk: a link removed or retargeted after init lets a session clear the
+gate without the contract. The gate observes reads, not the system prompt, so it
+could not detect this reliably either way.

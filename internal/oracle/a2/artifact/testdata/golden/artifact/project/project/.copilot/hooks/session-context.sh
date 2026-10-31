@@ -209,7 +209,7 @@ if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
     context="The Liza contracts (CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md, REPOSITORY.md, docs/USAGE.md) are in your system prompt. Treat them as read; do not re-read those files."
   fi
 else
-context="MANDATORY: Read ~/.liza/CORE.md and the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
+context="~/.liza/CORE.md is already in your system prompt; do not re-read it at session start. MANDATORY: Read the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
 if [[ -n "$agent_id_value" ]]; then
   context+="~/.liza/MULTI_AGENT_MODE.md"
 else

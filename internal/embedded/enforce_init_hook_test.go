@@ -16,12 +16,12 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
-func TestEnforceInitHook_RequiresCoreRead(t *testing.T) {
+func TestEnforceInitHook_ClearsWithoutCoreRead(t *testing.T) {
 	for _, native := range []bool{false, true} {
 		t.Run(map[bool]string{false: "bash", true: "native"}[native], func(t *testing.T) {
 			hook := writeEnforceInitHook(t)
 			projectRoot := t.TempDir()
-			sessionID := "core-required-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+			sessionID := "core-not-required-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
 			stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
 			t.Cleanup(func() { os.RemoveAll(stateDir) })
 			read := func(name string) {
@@ -38,15 +38,14 @@ func TestEnforceInitHook_RequiresCoreRead(t *testing.T) {
 			}
 			read("AGENT_TOOLS.md")
 			read("PAIRING_MODE.md")
-			read("COLLABORATION_CONTINUITY.md")
-			if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); !os.IsNotExist(err) {
-				t.Fatalf("gate cleared without CORE read: %v", err)
-			}
 			output := runHook(t, hook, bashPayload(t, sessionID, projectRoot, "git status --short"), 2)
-			if !strings.Contains(output, "~/"+paths.GlobalDirName()+"/CORE.md") {
-				t.Fatalf("missing CORE diagnostic: %s", output)
+			if strings.Contains(output, "CORE.md") {
+				t.Fatalf("block diagnostic still requires CORE: %s", output)
 			}
-			read("CORE.md")
+			read("COLLABORATION_CONTINUITY.md")
+			if _, err := os.Stat(filepath.Join(stateDir, "CLEARED")); err != nil {
+				t.Fatalf("gate did not clear without CORE read: %v", err)
+			}
 			runHook(t, hook, bashPayload(t, sessionID, projectRoot, "git status --short"), 0)
 		})
 	}

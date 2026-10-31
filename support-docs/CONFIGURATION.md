@@ -81,8 +81,8 @@ fall back to the catalog's local file when supported (for Claude,
 Git status; existing user files are preserved. If any selected provider remains
 inactive, init exits nonzero before deploying new provider hooks/settings and
 leaves existing activation metadata unchanged. Skipping placement succeeds only
-when a supported contract link is already active. Session startup names
-`~/§BRAND_GLOBAL_DIRNAME§/CORE.md`, and the init gate requires its read alongside
+when a supported contract link is already active. Session startup notes that
+`~/§BRAND_GLOBAL_DIRNAME§/CORE.md` is already loaded, and the init gate requires
 the other mandatory documents, except for lane sessions whose launcher put the
 contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236).
 
