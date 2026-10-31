@@ -372,6 +372,35 @@ func TestEnforceInitHook_RejectsStaleGlobalRootAndStopsRepeatedRetries(t *testin
 	}
 }
 
+func TestEnforceInitHook_InvalidReadListsUnreadDocs(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	hookPath := writeEnforceInitHook(t)
+	projectRoot := t.TempDir()
+	sessionID := "test-invalid-read-lists-unread-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+	stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
+	defer os.RemoveAll(stateDir)
+	agentTools := "~/" + paths.GlobalDirName() + "/AGENT_TOOLS.md"
+	modeLine := "  - The applicable mode contract from the Mode Selection Gate"
+	invalid := bashPayload(t, sessionID, projectRoot, "wc -l "+agentTools)
+
+	first := runHook(t, hookPath, invalid, 2)
+	if !strings.Contains(first, "Mandatory documents still unread:") ||
+		!strings.Contains(first, "  - "+agentTools) ||
+		!strings.Contains(first, modeLine) {
+		t.Fatalf("invalid read rejection should list unread documents, got:\n%s", first)
+	}
+
+	runHook(t, hookPath, bashPayload(t, sessionID, projectRoot, "cat "+agentTools), 0)
+
+	second := runHook(t, hookPath, invalid, 2)
+	if strings.Contains(second, "  - "+agentTools) || !strings.Contains(second, modeLine) {
+		t.Fatalf("invalid read rejection should list only documents still unread, got:\n%s", second)
+	}
+}
+
 func TestEnforceInitHook_SuccessfulNativeReadsResetRepeatedInvalidMarker(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")

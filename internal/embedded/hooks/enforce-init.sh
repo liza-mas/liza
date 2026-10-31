@@ -395,6 +395,29 @@ is_safe_guardrails_probe_wrapper() {
   is_plain_echo_command "$else_branch"
 }
 
+# Sets $missing to the unread mandatory documents, one "  - <path>" line each.
+collect_missing_init_docs() {
+  mark_absent_project_docs_if_needed
+  missing=""
+  [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
+  [[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing
+  - The applicable mode contract from the Mode Selection Gate"
+  if requires_pairing_companion_docs; then
+    [[ -f "$project_dir/REPOSITORY.md" ]] && [[ ! -f "$STATE_DIR/REPOSITORY.done" ]] && missing="$missing
+  - $project_dir/REPOSITORY.md"
+    [[ -f "$project_dir/docs/USAGE.md" ]] && [[ ! -f "$STATE_DIR/USAGE.done" ]] && missing="$missing
+  - $project_dir/docs/USAGE.md"
+    [[ ! -f "$STATE_DIR/COLLABORATION_CONTINUITY.done" ]] && missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md"
+  fi
+  if [[ -f "$project_dir/GUARDRAILS.md" ]] && [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]]; then
+    missing="$missing
+  - $project_dir/GUARDRAILS.md"
+  fi
+  return 0
+}
+
 # Codex currently exposes shell reads through the Bash hook surface. Allow a
 # narrow set of read-only commands for the mandatory docs so the gate can clear
 # even when MCP filesystem read tools are unavailable.
@@ -417,6 +440,10 @@ EOF
 Allowed commands: cat, sed, an exact GUARDRAILS.md existence
 probe, or a narrow \`test -f GUARDRAILS.md && ... || ...\` wrapper.
 EOF
+    collect_missing_init_docs
+    if [[ -n "$missing" ]]; then
+      printf '\nMandatory documents still unread:%s\n' "$missing" >&2
+    fi
     if (( repeated_invalid_read )); then
       cat <<EOF >&2
 
@@ -467,24 +494,7 @@ fi
 
 # Non-Read tool call: block if gate not cleared.
 # Stderr is shown to the agent as the block reason (exit 2 protocol).
-mark_absent_project_docs_if_needed
-missing=""
-[[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
-  - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
-[[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing
-  - The applicable mode contract from the Mode Selection Gate"
-if requires_pairing_companion_docs; then
-  [[ -f "$project_dir/REPOSITORY.md" ]] && [[ ! -f "$STATE_DIR/REPOSITORY.done" ]] && missing="$missing
-  - $project_dir/REPOSITORY.md"
-  [[ -f "$project_dir/docs/USAGE.md" ]] && [[ ! -f "$STATE_DIR/USAGE.done" ]] && missing="$missing
-  - $project_dir/docs/USAGE.md"
-  [[ ! -f "$STATE_DIR/COLLABORATION_CONTINUITY.done" ]] && missing="$missing
-  - ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md"
-fi
-if [[ -f "$project_dir/GUARDRAILS.md" ]] && [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]]; then
-  missing="$missing
-  - $project_dir/GUARDRAILS.md"
-fi
+collect_missing_init_docs
 
 cat <<EOF >&2
 BLOCKED — session initialization incomplete.
