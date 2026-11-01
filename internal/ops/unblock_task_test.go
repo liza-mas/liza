@@ -1266,3 +1266,33 @@ func mustReadTask(t *testing.T, stateFile, taskID string) *models.Task {
 	}
 	return task
 }
+
+func TestUnblockTaskExactReplayReportsClaimability(t *testing.T) {
+	t.Parallel()
+	root, _, bb, _ := setupOwnershipLifecycleClaim(t)
+	testhelpers.SetupPipelineConfig(t, root)
+	authority := models.AgentAuthority{ID: "orchestrator-1", Generation: "unblock-current"}
+	if err := bb.Modify(func(state *models.State) error {
+		task := state.FindTask("task-1")
+		*task = testhelpers.BuildTaskByStatus(task.ID, models.TaskStatusBlocked, task.Created)
+		task.Worktree = nil
+		agent := testhelpers.RegisteredTestAgent("orchestrator")
+		agent.Generation = authority.Generation
+		state.Agents[authority.ID] = agent
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	opts := UnblockTaskOptions{Request: ownershipRequestOptions(t, bb, "claimable-replay-unblock")}
+	result, err := UnblockTaskWithAuthority(root, "task-1", "repaired", authority, opts)
+	if err != nil || result.Outcome != models.LifecycleCompleted || !result.Claimable {
+		t.Fatalf("unblock: %+v, %v; want completed and claimable", result, err)
+	}
+	replayed, err := UnblockTaskWithAuthority(root, "task-1", "repaired", authority, opts)
+	if err != nil || replayed.Outcome != models.LifecycleAlreadyCompleted {
+		t.Fatalf("exact replay: %+v, %v", replayed, err)
+	}
+	if replayed.Claimable != result.Claimable {
+		t.Fatalf("exact replay Claimable = %v, original %v", replayed.Claimable, result.Claimable)
+	}
+}

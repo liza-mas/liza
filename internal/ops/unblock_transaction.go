@@ -152,7 +152,7 @@ func (c *unblockCall) mutate(state *models.State) error {
 	if task == nil {
 		return &errors.NotFoundError{Entity: notFoundEntityTask, ID: c.taskID}
 	}
-	if err := c.admit(task); err != nil {
+	if err := c.admit(state, task); err != nil {
 		return err
 	}
 	if err := c.checkUnblockable(state, task); err != nil {
@@ -177,8 +177,9 @@ func (c *unblockCall) mutate(state *models.State) error {
 }
 
 // admit validates the recorded preparation of a prepared request, or resolves
-// the request against the task's receipts, answering an exact replay.
-func (c *unblockCall) admit(task *models.Task) error {
+// the request against the task's receipts, answering an exact replay with the
+// original result fields and the task's current claimability.
+func (c *unblockCall) admit(state *models.State, task *models.Task) error {
 	if c.prepared {
 		return ValidateLifecyclePreparation(task, c.request)
 	}
@@ -187,10 +188,18 @@ func (c *unblockCall) admit(task *models.Task) error {
 		return err
 	}
 	if receipt != nil {
-		c.result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, c.agentID), TaskID: c.taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: c.opts.AssignTo, NewIteration: c.opts.NewIteration}
+		c.result = UnblockTaskResult{LifecycleOutcome: LifecycleReplayOutcome(task, receipt, c.agentID), TaskID: c.taskID, FromStatus: receipt.Projection.SourceStatus, ToStatus: task.Status, AssignedTo: c.opts.AssignTo, Claimable: c.claimable(state, task), NewIteration: c.opts.NewIteration}
 		return errLifecycleReplay
 	}
 	return nil
+}
+
+// claimable reports whether the task is claimable by its doer role, the
+// evaluation both the restore and its replay report. A role pair that no
+// longer resolves has no claimant.
+func (c *unblockCall) claimable(state *models.State, task *models.Task) bool {
+	doer, err := c.resolver.DoerRole(task.RolePair)
+	return err == nil && task.IsClaimable(doer, state.Tasks, c.resolver)
 }
 
 // checkUnblockable refuses a task that is not a BLOCKED one this call may
@@ -389,7 +398,7 @@ func (c *unblockCall) complete(state *models.State, task *models.Task, restore *
 		FromStatus:   restore.fromStatus,
 		ToStatus:     restore.targetStatus,
 		AssignedTo:   c.opts.AssignTo,
-		Claimable:    task.IsClaimable(restore.doer, state.Tasks, c.resolver),
+		Claimable:    c.claimable(state, task),
 		NewIteration: c.opts.NewIteration,
 		Rebase:       c.rebaseResult,
 	}
