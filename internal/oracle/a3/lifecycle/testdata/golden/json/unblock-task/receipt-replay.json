@@ -30,7 +30,7 @@
         "ok": true,
         "result": {
           "changed": false,
-          "claimable": false,
+          "claimable": true,
           "completed_transition_id": "<id-1>",
           "effects": "committed",
           "from_status": "BLOCKED",
