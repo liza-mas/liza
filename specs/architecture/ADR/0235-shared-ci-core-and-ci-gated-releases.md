@@ -3,7 +3,7 @@
 ## Status
 
 ACCEPTED — implemented 2026-10-22 to 2026-10-23; backfilled 2026-10-25. Amends
-ADR-0017.
+ADR-0017. Amended 2026-11-02 (Linux shards; Windows skipped on pull requests).
 
 ## Context and Problem Statement
 
@@ -111,6 +111,40 @@ weekly caches, single integration run, macOS-on-PR, Windows weekly caches, the
 merged-not-pinned docs change), `63596d743`, `bc82b2757` for context, and
 `.github/workflows/README.md`. The user supplied the maintenance rationale and
 confirmed the macOS decision on 2026-10-25.
+
+## Amendment (2026-10-30 to 2026-11-02): Linux shards, and Windows skipped on pull requests
+
+**Linux shards.** The single Linux race job became separate runners, first
+three (`da93bfe08`), then five (`a267fd7f1`):
+
+| Shard | Packages |
+|---|---|
+| core | everything except `internal/ops`, oracle, `internal/integration` and `cmd/liza` |
+| ops | `internal/ops` |
+| oracle | the oracle packages |
+| integration | `internal/integration`, plus the Python tests |
+| cli | `cmd/liza` |
+
+The core shard ran under `-race -p 2` in a 30-minute job, with `internal/ops`
+taking a large share of it. On a branch adding long-running decision tests it
+hit the job limit twice, and the combined integration and CLI job finished at
+28 of its 30 minutes. The shards still cover every package exactly once, keep
+race detection and uncached runs, and isolate weekly caches by suite. The
+Linux aggregate check and the `verified_sha` output are unchanged, so release
+gating still reads one result. The new Makefile targets
+(`ci-test-ops-nosync`, `ci-test-integration-nosync`, `ci-test-cli-nosync`, and
+the core and oracle targets) are fork extension points under the rules above.
+`ci-test-slow-race-nosync` stays for the combined local lane.
+
+**Windows on pull requests.** Pull requests skip both the Windows shard matrix
+and its aggregate job, matching the macOS policy, so a pull request runs Linux
+checks only (`7acf3c9f7`). Windows still runs on `main` pushes, version tags
+and manual runs, and the release still waits for it. The accepted macOS
+trade-off now covers Windows as well: a Windows-only regression surfaces after
+merge, not in review. *The commit gives matching the macOS policy as the
+reason; no further rationale is recorded.*
+
+Sources: the commit bodies of `da93bfe08`, `7acf3c9f7` and `a267fd7f1`.
 
 ---
 *Reconstructed from commits `8e117e1fa`..`63596d743` (2026-10-22 to 2026-10-23); context from `bc82b2757` (2026-09-24).*

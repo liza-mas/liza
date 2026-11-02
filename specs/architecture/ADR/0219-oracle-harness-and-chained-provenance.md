@@ -7,6 +7,8 @@ package-scoped change points (M1–M9); D24's text and §1's D53 text are unchan
 Clarified (2026-10-27) for one merged omission, the C5 golden change at
 `7e4e9f37d`: §4 gains the attributed record, §5 its binding, §7 the check-mode
 exclusion of an unresolved C package. D24, D53 and D56 text are unchanged.
+Amended (2026-10-28): golden drift of asset-capturing oracles is checked at
+commit (see the amendment at the end).
 
 ## Context
 
@@ -185,3 +187,23 @@ produces. Both are C change points, and regeneration must reproduce them.
    work outside the run's goal.
 3. Naming a golden-changing commit in its own ledger record: rejected because
    the commit would name itself and rebases would invalidate the record.
+
+## Amendment (2026-10-28): golden drift checked at commit
+
+Goldens that capture embedded assets, prompt templates and CLI help went stale
+twice in a row (`a89e984c4`, `b12eea90f`). CI caught both only after the push.
+Regenerating them meant knowing which packages were affected and remembering
+`make sync-embedded` and `ORACLE_WRITE=1`.
+
+- `make oracle-check` runs the asset-capturing oracles (`a2/artifact`,
+  `a7/install`, `a7/present`, `a8` and `sample`) in live mode. On failure it
+  names `make oracle-regen`.
+- `make oracle-regen` regenerates those goldens and prints the golden
+  diffstat for review.
+- A path-filtered `oracle-goldens` pre-commit hook runs the check, never the
+  write. Golden changes therefore stay explicit commits that review sees, as
+  §§4–8 require.
+- `a2` and `a7` are Linux-only, so on macOS the hook checks `a8` and `sample`
+  only. Their drift is still caught in CI.
+
+Sources: the commit body of `74fd0076b` and `docs/TESTING.md`.

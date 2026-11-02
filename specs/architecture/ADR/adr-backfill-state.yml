@@ -1,7 +1,7 @@
 version: 1
 repository: "/home/tangi/Workspace/liza"
 started_at: "2026-02-01T12:00:00Z"
-last_updated: "2026-10-25T00:00:00Z"
+last_updated: "2026-11-02T13:49:00Z"
 
 file_classification:
   # Tier 0 - Dependency manifests
@@ -1867,29 +1867,112 @@ clusters:
     analysis:
       intent_hypothesis: "End divergent fork CI and unverified tag releases."
       solution_detected: "ci-core.yml merged to forks with declared extension points; releases gated on the CI-verified tagged SHA."
+  - id: 241
+    title: "One Initialization Implementation"
+    commit_shas: ["009d4835a","4cd8d7d78"]
+    date_range: "2026-10-26"
+    first_author_date: "2026-10-26T16:06:27+01:00"
+    confidence: 0.7
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0241-one-initialization-implementation.md"
+    adr_path: "specs/architecture/ADR/0241-one-initialization-implementation.md"
+    user_context:
+      selection: "2026-11-02: user approved all candidates; numbering from 0241."
+      intent: "None added; sources only, gaps marked."
+      provenance: "Consolidation decision record D6/D7/R5; reference-path choice derived from no production caller."
+    related_adrs: [21,218,226,242]
+    analysis:
+      intent_hypothesis: "Remove the duplicate init implementation (consolidation C4)."
+      solution_detected: "CLI path kept; ops.InitProject deleted; init Git via gitenv timed runners in the project root."
+  - id: 242
+    title: "Blackboard Mutation Only Through Named Ops Operations"
+    commit_shas: ["bc6945b07","263298679","4bd986841","fd09e4b3f","2f5944f09","f112f85ed"]
+    date_range: "2026-10-27"
+    first_author_date: "2026-10-27T02:40:55+01:00"
+    confidence: 0.9
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0242-blackboard-mutation-only-through-named-ops.md"
+    adr_path: "specs/architecture/ADR/0242-blackboard-mutation-only-through-named-ops.md"
+    user_context:
+      selection: "2026-11-02: user approved all candidates; numbering from 0241."
+      intent: "None added; why go/types over grep or a runtime validator is unrecorded."
+      provenance: "Consolidation decision record D6/D7/R8/N5/D61, commit bodies, guard source."
+    related_adrs: [11,21,218,228,241]
+    analysis:
+      intent_hypothesis: "Make ops the only owner of blackboard mutation and keep it so (consolidation C6)."
+      solution_detected: "Three moves into named ops operations plus TestC6MutationGuard in make lint."
+  - id: 243
+    title: "Configured Lease Duration at Every Lease Site"
+    commit_shas: ["8124f434b"]
+    date_range: "2026-10-27"
+    first_author_date: "2026-10-27T05:17:40+01:00"
+    confidence: 0.4
+    status: "adr_generated"
+    recommendation: "low_confidence_approved"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0243-configured-lease-duration-at-every-lease-site.md"
+    adr_path: "specs/architecture/ADR/0243-configured-lease-duration-at-every-lease-site.md"
+    user_context:
+      selection: "2026-11-02: user approved all candidates, including this low-confidence one."
+      intent: "None added."
+      provenance: "Consolidation decision record D6/D7/R12, commit body, C1 evidence file."
+    related_adrs: [62,220,224,226,228]
+    analysis:
+      intent_hypothesis: "Honour lease_duration everywhere (consolidation C1)."
+      solution_detected: "ops.LeaseDurationSeconds resolver at five sites; terminalPlaceholder constant."
+  - id: 244
+    title: "The Init Sequence Is Defined by CORE and Enforced by the Hook"
+    commit_shas: ["319fad665","cd2f8d6dc","965b22155","282b3ca65"]
+    date_range: "2026-10-31"
+    first_author_date: "2026-10-31T02:07:52+01:00"
+    confidence: 0.75
+    status: "adr_generated"
+    recommendation: "recommended"
+    cluster_path: "specs/architecture/ADR/adr-backfill-clusters/0244-init-sequence-defined-by-core-enforced-by-hook.md"
+    adr_path: "specs/architecture/ADR/0244-init-sequence-defined-by-core-enforced-by-hook.md"
+    user_context:
+      selection: "2026-11-02: user chose a new ADR scoped to single ownership, citing the ADR-0111 amendment, over folding into 0111."
+      intent: "None added."
+      provenance: "Commit bodies; ADR-0111 amendment; hook and template at HEAD."
+    related_adrs: [111,236]
+    analysis:
+      intent_hypothesis: "Stop the prompt copy of the init sequence drifting from CORE and the hook."
+      solution_detected: "Prompt defers to CORE; hook drops the CORE requirement and lists unread docs on every block."
 processing_cursor:
   step: "complete"
-  substep: "post_0155_selected_adrs_generated"
-  cluster_index: 235
-  last_triaged_commit: "97ccf330c"
-  selected_ids: [231, 232, 233, 234, 235]
+  substep: "post_0236_selected_adrs_generated"
+  cluster_index: 244
+  last_triaged_commit: "a267fd7f1"
+  selected_ids: [241, 242, 243, 244]
   not_selected_ids: []
-  note: "285 commits since d12866d8b triaged: 62 added ADR-0156..0217 in-session, 89 amended existing ADRs, 157 triaged by subject. Five Tier A records generated and ADR-0151 amended (observation reads use lock-free snapshots). Tier B pi/Copilot providers (6aca8a8a1/9ad0c936d) and the Claude Stop hook holding turns for background jobs (16971d7fd/293574d13) were presented and not selected."
-  covered_by_in_session_adrs: "0156-0217"
-  amended_existing: [151]
-  inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0155-inventory.yml"
-  numbering_policy: "Keep existing IDs; selected candidates numbered compactly by earliest author timestamp, first from 0218, renumbered 0231-0235 when main merged into global-refactoring (its consolidation ADRs hold 0218-0230)."
-  user_confirmation: "2026-10-25: resume from d12866d8b; generate all five Tier A records and amend ADR-0151; decline the two Tier B candidates; 0218 as one record; compact numbering. Intent supplied for 0219-0222; 0218 confirmed without additions."
+  note: "27 first-parent commits since 97ccf330c triaged. The consolidation merge 1581be7ec (#202) already carried ADR-0218..0230; its C2/C3 have ADR-0229/0230 and C5 is ADR-0225 item 19, while C1, C4 and C6 had no record and became 0243, 0241 and 0242. ADR-0236 was written in-session with 937212d32. 0244 covers the init-sequence ownership commits; their CORE-read half was already recorded as the 2026-10-30 ADR-0111 amendment by 319fad665. Amended ADR-0235 (Linux five shards, Windows skipped on PRs: da93bfe08, 7acf3c9f7, a267fd7f1) and ADR-0219 (commit-time golden check: 74fd0076b). Not ADR-worthy: operator watch replay by byte offset (008f2bc74) and 0/0 completion (abf00bfcf), hook-drift refresh (0d7e9ee85), ops fixes (257b1781e, b975a0c24, 3b226558b), test/chore commits."
+  covered_by_in_session_adrs: [236]
+  amended_existing: [219, 235]
+  numbering_policy: "User-set: new records numbered from 0241 by earliest author timestamp (0237-0240 left unused)."
+  user_confirmation: "2026-11-02: all four candidates and both amendments approved; numbering from 0241; 0244 as a new single-ownership ADR citing the 0111 amendment; sources only with rationale gaps marked; files written uncommitted for diff review."
   previous_batch:
-    substep: "post_0132_tier_a_adrs_generated"
-    cluster_index: 155
-    last_triaged_commit: "d12866d8b"
-    selected_ids: [146, 147, 148, 149, 150, 151, 152, 153, 154, 155]
+    substep: "post_0155_selected_adrs_generated"
+    cluster_index: 235
+    last_triaged_commit: "97ccf330c"
+    selected_ids: [231, 232, 233, 234, 235]
     not_selected_ids: []
-    note: "119 commits since 73a50ca8 triaged. Thirteen decisions (ADR-0133..0145) were already recorded in-session by the work itself and were not re-derived; six further commits amended existing records (0031, 0071, 0133, 0137, 0139). Ten Tier A candidates approved and generated. Six Tier B candidates were presented and declined by the user: AppArmor profile auto-install (0071100c1), bounded advisory index subprocesses (770c5ade9/07c2bdbfe), evidence preservation across repair and claim release (eight commits, 09-08 to 09-20), merge resumption on proven effect (a03a04664/f51580742), background-job-aware claim retention (016724045/6c7d5467b), empty-cohort analysis recovery (525f28a66). Not recommended and not generated: C#/Node test-filename admission (amends ADR-0007/0030), race-gate concurrency cap (belongs to previously declined candidate 128)."
-    covered_by_in_session_adrs: [133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
-    numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0146 by earliest author timestamp. Chronological interleaving with 0133-0145 is accepted rather than renumbering them."
-    user_confirmation: "2026-09-21: backfill since cluster 0132; generate all ten Tier A records and no Tier B; ADR-0150 as a single record rather than a three-way split; append numbering. Intent supplied for 0146, 0147, 0149, 0151; none supplied for 0148, 0152-0155; ADR-0150's release-timing rationale explicitly unknown."
+    note: "285 commits since d12866d8b triaged: 62 added ADR-0156..0217 in-session, 89 amended existing ADRs, 157 triaged by subject. Five Tier A records generated and ADR-0151 amended (observation reads use lock-free snapshots). Tier B pi/Copilot providers (6aca8a8a1/9ad0c936d) and the Claude Stop hook holding turns for background jobs (16971d7fd/293574d13) were presented and not selected."
+    covered_by_in_session_adrs: "0156-0217"
+    amended_existing: [151]
+    inventory_path: "specs/architecture/ADR/adr-backfill-clusters/post-0155-inventory.yml"
+    numbering_policy: "Keep existing IDs; selected candidates numbered compactly by earliest author timestamp, first from 0218, renumbered 0231-0235 when main merged into global-refactoring (its consolidation ADRs hold 0218-0230)."
+    user_confirmation: "2026-10-25: resume from d12866d8b; generate all five Tier A records and amend ADR-0151; decline the two Tier B candidates; 0218 as one record; compact numbering. Intent supplied for 0219-0222; 0218 confirmed without additions."
+    previous_batch:
+      substep: "post_0132_tier_a_adrs_generated"
+      cluster_index: 155
+      last_triaged_commit: "d12866d8b"
+      selected_ids: [146, 147, 148, 149, 150, 151, 152, 153, 154, 155]
+      not_selected_ids: []
+      note: "119 commits since 73a50ca8 triaged. Thirteen decisions (ADR-0133..0145) were already recorded in-session by the work itself and were not re-derived; six further commits amended existing records (0031, 0071, 0133, 0137, 0139). Ten Tier A candidates approved and generated. Six Tier B candidates were presented and declined by the user: AppArmor profile auto-install (0071100c1), bounded advisory index subprocesses (770c5ade9/07c2bdbfe), evidence preservation across repair and claim release (eight commits, 09-08 to 09-20), merge resumption on proven effect (a03a04664/f51580742), background-job-aware claim retention (016724045/6c7d5467b), empty-cohort analysis recovery (525f28a66). Not recommended and not generated: C#/Node test-filename admission (amends ADR-0007/0030), race-gate concurrency cap (belongs to previously declined candidate 128)."
+      covered_by_in_session_adrs: [133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145]
+      numbering_policy: "Preserve existing IDs and downstream alignment; assign new candidates from 0146 by earliest author timestamp. Chronological interleaving with 0133-0145 is accepted rather than renumbering them."
+      user_confirmation: "2026-09-21: backfill since cluster 0132; generate all ten Tier A records and no Tier B; ADR-0150 as a single record rather than a three-way split; append numbering. Intent supplied for 0146, 0147, 0149, 0151; none supplied for 0148, 0152-0155; ADR-0150's release-timing rationale explicitly unknown."
 
 non_adr_findings:
   - title: "Init Preflight Requires Committed Spec and Valid Integration Branch"
