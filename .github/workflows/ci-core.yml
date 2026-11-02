@@ -30,8 +30,10 @@ jobs:
       matrix:
         include:
           - { suite: core, target: ci-test-core-nosync }
+          - { suite: ops, target: ci-test-ops-nosync }
           - { suite: oracle, target: ci-test-oracle-nosync }
-          - { suite: integration, target: ci-test-slow-race-nosync }
+          - { suite: integration, target: ci-test-integration-nosync }
+          - { suite: cli, target: ci-test-cli-nosync }
     env:
       # A restored GOCACHE must never replay cached test results.
       GOFLAGS: -count=1

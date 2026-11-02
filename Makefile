@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-oracle-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -156,16 +156,25 @@ ci-test-go-nosync:
 ci-test-compat-nosync:
 	@$(MAKE) -j2 test-units-nosync ci-test-slow-nosync
 
-# Linux CI uses separate runners for core, oracle, and integration/CLI tests.
+# Linux CI uses separate runners for core, ops, oracle, integration, and CLI
+# tests; internal/ops and cmd/liza each fill too much of a 30-minute job to share one.
 # The combined targets above retain two local lanes, including all oracle tests.
 # Integration runs once with the e2e tag, which adds the sprint tests.
 CI_UNIT_PACKAGES = $$(go list ./... | grep -v -e '/internal/integration$$' -e '/cmd/liza$$')
 
 ci-test-core-nosync:
-	go test -race -timeout 30m -p 2 $$(go list ./... | grep -Ev '/internal/integration$$|/cmd/liza$$|/internal/oracle(/|$$)')
+	go test -race -timeout 30m -p 2 $$(go list ./... | grep -Ev '/internal/integration$$|/cmd/liza$$|/internal/ops$$|/internal/oracle(/|$$)')
+
+ci-test-ops-nosync:
+	go test -race -timeout 30m ./internal/ops/
 
 ci-test-oracle-nosync:
 	go test -race -timeout 30m -p 2 ./internal/oracle/...
+
+ci-test-integration-nosync: test-integration-nosync
+
+ci-test-cli-nosync:
+	go test -race -timeout 30m ./cmd/liza/
 
 ci-test-slow-race-nosync: test-integration-nosync
 	go test -race -timeout 30m ./cmd/liza/
@@ -377,8 +386,11 @@ help:
 	@echo "  ci-prepare         - Sync generated files and run shared CI checks"
 	@echo "  ci-test-nosync     - Run race, integration, and Python tests without syncing"
 	@echo "  ci-test-go-nosync  - Run race units and integration tests concurrently without syncing"
-	@echo "  ci-test-core-nosync - Run non-oracle units with race (Linux CI shard)"
+	@echo "  ci-test-core-nosync - Run units except ops and oracle with race (Linux CI shard)"
+	@echo "  ci-test-ops-nosync - Run internal/ops tests with race (Linux CI shard)"
 	@echo "  ci-test-oracle-nosync - Run oracle tests with race (Linux CI shard)"
+	@echo "  ci-test-integration-nosync - Run integration tests with race and e2e (Linux CI shard)"
+	@echo "  ci-test-cli-nosync - Run cmd/liza tests with race (Linux CI shard)"
 	@echo "  ci-test-compat-nosync - Run units and integration tests concurrently without syncing"
 	@echo "  ci-test-slow-nosync - Run integration then cmd/liza tests (CI lane)"
 	@echo "  ci-test-slow-race-nosync - Run integration then cmd/liza race tests (CI lane)"
