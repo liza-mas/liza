@@ -21,6 +21,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/testhelpers"
+	"github.com/liza-mas/liza/internal/testhelpers/oracle"
 )
 
 var dependencyRepairCLIBuild struct {
@@ -217,6 +218,9 @@ func buildDependencyRepairCLI(t *testing.T) string {
 		cmd := exec.Command("go", "build", "-o", dependencyRepairCLIBuild.binary, "./cmd/liza")
 		cmd.Dir = repoRoot
 		dependencyRepairCLIBuild.output, dependencyRepairCLIBuild.err = cmd.CombinedOutput()
+		if dependencyRepairCLIBuild.err == nil {
+			_, dependencyRepairCLIBuild.err = oracle.RegisterBuildInputs(nil, repoRoot, "./cmd/liza")
+		}
 	})
 	if dependencyRepairCLIBuild.err != nil {
 		t.Fatalf("build CLI: %v\n%s", dependencyRepairCLIBuild.err, dependencyRepairCLIBuild.output)

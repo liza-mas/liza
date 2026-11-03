@@ -106,6 +106,9 @@ func buildMain(mainPkg string, seq int) (string, error) {
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("oracle: build %s failed: %v\n%s", mainPkg, err, boundedTail(out.String()))
 	}
+	if _, err := RegisterBuildInputs(env, modRoot, mainPkg); err != nil {
+		return "", err
+	}
 	return bin, nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/liza-mas/liza/internal/testhelpers/oracle"
 )
 
 // WriteShellStub installs a fake command that production code can find on PATH
@@ -116,6 +118,9 @@ func stubRelayBinary(t *testing.T) string {
 		build.Dir = repoRoot
 		if out, err := build.CombinedOutput(); err != nil {
 			stubRelay.err = fmt.Errorf("build stub relay: %w\n%s", err, out)
+			return
+		}
+		if _, stubRelay.err = oracle.RegisterBuildInputs(nil, repoRoot, "./internal/testhelpers/stubrelay"); stubRelay.err != nil {
 			return
 		}
 		stubRelay.path = binary

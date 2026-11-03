@@ -623,11 +623,20 @@ volatile input. `internal/integration` remains: 17 tests run `go build` with
 Making it cacheable is deferred to the fix for the separate hazard below,
 because those builds are invisible to the test cache.
 
-**Related hazard:** packages that build binaries from source while testing
-(the oracle suite's `BuildCLI`, integration's CLI build, the shell-stub
-relay) can replay a stale `(cached)` result after an edit to those sources.
-Observed: a cached `internal/oracle/sample` stayed `(cached)` after a CLI help
-change that fails it under `-count=1`. CI is unaffected (`GOFLAGS=-count=1`).
+**Related hazard, resolved for built binaries (2026-11-03):** a binary built
+from source during a test was invisible to the test cache, so a cached
+`internal/oracle/sample` stayed `(cached)` after a CLI help change that fails
+it. `oracle.RegisterBuildInputs` now opens the built packages' main-module
+sources and their directories from the test process, so edits, additions and
+removals invalidate; the oracle `BuildCLI`, integration's CLI build and the
+shell-stub relay call it, and `TestRegisterBuildInputsInvalidatesCachedResult`
+guards it. Still invisible: tests whose inputs come from git history or a
+whole-module analysis — the regen tests, `a6/regeneration_proof`,
+`a8/mutation` and archguard's `go list -export` load. Payback trigger: the
+next stale `(cached)` result traced to one of them; CI is unaffected
+(`GOFLAGS=-count=1`). Separately, `BuildCLI` and integration's build start
+`go` in the repo root, whose mtime makes those packages cache only while the
+root is untouched; moving them to `go -C` would close it.
 
 ## Legacy built-in readiness surface
 
