@@ -76,6 +76,9 @@ func TestA4PlatformGate(t *testing.T) {
 }
 
 func TestA4FixturesValidate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	gate(t)
 	files, err := filepath.Glob("testdata/fixtures/state/*.yaml")
 	if err != nil || len(files) == 0 {

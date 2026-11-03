@@ -8,7 +8,7 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 
 | Command | What |
 |---------|------|
-| `make test-fast` | Short-mode iteration; skips guarded integration tests |
+| `make test-fast` | Short-mode iteration; skips integration tests and tests that take 5s or more |
 | `make test` | Required routine full-suite check, without race or coverage instrumentation |
 | `make test-race` | Full suite with the race detector; required once during final pre-commit/merge validation |
 | `make coverage` | Full suite with whole-module coverage (`-coverpkg=./...`), then an HTML report |

@@ -18,6 +18,9 @@ func nonemptyLines(text string) []string {
 }
 
 func TestOracleHelp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	skipUnlessLinux(t)
 	cases := []invocation{
 		{"root.txt", oracle.Human, []string{"--help"}},

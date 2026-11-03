@@ -25,6 +25,9 @@ type interactiveInvocation struct {
 }
 
 func TestOracleA9InteractiveLaunch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	unixOnly(t)
 	launchRequireCatalog(t)
 	for _, tool := range launchCatalog {

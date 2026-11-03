@@ -180,6 +180,9 @@ func loadCases(t *testing.T) []caseInput {
 }
 
 func TestOracleA5Supplement(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX fixtures use shell commands and POSIX paths")
 	}

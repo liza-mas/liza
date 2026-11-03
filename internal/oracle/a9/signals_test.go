@@ -143,6 +143,9 @@ func TestOracleA9AuditAndCleanup(t *testing.T) {
 }
 
 func TestOracleA9QuotaRaise(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, c := range []struct {
 		name  string
 		dirty bool
@@ -180,6 +183,9 @@ func TestOracleA9QuotaRaise(t *testing.T) {
 }
 
 func TestOracleA9UnavailableRaise(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, c := range []struct{ name, cli, signal, alert string }{
 		{"i20-claude", "claude", "provider-unavailable-claude", "PROVIDER UNAVAILABLE — claude: Failed to authenticate: OAuth session expired and could not be refreshed"},
 		{"i20-codex", "codex", "provider-unavailable-codex", "PROVIDER UNAVAILABLE — codex: thread/start failed: error creating thread: Codex cannot access session files under .codex/sessions (permission denied)"},

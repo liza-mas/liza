@@ -212,6 +212,9 @@ func TestCodexACPProviderUnavailableStopsSupervisorLifecycle(t *testing.T) {
 }
 
 func TestCodexACPProviderUnavailableLeavesUnrelatedFailureOnCrashPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	fixture := newProviderUnavailableSupervisorFixture(t)
 	failingAgent := &deterministicLLMAgent{
 		result: agent.LLMAgentRunResult{ExitCode: 1, Output: "unrelated provider transport failure"},

@@ -105,6 +105,9 @@ func TestOracleA9Restart42(t *testing.T) {
 // recorded. The BLOCKED branch is not pinned: no recipe reaches it at the
 // starting commit without a production change or a progress-signature change.
 func TestOracleA9Restart42Limit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	p := newScenario(t, "i06-limit")
 	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "second exit-42 restart", func() bool {
@@ -125,6 +128,9 @@ func TestOracleA9Restart42Limit(t *testing.T) {
 }
 
 func TestOracleA9SpinBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	p := newScenario(t, "i07-spin")
 	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	// Distinct launch seconds prevent timestamp-named files from colliding.

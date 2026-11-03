@@ -302,6 +302,9 @@ func TestC6ListingFailureNeverEchoesInheritedEnvironmentValues(t *testing.T) {
 // A withheld variable can no longer break the child: a host GOFLAGS the guard
 // does not read is ignored instead of failing with its value in the message.
 func TestC6HostGoflagsDoNotReachTheListing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	root := writeC6Module(t, map[string]string{
 		"go.mod":           "module c6env\n\ngo 1.22\n",
 		"cmd/tool/main.go": "package main\n\nfunc main() {}\n",

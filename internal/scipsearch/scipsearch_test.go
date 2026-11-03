@@ -1492,6 +1492,9 @@ func TestRuntimeRefreshNamesUpgradeWhenScipSearchLacksReroot(t *testing.T) {
 }
 
 func TestRuntimeCommandPlanTimesOutHungIndexer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	const timeout = 5 * time.Second
 	testhelpers.WithShortSubprocessTimeout(t, timeout)
 	testhelpers.AddSlowCommandToPathWithDelay(t, "scip-typescript", 15*time.Second)

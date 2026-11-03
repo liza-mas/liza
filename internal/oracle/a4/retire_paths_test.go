@@ -53,6 +53,9 @@ func branchBeside(t testing.TB, f *fixture) { f.git(t, "branch", "task/p0", f.co
 // deleted branch, the blocked recovery rule, the predecessor branch released
 // by the last terminal successor and the consumer edge a cancellation removes.
 func TestOracleRetirePaths(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	archive := replaceStep{"op", []string{"archive-terminal-tasks"}}
 	const operation = "supersede-task/"
 	const cancellation = "cancel-task/"

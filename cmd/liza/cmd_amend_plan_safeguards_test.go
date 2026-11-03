@@ -67,6 +67,9 @@ func TestAmendPlanCLIBeginRefusalsAreAtomic(t *testing.T) {
 }
 
 func TestAmendPlanCLIOnlyReviewedArtifactsCanApply(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, name := range []string{"unmerged", "self approved", "forged history", "artifact drift"} {
 		t.Run(name, func(t *testing.T) {
 			root, statePath := setupAmendmentCLI(t)
@@ -207,6 +210,9 @@ func TestAmendPlanCLIWithdrawScopesToCorrectionsSinceLastApply(t *testing.T) {
 }
 
 func TestAmendPlanCLIRepeatedCorrectionsAppendProducerWithoutRemapping(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	root, statePath := setupAmendmentCLI(t)
 	originalReview := *readState(t, statePath).FindTask("original").ReviewCommit
 	first := beginAmendmentCLI(t, root, statePath)
@@ -297,6 +303,9 @@ func TestAmendPlanCLIReasonCannotConsumeRegisteredFlag(t *testing.T) {
 }
 
 func TestAmendPlanCLIReviewedCorrectionKeepsManyToOneProgression(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, recovery := range []string{"adopt", "merged replacement", "canceled replacement"} {
 		t.Run(recovery, func(t *testing.T) {
 			root, statePath := setupAmendmentCLI(t)

@@ -116,6 +116,9 @@ func sampleClone(t *testing.T) *scenario {
 }
 
 func TestRegenNamesAlteredSampleGolden(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	s := sampleClone(t)
 	clone := s.dir
 	altered := "internal/oracle/sample/testdata/golden/json/error-envelope.json"
@@ -161,6 +164,9 @@ func (s *scenario) gitSourceRoot() string {
 // proof: in one commit a production line moves, the sample driver asserts the
 // new value and its golden follows, with the C1 record.
 func TestRegenReproducesChangedSampleAssertion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	s := sampleClone(t)
 	pre := s.git("rev-parse", "HEAD")
 	golden := "internal/oracle/sample/testdata/golden/json/error-envelope.json"

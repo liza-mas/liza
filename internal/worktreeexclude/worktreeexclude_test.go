@@ -229,6 +229,9 @@ func TestEnsureRepoExcludeFromLinkedWorktreeWritesSharedExclude(t *testing.T) {
 }
 
 func TestD47RepoExcludeSerializesAcrossProcesses(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	repo := newGitRepoWithWorktrees(t, "task-one", "task-two")
 	exclude := filepath.Join(repo.root, ".git", "info", "exclude")
 	before := readFileString(t, exclude)

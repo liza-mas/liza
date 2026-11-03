@@ -7,6 +7,9 @@ import "testing"
 // buckets, and the retirement-holder and stale-routing policy that
 // supersede-task and cancel-task reach through rewriteActiveDependents.
 func TestOracleProviderWaits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	reserve := func(task string, extra ...string) []string {
 		return append([]string{"reserve-provider", task, "cp-p", "--transition", "code-plan-to-coding", "--reason", "Writer order"}, extra...)
 	}

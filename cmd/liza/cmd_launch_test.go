@@ -664,6 +664,9 @@ func TestCmuxAdversarialPairingDefaultsToThreeCodexPanes(t *testing.T) {
 }
 
 func TestRunCmuxInteractiveLaunchInjectsPromptsWithSendAndEnter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	tmpDir := t.TempDir()
 	binDir := filepath.Join(tmpDir, "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {

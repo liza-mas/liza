@@ -19,6 +19,9 @@ const (
 // Stranded takeover (an expired, unregistered-liveness holder) and the retained
 // claim receipt (exact replay, stale expected transition) are frozen here too.
 func TestOracleClaimTaskVariants(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	linuxOnly(t)
 	claim := []string{"claim-task", "task-1", "coder-1"}
 	pinned := func(transition string) []string {

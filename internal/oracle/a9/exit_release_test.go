@@ -87,6 +87,9 @@ const exitReleaseRunLimit = 90 * time.Second
 // continuation of the same iteration and idles at the pause gate. The launch
 // golden is the state observed while parked, before the stop that ends the run.
 func TestOracleA9HaltRelease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	p := newScenario(t, "i05-halt-release")
 	p.installVersionProbeHook(t, "pause")
 	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
@@ -119,6 +122,9 @@ func TestOracleA9HaltRelease(t *testing.T) {
 // the continuation that exit released, leaves the task unblocked. The crash
 // threshold is 1, so the second crash reaches the block decision.
 func TestOracleA9BlockReleasedStale(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	p := newScenario(t, "i05-block-released-stale")
 	// Two crash exits (5 s and 10 s restart delays), then a third provider call
 	// that stops the run.

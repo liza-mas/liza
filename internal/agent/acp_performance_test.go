@@ -119,6 +119,9 @@ func (a *lizaACPBenchmarkAgent) Runs() []acpplugin.RunMetric {
 }
 
 func TestLizaSimplifiedProjectACPPerformanceComparison(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	baseline := runSimplifiedLizaBenchmark(t, "cli")
 	acp := runSimplifiedLizaBenchmark(t, "acp")
 

@@ -1658,6 +1658,9 @@ func (*delayedErrorWatcher) Close() error { return nil }
 // command must degrade the agent there too — otherwise this path retries the
 // failing worktree without a bound (ADR-0117).
 func TestAwaitVerdict_RejectedAutoReclaim_PostWorktreeCmdFailureDegradesAgent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range awaitSetupCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpDir := t.TempDir()

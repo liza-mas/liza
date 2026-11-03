@@ -106,6 +106,9 @@ func setupAwaitPolicyFixture(t *testing.T, caller string, seconds int) (string, 
 
 // These tests replace process-global watcher constructors and run sequentially.
 func TestAwaitPollingPolicyRoutes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, caller := range []string{"doer", "reviewer"} {
 		for _, route := range []string{"event", "periodic", "fallback", "long-periodic", "deadline", "cancellation"} {
 			t.Run(caller+"/"+route, func(t *testing.T) {

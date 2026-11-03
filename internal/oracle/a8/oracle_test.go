@@ -14,6 +14,9 @@ import (
 func TestMain(m *testing.M) { oracle.RunMain(m) }
 
 func TestOraclePrompt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	if runtime.GOOS == "windows" {
 		t.Skip("prompt goldens embed POSIX native paths")
 	}
@@ -42,6 +45,9 @@ func TestOraclePrompt(t *testing.T) {
 }
 
 func TestOraclePromptDistinctRoots(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	if runtime.GOOS == "windows" {
 		t.Skip("prompt goldens embed POSIX native paths")
 	}

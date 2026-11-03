@@ -47,6 +47,9 @@ func replaceOnce(input, token string) []replaceStep {
 // the source worktree removed beside the kept branch, the stale consumer, the
 // blocked-source recovery rule and the ineligible source.
 func TestOracleReplaceTaskPaths(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	archive := replaceStep{"op", []string{"archive-terminal-tasks"}}
 	for _, c := range []replaceCase{
 		{name: "replay", fixture: "graph", unchanged: true,

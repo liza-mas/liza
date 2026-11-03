@@ -165,6 +165,9 @@ func launchUnchanged(t *testing.T, p *scenario, what string) {
 // wrappers, and a concurrent fork elsewhere in the package can hold such a file
 // open for writing (ETXTBSY) between its write and its first execution.
 func TestOracleA9LaunchLines(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	unixOnly(t)
 	launchRequireCatalog(t)
 	for _, tool := range launchCatalog {

@@ -1596,6 +1596,9 @@ func TestClaimTask_PostWorktreeCmdRunsOnSameCoderReclaim(t *testing.T) {
 // Reclaim paths reuse an existing worktree, so a setup failure there means the
 // worktree missed bootstrap or regressed — the reclaim must not proceed.
 func TestClaimTask_PostWorktreeCmdFailureFailsReclaimClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	t.Parallel()
 	for _, tc := range []struct {
 		name        string

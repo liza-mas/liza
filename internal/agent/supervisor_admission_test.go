@@ -16,6 +16,9 @@ import (
 )
 
 func TestRunSupervisorWaitAdmission(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name  string
 		role  string

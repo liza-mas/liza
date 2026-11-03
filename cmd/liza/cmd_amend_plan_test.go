@@ -318,6 +318,9 @@ func TestPlanCheckCLI_D88ValidationNotesReachOnlySelectedChildAndBothRoles(t *te
 // A separately merged correction can become stale before application. It must
 // remain recoverable without reopening terminal state or dropping the fence.
 func TestAmendPlanCLI_D88RecoversMergedUnappliableCorrection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	root, statePath := setupAmendmentCLI(t)
 	if err := db.For(statePath).Modify(func(s *models.State) error {
 		provider := testhelpers.BuildTaskByStatus("prerequisite", models.TaskStatus("DRAFT_ARCHITECTURE"), time.Now().UTC())

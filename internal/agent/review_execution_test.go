@@ -133,6 +133,9 @@ func TestReviewLaunchUsesConfiguredReviewerRole(t *testing.T) {
 }
 
 func TestReviewExecutionReacquisitionRetiresOwnVerdict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	config, bb, runtimeConfig := reviewExecutionFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		for i, status := range []models.TaskStatus{models.TaskStatusRejected, models.TaskStatusReviewing, models.TaskStatusReadyForReview} {
@@ -195,6 +198,9 @@ func rejectableReviewFixture(t *testing.T) (SupervisorConfig, *db.Blackboard, mo
 // heartbeat. Neither that window nor the await-resubmission that follows is an
 // ownership loss.
 func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	config, bb, runtimeConfig, reviewCommit := rejectableReviewFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
@@ -294,6 +300,9 @@ func (p *reviewExecutionProvider) Run(ctx context.Context, req LLMAgentRunReques
 }
 
 func TestReviewExecutionOwnershipLifetime(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name       string
 		wantCancel bool
@@ -414,6 +423,9 @@ func TestReviewExecutionOwnershipLifetime(t *testing.T) {
 }
 
 func TestRunSupervisorReviewOwnershipLossContinues(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name         string
 		beforeLaunch bool

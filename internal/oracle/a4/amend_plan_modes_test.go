@@ -56,6 +56,9 @@ func amendContractRecipe(candidate string) []gitStep {
 // TestOracleAmendPlanModes pins the first refusal and the adoption paths of the
 // reviewed plan correction that TestOracleAmendPlan leaves open.
 func TestOracleAmendPlanModes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	apply := func(name, fixture, id, correction, mergeLabel string, recipe []gitStep, code int, message string) {
 		t.Run(name, func(t *testing.T) {
 			runAdoptedAmendment(t, oracleCase{name: "amend-plan/" + name, fixture: fixture, identity: "orch", wantExit: code, contains: message,

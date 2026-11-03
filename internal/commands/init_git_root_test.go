@@ -227,6 +227,9 @@ func TestInitBranchValidationPrecedence_NonRepository(t *testing.T) {
 }
 
 func TestInitGitTimeout_HelpersReportTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	const branch = "c4-timeout-branch"
 	argvs := [][]string{
 		{"check-ref-format", "--branch", branch},

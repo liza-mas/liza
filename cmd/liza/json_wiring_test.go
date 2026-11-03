@@ -1929,6 +1929,9 @@ func TestJSON_Validate_MasterPlanningEmbeddedPipeline(t *testing.T) {
 }
 
 func TestJSON_InitialPlanningRoutesRenderOneTaskContractsFromInitializedCLIState(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	tests := []struct {
 		name           string
 		entryPoint     string

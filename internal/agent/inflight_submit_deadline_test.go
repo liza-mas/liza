@@ -25,6 +25,9 @@ import (
 // marker is asserted in internal/ops (budget_exception_test.go,
 // submission_admission_test.go).
 func TestExecuteAgentLetsLateSubmitPublishPastSupervisorClocks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name  string
 		stall time.Duration
@@ -272,6 +275,9 @@ func requireSupervisorBlocked(t *testing.T, scenario *testhelpers.AcceptanceSubm
 // marker stands for the session's submit; the real submit's own marker is
 // asserted in internal/ops (budget_exception_test.go, submission_admission_test.go).
 func TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name  string
 		stall time.Duration
@@ -311,6 +317,9 @@ func TestExecuteAgentBlocksUnadmittedLateSubmitAfterHandback(t *testing.T) {
 // progress timeout shorter than the hand-back is blocked by the watchdog,
 // still never released.
 func TestExecuteAgentProgressWatchdogStillBlocksDuringHandback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, tc := range []struct {
 		name       string
 		startDelay time.Duration

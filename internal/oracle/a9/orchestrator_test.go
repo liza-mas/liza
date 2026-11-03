@@ -32,6 +32,9 @@ import (
 //     summary CLI is held on a wait file while resume and sprint-checkpoint raise
 //     a second obligation, which stays unclaimed until the first one ends.
 func TestOracleA9OrchestratorTurn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	t.Run("i12-success", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i12-success")
 		after := p.state(t)
@@ -119,6 +122,9 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 }
 
 func TestOracleA9CheckpointSummary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	t.Run("i15-emitted", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i15-emitted")
 		records := p.records(t)

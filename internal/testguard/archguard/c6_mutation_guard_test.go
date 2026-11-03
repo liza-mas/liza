@@ -301,6 +301,9 @@ func c6Symbol(fn *types.Func, recv *types.Named) string {
 // Blackboard or supplies it a mutation callback. It runs in `make lint`
 // through lint-archguard.
 func TestC6MutationGuard(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	start := time.Now()
 	violations, err := c6Run(repoRoot(), c6BlackboardMethods)
 	if err != nil {

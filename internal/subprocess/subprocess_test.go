@@ -11,6 +11,9 @@ import (
 )
 
 func TestCombinedOutputWithTimeoutKillsHungCommand(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	const timeout = 5 * time.Second
 
 	binDir := t.TempDir()

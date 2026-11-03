@@ -227,6 +227,9 @@ func TestSubmitTimeoutRetryMarkerCoversWaitBatchAndRetry(t *testing.T) {
 // command runs. A changed live policy does not matter: the snapshot taken
 // with the marker governs.
 func TestSubmitRefusesABudgetChangedAfterTheMarkerWasPublished(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for name, tc := range map[string]struct {
 		change func(state *models.State, task *models.Task)
 		refuse bool

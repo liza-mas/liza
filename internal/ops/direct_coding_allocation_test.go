@@ -251,6 +251,9 @@ func mixedArchitectureAllocationFixture(t *testing.T, upstreamRoute, downstreamR
 }
 
 func TestArchitectureMixedRouteInheritanceRefusesPublicGenerationAndRecovery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	for _, routes := range [][2]string{
 		{"architecture-to-code-plan", "architecture-to-coding"},
 		{"architecture-to-coding", "architecture-to-code-plan"},

@@ -95,6 +95,9 @@ const exitReleaseProbeVar = "ORACLE_A9_EXIT_RELEASE_PROBE"
 // behind is reparented to it and is found here, after the probe has exited and
 // before this test's own cleanup could hide it.
 func TestOracleA9ExitReleaseCleanup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	if runtime.GOOS != "linux" {
 		t.Skip("A9: the child subreaper (decision D45) is Linux-only")
 	}

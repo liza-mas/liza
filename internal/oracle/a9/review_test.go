@@ -234,6 +234,9 @@ func TestOracleA9ReviewerClaimRefused(t *testing.T) {
 // I-10 refusal; the intact worktree of TestOracleA9ReviewerClaim is the I-09
 // refusal.
 func TestOracleA9ReviewerWorktree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	t.Run("i09-recovered", func(t *testing.T) {
 		p := newReviewScenario(t, "i09-recovered", reviewGit{state: reviewStateUnrecorded, branch: true})
 		r := p.runSupervisor(t, reviewerArgs()...)
@@ -326,6 +329,9 @@ func reviewHeartbeatRecord(t *testing.T, p *scenario, launch []byte) {
 // TestOracleA9Heartbeat holds a reviewer session until the first default-interval
 // beat publishes its liveness record (R23), then lets the stub stop the run.
 func TestOracleA9Heartbeat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	p := newReviewScenario(t, "i03-success", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
 	r := p.runSupervisor(t, reviewerArgs()...)
 	requireCode(t, p, r, 0)
@@ -416,6 +422,9 @@ func TestOracleA9PendingMergeStall(t *testing.T) {
 // beat (the adapter, AC2). No liveness record is written and state.yaml keeps its
 // bytes.
 func TestOracleA9HeartbeatRefused(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	t.Parallel()
 	p := newReviewScenario(t, "i03-refused", reviewGit{})
 	got, err := heartbeatRefused(filepath.Join(p.dir, ".liza", "state.yaml"), "coder-1", 75*time.Second)

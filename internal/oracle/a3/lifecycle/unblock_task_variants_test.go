@@ -18,6 +18,9 @@ const scopeExceptionFile = `{"files":["internal/example/helper.go"],"change":"ad
 // expected transition). These scenarios use Git and CLI state only, no Linux
 // process facility (D53), so none is Linux-scoped.
 func TestOracleUnblockTaskVariants(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	base := []string{"unblock-task", "task-1", "--reason", "oracle-reason"}
 	with := func(extra ...string) []string { return append(append([]string(nil), base...), extra...) }
 	scope := []setupFile{{name: "scope.json", data: []byte(scopeExceptionFile)}}

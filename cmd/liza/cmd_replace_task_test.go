@@ -231,6 +231,9 @@ func (f replaceTaskE2EFixture) complete(t *testing.T) map[string]any {
 }
 
 func TestReplaceTaskE2E_Lineage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	f := setupReplaceTaskE2E(t)
 	f.complete(t)
 
@@ -278,6 +281,9 @@ func TestReplaceTaskE2E_Replay(t *testing.T) {
 }
 
 func TestReplaceTaskE2E_Conflict(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test: skipped in -short mode")
+	}
 	f := setupReplaceTaskE2E(t)
 	f.complete(t)
 	before := readStateBytes(t, f.statePath)
