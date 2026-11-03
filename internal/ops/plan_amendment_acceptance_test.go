@@ -149,6 +149,7 @@ func TestPlanAmendmentAcceptanceQuarantinedOriginRequiresFreshAppliedReview(t *t
 }
 
 func TestPlanAmendmentAcceptanceRefusesForgedEvidence(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(*models.State){
 		"wrong original": func(s *models.State) { s.FindTask("correction").AmendsPlan = "unrelated" },
 		"draft applied":  func(s *models.State) { s.FindTask("correction").Status = models.TaskStatusDraftCodingPlan },

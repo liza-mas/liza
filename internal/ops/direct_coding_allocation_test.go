@@ -251,6 +251,7 @@ func mixedArchitectureAllocationFixture(t *testing.T, upstreamRoute, downstreamR
 }
 
 func TestArchitectureMixedRouteInheritanceRefusesPublicGenerationAndRecovery(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
@@ -340,6 +341,7 @@ func TestArchitectureMixedRouteExplicitWriterOrderingPublicGenerationAndRecovery
 }
 
 func TestArchitectureSameDirectRouteInheritancePublicGenerationAndRecovery(t *testing.T) {
+	t.Parallel()
 	for _, inheritance := range []string{"all", "selected"} {
 		for _, recovery := range []bool{false, true} {
 			for _, operation := range []string{"proceed", "transition-report"} {

@@ -206,6 +206,7 @@ func TestSubmitForReview_PlanningOutputChangedBeforeCommit(t *testing.T) {
 const outputRefFragmentSection = "\n## Capability Two\n\nSecond capability.\n"
 
 func TestSubmitForReview_OutputRefFragments(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		legacy    bool
@@ -337,6 +338,7 @@ func commitWorktreeFiles(t *testing.T, wt string, files map[string]string) strin
 // candidate changed; a carrier it cannot build must be refused at submission,
 // while the author still holds the task and its worktree.
 func TestSubmitForReview_ReviewCarriers(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		pin       func(t *testing.T, worktree string) string // optional revision the carrier pins instead of base

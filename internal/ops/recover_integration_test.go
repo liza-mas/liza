@@ -190,6 +190,7 @@ func TestRecoverIntegrationPreservesEvidenceAndReplays(t *testing.T) {
 }
 
 func TestRecoverIntegrationRefusesUnsafeState(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, want string
 		mutate     func(*models.State, string)

@@ -61,6 +61,7 @@ func dropParentAllocation(state *models.State, _ *models.Task) {
 // Each refusal site is classified where it refuses; a failed Git read is never
 // reported as a content or allocation fault.
 func TestAcceptanceRefusalClassifiedAtOrigin(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		mutate func(state *models.State, task *models.Task)
@@ -214,6 +215,7 @@ func TestAcceptanceObservationCoversEveryInput(t *testing.T) {
 // A content refusal blocks with a valid BLOCKED record the orchestrator acts on,
 // and a second escalation of the same refusal is a no-op.
 func TestBlockAcceptanceRefusedTask_ContentRefusalBlocksOnce(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetAcceptanceTaskForClaim(t, bb, taskID, agentID, mismatchValidation)
 	refusal := refuseAcceptanceClaim(t, root, taskID, agentID)
@@ -249,6 +251,7 @@ func TestBlockAcceptanceRefusedTask_ContentRefusalBlocksOnce(t *testing.T) {
 // D-170: a pinned reference file over its cap blocks the task on its first
 // refusal, and the blocked reason names the cap.
 func TestBlockAcceptanceRefusedTask_OversizedReference(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetAcceptanceTaskForClaim(t, bb, taskID, agentID, nil)
 	repinAcceptanceGoal(t, root, padReferenceFile(boundGoal(smallIdentitySection, "\n"), referenceFileBound+1))
@@ -269,6 +272,7 @@ func TestBlockAcceptanceRefusedTask_OversizedReference(t *testing.T) {
 // a moved integration ref, a new owner or a stale registration leaves the task
 // as it is.
 func TestBlockAcceptanceRefusedTask_StaleRefusalLeavesTaskUnchanged(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		refuse    func(state *models.State, task *models.Task)
@@ -332,6 +336,7 @@ func TestBlockAcceptanceRefusedTask_StaleRefusalLeavesTaskUnchanged(t *testing.T
 // Re-affirming a drifted approved proof is a state-only repair: it moves no
 // task field, so only the observation's reaffirmations can fence it.
 func TestBlockAcceptanceRefusedTask_ReaffirmationAfterRefusalLeavesTaskUnchanged(t *testing.T) {
+	t.Parallel()
 	root, taskID, agentID, bb := proofDriftScenario(t)
 	resetAcceptanceTaskForClaim(t, bb, taskID, agentID, nil)
 	refusal := refuseAcceptanceClaim(t, root, taskID, agentID)
@@ -413,6 +418,7 @@ func TestBlockAcceptanceRefusedTask_IntegrationMoveAfterEqualityWaitsForBlock(t 
 // A rejected task reclaimed after its adopted declaration disappeared blocks
 // without downgrading the adopted source.
 func TestBlockAcceptanceRefusedTask_RejectedReclaimKeepsAdoptedSource(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetAcceptanceTaskForClaim(t, bb, taskID, agentID, nil)
 	if _, err := ClaimTask(root, taskID, agentID); err != nil {
@@ -454,6 +460,7 @@ func TestBlockAcceptanceRefusedTask_RejectedReclaimKeepsAdoptedSource(t *testing
 // After the orchestrator corrects the allocation, unblock-task restores the
 // task and a doer claims it normally.
 func TestBlockAcceptanceRefusedTask_UnblockAfterRepairRestoresClaim(t *testing.T) {
+	t.Parallel()
 	root, taskID, _, agentID, bb := completeAcceptanceScenario(t)
 	resetAcceptanceTaskForClaim(t, bb, taskID, agentID, mismatchValidation)
 	refusal := refuseAcceptanceClaim(t, root, taskID, agentID)

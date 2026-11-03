@@ -82,6 +82,7 @@ func repinAcceptanceGoal(t *testing.T, root, goal string) string {
 }
 
 func TestAcceptanceReferenceBoundAppliesToCitedSection(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		goal     string
@@ -218,6 +219,7 @@ func TestObligationDriftIgnoresGrowthOutsideTheSectionOfALargeFile(t *testing.T)
 // D-171: planning submission applies claim's reference bounds, so a plan whose
 // coding children claim would refuse is refused before review, not after merge.
 func TestPlanningSubmissionRefusesReferencesClaimWouldRefuse(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		goal   string

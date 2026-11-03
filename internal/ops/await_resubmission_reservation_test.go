@@ -466,6 +466,7 @@ func TestAwaitResubmission_EarlyReclaimFailureReleasesNothing(t *testing.T) {
 }
 
 func TestD42RetainedReviewReservationSafety(t *testing.T) {
+	t.Parallel()
 	for _, exit := range []string{"cancellation", "expired", "stale-generation", "newer-claim", "paused", "stopped", "final-timeout"} {
 		t.Run(exit, func(t *testing.T) {
 			root, bb := setupReservationFixture(t)

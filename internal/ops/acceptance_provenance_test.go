@@ -1292,6 +1292,7 @@ func TestReaffirmProof_UsesSpecRefWhenPlanRefIsAbsent(t *testing.T) {
 }
 
 func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
+	t.Parallel()
 	for _, lineage := range []string{"singular parent", "plural parents"} {
 		for _, allocation := range []string{"unchanged", "mismatched"} {
 			t.Run(lineage+"/"+allocation+" allocation", func(t *testing.T) {

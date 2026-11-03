@@ -73,6 +73,7 @@ func TestReplanPreservingOutputIdentityKeepsConsumerSelectors(t *testing.T) {
 }
 
 func TestStartedAcceptanceChildRetainsHistoricalReview(t *testing.T) {
+	t.Parallel()
 	for _, changed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unchanged", true: "changed allocation"}[changed], func(t *testing.T) {
 			f := newAcceptanceCreationFixture(t)
@@ -129,6 +130,7 @@ func TestDirectArchitectureAcceptanceRequiresExplicitReviewedAllocation(t *testi
 }
 
 func TestBoundedContractCandidateRejectsUnreferencedChanges(t *testing.T) {
+	t.Parallel()
 	f := newAcceptanceCreationFixture(t)
 	state := replacementState(t, f)
 	parent := state.FindTask("acceptance-parent")

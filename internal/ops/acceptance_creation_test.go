@@ -186,6 +186,7 @@ func writeUncommitted(t *testing.T, f replacementFixture, name string) {
 // Creation refuses exactly what claim refuses: sections claim admits as legacy
 // or marker-free, and tasks claim does not judge, are still created.
 func TestAddTask_AdmitsWhatClaimAdmits(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		uncommitted string
 		input       *AddTaskInput
@@ -286,6 +287,7 @@ func TestAcceptanceCreationApplies_MatchesClaimPredicateGates(t *testing.T) {
 // J79's supported repair: a same-pair replacement keeps the allocating parent,
 // is created, and its claim adopts the reviewed source.
 func TestReplaceTask_AllocatedReplacementIsCreatedAndClaimable(t *testing.T) {
+	t.Parallel()
 	f := newAcceptanceCreationFixture(t)
 	if _, err := f.run(); err != nil {
 		t.Fatalf("replacement continuing a valid allocation refused: %v", err)
@@ -359,6 +361,7 @@ func TestReplaceTask_ParentEvidenceChangeDuringCheckRequeries(t *testing.T) {
 // D53: a same-pair replacement that only changes dependencies continues the
 // reviewed allocation: it keeps the source's parent, is created and claimable.
 func TestReplaceTask_ChangedDependenciesKeepAllocation(t *testing.T) {
+	t.Parallel()
 	f := newAcceptanceCreationFixture(t)
 	if err := db.For(f.statePath).Modify(func(s *models.State) error {
 		s.Agents["coder-1"] = testhelpers.RegisteredTestAgent(models.RoleCoder)
