@@ -95,6 +95,7 @@
     "internal/worktreeexclude": "Private ignore setup for linked worktrees so generated runtime artifacts stay out of Git status.",
     "plugin/acp": "Independent ACP session and run-metrics package for warm-session tracking, ACP-style event aggregation, and warm-vs-fresh benchmark summaries.",
     "root": "Repository-level installation, upgrade, embedded assets, docs, specs, and build configuration.",
+    "scripts": "Scripts",
     "scripts/ci/testshard": "CI-only tool that splits Windows test runs into weighted shards and verifies every test runs exactly once.",
     "scripts/repro": "Shell reproducers for operational debugging scenarios such as pre-commit bootstrap flows.",
     "skills/adversarial-pairing/scripts": "Skill-local Python tooling for locked Markdown blackboard writes in adversarial-pairing workflows.",
