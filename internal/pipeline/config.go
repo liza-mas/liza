@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/models"
@@ -180,6 +181,13 @@ func (t TransitionDef) TaskSlugOrName() string {
 	return t.Name
 }
 
+// frozenReference parses the embedded default once per process. LoadFrozen
+// only reads it: MigrateOperations copies operation names (strings) into the
+// frozen config and never aliases the reference's maps or slices. Re-parsing
+// it on every LoadFrozen was about 11% of internal/ops test CPU. Callers that
+// may modify the reference use LoadEmbeddedReference, which stays a fresh parse.
+var frozenReference = sync.OnceValues(LoadEmbeddedReference)
+
 // LoadFrozen loads the frozen pipeline config from the project runtime directory.
 // After loading, it migrates missing allowed-operations from the embedded
 // default config to ensure older workspaces gain new operations without
@@ -198,7 +206,7 @@ func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	}
 
 	// Migrate missing operations from the embedded default.
-	refCfg, refErr := LoadEmbeddedReference()
+	refCfg, refErr := frozenReference()
 	if refErr == nil {
 		MigrateOperations(cfg, refCfg)
 		// Task-slugs are NOT migrated: old workspaces keep their existing role-pair

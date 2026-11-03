@@ -760,6 +760,48 @@ func TestLoadFrozenEffectiveRoleCapabilities(t *testing.T) {
 	}
 }
 
+// LoadFrozen shares one parsed reference across calls, so a frozen config must
+// never alias it: modifying what LoadFrozen returns must leave the reference intact.
+func TestLoadFrozenDoesNotAliasSharedReference(t *testing.T) {
+	legacy, err := LoadEmbeddedReference()
+	if err != nil {
+		t.Fatalf("LoadEmbeddedReference: %v", err)
+	}
+	coder := legacy.Pipeline.Roles["coder"]
+	coder.AllowedOperations = nil // every operation comes from the migration
+	legacy.Pipeline.Roles["coder"] = coder
+	data, err := yaml.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy pipeline: %v", err)
+	}
+	projectRoot := t.TempDir()
+	testhelpers.SetupPipelineConfigBytes(t, projectRoot, data)
+
+	frozen, err := LoadFrozen(projectRoot)
+	if err != nil {
+		t.Fatalf("LoadFrozen: %v", err)
+	}
+	ops := frozen.Pipeline.Roles["coder"].AllowedOperations
+	if len(ops) == 0 {
+		t.Fatal("migration gave the legacy coder no operations")
+	}
+	for i := range ops {
+		ops[i] = "mutated"
+	}
+
+	shared, err := frozenReference()
+	if err != nil {
+		t.Fatalf("frozenReference: %v", err)
+	}
+	fresh, err := LoadEmbeddedReference()
+	if err != nil {
+		t.Fatalf("LoadEmbeddedReference: %v", err)
+	}
+	if !reflect.DeepEqual(shared, fresh) {
+		t.Fatal("modifying a LoadFrozen result changed the shared reference")
+	}
+}
+
 func TestLoadFrozen_BackfillsLegacyMasterDecompositionOutputRefs(t *testing.T) {
 	dir := t.TempDir()
 	lizaDir := filepath.Join(dir, paths.ProjectDirName())
