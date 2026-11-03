@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liza-mas/liza/internal/deepcopy"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
@@ -799,6 +800,55 @@ func TestLoadFrozenDoesNotAliasSharedReference(t *testing.T) {
 	}
 	if !reflect.DeepEqual(shared, fresh) {
 		t.Fatal("modifying a LoadFrozen result changed the shared reference")
+	}
+}
+
+// LoadFromBytes hands out deep copies of a cached parse, which is sound only
+// while no type in the config graph would be copied shallowly.
+func TestPipelineConfigShapeIsCloneable(t *testing.T) {
+	for _, alias := range deepcopy.ShallowAliases(reflect.TypeFor[PipelineConfig](), "PipelineConfig") {
+		t.Errorf("%s: a cached config would alias the copies handed out", alias)
+	}
+}
+
+func TestLoadCachesByContentAndIsolatesCallers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pipeline.yaml")
+	src, err := os.ReadFile("testdata/valid-coding-subpipeline.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	load := func() *PipelineConfig {
+		t.Helper()
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		return cfg
+	}
+	miss := load()
+	want := deepcopy.Of(miss)
+	hit := load()
+	// Both the parse that filled the cache and a copy served from it are the
+	// caller's own: modifying either must not reach the next Load.
+	for _, cfg := range []*PipelineConfig{miss, hit} {
+		for name := range cfg.Pipeline.RolePairs {
+			delete(cfg.Pipeline.RolePairs, name)
+		}
+	}
+	if !reflect.DeepEqual(load(), want) {
+		t.Fatal("modifying a loaded config changed what the next Load returns")
+	}
+
+	// A changed file is a new key: the edit is parsed, never served stale.
+	invalid := strings.Replace(string(src), "pipeline:", "pipeline_typo:", 1)
+	if err := os.WriteFile(path, []byte(invalid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("an invalid edit was not parsed: Load served the cached config")
 	}
 }
 

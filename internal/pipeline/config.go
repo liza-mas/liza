@@ -4,6 +4,7 @@ package pipeline
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/deepcopy"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/roles"
@@ -217,8 +219,29 @@ func LoadFrozen(projectRoot string) (*PipelineConfig, error) {
 	return cfg, nil
 }
 
+// parsedConfigs memoizes validated configs by the SHA-256 of their bytes, so
+// the frozen pipeline.yaml that nearly every operation loads is parsed once per
+// process; a changed file has a new key, so a stale entry is never served.
+// Entries are private: callers get a deep copy they may mutate. Ceiling: past
+// maxParsedConfigs entries the cache is cleared and refills on demand. A
+// process sees a handful of configs; a test binary sees hundreds of fixtures.
+var parsedConfigs = struct {
+	sync.Mutex
+	byHash map[[sha256.Size]byte]*PipelineConfig
+}{byHash: map[[sha256.Size]byte]*PipelineConfig{}}
+
+const maxParsedConfigs = 64
+
 // LoadFromBytes parses and validates a pipeline config from raw YAML bytes.
 func LoadFromBytes(data []byte) (*PipelineConfig, error) {
+	key := sha256.Sum256(data)
+	parsedConfigs.Lock()
+	cached := parsedConfigs.byHash[key]
+	parsedConfigs.Unlock()
+	if cached != nil {
+		return deepcopy.Of(cached), nil
+	}
+
 	var cfg PipelineConfig
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
@@ -229,6 +252,13 @@ func LoadFromBytes(data []byte) (*PipelineConfig, error) {
 	if err := validate(&cfg); err != nil {
 		return nil, fmt.Errorf("validating pipeline config: %w", err)
 	}
+
+	parsedConfigs.Lock()
+	if len(parsedConfigs.byHash) >= maxParsedConfigs {
+		clear(parsedConfigs.byHash)
+	}
+	parsedConfigs.byHash[key] = deepcopy.Of(&cfg)
+	parsedConfigs.Unlock()
 	return &cfg, nil
 }
 
@@ -238,17 +268,7 @@ func Load(path string) (*PipelineConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading pipeline config: %w", err)
 	}
-	var cfg PipelineConfig
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("parsing pipeline config: %w", err)
-	}
-	applyCompatibilityDefaults(&cfg)
-	if err := validate(&cfg); err != nil {
-		return nil, fmt.Errorf("validating pipeline config: %w", err)
-	}
-	return &cfg, nil
+	return LoadFromBytes(data)
 }
 
 // validate checks a PipelineConfig for structural correctness.
