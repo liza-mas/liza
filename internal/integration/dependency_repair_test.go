@@ -215,8 +215,9 @@ func buildDependencyRepairCLI(t *testing.T) string {
 		if runtime.GOOS == "windows" {
 			dependencyRepairCLIBuild.binary += ".exe"
 		}
-		cmd := exec.Command("go", "build", "-o", dependencyRepairCLIBuild.binary, "./cmd/liza")
-		cmd.Dir = repoRoot
+		// go -C, not cmd.Dir: starting a process in the repo root stats it, and
+		// the root's mtime would make this package's test cache volatile.
+		cmd := exec.Command("go", "-C", repoRoot, "build", "-o", dependencyRepairCLIBuild.binary, "./cmd/liza")
 		dependencyRepairCLIBuild.output, dependencyRepairCLIBuild.err = cmd.CombinedOutput()
 		if dependencyRepairCLIBuild.err == nil {
 			_, dependencyRepairCLIBuild.err = oracle.RegisterBuildInputs(nil, repoRoot, "./cmd/liza")

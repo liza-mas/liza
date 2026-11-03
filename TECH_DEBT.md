@@ -634,9 +634,16 @@ guards it. Still invisible: tests whose inputs come from git history or a
 whole-module analysis — the regen tests, `a6/regeneration_proof`,
 `a8/mutation` and archguard's `go list -export` load. Payback trigger: the
 next stale `(cached)` result traced to one of them; CI is unaffected
-(`GOFLAGS=-count=1`). Separately, `BuildCLI` and integration's build start
-`go` in the repo root, whose mtime makes those packages cache only while the
-root is untouched; moving them to `go -C` would close it.
+(`GOFLAGS=-count=1`).
+
+**Resolved (2026-11-03):** `BuildCLI` and integration's CLI build now run
+`go -C <root>` instead of starting in the repo root, so integration and the
+oracle packages stay `(cached)` across root churn. Two consecutive unchanged
+`go test ./...` runs (each after `make ci-prepare`) reported every
+test-bearing package `(cached)` except `internal/testguard/archguard`, whose
+source walk lists the module tree including the root and so legitimately
+re-runs when a file is added or removed anywhere in it (about 7s). The
+git-history inputs listed above remain uncovered.
 
 ## Legacy built-in readiness surface
 

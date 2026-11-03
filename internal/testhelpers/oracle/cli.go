@@ -98,8 +98,8 @@ func buildMain(mainPkg string, seq int) (string, error) {
 	// -trimpath keeps cache hits independent of the module directory: without
 	// it, every fresh checkout (the regen tool's per-commit worktrees) rebuilds
 	// the CLI from scratch, about 50 CPU-seconds each.
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", bin, mainPkg)
-	cmd.Dir = modRoot
+	// go -C, not cmd.Dir: see RegisterBuildInputs.
+	cmd := exec.CommandContext(ctx, "go", "-C", modRoot, "build", "-trimpath", "-o", bin, mainPkg)
 	cmd.Env = env
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
