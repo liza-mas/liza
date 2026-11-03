@@ -1518,3 +1518,28 @@ there, load rather than sharding is implicated.
 - Run a9 unsharded under comparable load to separate load from sharding.
 - If sharding is the cause, fix the helper so a9 can be split again. If load
   is the cause, fix the helper at the shared boundary.
+
+## Claim-loss fence test probes the process group with no grace
+
+**What:** `runClaimLossDuringValidation` (`internal/ops/acceptance_ownership_fence_test.go`)
+checks `syscall.Kill(-pgid, 0)` the instant `SubmitForReviewWithAuthority`
+returns and fails if the canonical command's process group still exists.
+`TestSubmitForReviewStopsCanonicalValidationWhenClaimIsLost` failed once that
+way ("process group N still running after submit returned") in a full
+`go test ./...` at load average about 12, on 2026-11-03.
+
+Measured under 8 busy loops: 1 failure in 250 runs. A/B with the
+`decodeState` memo enabled and disabled gave 0 of 200 each, so the memo is not
+implicated. Not established: whether submit returns before the group is
+reaped, or the probe only races the kernel's teardown of a group that was
+already killed.
+
+**Why deferred:** Too rare to instrument within the CPU work that surfaced it.
+Adding a grace period to the probe without knowing which side races would hide
+a real fence gap if submit can return while the command still runs.
+
+**Payback trigger:**
+- The next failure of either `TestSubmitForReviewStopsCanonicalValidation*` test.
+- Capture whether the group's processes are zombies or running at the probe,
+  then fix production (wait for the group) or the probe (bounded wait for
+  teardown), whichever is the racing side.
