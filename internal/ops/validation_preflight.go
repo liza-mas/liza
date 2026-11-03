@@ -340,6 +340,10 @@ func (p *ValidationPreflight) observeSession(agent models.Agent, session *Valida
 	return session, checkErr
 }
 
+// validationPreflightLimits is models.EffectiveValidationPreflightLimits; tests
+// scale it down to exercise the in-session ceiling without waiting 30 s.
+var validationPreflightLimits = models.EffectiveValidationPreflightLimits
+
 // probePrerequisites applies the execution policy and runs the task's declared
 // prerequisite probes against the session environment, outside any lock.
 func (p *ValidationPreflight) probePrerequisites(state *models.State, task *models.Task, session *ValidationSession, inSession bool) error {
@@ -352,7 +356,7 @@ func (p *ValidationPreflight) probePrerequisites(state *models.State, task *mode
 	if session.Execution != p.policy {
 		return validationError(validationCodeExecutionPolicyRequired)
 	}
-	probeTimeout, totalTimeout := models.EffectiveValidationPreflightLimits(state.Config, inSession)
+	probeTimeout, totalTimeout := validationPreflightLimits(state.Config, inSession)
 	checkErr := sessionvalidation.Check(context.Background(), task.Validation, task.ValidationPrerequisites, p.worktree, append([]string(nil), session.Environment...), probeTimeout, totalTimeout)
 	var missing *sessionvalidation.Error
 	if errors.As(checkErr, &missing) && missing.Code == sessionvalidation.CodeEnvironmentMissing && models.RuntimeInputDenyNames(state)[missing.Variable] {

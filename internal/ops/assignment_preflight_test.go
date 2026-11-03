@@ -619,20 +619,23 @@ func TestValidationPreflightConfiguredTotalTimeout(t *testing.T) {
 // An in-session check runs inside a provider tool call, so a configured total
 // above the in-session ceiling cannot extend it past 30 s.
 func TestValidationPreflightInSessionCeiling(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits for the 30 s in-session ceiling")
+	// models.TestEffectiveValidationPreflightLimits pins the ceiling's value; this
+	// pins that a check without a supervisor session is capped by it. Limits are
+	// scaled 1/20: the 1.5 s ceiling stops a 2.25 s probe that the configured
+	// 3 s probe limit would let finish, so an uncapped check passes and fails here.
+	realLimits := validationPreflightLimits
+	t.Cleanup(func() { validationPreflightLimits = realLimits })
+	validationPreflightLimits = func(c models.Config, inSession bool) (time.Duration, time.Duration) {
+		probe, total := realLimits(c, inSession)
+		return probe / 20, total / 20
 	}
 	f := newSlowProbeFixture(t, 1, &models.ValidationPreflightConfig{ProbeTimeoutSeconds: 60, TimeoutSeconds: 120})
 	t.Setenv(brand.EnvName("AGENT_ID"), f.authority.ID)
 	t.Setenv(brand.EnvName("AGENT_GENERATION"), f.authority.Generation)
 	t.Setenv("VALIDATION_TEST_REQUIRED", "fixture-value")
-	t.Setenv(slowProbeSleepEnv, "40000")
-	start := time.Now()
+	t.Setenv(slowProbeSleepEnv, "2250")
 	_, err := PrepareValidationPreflight(f.root, "task-1", f.authority.ID, "", nil)
 	requireProbeTimeoutAt(t, err, 0)
-	if elapsed := time.Since(start); elapsed >= 35*time.Second {
-		t.Fatalf("in-session check exceeded its ceiling: %s", elapsed)
-	}
 }
 
 // TestValidationPreflightSlowProbe is the slow-success probe: it sleeps for
