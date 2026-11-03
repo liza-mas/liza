@@ -119,6 +119,7 @@ func TestRegenNamesAlteredSampleGolden(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	s := sampleClone(t)
 	clone := s.dir
 	altered := "internal/oracle/sample/testdata/golden/json/error-envelope.json"
@@ -167,6 +168,7 @@ func TestRegenReproducesChangedSampleAssertion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	s := sampleClone(t)
 	pre := s.git("rev-parse", "HEAD")
 	golden := "internal/oracle/sample/testdata/golden/json/error-envelope.json"
