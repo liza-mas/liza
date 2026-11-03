@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liza-mas/liza/internal/deepcopy"
 	"github.com/liza-mas/liza/internal/models"
 	"gopkg.in/yaml.v3"
 )
@@ -214,39 +215,7 @@ func BenchmarkStateParse(b *testing.B) {
 // alongside exported pointers, slices or maps would alias silently, so it fails
 // here instead.
 func TestStateModelShapeIsCloneable(t *testing.T) {
-	seen := map[reflect.Type]bool{}
-	var walk func(reflect.Type, string)
-	walk = func(t2 reflect.Type, path string) {
-		if seen[t2] {
-			return
-		}
-		seen[t2] = true
-
-		switch t2.Kind() {
-		case reflect.Pointer, reflect.Slice, reflect.Array:
-			walk(t2.Elem(), path+"[]")
-		case reflect.Map:
-			walk(t2.Key(), path+".key")
-			walk(t2.Elem(), path+".value")
-		case reflect.Struct:
-			if t2 == reflect.TypeOf(time.Time{}) {
-				return
-			}
-			if hasUnexportedFields(t2) {
-				for i := 0; i < t2.NumField(); i++ {
-					field := t2.Field(i)
-					if field.IsExported() && needsDeepCopy(field.Type) {
-						t.Errorf("%s (%s) has unexported fields and reference-bearing field %s: "+
-							"CloneState would copy it shallowly and alias the cache",
-							path, t2, field.Name)
-					}
-				}
-				return
-			}
-			for i := 0; i < t2.NumField(); i++ {
-				walk(t2.Field(i).Type, path+"."+t2.Field(i).Name)
-			}
-		}
+	for _, alias := range deepcopy.ShallowAliases(reflect.TypeFor[models.State](), "State") {
+		t.Errorf("%s: CloneState would copy it shallowly and alias the cache", alias)
 	}
-	walk(reflect.TypeOf(models.State{}), "State")
 }

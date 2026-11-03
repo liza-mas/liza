@@ -11,6 +11,7 @@ var areaA1 = Area{
 		{Package: "internal/atomicfile", Layer: layerInfrastructure},
 		{Package: "internal/brand", Layer: layerLeaf},
 		{Package: "internal/db", Layer: layerInfrastructure},
+		{Package: "internal/deepcopy", Layer: layerLeaf},
 		{Package: "internal/envgate", Layer: layerInfrastructure},
 		{Package: "internal/errors", Layer: layerLeaf},
 		{Package: "internal/filelock", Layer: layerInfrastructure},

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/liza-mas/liza/internal/archiveobject"
+	"github.com/liza-mas/liza/internal/deepcopy"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/statehygiene"
@@ -103,7 +104,7 @@ func terminalPayload(task *models.Task) models.Task {
 
 func cloneTerminalTask(task *models.Task) models.Task {
 	var copy models.Task
-	deepCopyValue(reflect.ValueOf(task).Elem(), reflect.ValueOf(&copy).Elem())
+	deepcopy.Into(reflect.ValueOf(task).Elem(), reflect.ValueOf(&copy).Elem())
 	return copy
 }
 
@@ -173,7 +174,7 @@ func terminalRetainedBytes(value reflect.Value) int {
 			size += terminalRetainedBytes(iter.Key()) + terminalRetainedBytes(iter.Value()) + terminalMapEntryOverheadBytes
 		}
 	case reflect.Struct:
-		if hasUnexportedFields(value.Type()) {
+		if deepcopy.HasUnexportedFields(value.Type()) {
 			break // time.Time is copied by value and contains no mutable payload.
 		}
 		for i := 0; i < value.NumField(); i++ {
