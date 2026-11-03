@@ -609,6 +609,26 @@ test-bearing package reports `(cached)`. A wall-clock threshold can be met by
 variance alone — one measured repeat already came in at 45.4s with none of
 these inputs removed.
 
+**Partial resolution (2026-11-03):** Go hashes directory mtimes into test-cache
+inputs. Three tests resolved the project from the package directory, inside
+the real checkout, and so recorded the repo root and `.git`, which any git
+command or root-level file change touches:
+`TestMASInitDefaultsKeepFormerValues` (commands) and
+`TestShellCompleteConfigKeys` / `TestShellCompleteAgentRoleAndCLIFlag`
+(cmd/liza). They now run from a temporary directory or with
+`--project-root`. Those two packages report `(cached)` across `make
+ci-prepare`, `git status` and a root-level file churn; `internal/tui` had no
+volatile input. `internal/integration` remains: 17 tests run `go build` with
+`cmd.Dir` set to the repo root, and `os.StartProcess` stats that directory.
+Making it cacheable is deferred to the fix for the separate hazard below,
+because those builds are invisible to the test cache.
+
+**Related hazard:** packages that build binaries from source while testing
+(the oracle suite's `BuildCLI`, integration's CLI build, the shell-stub
+relay) can replay a stale `(cached)` result after an edit to those sources.
+Observed: a cached `internal/oracle/sample` stayed `(cached)` after a CLI help
+change that fails it under `-count=1`. CI is unaffected (`GOFLAGS=-count=1`).
+
 ## Legacy built-in readiness surface
 
 **What:** `tasks.legacy_coder_claimable`,

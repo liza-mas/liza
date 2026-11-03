@@ -22,6 +22,10 @@ func TestMASInitDefaultsKeepFormerValues(t *testing.T) {
 	if initDirMode != 0755 || initFileMode != 0644 {
 		t.Fatalf("init file modes changed: dir %o file %o", initDirMode, initFileMode)
 	}
+	// newMASInit discovers the project from the working directory; outside a
+	// repository it never reads the real checkout, whose .git would otherwise
+	// become a Go test-cache input.
+	t.Chdir(t.TempDir())
 	m, err := newMASInit(InitParams{Stdin: strings.NewReader("")})
 	if err != nil {
 		t.Fatalf("newMASInit: %v", err)

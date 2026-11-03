@@ -40,27 +40,31 @@ func TestShellCompleteCompletionCommandShellNames(t *testing.T) {
 }
 
 func TestShellCompleteConfigKeys(t *testing.T) {
+	// An empty project root keeps the real checkout's state and .git out of
+	// the test, and out of Go's test-cache inputs.
+	root := t.TempDir()
 	for _, args := range [][]string{{"config", "get", "config."}, {"config", "set", "config."}, {"get", "config."}} {
-		output := executeShellComplete(t, args...)
+		output := executeShellComplete(t, append([]string{"--project-root", root}, args...)...)
 		if !completionOutputContains(output, "config.post_worktree_cmd") {
 			t.Fatalf("missing config key: %s", output)
 		}
 	}
-	output := executeShellComplete(t, "config", "set", "config.post_worktree_cmd", "")
+	output := executeShellComplete(t, "--project-root", root, "config", "set", "config.post_worktree_cmd", "")
 	if completionOutputContains(output, "config.post_worktree_cmd") {
 		t.Fatalf("key offered as command value: %s", output)
 	}
 }
 
 func TestShellCompleteAgentRoleAndCLIFlag(t *testing.T) {
-	roleOutput := executeShellComplete(t, "agent", "co")
+	root := t.TempDir() // see TestShellCompleteConfigKeys
+	roleOutput := executeShellComplete(t, "--project-root", root, "agent", "co")
 	for _, want := range []string{"code-reviewer", "coder"} {
 		if !completionOutputContains(roleOutput, want) {
 			t.Fatalf("agent role completion missing %q:\n%s", want, roleOutput)
 		}
 	}
 
-	cliOutput := executeShellComplete(t, "agent", "--cli", "c")
+	cliOutput := executeShellComplete(t, "--project-root", root, "agent", "--cli", "c")
 	for _, want := range []string{"claude", "codex", "codex-acp", "cursor-acp"} {
 		if !completionOutputContains(cliOutput, want) {
 			t.Fatalf("agent --cli completion missing %q:\n%s", want, cliOutput)
