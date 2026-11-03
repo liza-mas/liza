@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/agent"
+	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/models"
@@ -29,6 +30,8 @@ func setupTestProject(t *testing.T) (projectDir string, cleanup func()) {
 	t.Helper()
 
 	testhelpers.SetupGlobalLiza(t)
+	// A host that enables bash-policy would otherwise run the real binary from PATH during init.
+	t.Setenv(bashpolicycli.EnvEnableBashPolicy, "")
 
 	tmpDir := t.TempDir()
 
