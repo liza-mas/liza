@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-par test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -196,6 +196,10 @@ test: ci-prepare
 
 test-nosync:
 	go test ./...
+
+# Run the full suite with the slowest packages split across processes
+test-par: ci-prepare
+	@scripts/test-par.sh
 
 # Run the short test subset for fast local feedback
 test-fast: sync-embedded check-testhelpers
@@ -399,6 +403,7 @@ help:
 	@echo "  test-integration-nosync - Run internal/integration once, including e2e tests"
 	@echo "  test               - Run the full suite without race or coverage instrumentation"
 	@echo "  test-nosync        - Run the full suite against an already-synced checkout"
+	@echo "  test-par           - Run the full suite with slow packages sharded across processes"
 	@echo "  test-fast          - Run the short test subset"
 	@echo "  test-race          - Run the full suite with race instrumentation"
 	@echo "  test-race-nosync   - Run the race suite against an already-synced checkout"

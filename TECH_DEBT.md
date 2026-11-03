@@ -1439,3 +1439,46 @@ whether the consolidation regime (D24/D56) is retired or rebased. Found when
 **Payback trigger:** the next time the manual regen check is relied on, or a
 decision on the consolidation regime. Then retire H1 or define an explicit
 post-consolidation baseline the ledger can express.
+
+## Oracle A9 reap/scan helpers fail intermittently under `make test-par`
+
+**What:** With `internal/oracle/a9` split into 4 processes by
+`scripts/test-par.sh`, 2 of about 15 sharded runs failed in a9. Unsharded runs
+went 0 for 3, but those were not under the same load.
+- `TestOracleA9UnavailableRaise/i20-claude` (shard a9.1) failed at
+  `signals_test.go:63` with "a started process outlived the test". The subtest
+  took 2.79s against `signalReap`'s 5s deadline, so `signalReap` returned false
+  early rather than timing out.
+- `TestSignalProviderReap/cancelled` (shard a9.2) failed at
+  `signals_reap_linux_test.go:123` with "processes unobservable", meaning
+  `signalChildrenOf` returned an error. Line 142 "no provider observed" followed.
+
+The exact error was not captured in either case. `signalChildrenOf` treats
+every `/proc/<pid>/stat` read error except `fs.ErrNotExist` as fatal.
+`orchChildren` in `orchreap_linux_test.go` skips such errors instead.
+
+Ruled out by a scratch program that scans `/proc` while child processes churn
+(single-threaded `true`, up to load ~32): `ESRCH` or other non-`ENOENT` read
+errors and truncated stat content were never seen (1,359 scans).
+
+Not tested:
+- `ECHILD` from competing `Wait4` callers on the same pid
+- churn of multithreaded Go children
+- whether load alone, without sharding, triggers it
+
+**Why deferred:** At roughly 1 failure in 7 runs, reproduction with
+instrumentation stalled after four attempts. Making the scan tolerant without
+a root cause would hide the signal. `test-par` is an opt-in target, so
+`make test` (unsharded a9) is unaffected.
+
+**Mitigation (2026-11-03):** `scripts/test-par.sh` now runs a9 as one process
+(`a9=1`), which removes about a shard's worth of speedup. If a9 still fails
+there, load rather than sharding is implicated.
+
+**Payback trigger:**
+- The next a9 failure under `make test-par`, or before `test-par` replaces
+  `make test`.
+- Capture the `signalChildrenOf` error value and the `Wait4` results first.
+- Run a9 unsharded under comparable load to separate load from sharding.
+- If sharding is the cause, fix the helper so a9 can be split again. If load
+  is the cause, fix the helper at the shared boundary.

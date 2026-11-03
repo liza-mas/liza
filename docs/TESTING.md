@@ -10,6 +10,7 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 |---------|------|
 | `make test-fast` | Short-mode iteration; skips integration tests and tests that take 5s or more |
 | `make test` | Required routine full-suite check, without race or coverage instrumentation |
+| `make test-par` | Same tests as `make test`, with the slowest packages split across `go test -run` processes (`scripts/test-par.sh`) |
 | `make test-race` | Full suite with the race detector; required once during final pre-commit/merge validation |
 | `make coverage` | Full suite with whole-module coverage (`-coverpkg=./...`), then an HTML report |
 | `go test -run TestFoo ./internal/db/` | Specific test |
