@@ -305,16 +305,6 @@ func (bb *Blackboard) decodeLiveState(data []byte, operation string) (*models.St
 	return state, nil
 }
 
-func decodeState(data []byte, operation string) (*models.State, error) {
-	var state models.State
-	if err := yaml.Unmarshal(data, &state); err != nil {
-		return nil, &errors.StateSchemaError{Operation: operation, Err: err}
-	}
-	normalizeAgentRoles(&state)
-	normalizeTaskAttempts(&state)
-	return &state, nil
-}
-
 // ReadRaw reads the raw state.yaml bytes under flock protection.
 // Use this when you need the file content without parsing (e.g., serving
 // the raw YAML to an external consumer), while still respecting the lock
