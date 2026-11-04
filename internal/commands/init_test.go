@@ -3441,6 +3441,9 @@ func TestInitCommandWithConfig_SembleReadinessDiagnosticsNonFatal(t *testing.T) 
 			setupGlobalLiza(t)
 			t.Setenv(semble.EnvEnableSemble, "1")
 			t.Setenv("SEMBLE_MODEL_NAME", "diagnostic-"+tt.name)
+			// A fresh cache home is a fresh readiness-cache key, so a repeated
+			// run (-count>1) validates again instead of reading the last result.
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
 			originalDir, err := os.Getwd()
 			if err != nil {
