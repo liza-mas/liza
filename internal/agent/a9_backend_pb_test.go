@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -433,7 +434,7 @@ func TestA9BackendPB4CompletionMapping(t *testing.T) {
 			if (err != nil) != tc.wantErr || result.ExitCode != tc.wantExit || !strings.Contains(result.Output, tc.wantOutput) {
 				t.Fatalf("Run = (%#v, %v)", result, err)
 			}
-			if result.Usage != (LLMAgentUsage{}) || !result.WarmUsage || result.SessionID != "session-pb" {
+			if !reflect.DeepEqual(result.Usage, LLMAgentUsage{}) || !result.WarmUsage || result.SessionID != "session-pb" {
 				t.Fatalf("result shape = %#v", result)
 			}
 			if got := countLLMAgentEvents(sink.Events(), LLMAgentEventCompleted); got != 1 {

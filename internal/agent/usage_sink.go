@@ -148,6 +148,20 @@ func (s *supervisorLLMAgentEventSink) appendRecord(event LLMAgentEvent) {
 		OutputTokens:     reported.OutputTokens,
 		Provenance:       classifyUsageProvenance(reported, sawUsage),
 		ExitCode:         completedExitCode(event),
+
+		CacheWrite1hTokens: reported.CachedWrite1hTokens,
+		ReasoningTokens:    reported.ReasoningTokens,
+		CostUSD:            reportedCost(reported.CostUSD, reported.CostReported),
+		RequestedModel:     reported.Model,
+		Models:             recordModels(reported.Models),
+		ProviderSessionID:  reported.ProviderSessionID,
+		UsageSource:        reported.Source,
+		WebSearchRequests:  reported.WebSearchRequests,
+		WebFetchRequests:   reported.WebFetchRequests,
+		APIDurationMs:      reported.APIDurationMs,
+		TTFTMs:             reported.TTFTMs,
+		APICalls:           reported.APICalls,
+		ServiceTier:        reported.ServiceTier,
 	}
 	if err := usage.Append(s.cfg.ProjectRoot, record); err != nil {
 		GetLogger().Warn("Failed to append usage record",
@@ -173,6 +187,32 @@ func classifyUsageProvenance(reported LLMAgentUsage, sawUsage bool) usage.Proven
 		// The provider reports no usage at all, as the CLI transport does.
 		return usage.ProvenanceUnknown
 	}
+}
+
+// reportedCost keeps "unpriced" distinct from a reported zero.
+func reportedCost(cost float64, reported bool) *float64 {
+	if !reported {
+		return nil
+	}
+	return &cost
+}
+
+func recordModels(models []LLMAgentModelUsage) []usage.ModelUsage {
+	var out []usage.ModelUsage
+	for _, m := range models {
+		out = append(out, usage.ModelUsage{
+			Model:              m.Model,
+			FreshInputTokens:   m.InputTokens,
+			CacheReadTokens:    m.CachedReadTokens,
+			CacheWriteTokens:   m.CachedWriteTokens,
+			CacheWrite1hTokens: m.CachedWrite1hTokens,
+			OutputTokens:       m.OutputTokens,
+			ReasoningTokens:    m.ReasoningTokens,
+			CostUSD:            reportedCost(m.CostUSD, m.CostReported),
+			CostBasis:          m.CostBasis,
+		})
+	}
+	return out
 }
 
 func completedExitCode(event LLMAgentEvent) int {

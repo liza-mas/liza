@@ -41,6 +41,8 @@ type Input struct {
 	Counters  *models.LifecycleOutcomeMetrics
 	Window    Window
 	Baseline  *Window
+	// BreakdownBy, when set, adds a Breakdown block by that dimension.
+	BreakdownBy string
 }
 
 // Distribution summarizes one token dimension over the units of a row: tasks,
@@ -157,6 +159,7 @@ type Report struct {
 	PerCompletedTask *PerCompletedTask   `json:"per_completed_task,omitempty"`
 	PostTransition   []PostTransitionRow `json:"post_transition,omitempty"`
 	Provenance       *ProvenanceCounts   `json:"provenance,omitempty"`
+	Breakdown        *Breakdown          `json:"breakdown,omitempty"`
 	SuppressedCalls  *SuppressedCalls    `json:"suppressed_calls,omitempty"`
 	Baseline         *Report             `json:"baseline,omitempty"`
 	Deltas           []Delta             `json:"deltas,omitempty"`
@@ -202,6 +205,11 @@ func Build(in Input) (Report, error) {
 	}
 	if err := in.Window.validate(); err != nil {
 		return Report{}, err
+	}
+	if in.BreakdownBy != "" {
+		if err := ValidateBreakdownBy(in.BreakdownBy); err != nil {
+			return Report{}, fmt.Errorf("usage report: %w", err)
+		}
 	}
 	if in.Baseline != nil {
 		if err := in.Baseline.validate(); err != nil {
@@ -446,6 +454,7 @@ func buildWindow(in Input, w Window) (Report, error) {
 	missingTasks := 0
 	referenced := map[string]struct{}{}
 	var overall tokenCounts
+	var authoritativeRecords []Record
 
 	for _, r := range in.Records {
 		if !inWindow(r.StartedAt, w.Since, w.Until) {
@@ -467,6 +476,7 @@ func buildWindow(in Input, w Window) (Report, error) {
 			continue
 		}
 		overall.add(r)
+		authoritativeRecords = append(authoritativeRecords, r)
 		key := outcomeKey{reading.outcome, r.Role}
 		acc := outcomes[key]
 		if acc == nil {
@@ -490,6 +500,9 @@ func buildWindow(in Input, w Window) (Report, error) {
 	report.OutcomeTotals = outcomeTotals(outcomes)
 	report.PerCompletedTask = perCompletedTask(outcomes, overall)
 	report.PostTransition = tailRows(tails)
+	if in.BreakdownBy != "" {
+		report.Breakdown = buildBreakdown(authoritativeRecords, in.BreakdownBy)
+	}
 	if missingTasks > 0 {
 		report.Warnings = append(report.Warnings,
 			fmt.Sprintf("%d usage records name tasks absent from state; reported as unattributed", missingTasks))

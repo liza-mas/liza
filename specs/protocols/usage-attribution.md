@@ -39,9 +39,48 @@ completes. One JSON object per line.
 | `session_id` | Provider session exactly as the provider reports it, falling back to the caller-supplied value |
 | `provider` | Configured provider CLI name |
 | `started_at`, `ended_at` | UTC interval of the provider turn |
-| `fresh_input_tokens`, `cache_read_tokens`, `cache_write_tokens`, `output_tokens` | Token counts as the provider reported them |
+| `fresh_input_tokens`, `cache_read_tokens`, `cache_write_tokens`, `output_tokens` | Token counts as the provider reported them. Fresh input never includes the cache: a provider whose input count is cache-inclusive (Codex) is normalised at capture |
 | `provenance` | `terminal_authoritative`, `partial`, `unknown` or `conflicting` |
 | `exit_code`, `warm_session` | Turn outcome and warm-session reuse. `warm_session` is reserved: no provider event carries warm-session reuse today, so capture leaves it false |
+
+The fields below are additive within schema version 1. They are omitted when
+the provider did not report them, so a record written before them still loads,
+and a reader that predates them ignores them.
+
+| Field (JSON) | Meaning |
+|---|---|
+| `cache_write_1h_tokens` | The part of `cache_write_tokens` written with the 1h TTL, priced above the 5m rate |
+| `reasoning_tokens` | Thinking/reasoning tokens. Informational: Claude and Codex count them inside `output_tokens`, so totals never add them again |
+| `cost_usd` | The provider's own price of the turn. Absent means unpriced, never free; a present `0` is a reported zero |
+| `requested_model` | The model the launch asked for |
+| `models[]` | One entry per billed model — `model`, the token counts, `cost_usd`, `cost_basis` — when the provider reports a per-model breakdown (Claude `modelUsage`, which includes subagent and background models). The entries sum to the record's counts |
+| `provider_session_id` | The provider's native session id, distinct from `session_id`, which on the CLI path copies the task id |
+| `usage_source` | Where the counts were read: `stream_result` (the CLI's JSON output) or `acpx` (the ACP prompt result) |
+| `web_search_requests`, `web_fetch_requests`, `api_duration_ms`, `ttft_ms`, `api_calls`, `service_tier` | Provider-reported extras, kept as reported |
+
+### Usage carriers
+
+The CLI backend reads usage from the JSON stream each provider already prints
+when output logs are kept. Each event is read only for the backend whose shape
+was verified; other stream-json backends (cursor, gemini, kimi, qwen) print
+look-alike events whose input semantics are unverified, so they record
+`unknown` rather than counts that may include the cache:
+
+| Provider | Event | Mapping |
+|---|---|---|
+| Claude (`-p --output-format stream-json`) | every `result` | A run that wakes for background work prints one `result` per process turn. `modelUsage`, `total_cost_usd` and `duration_api_ms` are running totals, so the last wins; `num_turns` (`api_calls`), the top-level `usage` and its server tool counts cover their own turn and are summed. Totals and `models[]` come from `modelUsage` when present (it covers subagents; the top-level `usage` covers the main loop only), else from the summed `usage`. Each model keeps its own `costUSD` and `costBasis`; `total_cost_usd` falls back to the model sum when absent and every model is priced. Also the 1h cache split, thinking tokens, `session_id` and the first turn's TTFT |
+| Codex (`exec --json`) | last `turn.completed` | Its usage is the thread's running total, so the last event wins. Codex reports no call count, so `api_calls` stays empty. `input_tokens` includes cached reads and writes, so fresh input is `input − cached − cache_write`, floored at zero. No cost or model is reported |
+| OpenCode (`run --format json`) | each `step_finish` | Each covers its own step and they are summed; `cost` counts as reported only when positive, since OpenCode prints `0` for a model it cannot price |
+
+`cost_usd` is the provider's own price, not necessarily billed spend: Claude
+reports `costBasis: "list"`, its list price, also under a subscription.
+`models[].cost_basis` keeps that basis.
+
+The ACPX backend reads `inputTokens`, `outputTokens`, `cachedReadTokens`,
+`cachedWriteTokens` and `thoughtTokens` from the prompt result's `usage`.
+A provider that prints none of these events — plain-text output, a run with
+output logs off, a crash before the final event — still emits the explicit
+empty usage event and records `unknown`.
 
 ### Identity and deduplication
 
@@ -65,7 +104,7 @@ provider's usage report, never re-derived later:
 |---|---|
 | `terminal_authoritative` | The provider reported a usage object with a non-zero fresh-input or output count |
 | `partial` | Some fields arrived (cache-read or cache-write counts) while the fresh-input and output counts did not |
-| `unknown` | No usage event arrived for the turn, or the provider reports no usage at all — the default CLI transport reports none today, and emits an explicit empty usage event so the quality is recorded rather than inferred from zero. Interactive supervisor launches record `unknown` provenance because the provider reports no usage on that path; only start and completion events arrive. A completed turn with no preceding start (the launch-gate failure path) is also `unknown`, over a zero-length interval |
+| `unknown` | No usage event arrived for the turn, or the provider reports no usage at all — a CLI that printed none of the usage carriers above emits an explicit empty usage event, so the quality is recorded rather than inferred from zero. Interactive supervisor launches record `unknown` provenance because the provider reports no usage on that path; only start and completion events arrive. A completed turn with no preceding start (the launch-gate failure path) is also `unknown`, over a zero-length interval |
 | `conflicting` | Assigned at load time to an identity whose duplicates disagree on counts |
 
 Pinning the quality with the record is what keeps a later before/after
@@ -253,6 +292,7 @@ projection supplied by the caller.
 | `per_completed_task` | `merged_tasks`, `cache_read_tokens_per_merged_task`, `cache_hit_percent`. A ratio is absent, not zero, when its denominator is zero |
 | `post_transition[]` | Rows by role × failure category with `tokens`, `records`, and bounded per-task detail naming each task's last useful transition; the largest tails are kept and the rest counted in `tasks_omitted` |
 | `provenance` | Counts per quality plus `duplicates_collapsed`, `malformed_lines` and `conflicting_records` |
+| `breakdown` | Authoritative usage grouped by one dimension (`--by`: `model`, `role`, `agent`, `task` or `provider`; default `model`). Each row and the `totals` carry `records`, fresh, cache-write (with its 1h part), cache-read, output and reasoning tokens, `tokens_processed` (fresh + cache-write + cache-read + output), `input_cache_hit_percent` (cache-read over all input, cache writes included — unlike `per_completed_task.cache_hit_percent`, which leaves writes out), `cost_usd` summed over reported costs and `unpriced_records` counting the shares it leaves out. By model, a record with `models[]` contributes one share per model, so the model rows' tokens sum to `totals` (and their cost does when every model is priced) while their `records` and `unpriced_records` count shares and can sum above it; a record without `models[]` falls under `requested_model`, else `<provider> (default)` (a launch on the CLI's default model), else `(none)` |
 | `suppressed_calls` | Read-only projection of the lifecycle counter rows for suppressed duplicates and preflight rejections |
 | `baseline`, `deltas[]` | Present only when a baseline window is supplied |
 | `warnings[]` | Store unavailable, malformed lines skipped, records naming absent tasks, unclassified task events, counters unavailable |
@@ -307,7 +347,7 @@ that the counters themselves do not claim.
 
 | Surface | Content |
 |---|---|
-| `usage report` | The full report. Read-only: it reads files and state and mutates nothing, so it takes no role authorization row. Flags: `--since`, `--until`, `--as-of`, `--role`, `--task`, `--baseline-since`, `--baseline-until`, `--format`, and the repository's JSON envelope. Time bounds accept RFC 3339 or `YYYY-MM-DD` and are parsed before any read |
+| `usage report` | The full report. Read-only: it reads files and state and mutates nothing, so it takes no role authorization row. Flags: `--since`, `--until`, `--as-of`, `--role`, `--task`, `--by`, `--baseline-since`, `--baseline-until`, `--format`, and the repository's JSON envelope. Time bounds accept RFC 3339 or `YYYY-MM-DD` and are parsed before any read |
 | `get metrics` | A compact usage summary for the current sprint window: per-outcome totals, cache-read tokens per merged task, cache-hit percent, provenance counts and warnings. No distributions, post-transition rows or deltas. An unavailable store omits the block and records the warning; no pre-existing metrics field changes |
 
 Neither surface reads or writes lifecycle state, and no new task or state field

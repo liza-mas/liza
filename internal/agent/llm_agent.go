@@ -101,11 +101,48 @@ type LLMAgentRunResult struct {
 }
 
 // LLMAgentUsage tracks provider token consumption for a single run.
+// InputTokens is always fresh input: cache reads and writes are never in it.
 type LLMAgentUsage struct {
 	InputTokens       int
 	OutputTokens      int
 	CachedReadTokens  int
 	CachedWriteTokens int
+	// CachedWrite1hTokens is the part of CachedWriteTokens written with the 1h
+	// TTL, which is priced above the 5m rate.
+	CachedWrite1hTokens int
+	// ReasoningTokens is informational: Claude and Codex count it inside OutputTokens.
+	ReasoningTokens int
+	// CostUSD is the provider's own price of the run, meaningful only when CostReported.
+	CostUSD      float64
+	CostReported bool
+	// Model is the requested model; Models holds what each billed model consumed.
+	Model             string
+	Models            []LLMAgentModelUsage
+	ProviderSessionID string
+	// Source names the carrier the counts were read from (stream_result, acpx).
+	Source            string
+	WebSearchRequests int
+	WebFetchRequests  int
+	APIDurationMs     int64
+	TTFTMs            int64
+	APICalls          int
+	ServiceTier       string
+}
+
+// LLMAgentModelUsage is one billed model's share of a run.
+type LLMAgentModelUsage struct {
+	Model               string
+	InputTokens         int
+	OutputTokens        int
+	CachedReadTokens    int
+	CachedWriteTokens   int
+	CachedWrite1hTokens int
+	ReasoningTokens     int
+	CostUSD             float64
+	CostReported        bool
+	// CostBasis is how the provider priced CostUSD; Claude's "list" is list price,
+	// not what a subscription bills.
+	CostBasis string
 }
 
 // LLMAgentInteractiveRequest contains parameters for interactive mode.

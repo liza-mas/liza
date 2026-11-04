@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -57,8 +58,8 @@ func TestACPXAgentRunUsesPersistentCodexSession(t *testing.T) {
 	if first.WarmUsage {
 		t.Fatal("first WarmUsage = true, want false")
 	}
-	wantUsage := LLMAgentUsage{InputTokens: 123, OutputTokens: 7, CachedReadTokens: 42}
-	if first.Usage != wantUsage {
+	wantUsage := LLMAgentUsage{InputTokens: 123, OutputTokens: 7, CachedReadTokens: 42, Source: usageSourceACPX}
+	if !reflect.DeepEqual(first.Usage, wantUsage) {
 		t.Fatalf("first Usage = %+v, want %+v", first.Usage, wantUsage)
 	}
 
@@ -773,8 +774,8 @@ func TestACPXAgentRunStreamsOutputToLogsEventsAndProgress(t *testing.T) {
 	if run.result.Output != "first streamed chunksecond streamed chunk" {
 		t.Fatalf("Output = %q, want streamed chunks", run.result.Output)
 	}
-	wantUsage := LLMAgentUsage{InputTokens: 321, OutputTokens: 11, CachedReadTokens: 99}
-	if run.result.Usage != wantUsage {
+	wantUsage := LLMAgentUsage{InputTokens: 321, OutputTokens: 11, CachedReadTokens: 99, Source: usageSourceACPX}
+	if !reflect.DeepEqual(run.result.Usage, wantUsage) {
 		t.Fatalf("Usage = %+v, want %+v", run.result.Usage, wantUsage)
 	}
 
@@ -952,7 +953,7 @@ func TestACPXAgentUsageEventSingle(t *testing.T) {
 		wantErr   bool
 		wantUsage LLMAgentUsage
 	}{
-		{name: "success", prompt: "implement the requested change", wantUsage: LLMAgentUsage{InputTokens: 123, OutputTokens: 7, CachedReadTokens: 42}},
+		{name: "success", prompt: "implement the requested change", wantUsage: LLMAgentUsage{InputTokens: 123, OutputTokens: 7, CachedReadTokens: 42, Source: usageSourceACPX}},
 		{name: "prompt_failure", prompt: "unrelated failure", wantErr: true},
 	}
 	for _, tc := range cases {
@@ -982,7 +983,7 @@ func TestACPXAgentUsageEventSingle(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Run() error = %v, wantErr = %v", err, tc.wantErr)
 			}
-			if result.Usage != tc.wantUsage {
+			if !reflect.DeepEqual(result.Usage, tc.wantUsage) {
 				t.Fatalf("Usage = %+v, want %+v", result.Usage, tc.wantUsage)
 			}
 			mu.Lock()

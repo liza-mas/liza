@@ -5,6 +5,39 @@
     "ok": true,
     "result": {
       "baseline": {
+        "breakdown": {
+          "by": "model",
+          "rows": [
+            {
+              "cache_read_tokens": 200,
+              "cache_write_1h_tokens": 0,
+              "cache_write_tokens": 30,
+              "cost_usd": 0,
+              "fresh_input_tokens": 600,
+              "input_cache_hit_percent": 24.096385542168676,
+              "key": "codex (default)",
+              "output_tokens": 75,
+              "reasoning_tokens": 0,
+              "records": 1,
+              "tokens_processed": 905,
+              "unpriced_records": 1
+            }
+          ],
+          "totals": {
+            "cache_read_tokens": 200,
+            "cache_write_1h_tokens": 0,
+            "cache_write_tokens": 30,
+            "cost_usd": 0,
+            "fresh_input_tokens": 600,
+            "input_cache_hit_percent": 24.096385542168676,
+            "key": "total",
+            "output_tokens": 75,
+            "reasoning_tokens": 0,
+            "records": 1,
+            "tokens_processed": 905,
+            "unpriced_records": 1
+          }
+        },
         "outcome_totals": [
           {
             "cache_read_tokens": 200,
@@ -76,6 +109,39 @@
           "as_of": "2026-09-30T00:00:00Z",
           "since": "2026-09-29T00:00:00Z",
           "until": "2026-09-30T00:00:00Z"
+        }
+      },
+      "breakdown": {
+        "by": "model",
+        "rows": [
+          {
+            "cache_read_tokens": 320,
+            "cache_write_1h_tokens": 0,
+            "cache_write_tokens": 60,
+            "cost_usd": 0,
+            "fresh_input_tokens": 1280,
+            "input_cache_hit_percent": 19.27710843373494,
+            "key": "codex (default)",
+            "output_tokens": 160,
+            "reasoning_tokens": 0,
+            "records": 2,
+            "tokens_processed": 1820,
+            "unpriced_records": 2
+          }
+        ],
+        "totals": {
+          "cache_read_tokens": 320,
+          "cache_write_1h_tokens": 0,
+          "cache_write_tokens": 60,
+          "cost_usd": 0,
+          "fresh_input_tokens": 1280,
+          "input_cache_hit_percent": 19.27710843373494,
+          "key": "total",
+          "output_tokens": 160,
+          "reasoning_tokens": 0,
+          "records": 2,
+          "tokens_processed": 1820,
+          "unpriced_records": 2
         }
       },
       "deltas": [

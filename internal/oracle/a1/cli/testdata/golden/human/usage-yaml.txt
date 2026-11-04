@@ -87,6 +87,34 @@ conflicting: 0
 duplicatescollapsed: 0
 malformedlines: 0
 conflictingrecords: 0
+breakdown:
+by: model
+totals:
+key: total
+records: 2
+freshinputtokens: 1280
+cachewritetokens: 60
+cachewrite1htokens: 0
+cachereadtokens: 320
+outputtokens: 160
+reasoningtokens: 0
+tokensprocessed: 1820
+inputcachehitpercent: 19.27710843373494
+costusd: 0
+unpricedrecords: 2
+rows:
+- key: codex (default)
+records: 2
+freshinputtokens: 1280
+cachewritetokens: 60
+cachewrite1htokens: 0
+cachereadtokens: 320
+outputtokens: 160
+reasoningtokens: 0
+tokensprocessed: 1820
+inputcachehitpercent: 19.27710843373494
+costusd: 0
+unpricedrecords: 2
 suppressedcalls:
 available: false
 observedsince: null

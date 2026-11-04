@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/liza-mas/liza/internal/models"
@@ -30,7 +31,7 @@ func TestCLIAgentEmitsUsageEvent(t *testing.T) {
 		for i, event := range events {
 			if event.Kind == LLMAgentEventUsage && usageIndex < 0 {
 				usageIndex = i
-				if reported, ok := event.Payload["usage"].(LLMAgentUsage); !ok || reported != (LLMAgentUsage{}) {
+				if reported, ok := event.Payload["usage"].(LLMAgentUsage); !ok || !reflect.DeepEqual(reported, LLMAgentUsage{}) {
 					t.Fatalf("usage payload = %#v, want the empty usage the CLI transport reports", event.Payload["usage"])
 				}
 			}

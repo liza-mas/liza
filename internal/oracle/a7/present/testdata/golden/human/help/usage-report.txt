@@ -8,6 +8,12 @@ by role and failure category; provenance counts for unknown, partial and
 conflicting records; and the lifecycle counter rows that show suppressed
 duplicate and preflight-rejected calls. An unavailable store or counter file
 is reported as a warning, never as zero.
+A breakdown (--by, default model) groups authoritative usage by model, role,
+agent, task or provider: fresh input, cache write (with its 1h part), cache
+read, output and reasoning tokens, the cache-hit percentage over all input,
+and the provider-reported cost with a count of unpriced records. By model, a
+turn that used several models (subagents, background models) contributes one
+share to each.
 The window defaults to the current sprint: from its start until it ended, or
 now. Time bounds accept RFC 3339 timestamps or YYYY-MM-DD dates (UTC).
 --as-of reads task outcomes as they stood at that point, so a reading can be
@@ -16,6 +22,7 @@ report over the same records and the deltas between the two.
 Examples:
 liza usage report --json
 liza usage report --since 2026-09-07 --until 2026-09-10 --role coder
+liza usage report --by role
 liza usage report --task task-1 --as-of <TIME> --format yaml
 liza usage report --baseline-since 2026-09-01 --baseline-until 2026-09-06 --json
 Usage:
@@ -24,6 +31,7 @@ Flags:
 --as-of string read task outcomes as of this time; defaults to --until
 --baseline-since string baseline window start for a before/after comparison
 --baseline-until string baseline window end for a before/after comparison
+--by string breakdown dimension: model, role, agent, task, or provider (default "model")
 --format string output format: json, yaml, table, or value (default "table")
 -h, --help help for report
 --json output result as structured JSON

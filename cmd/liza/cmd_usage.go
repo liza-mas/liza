@@ -43,6 +43,7 @@ var usageReportCmd = &cobra.Command{
 		opts.AsOf, _ = cmd.Flags().GetString("as-of")
 		opts.Role, _ = cmd.Flags().GetString("role")
 		opts.TaskID, _ = cmd.Flags().GetString("task")
+		opts.By, _ = cmd.Flags().GetString("by")
 		opts.BaselineSince, _ = cmd.Flags().GetString("baseline-since")
 		opts.BaselineUntil, _ = cmd.Flags().GetString("baseline-until")
 
@@ -85,6 +86,13 @@ conflicting records; and the lifecycle counter rows that show suppressed
 duplicate and preflight-rejected calls. An unavailable store or counter file
 is reported as a warning, never as zero.
 
+A breakdown (--by, default model) groups authoritative usage by model, role,
+agent, task or provider: fresh input, cache write (with its 1h part), cache
+read, output and reasoning tokens, the cache-hit percentage over all input,
+and the provider-reported cost with a count of unpriced records. By model, a
+turn that used several models (subagents, background models) contributes one
+share to each.
+
 The window defaults to the current sprint: from its start until it ended, or
 now. Time bounds accept RFC 3339 timestamps or YYYY-MM-DD dates (UTC).
 --as-of reads task outcomes as they stood at that point, so a reading can be
@@ -94,6 +102,7 @@ report over the same records and the deltas between the two.
 Examples:
   %[1]s --json
   %[1]s --since 2026-09-07 --until 2026-09-10 --role coder
+  %[1]s --by role
   %[1]s --task task-1 --as-of 2026-09-09T12:00:00Z --format yaml
   %[1]s --baseline-since 2026-09-01 --baseline-until 2026-09-06 --json`,
 		brand.Command("usage", "report"))
@@ -110,6 +119,7 @@ func init() {
 	usageReportCmd.Flags().String("as-of", "", "read task outcomes as of this time; defaults to --until")
 	usageReportCmd.Flags().String("role", "", "only records of this role")
 	usageReportCmd.Flags().String("task", "", "only records of this task")
+	usageReportCmd.Flags().String("by", "model", "breakdown dimension: model, role, agent, task, or provider")
 	usageReportCmd.Flags().String("baseline-since", "", "baseline window start for a before/after comparison")
 	usageReportCmd.Flags().String("baseline-until", "", "baseline window end for a before/after comparison")
 	addJSONFlag(usageReportCmd)
