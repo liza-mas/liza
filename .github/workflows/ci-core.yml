@@ -193,11 +193,23 @@ jobs:
             ${{ steps.go-dirs.outputs.gomodcache }}
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
-  macos:
-    name: macOS compatibility
+  # The Linux suites without race instrumentation, one runner each: a single
+  # 3-core runner took 14 minutes. Keep at most five, GitHub's concurrent
+  # macOS job limit below Enterprise plans; more would queue.
+  macos-shard:
+    name: macOS tests (${{ matrix.suite }})
     if: github.event_name != 'pull_request' || inputs.macos_on_pr
     runs-on: macos-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: core, target: ci-test-compat-core-nosync }
+          - { suite: ops, target: ci-test-compat-ops-nosync }
+          - { suite: oracle, target: ci-test-compat-oracle-nosync }
+          - { suite: integration, target: ci-test-integration-nosync }
+          - { suite: cli, target: ci-test-compat-cli-nosync }
     env:
       # A restored GOCACHE must never replay cached test results.
       GOFLAGS: -count=1
@@ -232,8 +244,10 @@ jobs:
           path: |
             ${{ steps.go-dirs.outputs.gocache }}
             ${{ steps.go-dirs.outputs.gomodcache }}
-          key: go-macos-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          key: go-macos-${{ matrix.suite }}-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
           restore-keys: |
+            go-macos-${{ matrix.suite }}-${{ hashFiles('go.sum') }}-
+            go-macos-${{ matrix.suite }}-
             go-macos-${{ hashFiles('go.sum') }}-
             go-macos-
 
@@ -242,7 +256,7 @@ jobs:
           node-version: "24"
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        if: inputs.setup_python
+        if: matrix.suite == 'integration' && inputs.setup_python
         with:
           python-version: "3.12"
 
@@ -250,14 +264,15 @@ jobs:
         run: make ci-prepare
 
       # Race coverage runs on Linux; macOS checks platform compatibility.
-      - name: Run unit and integration tests in parallel
-        run: make ci-test-compat-nosync
+      - name: Run Go tests
+        run: make ${{ matrix.target }}
 
       - name: Run Python tests
-        if: inputs.setup_python
+        if: matrix.suite == 'integration' && inputs.setup_python
         run: make test-python-nosync
 
       - name: Build
+        if: matrix.suite == 'cli'
         run: make build-nosync
 
       - name: Save Go caches
@@ -268,3 +283,15 @@ jobs:
             ${{ steps.go-dirs.outputs.gocache }}
             ${{ steps.go-dirs.outputs.gomodcache }}
           key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  macos:
+    name: macOS compatibility
+    if: always() && (github.event_name != 'pull_request' || inputs.macos_on_pr)
+    needs: macos-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every macOS shard to pass
+        env:
+          SHARDS_RESULT: ${{ needs.macos-shard.result }}
+        run: test "$SHARDS_RESULT" = success

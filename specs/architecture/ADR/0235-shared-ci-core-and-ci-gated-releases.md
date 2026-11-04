@@ -3,7 +3,8 @@
 ## Status
 
 ACCEPTED — implemented 2026-10-22 to 2026-10-23; backfilled 2026-10-25. Amends
-ADR-0017. Amended 2026-11-02 (Linux shards; Windows skipped on pull requests).
+ADR-0017. Amended 2026-11-02 (Linux shards; Windows skipped on pull requests)
+and 2026-11-04 (macOS shards).
 
 ## Context and Problem Statement
 
@@ -145,6 +146,22 @@ merge, not in review. *The commit gives matching the macOS policy as the
 reason; no further rationale is recorded.*
 
 Sources: the commit bodies of `da93bfe08`, `7acf3c9f7` and `a267fd7f1`.
+
+## Amendment (2026-11-04): macOS shards
+
+Once the Linux and Windows shards finished within 9 minutes, the single macOS
+job (14 minutes on one 3-core runner, run 41762236975) became the slowest
+check on `main`. It now runs the five Linux suites as a matrix with a
+`macOS compatibility` aggregate check, which keeps the check name, the
+non-race policy (integration still runs with race, as before) and the
+pull-request skip. The user chose this together with a separate lane for
+`internal/oracle/a9`: `go test` starts packages in list order, so a9, which
+mostly waits, started about 7 minutes into the old job. Five shards stay
+within GitHub's limit of five concurrent macOS jobs on Free, Pro and Team
+plans (docs.github.com/en/actions/reference/limits, read 2026-11-04). Each shard
+keeps its own weekly cache; `ci-test-compat-nosync` and `ci-test-slow-nosync`
+were removed, and the new `ci-test-compat-*-nosync` targets are fork extension
+points.
 
 ---
 *Reconstructed from commits `8e117e1fa`..`63596d743` (2026-10-22 to 2026-10-23); context from `bc82b2757` (2026-09-24).*

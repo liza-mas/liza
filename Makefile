@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-nosync ci-test-slow-nosync ci-test-slow-race-nosync test test-nosync test-par test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-core-nosync ci-test-compat-ops-nosync ci-test-compat-oracle-nosync ci-test-compat-oracle-a9-nosync ci-test-compat-oracle-rest-nosync ci-test-compat-cli-nosync ci-test-slow-race-nosync test test-nosync test-par test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -153,17 +153,15 @@ ci-test-nosync: ci-test-go-nosync test-python-nosync
 ci-test-go-nosync:
 	@$(MAKE) -j2 test-units-race-nosync ci-test-slow-race-nosync
 
-ci-test-compat-nosync:
-	@$(MAKE) -j2 test-units-nosync ci-test-slow-nosync
-
 # Linux CI uses separate runners for core, ops, oracle, integration, and CLI
 # tests; internal/ops and cmd/liza each fill too much of a 30-minute job to share one.
 # The combined targets above retain two local lanes, including all oracle tests.
 # Integration runs once with the e2e tag, which adds the sprint tests.
 CI_UNIT_PACKAGES = $$(go list ./... | grep -v -e '/internal/integration$$' -e '/cmd/liza$$')
+CI_CORE_PACKAGES = $$(go list ./... | grep -Ev '/internal/integration$$|/cmd/liza$$|/internal/ops$$|/internal/oracle(/|$$)')
 
 ci-test-core-nosync:
-	go test -race -timeout 30m -p 2 $$(go list ./... | grep -Ev '/internal/integration$$|/cmd/liza$$|/internal/ops$$|/internal/oracle(/|$$)')
+	go test -race -timeout 30m -p 2 $(CI_CORE_PACKAGES)
 
 ci-test-ops-nosync:
 	go test -race -timeout 30m ./internal/ops/
@@ -179,7 +177,27 @@ ci-test-cli-nosync:
 ci-test-slow-race-nosync: test-integration-nosync
 	go test -race -timeout 30m ./cmd/liza/
 
-ci-test-slow-nosync: test-integration-nosync
+# macOS CI runs the same five suites on separate runners, without race
+# instrumentation; its integration runner reuses ci-test-integration-nosync.
+ci-test-compat-core-nosync:
+	go test -timeout 30m $(CI_CORE_PACKAGES)
+
+ci-test-compat-ops-nosync:
+	go test -timeout 30m ./internal/ops/
+
+# go test starts packages in list order, so a9, listed near the end, waited
+# for a free slot although it spends its run mostly waiting, not computing.
+# Its own lane starts it at once.
+ci-test-compat-oracle-nosync:
+	@$(MAKE) -j2 ci-test-compat-oracle-a9-nosync ci-test-compat-oracle-rest-nosync
+
+ci-test-compat-oracle-a9-nosync:
+	go test -timeout 30m ./internal/oracle/a9/
+
+ci-test-compat-oracle-rest-nosync:
+	go test -timeout 30m $$(go list ./internal/oracle/... | grep -v '/internal/oracle/a9$$')
+
+ci-test-compat-cli-nosync:
 	go test -timeout 30m ./cmd/liza/
 
 test-units-nosync:
@@ -395,8 +413,10 @@ help:
 	@echo "  ci-test-oracle-nosync - Run oracle tests with race (Linux CI shard)"
 	@echo "  ci-test-integration-nosync - Run integration tests with race and e2e (Linux CI shard)"
 	@echo "  ci-test-cli-nosync - Run cmd/liza tests with race (Linux CI shard)"
-	@echo "  ci-test-compat-nosync - Run units and integration tests concurrently without syncing"
-	@echo "  ci-test-slow-nosync - Run integration then cmd/liza tests (CI lane)"
+	@echo "  ci-test-compat-core-nosync - Run units except ops and oracle (macOS CI shard)"
+	@echo "  ci-test-compat-ops-nosync - Run internal/ops tests (macOS CI shard)"
+	@echo "  ci-test-compat-oracle-nosync - Run oracle tests, a9 in its own lane (macOS CI shard)"
+	@echo "  ci-test-compat-cli-nosync - Run cmd/liza tests (macOS CI shard)"
 	@echo "  ci-test-slow-race-nosync - Run integration then cmd/liza race tests (CI lane)"
 	@echo "  test-units-nosync  - Run all packages except internal/integration"
 	@echo "  test-units-race-nosync - Run all packages except internal/integration with race"
