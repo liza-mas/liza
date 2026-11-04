@@ -16,7 +16,7 @@ Based on the `llm-agent-boundary` branch (PR #83, ADR-0085).
 | **Provider env file** | Loads `claude.env`, feeds entries to masker | No env file loading | Low impact — ACP doesn't use Claude's env file |
 | **Codex version pinning** | `LIZA_CODEX_VERSION` / `config.codex_package_version` | No ACPX adapter/package pinning | Implementation gap if ACP becomes production-critical |
 | **Claude subagent disabling** | `LIZA_DISABLE_CLAUDE_SUBAGENTS` → `--disallowedTools Task` | N/A | Provider-specific, not applicable |
-| **Token usage reporting** | No structured token data | Parses real `inputTokens`/`outputTokens`/`cachedReadTokens` from acpx JSON-RPC | ACP advantage |
+| **Token usage reporting** | Parses the final usage events of Claude (`result`, with per-model `modelUsage` and cost), Codex (`turn.completed`) and OpenCode (`step_finish`) from their JSON output; other CLIs report none | Parses `inputTokens`/`outputTokens`/`cachedReadTokens`/`cachedWriteTokens`/`thoughtTokens` from acpx JSON-RPC | CLI is richer for Claude (models, cost, 1h cache split) |
 | **Warm session management** | None | Local `seen` map + `acpx sessions show` for cross-restart detection | ACP advantage |
 | **Event semantics** | `output_chunk` (raw bytes from stdout/stderr) | `agent_message_chunk` (parsed ACP messages) + `usage` | Different by design |
 | **Trajectory/tool/thought events** | Not available from CLI stdout | Not parsed yet, though event enum supports them | Implementation gap in ACP event handling |
@@ -145,7 +145,3 @@ execution. Closing it would require either routing session control calls through
 the same transcript writer with metadata distinguishing control calls from prompt
 runs, or adding explicit support-doc language that only prompt subprocesses are
 transcript-logged.
-
-## Dead Code
-
-- `CLIAgent` always returns `LLMAgentUsage{}` — the `emitUsageEvent` calls were removed but the zero-value return remains (correct: no data available)

@@ -32,7 +32,7 @@ func usageCLIMergedTask(id string, created, merged time.Time) models.Task {
 func resetUsageReportCLI(t *testing.T) {
 	t.Helper()
 	reset := func() {
-		for _, name := range []string{"since", "until", "as-of", "task", "baseline-since", "baseline-until"} {
+		for _, name := range []string{"since", "until", "as-of", "task", "by", "baseline-since", "baseline-until"} {
 			resetFlagIfPresent(usageReportCmd, name)
 		}
 	}
@@ -321,7 +321,7 @@ func TestUsageAttributionEndToEnd(t *testing.T) {
 		}
 
 		// Merged task: one authoritative turn, plus one turn whose provider
-		// reported no usage at all — the default CLI transport's record.
+		// reported no usage at all — a CLI that printed no usage event.
 		usageE2ETurn(t, projectRoot, withTask(coder, "M1", ""), at(2*time.Hour), usageE2EUsage(100, 1000, 10))
 		usageE2ETurn(t, projectRoot, withTask(coder, "M1", ""), at(3*time.Hour), agent.LLMAgentUsage{})
 		usageE2ETurn(t, projectRoot, withTask(coder, "B1", ""), at(90*time.Minute), usageE2EUsage(40, 200, 4))
@@ -508,4 +508,61 @@ func TestUsageAttributionEndToEnd(t *testing.T) {
 			t.Errorf("fresh_tokens delta = %v, want 200 -> 50", freshDelta)
 		}
 	})
+}
+
+// TestUsageReportBreakdown drives turns through the supervisor sink and reads
+// the --by breakdown back through the CLI: per-model shares of a multi-model
+// turn, provider cost, unpriced turns and the dimension flag's validation.
+func TestUsageReportBreakdown(t *testing.T) {
+	resetUsageReportCLI(t)
+	day := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	projectRoot, _ := setupMutationTestProject(t, func(state *models.State) {
+		state.Sprint.Timeline.Started = day
+		state.Tasks = []models.Task{usageCLIMergedTask("M1", day, day.Add(10*time.Hour))}
+	})
+	coder := agent.UsageSinkConfig{AgentID: "coder-1", Role: models.RoleCoder, Provider: "claude", TaskID: "M1"}
+	usageE2ETurn(t, projectRoot, coder, day.Add(time.Hour), agent.LLMAgentUsage{
+		InputTokens: 52, OutputTokens: 20, CachedReadTokens: 4000, CachedWriteTokens: 1000, CachedWrite1hTokens: 600,
+		CostUSD: 0.25, CostReported: true, Model: "claude-opus-5-5", Source: "stream_result",
+		Models: []agent.LLMAgentModelUsage{
+			{Model: "claude-opus-5-5", InputTokens: 2, OutputTokens: 13, CachedReadTokens: 3000, CachedWriteTokens: 900, CachedWrite1hTokens: 600, CostUSD: 0.2, CostReported: true},
+			{Model: "claude-haiku-5-5", InputTokens: 50, OutputTokens: 7, CachedReadTokens: 1000, CachedWriteTokens: 100, CostUSD: 0.05, CostReported: true},
+		},
+	})
+	reviewer := agent.UsageSinkConfig{AgentID: "reviewer-1", Role: models.RoleCodeReviewer, Provider: "codex", TaskID: "M1"}
+	usageE2ETurn(t, projectRoot, reviewer, day.Add(2*time.Hour), agent.LLMAgentUsage{
+		InputTokens: 300, OutputTokens: 50, CachedReadTokens: 700, Model: "gpt-5.5", Source: "stream_result",
+	})
+	window := []string{"--since", day.Format(time.RFC3339), "--until", day.Add(12 * time.Hour).Format(time.RFC3339)}
+
+	byModel := usageE2EReport(t, projectRoot, window...)["breakdown"].(map[string]any)
+	if byModel["by"] != "model" {
+		t.Fatalf("default breakdown = %v, want by model", byModel["by"])
+	}
+	rows := map[string]map[string]any{}
+	for _, row := range byModel["rows"].([]any) {
+		r := row.(map[string]any)
+		rows[r["key"].(string)] = r
+	}
+	if len(rows) != 3 || rows["claude-haiku-5-5"] == nil || rows["gpt-5.5"] == nil {
+		t.Fatalf("model rows = %v, want opus, the haiku subagent and gpt-5.5", byModel["rows"])
+	}
+	totals := byModel["totals"].(map[string]any)
+	if usageE2EInt(t, totals, "tokens_processed") != 52+20+4000+1000+300+50+700 || usageE2EInt(t, totals, "unpriced_records") != 1 {
+		t.Fatalf("totals = %v", totals)
+	}
+	if cost := totals["cost_usd"].(float64); cost != 0.25 {
+		t.Fatalf("total cost = %v, want the reported $0.25 only", cost)
+	}
+
+	resetUsageReportCLI(t)
+	byRole := usageE2EReport(t, projectRoot, append(window, "--by", "role")...)["breakdown"].(map[string]any)
+	if byRole["by"] != "role" || len(byRole["rows"].([]any)) != 2 {
+		t.Fatalf("role breakdown = %v, want coder and reviewer rows", byRole)
+	}
+
+	resetUsageReportCLI(t)
+	if stdout, err := executeRootCommandCapture(t, projectRoot, "usage", "report", "--by", "sprint"); err == nil {
+		t.Fatalf("usage report --by sprint succeeded, want a validation error:\n%s", stdout)
+	}
 }

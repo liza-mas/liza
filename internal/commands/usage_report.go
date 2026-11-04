@@ -25,6 +25,7 @@ type UsageReportOptions struct {
 	AsOf          string // Outcome reading point, defaults to Until
 	Role          string // Only records of this role
 	TaskID        string // Only records of this task
+	By            string // Breakdown dimension: model, role, agent, task or provider; defaults to model
 	BaselineSince string // Baseline window start
 	BaselineUntil string // Baseline window end
 	Format        string // Output format: json, yaml, table, value
@@ -38,6 +39,12 @@ type UsageReportOptions struct {
 func (opts *UsageReportOptions) Validate() error {
 	if !slices.Contains(inspectFormats, inspectFormat(opts.Format)) {
 		return fmt.Errorf("invalid format: %s (must be json, yaml, table, or value)", opts.Format)
+	}
+	if opts.By == "" {
+		opts.By = usage.BreakdownByModel
+	}
+	if err := usage.ValidateBreakdownBy(opts.By); err != nil {
+		return &errors.ValidationError{Message: "--by: " + err.Error()}
 	}
 	var baseline usage.Window
 	bounds := []timeBound{
@@ -134,12 +141,13 @@ func UsageReportCommand(opts UsageReportOptions) (any, error) {
 	})
 
 	report, err := usage.Build(usage.Input{
-		Records:   records,
-		LoadStats: stats,
-		State:     state,
-		Counters:  state.Sprint.Metrics.LifecycleOutcomes,
-		Window:    window,
-		Baseline:  opts.baseline,
+		Records:     records,
+		LoadStats:   stats,
+		State:       state,
+		Counters:    state.Sprint.Metrics.LifecycleOutcomes,
+		Window:      window,
+		Baseline:    opts.baseline,
+		BreakdownBy: opts.By,
 	})
 	if err != nil {
 		return nil, err
@@ -195,8 +203,35 @@ func formatUsageReport(report usage.Report, format string) (string, error) {
 	if len(rows) > 0 {
 		out.WriteString(render.FormatTable(headers, rows))
 	}
+	if b := report.Breakdown; b != nil && len(b.Rows) > 0 {
+		fmt.Fprintf(&out, "\nBy %s:\n", b.By)
+		out.WriteString(render.FormatTable(breakdownHeaders, append(breakdownTableRows(b.Rows), breakdownTableRow(b.Totals))))
+	}
 	for _, warning := range report.Warnings {
 		fmt.Fprintf(&out, "warning: %s\n", warning)
 	}
 	return out.String(), nil
+}
+
+var breakdownHeaders = []string{"KEY", "RECORDS", "FRESH", "CACHE WRITE", "CACHE WRITE 1H", "CACHE READ", "OUTPUT", "REASONING", "TOTAL", "CACHE HIT %", "COST USD", "UNPRICED"}
+
+func breakdownTableRows(rows []usage.BreakdownRow) [][]string {
+	out := make([][]string, 0, len(rows)+1)
+	for _, row := range rows {
+		out = append(out, breakdownTableRow(row))
+	}
+	return out
+}
+
+func breakdownTableRow(row usage.BreakdownRow) []string {
+	hit := "-"
+	if row.CacheHitPercent != nil {
+		hit = strconv.FormatFloat(*row.CacheHitPercent, 'f', 1, 64)
+	}
+	return []string{
+		row.Key, strconv.Itoa(row.Records),
+		strconv.Itoa(row.FreshInputTokens), strconv.Itoa(row.CacheWriteTokens), strconv.Itoa(row.CacheWrite1hTokens),
+		strconv.Itoa(row.CacheReadTokens), strconv.Itoa(row.OutputTokens), strconv.Itoa(row.ReasoningTokens),
+		strconv.Itoa(row.TokensProcessed), hit, strconv.FormatFloat(row.CostUSD, 'f', 4, 64), strconv.Itoa(row.UnpricedRecords),
+	}
 }

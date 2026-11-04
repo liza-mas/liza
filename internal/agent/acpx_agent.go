@@ -70,6 +70,9 @@ func (a *ACPXAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRu
 	emitLLMAgentEvent(ctx, req.EventSink, started)
 
 	output, usage, failureEvidence, err := a.waitACPXPrompt(ctx, req, promptProcess)
+	if usage.Source != "" {
+		usage.Model = req.Model
+	}
 	emitLLMAgentUsage(ctx, req.EventSink, turn.base, usage)
 	return a.completeRun(ctx, turn, output, usage, failureEvidence, err)
 }
@@ -399,15 +402,21 @@ func acpxAgentMessageChunk(update map[string]any) string {
 	return text
 }
 
+// usageSourceACPX marks counts read from an ACP prompt result's usage object.
+const usageSourceACPX = "acpx"
+
 func acpxAgentUsage(raw any) (LLMAgentUsage, bool) {
 	usage, ok := raw.(map[string]any)
 	if !ok {
 		return LLMAgentUsage{}, false
 	}
 	return LLMAgentUsage{
-		InputTokens:      acpxInt(usage["inputTokens"]),
-		OutputTokens:     acpxInt(usage["outputTokens"]),
-		CachedReadTokens: acpxInt(usage["cachedReadTokens"]),
+		InputTokens:       acpxInt(usage["inputTokens"]),
+		OutputTokens:      acpxInt(usage["outputTokens"]),
+		CachedReadTokens:  acpxInt(usage["cachedReadTokens"]),
+		CachedWriteTokens: acpxInt(usage["cachedWriteTokens"]),
+		ReasoningTokens:   acpxInt(usage["thoughtTokens"]),
+		Source:            usageSourceACPX,
 	}, true
 }
 

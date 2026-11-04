@@ -7,8 +7,8 @@ import (
 	"github.com/liza-mas/liza/internal/providersignal"
 )
 
-func cliRunResult(req LLMAgentRunRequest, exitCode int, output string) LLMAgentRunResult {
-	return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: LLMAgentUsage{}, WarmUsage: req.WarmSession, SessionID: req.SessionID}
+func cliRunResult(req LLMAgentRunRequest, exitCode int, output string, usage LLMAgentUsage) LLMAgentRunResult {
+	return LLMAgentRunResult{ExitCode: exitCode, Output: output, Usage: usage, WarmUsage: req.WarmSession, SessionID: req.SessionID}
 }
 
 // failCLIRun reports a run that never reached a provider outcome: its command
@@ -16,34 +16,38 @@ func cliRunResult(req LLMAgentRunRequest, exitCode int, output string) LLMAgentR
 func failCLIRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent, err error) (LLMAgentRunResult, error) {
 	emitLLMAgentUsage(ctx, req.EventSink, base, LLMAgentUsage{})
 	emitLLMAgentFailed(ctx, req.EventSink, base, err.Error())
-	return cliRunResult(req, 0, ""), err
+	return cliRunResult(req, 0, "", LLMAgentUsage{}), err
 }
 
 // completeRun maps the provider's wait outcome to the run result and its
-// completed event. The CLI transport reports no usage object, so the empty
-// usage is emitted explicitly on every path: the supervisor sink then pins
-// unknown provenance instead of inferring zero tokens from a missing event.
+// completed event. Usage is read from the CLI's JSON output stream; a CLI that
+// printed none yields the empty usage, still emitted explicitly on every path,
+// so the supervisor sink pins unknown provenance instead of inferring zero tokens.
 func (d *CLIAgent) completeRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent, streams *cliRunStreams, waitErr error) (LLMAgentRunResult, error) {
+	usage, _ := parseCLIUsage(streams.stdout.String())
+	if usage.Source != "" {
+		usage.Model = req.Model
+	}
 	output := streams.stdout.String() + "\n" + streams.stderr.String()
 	if d.masker != nil {
 		output = d.masker.MaskText(output)
 	}
-	emitLLMAgentUsage(ctx, req.EventSink, base, LLMAgentUsage{})
+	emitLLMAgentUsage(ctx, req.EventSink, base, usage)
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			exitCode := exitErr.ExitCode()
 			emitLLMAgentExited(ctx, req.EventSink, base, exitCode)
-			return cliRunResult(req, exitCode, output), nil
+			return cliRunResult(req, exitCode, output, usage), nil
 		}
 		emitLLMAgentFailed(ctx, req.EventSink, base, waitErr.Error())
-		return cliRunResult(req, 0, output), waitErr
+		return cliRunResult(req, 0, output, usage), waitErr
 	}
 	// A CLI may print its quota failure and still exit 0. Report it as a failed
 	// session, as the ACPX backend does, so the supervisor's quota path runs.
 	if qe := providersignal.DetectQuotaExhaustion(output, req.BackendName); qe != nil {
 		emitLLMAgentQuotaExhausted(ctx, req.EventSink, base, qe.Message)
-		return cliRunResult(req, 1, output), nil
+		return cliRunResult(req, 1, output, usage), nil
 	}
 	emitLLMAgentExited(ctx, req.EventSink, base, 0)
-	return cliRunResult(req, 0, output), nil
+	return cliRunResult(req, 0, output, usage), nil
 }

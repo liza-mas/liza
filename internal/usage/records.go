@@ -82,6 +82,39 @@ type Record struct {
 	Provenance       Provenance `json:"provenance"`
 	ExitCode         int        `json:"exit_code"`
 	WarmSession      bool       `json:"warm_session"`
+
+	// The fields below are additive within schema version 1: absent on records
+	// written before them, and ignored by readers that predate them.
+
+	// CacheWrite1hTokens is the part of CacheWriteTokens written with the 1h TTL.
+	CacheWrite1hTokens int `json:"cache_write_1h_tokens,omitempty"`
+	// ReasoningTokens is informational; it is not added to the token totals.
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+	// CostUSD is the provider's own price of the turn; nil means unpriced, not free.
+	CostUSD           *float64     `json:"cost_usd,omitempty"`
+	RequestedModel    string       `json:"requested_model,omitempty"`
+	Models            []ModelUsage `json:"models,omitempty"`
+	ProviderSessionID string       `json:"provider_session_id,omitempty"`
+	UsageSource       string       `json:"usage_source,omitempty"`
+	WebSearchRequests int          `json:"web_search_requests,omitempty"`
+	WebFetchRequests  int          `json:"web_fetch_requests,omitempty"`
+	APIDurationMs     int64        `json:"api_duration_ms,omitempty"`
+	TTFTMs            int64        `json:"ttft_ms,omitempty"`
+	APICalls          int          `json:"api_calls,omitempty"`
+	ServiceTier       string       `json:"service_tier,omitempty"`
+}
+
+// ModelUsage is one billed model's share of a record. The shares of a record
+// sum to its token counts.
+type ModelUsage struct {
+	Model              string   `json:"model"`
+	FreshInputTokens   int      `json:"fresh_input_tokens"`
+	CacheReadTokens    int      `json:"cache_read_tokens"`
+	CacheWriteTokens   int      `json:"cache_write_tokens"`
+	CacheWrite1hTokens int      `json:"cache_write_1h_tokens,omitempty"`
+	OutputTokens       int      `json:"output_tokens"`
+	ReasoningTokens    int      `json:"reasoning_tokens,omitempty"`
+	CostUSD            *float64 `json:"cost_usd,omitempty"`
 }
 
 func (r Record) sameCounts(other Record) bool {
