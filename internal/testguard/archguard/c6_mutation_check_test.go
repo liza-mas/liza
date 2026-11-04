@@ -280,7 +280,7 @@ func TestC6ListingFailureNeverEchoesInheritedEnvironmentValues(t *testing.T) {
 	for _, goroot := range []string{"/c6-synthetic-goroot-marker", "abc", "x"} {
 		environ := append(c6SyntheticEnviron()[:3:3], "GOROOT="+goroot,
 			"GOFLAGS=-c6-synthetic-flags-marker", "C6_SYNTHETIC_SECRET=c6-synthetic-secret-marker")
-		_, err := c6List(root, "linux", environ)
+		_, err := c6List(root, "linux", environ, false, "./cmd/...")
 		if err == nil {
 			t.Fatalf("GOROOT=%q must fail the listing", goroot)
 		}
@@ -311,7 +311,7 @@ func TestC6HostGoflagsDoNotReachTheListing(t *testing.T) {
 	})
 	environ := append(c6SyntheticEnviron()[:3:3], "GOFLAGS=-c6-synthetic-flags-marker")
 	environ = append(environ, c6OwnedGoEnviron(t)...)
-	if _, err := c6List(root, "linux", environ); err != nil {
+	if _, err := c6List(root, "linux", environ, false, "./cmd/..."); err != nil {
 		t.Fatalf("withheld GOFLAGS still reached go list: %v", err)
 	}
 }

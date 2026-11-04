@@ -4,7 +4,9 @@
 
 ACCEPTED — implemented 2026-10-27 (behaviour change C6 of the architecture
 consolidation); backfilled 2026-11-02. Completes
-[ADR-0021](0021-ops-service-layer-for-mutations.md).
+[ADR-0021](0021-ops-service-layer-for-mutations.md). Amended (2026-11-04):
+module packages are type-checked from source instead of compiled for export
+data.
 
 ## Context and Problem Statement
 
@@ -62,10 +64,11 @@ authority check is added. The heartbeat liveness file
 ### Enforcement
 
 `TestC6MutationGuard` in `internal/testguard/archguard` runs through
-`lint-archguard`. It loads every production package outside `ops` and `db`
-with `go list` export data, type-checks it for linux, darwin and windows, and
-applies these rules to every use the type checker resolves: calls, method
-values, method expressions, handle chains and promoted methods.
+`lint-archguard`. For linux, darwin and windows it type-checks every production
+package outside `ops` and `db` from source, resolving the standard library and
+other modules from `go list` export data, and applies these rules to every use
+the type checker resolves: calls, method values, method expressions, handle
+chains and promoted methods.
 
 | Rule | Rejects |
 |---|---|

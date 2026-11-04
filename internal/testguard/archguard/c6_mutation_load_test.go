@@ -126,13 +126,18 @@ func c6ChildEnv(environ []string, goos string) ([]string, []c6Mask) {
 	return append(env, "GOOS="+goos, "GOARCH=amd64", "CGO_ENABLED=0"), masks
 }
 
-// c6List runs go list for one configuration and decodes its package stream.
-// The child sees only c6ChildEnv(environ, goos). Failures name the
-// configuration and a bounded stderr in which the root is relative and every
-// retained variable value is replaced by its name; they never carry an
+// c6List runs go list -deps over patterns for one configuration and decodes its
+// package stream; export adds -export, which compiles each listed package for
+// its export data. The child sees only c6ChildEnv(environ, goos). Failures name
+// the configuration and a bounded stderr in which the root is relative and
+// every retained variable value is replaced by its name; they never carry an
 // environment value.
-func c6List(root, goos string, environ []string) ([]c6Listed, error) {
-	cmd := exec.Command("go", "list", "-e", "-export", "-deps", "-buildvcs=false", "-json", "./cmd/...", "./internal/...")
+func c6List(root, goos string, environ []string, export bool, patterns ...string) ([]c6Listed, error) {
+	args := []string{"list", "-e", "-deps", "-buildvcs=false", "-json"}
+	if export {
+		args = append(args, "-export")
+	}
+	cmd := exec.Command("go", append(args, patterns...)...)
 	cmd.Dir = root
 	env, masks := c6ChildEnv(environ, goos)
 	cmd.Env = env
@@ -188,7 +193,11 @@ func (i c6Importer) Import(p string) (*types.Package, error) {
 }
 
 // c6Load lists and type-checks every non-exempt production package of the
-// module at root under each configuration in c6GOOS.
+// module at root under each configuration in c6GOOS. Module packages are
+// type-checked from source (c6Source), so only the standard library and other
+// modules are compiled for export data: those stay cached, while compiling the
+// module itself for three configurations cost about 20 CPU-seconds each after
+// any change to an exported API.
 func c6Load(root, module string) (*c6Loaded, error) {
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -197,18 +206,33 @@ func c6Load(root, module string) (*c6Loaded, error) {
 	root = resolved
 	loaded := &c6Loaded{Module: module, Typed: map[string]map[string]bool{}}
 	for _, goos := range c6GOOS {
-		pkgs, err := c6List(root, goos, os.Environ())
+		pkgs, err := c6List(root, goos, os.Environ(), false, "./cmd/...", "./internal/...")
 		if err != nil {
 			return nil, err
 		}
-		exports := map[string]string{}
+		modulePkgs := map[string]c6Listed{}
+		var external []string
 		for _, p := range pkgs {
-			if p.Export != "" {
-				exports[p.ImportPath] = p.Export
+			if p.Module != nil && p.Module.Main {
+				modulePkgs[p.ImportPath] = p
+			} else {
+				external = append(external, p.ImportPath)
+			}
+		}
+		exports := map[string]string{}
+		if len(external) > 0 {
+			deps, err := c6List(root, goos, os.Environ(), true, external...)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range deps {
+				if p.Export != "" {
+					exports[p.ImportPath] = p.Export
+				}
 			}
 		}
 		fset := token.NewFileSet()
-		imp := importer.ForCompiler(fset, "gc", func(p string) (io.ReadCloser, error) {
+		exportData := importer.ForCompiler(fset, "gc", func(p string) (io.ReadCloser, error) {
 			file, ok := exports[p]
 			if !ok {
 				return nil, fmt.Errorf("no export data for %s", p)
@@ -219,6 +243,7 @@ func c6Load(root, module string) (*c6Loaded, error) {
 			}
 			return f, nil
 		})
+		imp := &c6Source{root: root, goos: goos, fset: fset, module: modulePkgs, exports: exportData, checked: map[string]*c6Checked{}}
 		plat := &c6Platform{GOOS: goos}
 		c6Resolve(plat, imp, module)
 		loaded.Platforms = append(loaded.Platforms, plat)
@@ -234,12 +259,11 @@ func c6Load(root, module string) (*c6Loaded, error) {
 			if c6IsExempt(dir) {
 				continue
 			}
-			unit, err := c6TypeCheck(root, goos, fset, imp, p, dir)
+			checked, err := imp.check(p.ImportPath)
 			if err != nil {
 				return nil, err
 			}
-			unit.Platform = plat
-			loaded.Units = append(loaded.Units, unit)
+			loaded.Units = append(loaded.Units, c6Unit{Platform: plat, Fset: fset, Info: checked.info})
 			if loaded.Typed[dir] == nil {
 				loaded.Typed[dir] = map[string]bool{}
 			}
@@ -251,21 +275,67 @@ func c6Load(root, module string) (*c6Loaded, error) {
 	return loaded, nil
 }
 
+// c6Source type-checks the module's packages from source, each once, as the
+// guard or an import first asks for it, and resolves every other import from
+// export data. A package the guard checks reports its own failure; a failure
+// in exempt ops or db surfaces inside the error of the package importing it.
+type c6Source struct {
+	root, goos string
+	fset       *token.FileSet
+	module     map[string]c6Listed
+	exports    types.Importer
+	checked    map[string]*c6Checked
+}
+
+// c6Checked is one module package type-checked from source, or its error.
+type c6Checked struct {
+	pkg  *types.Package
+	info *types.Info
+	err  error
+}
+
+func (s *c6Source) Import(path string) (*types.Package, error) {
+	if _, ok := s.module[path]; !ok {
+		return s.exports.Import(path)
+	}
+	checked, err := s.check(path)
+	if err != nil {
+		return nil, err
+	}
+	return checked.pkg, nil
+}
+
+func (s *c6Source) check(path string) (*c6Checked, error) {
+	if checked, ok := s.checked[path]; ok {
+		return checked, checked.err
+	}
+	p := s.module[path]
+	checked := &c6Checked{}
+	s.checked[path] = checked // import cycles cannot occur in a listed module
+	dir, err := filepath.Rel(s.root, p.Dir)
+	if err != nil {
+		checked.err = fmt.Errorf("package %s: %w", p.ImportPath, err)
+		return checked, checked.err
+	}
+	checked.pkg, checked.info, checked.err = c6TypeCheck(s.root, s.goos, s.fset, s, p, filepath.ToSlash(dir))
+	return checked, checked.err
+}
+
 // c6TypeCheck parses and type-checks one listed package; any parse or type error
 // fails the guard, since an unchecked package would hide a write.
-func c6TypeCheck(root, goos string, fset *token.FileSet, imp types.Importer, p c6Listed, dir string) (c6Unit, error) {
+func c6TypeCheck(root, goos string, fset *token.FileSet, imp types.Importer, p c6Listed, dir string) (*types.Package, *types.Info, error) {
 	if p.Error != nil {
-		return c6Unit{}, fmt.Errorf("package %s (GOOS=%s): %s", dir, goos, c6Sanitize(p.Error.Err, root))
+		return nil, nil, fmt.Errorf("package %s (GOOS=%s): %s", dir, goos, c6Sanitize(p.Error.Err, root))
 	}
 	var files []*ast.File
 	for _, name := range p.GoFiles {
 		src, err := os.ReadFile(filepath.Join(p.Dir, name))
 		if err != nil {
-			return c6Unit{}, fmt.Errorf("read %s/%s: %w", dir, name, bareErr(err))
+			return nil, nil, fmt.Errorf("read %s/%s: %w", dir, name, bareErr(err))
 		}
 		f, err := parser.ParseFile(fset, path.Join(dir, name), src, parser.SkipObjectResolution)
 		if err != nil {
-			return c6Unit{}, fmt.Errorf("parse %s/%s (GOOS=%s): %w", dir, name, goos, err)
+			return nil, nil, fmt.Errorf("parse %s/%s (GOOS=%s): %w", dir, name, goos, err)
 		}
 		files = append(files, f)
 	}
@@ -282,11 +352,11 @@ func c6TypeCheck(root, goos string, fset *token.FileSet, imp types.Importer, p c
 	if p.Module.GoVersion != "" {
 		conf.GoVersion = "go" + p.Module.GoVersion
 	}
-	_, _ = conf.Check(p.ImportPath, fset, files, info)
+	pkg, _ := conf.Check(p.ImportPath, fset, files, info)
 	if first != nil {
-		return c6Unit{}, fmt.Errorf("type-check %s (GOOS=%s): %s", dir, goos, c6Sanitize(first.Error(), root))
+		return nil, nil, fmt.Errorf("type-check %s (GOOS=%s): %s", dir, goos, c6Sanitize(first.Error(), root))
 	}
-	return c6Unit{Fset: fset, Info: info}, nil
+	return pkg, info, nil
 }
 
 // c6Resolve imports db and ops under one configuration and records the

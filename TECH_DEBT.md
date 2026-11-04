@@ -632,7 +632,8 @@ removals invalidate; the oracle `BuildCLI`, integration's CLI build and the
 shell-stub relay call it, and `TestRegisterBuildInputsInvalidatesCachedResult`
 guards it. Still invisible: tests whose inputs come from git history or a
 whole-module analysis — the regen tests, `a6/regeneration_proof`,
-`a8/mutation` and archguard's `go list -export` load. Payback trigger: the
+`a8/mutation` and archguard's guard for added files (it reads the module
+sources it type-checks, so edits invalidate). Payback trigger: the
 next stale `(cached)` result traced to one of them; CI is unaffected
 (`GOFLAGS=-count=1`).
 
