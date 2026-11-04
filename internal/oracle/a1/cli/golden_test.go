@@ -64,7 +64,7 @@ type valueSpan struct{ start, end int }
 func usagePointers(s string) (string, error) {
 	trimmed := strings.TrimSpace(s)
 	start := strings.Index(s, trimmed)
-	fields, err := valueFields(s, valueSpan{start, start + len(trimmed)}, '{', '}', 10)
+	fields, err := valueFields(s, valueSpan{start, start + len(trimmed)}, '{', '}', 11)
 	if err != nil {
 		return "", err
 	}
@@ -80,11 +80,11 @@ func usagePointers(s string) (string, error) {
 			if !strings.HasPrefix(value, "{") || !strings.HasSuffix(value, "}") {
 				return "", fmt.Errorf("unexpected usage-value window shape")
 			}
-		case 1, 2, 4, 8, 9:
+		case 1, 2, 4, 9, 10:
 			if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
 				return "", fmt.Errorf("unexpected usage-value sequence shape")
 			}
-		case 3, 5, 6, 7:
+		case 3, 5, 6, 7, 8:
 			slots = append(slots, slot{f, pointerMarker(i)})
 		}
 	}
@@ -167,7 +167,7 @@ func valueFields(s string, group valueSpan, open, close byte, count int) ([]valu
 }
 
 func pointerMarker(i int) string {
-	return map[int]string{3: "<PerCompletedTask:pointer>", 5: "<Provenance:pointer>", 6: "<SuppressedCalls:pointer>", 7: "<Baseline:pointer>"}[i]
+	return map[int]string{3: "<PerCompletedTask:pointer>", 5: "<Provenance:pointer>", 6: "<Breakdown:pointer>", 7: "<SuppressedCalls:pointer>", 8: "<Baseline:pointer>"}[i]
 }
 
 func (n selective) normalize(path string, got observation) ([]byte, error) {
@@ -336,14 +336,14 @@ func TestOracleCLIComparison(t *testing.T) {
 	if !bytes.Equal(b, c) {
 		t.Fatal("JSON key/layout canonicalization")
 	}
-	value := "{{2026-10-01 00:00:00 +0000 UTC} [{merged coder 1}] [{merged 1}] 0x111 [] 0x222 0x333 <nil> [] [fixture 0xabcdef0123456789]}\n"
+	value := "{{2026-10-01 00:00:00 +0000 UTC} [{merged coder 1}] [{merged 1}] 0x111 [] 0x222 0x777 0x333 <nil> [] [fixture 0xabcdef0123456789]}\n"
 	obs := observation{0, "", value}
 	b, err = n.normalize("human/usage-value.txt", obs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	other := obs
-	other.Stderr = strings.NewReplacer("0x111", "0xaaa", "0x222", "0xbbb", "0x333", "0xccc").Replace(value)
+	other.Stderr = strings.NewReplacer("0x111", "0xaaa", "0x222", "0xbbb", "0x777", "0xddd", "0x333", "0xccc").Replace(value)
 	c, err = n.normalize("human/usage-value.txt", other)
 	if err != nil || !bytes.Equal(b, c) {
 		t.Fatal("pointer-only variation did not compare equal")
@@ -415,11 +415,11 @@ func TestOracleCLIJSONPaths(t *testing.T) {
 
 func TestOracleCLIUsagePointers(t *testing.T) {
 	t.Parallel()
-	// D36: Report's four pointer fields and every PostTransitionTask.LastUseful
+	// D36: Report's five pointer fields and every PostTransitionTask.LastUseful
 	// print addresses. Pointees are not expanded by fmt's nested value rendering.
-	value := " \t{{2026-10-01 00:00:00 +0000 UTC} [] [] 0x111 [{coder retry_tail 12 2 [{task-1 7 1 0x444} {task-2 5 1 <nil>}] 0} {reviewer other 3 1 [{task-3 3 1 0x555}] 0}] 0x222 0x333 0x666 [] [fixture 0xabcdef0123456789]}\n"
+	value := " \t{{2026-10-01 00:00:00 +0000 UTC} [] [] 0x111 [{coder retry_tail 12 2 [{task-1 7 1 0x444} {task-2 5 1 <nil>}] 0} {reviewer other 3 1 [{task-3 3 1 0x555}] 0}] 0x222 0x777 0x333 0x666 [] [fixture 0xabcdef0123456789]}\n"
 	want := strings.NewReplacer(
-		"0x111", "<PerCompletedTask:pointer>", "0x222", "<Provenance:pointer>",
+		"0x111", "<PerCompletedTask:pointer>", "0x222", "<Provenance:pointer>", "0x777", "<Breakdown:pointer>",
 		"0x333", "<SuppressedCalls:pointer>", "0x666", "<Baseline:pointer>",
 		"0x444", "<LastUseful:pointer>", "0x555", "<LastUseful:pointer>",
 	).Replace(value)
@@ -427,7 +427,7 @@ func TestOracleCLIUsagePointers(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatalf("type-position masks must preserve every other byte: %v", err)
 	}
-	for _, address := range []string{"0x111", "0x222", "0x333", "0x444", "0x555", "0x666"} {
+	for _, address := range []string{"0x111", "0x222", "0x333", "0x444", "0x555", "0x666", "0x777"} {
 		t.Run(address, func(t *testing.T) {
 			other, err := usagePointers(strings.Replace(value, address, "0xabc", 1))
 			if err != nil || other != want {

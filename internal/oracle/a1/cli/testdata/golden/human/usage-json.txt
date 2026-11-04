@@ -114,6 +114,39 @@ exit_code: 0
 "malformed_lines": 0,
 "conflicting_records": 0
 },
+"breakdown": {
+"by": "model",
+"totals": {
+"key": "total",
+"records": 2,
+"fresh_input_tokens": 1280,
+"cache_write_tokens": 60,
+"cache_write_1h_tokens": 0,
+"cache_read_tokens": 320,
+"output_tokens": 160,
+"reasoning_tokens": 0,
+"tokens_processed": 1820,
+"input_cache_hit_percent": 19.27710843373494,
+"cost_usd": 0,
+"unpriced_records": 2
+},
+"rows": [
+{
+"key": "(none)",
+"records": 2,
+"fresh_input_tokens": 1280,
+"cache_write_tokens": 60,
+"cache_write_1h_tokens": 0,
+"cache_read_tokens": 320,
+"output_tokens": 160,
+"reasoning_tokens": 0,
+"tokens_processed": 1820,
+"input_cache_hit_percent": 19.27710843373494,
+"cost_usd": 0,
+"unpriced_records": 2
+}
+]
+},
 "suppressed_calls": {
 "available": false
 },
