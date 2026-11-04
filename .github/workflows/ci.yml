@@ -47,10 +47,10 @@ jobs:
   # Windows tests run as a matrix of shards; the "Test (windows)" job below
   # aggregates them. scripts/ci/testshard partitions the work from
   # scripts/ci/testshard/windows-weights.json (estimated Windows seconds):
-  #   ops  - internal/ops top-level tests (~870s serial) as 4 weighted
-  #          contiguous name ranges of ~217s each;
-  #   rest - every other package (~1190s, run 2 at a time) as 3 LPT bins of
-  #          ~450s each, bounded by agent/integration/commands at 210-260s.
+  #   ops  - internal/ops top-level tests (~1500s serial) as 4 weighted
+  #          contiguous name ranges of ~375s each;
+  #   rest - every other package (~1830s, run 2 at a time) as 3 LPT bins of
+  #          ~610s each, bounded by regen/cmd-liza/agent at 225-315s.
   # With setup + compilation (~2-4 min) each shard targets <10 minutes.
   # Update the shard counts here only; `total` must match the entries listed.
   test-windows-shard:
