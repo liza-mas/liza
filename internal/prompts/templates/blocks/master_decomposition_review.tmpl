@@ -46,6 +46,7 @@ with `{{binaryName}} submit-verdict`.
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
+{{template "post-verdict-await" .}}
 {{- end}}
 
 Invoke `systemic-thinking` before submitting a verdict and cite its evidence in

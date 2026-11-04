@@ -82,18 +82,7 @@ DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
-
-POST-VERDICT (MANDATORY for REJECTED):
-After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
-   {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
-Keep this session while waiting. {{template "await-foreground" .}}
-On `POLL`, run the same command again in the foreground. Repeat until a non-POLL outcome.
-There is no call limit and no argument to carry over: {{brandTitle}} tracks the remaining budget from your
-rejection time, and `timeout_seconds` is reported for visibility only.
-`TIMEOUT` is final budget exhaustion — exit normally.
-`PAUSED`: exit normally and tell the operator to resume the system.
-- RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
-- TERMINAL/ABORTED: exit normally
+{{template "post-verdict-await" .}}
 {{- else if eq .Role "code-plan-reviewer"}}
 
 REFERENCE-FIRST REVIEW:
@@ -194,6 +183,7 @@ REVIEW PHASE:
    output[] has one entry per planned coding task with valid desc, done_when, scope, spec_ref, any declared validation with durable check/hook intent, and task_depends_on.
 7. Verify each proposed coding task passes the review checklist above.
 8. Submit verdict with {{binaryName}} submit-verdict.
+{{template "post-verdict-await" .}}
 {{- else if eq .Role "epic-plan-reviewer"}}
 
 EPIC-WRITING SKILL:
@@ -246,6 +236,7 @@ REVIEW PHASE:
    Verify: each epic_ref is the epic document path with a #section-anchor matching the capability heading.
 7. Check each proposed capability against the review checklist and anti-pattern table above.
 8. Submit verdict with {{binaryName}} submit-verdict.
+{{template "post-verdict-await" .}}
 {{- else if eq .Role "us-reviewer"}}
 
 SPEC-REVIEW SKILL:
@@ -319,6 +310,7 @@ CANONICAL VALIDATION:
 DOER VALIDATION PLAN: {{.ValidationPlan}}
 {{- end}}
 10. Submit verdict with {{binaryName}} submit-verdict.
+{{template "post-verdict-await" .}}
 {{- else if eq .Role "architecture-reviewer"}}
 
 REFERENCE-FIRST REVIEW:
@@ -389,6 +381,7 @@ REVIEW PHASE:
    output[] has one entry per code-planning scope with valid desc, done_when, scope, spec_ref, arch_ref, any declared validation with durable check/hook intent, and task_depends_on.
 8. Check each proposed scope against the review checklist above.
 9. Submit verdict with {{binaryName}} submit-verdict.
+{{template "post-verdict-await" .}}
 {{- else if eq .Role "integration-reviewer"}}
 
 REVIEW SCOPE:
@@ -459,7 +452,11 @@ INSTRUCTIONS:
 {{- if ne .PriorRejection ""}}
 {{- template "prior-feedback-review" .}}
 {{- end}}
+{{template "post-verdict-await" .}}
+{{- end}}
+{{- end -}}
 
+{{- define "post-verdict-await"}}
 POST-VERDICT (MANDATORY for REJECTED):
 After submitting a REJECTED verdict, MUST run {{binaryName}} await-resubmission immediately:
    {{binaryName}} await-resubmission {{.TaskID}} --agent-id {{.AgentID}} --json
@@ -471,7 +468,6 @@ rejection time, and `timeout_seconds` is reported for visibility only.
 `PAUSED`: exit normally and tell the operator to resume the system.
 - RESUBMITTED: discard prompt-time BASE COMMIT / REVIEW_COMMIT and re-review using the returned base_commit..review_commit boundary
 - TERMINAL/ABORTED: exit normally
-{{- end}}
 {{- end -}}
 
 {{- define "handoff-review-rows" -}}

@@ -2044,7 +2044,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				t.Errorf("output missing key string %q", key)
 			}
 		}
-		assertAwaitResubmissionPassiveGuidance(t, output, 1)
+		assertAwaitResubmissionPassiveGuidance(t, output, 2)
 	})
 
 	t.Run("epic-planner", func(t *testing.T) {
@@ -2133,7 +2133,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				t.Errorf("output missing key string %q", key)
 			}
 		}
-		assertAwaitResubmissionPassiveGuidance(t, output, 1)
+		assertAwaitResubmissionPassiveGuidance(t, output, 2)
 	})
 
 	t.Run("us-writer", func(t *testing.T) {
@@ -2237,7 +2237,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				t.Errorf("output missing key string %q", key)
 			}
 		}
-		assertAwaitResubmissionPassiveGuidance(t, output, 1)
+		assertAwaitResubmissionPassiveGuidance(t, output, 2)
 	})
 
 	t.Run("architect", func(t *testing.T) {
@@ -2334,7 +2334,7 @@ func TestBuildRoleContext_AllRoles(t *testing.T) {
 				t.Errorf("output missing key string %q", key)
 			}
 		}
-		assertAwaitResubmissionPassiveGuidance(t, output, 1)
+		assertAwaitResubmissionPassiveGuidance(t, output, 2)
 	})
 }
 
@@ -3023,7 +3023,10 @@ func TestReviewInstructions_PostVerdictResubmissionBoundaryGuidance(t *testing.T
 		"templates/blocks/await_verdict_loop.tmpl",
 	))
 
-	for _, role := range []string{"code-reviewer", "integration-reviewer"} {
+	for _, role := range []string{
+		"code-reviewer", "integration-reviewer",
+		"code-plan-reviewer", "epic-plan-reviewer", "us-reviewer", "architecture-reviewer",
+	} {
 		t.Run(role, func(t *testing.T) {
 			data := RoleContextData{
 				Role:           role,
@@ -3048,7 +3051,35 @@ func TestReviewInstructions_PostVerdictResubmissionBoundaryGuidance(t *testing.T
 			if !strings.Contains(output, "discard prompt-time BASE COMMIT / REVIEW_COMMIT") {
 				t.Fatalf("%s prompt missing resubmission boundary refresh guidance:\n%s", role, output)
 			}
+			if !strings.Contains(output, "await-resubmission task-review --agent-id reviewer-1 --json") {
+				t.Fatalf("%s prompt missing await-resubmission command:\n%s", role, output)
+			}
 		})
+	}
+}
+
+// A decomposition-root code-plan-reviewer loses review-instructions
+// (internal/agent/prompt.go), so the master review block must carry the
+// post-verdict await itself — exactly once.
+func TestBuildRoleContext_MasterDecompositionReview_CodePlanReviewerPostVerdict(t *testing.T) {
+	data := &RoleContextData{
+		Role:                 "code-plan-reviewer",
+		RoleType:             "reviewer",
+		DecompositionRoot:    true,
+		MasterOutputRefField: "plan_ref",
+		TaskID:               "task-review",
+		AgentID:              "reviewer-1",
+	}
+
+	output, err := BuildRoleContext("code-plan-reviewer", []string{"master-decomposition-review"}, data)
+	if err != nil {
+		t.Fatalf("BuildRoleContext: %v", err)
+	}
+	if got := strings.Count(output, "POST-VERDICT (MANDATORY for REJECTED)"); got != 1 {
+		t.Fatalf("want exactly one post-verdict block, got %d:\n%s", got, output)
+	}
+	if !strings.Contains(output, "await-resubmission task-review --agent-id reviewer-1 --json") {
+		t.Fatalf("master code-plan-reviewer prompt missing await-resubmission command:\n%s", output)
 	}
 }
 
