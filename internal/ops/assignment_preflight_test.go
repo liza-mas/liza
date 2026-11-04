@@ -634,6 +634,10 @@ func TestValidationPreflightInSessionCeiling(t *testing.T) {
 	t.Setenv(brand.EnvName("AGENT_GENERATION"), f.authority.Generation)
 	t.Setenv("VALIDATION_TEST_REQUIRED", "fixture-value")
 	t.Setenv(slowProbeSleepEnv, "2250")
+	// Without a session the probe inherits this environment; without this, the
+	// race runtime's exit delay would time out an uncapped 3 s probe too.
+	raceName, raceValue, _ := strings.Cut(slowProbeRaceEnv, "=")
+	t.Setenv(raceName, raceValue)
 	_, err := PrepareValidationPreflight(f.root, "task-1", f.authority.ID, "", nil)
 	requireProbeTimeoutAt(t, err, 0)
 }
