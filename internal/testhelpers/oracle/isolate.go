@@ -3,9 +3,7 @@ package oracle
 import (
 	"bytes"
 	"context"
-	"errors"
 	"flag"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,10 +41,11 @@ const isolateMargin = 10 * time.Second
 // child applies the parent's subtest selection (-run below the top level, and
 // -skip).
 //
-// The parent builds mainPkgs first and hands them down. It also registers the
-// package's testdata as test inputs and reads WriteEnv: go test caches a result
-// on what its own process opens and reads, and a child's golden reads would
-// otherwise let a stale "(cached)" pass replay. The child's coverage is not
+// The parent builds mainPkgs first and hands them down. When go test records
+// the parent's inputs (-test.testlogfile), the child records its own and the
+// parent replays them: go test caches a result on what the parent process
+// read, and a file or variable only the child read would otherwise let a stale
+// "(cached)" pass replay after it changed. The child's coverage is not
 // collected.
 func Isolate(t *testing.T, mainPkgs ...string) bool {
 	t.Helper()
@@ -61,10 +60,6 @@ func Isolate(t *testing.T, mainPkgs ...string) bool {
 	for _, pkg := range mainPkgs {
 		prebuilt = append(prebuilt, pkg+"="+BuildCLI(t, pkg))
 	}
-	if err := registerTree("testdata"); err != nil {
-		t.Fatal(err)
-	}
-	_ = os.Getenv(WriteEnv)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatalf("oracle: test executable: %v", err)
@@ -80,6 +75,15 @@ func Isolate(t *testing.T, mainPkgs ...string) bool {
 	if testing.Short() {
 		args = append(args, "-test.short")
 	}
+	inputs := ""
+	if flag.Lookup("test.testlogfile").Value.String() != "" {
+		inputs = filepath.Join(t.TempDir(), "testlog")
+		args = append(args, "-test.testlogfile="+inputs)
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("oracle: working directory: %v", err)
+	}
 	ctx := context.Background()
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
@@ -92,6 +96,11 @@ func Isolate(t *testing.T, mainPkgs ...string) bool {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("oracle: isolated %s failed: %v\n%s", t.Name(), err, out)
+	}
+	if inputs != "" {
+		if err := replayInputs(inputs, dir); err != nil {
+			t.Fatalf("oracle: isolated %s inputs: %v", t.Name(), err)
+		}
 	}
 	switch {
 	case bytes.Contains(out, []byte("--- SKIP: "+t.Name()+" ")):
@@ -175,21 +184,44 @@ func prebuiltCLI(mainPkg string) (string, bool) {
 	return "", false
 }
 
-// registerTree opens every directory and file under root so that go test
-// records them as inputs of the result; a missing root registers nothing.
-func registerTree(root string) error {
-	err := filepath.WalkDir(root, func(path string, _ fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		return f.Close()
-	})
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+// replayInputs repeats in this process every input a child test process
+// recorded in its test log (testing's -test.testlogfile: "getenv", "open",
+// "stat" and "chdir" lines), so go test records them for this process's
+// result. Relative paths resolve against dir, the child's starting directory,
+// as later updated by its recorded chdirs (always absolute); the child's own
+// directory changes stay out of this process.
+func replayInputs(path, dir string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
 	}
-	return err
+	seen := map[string]bool{}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		op, name, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+		if op == "chdir" {
+			dir = name
+			continue
+		}
+		if (op == "open" || op == "stat") && !filepath.IsAbs(name) {
+			name = filepath.Join(dir, name)
+		}
+		if seen[op+" "+name] {
+			continue
+		}
+		seen[op+" "+name] = true
+		switch op {
+		case "getenv":
+			os.Getenv(name)
+		case "stat":
+			_, _ = os.Stat(name)
+		case "open":
+			if f, err := os.Open(name); err == nil {
+				_ = f.Close()
+			}
+		}
+	}
+	return nil
 }

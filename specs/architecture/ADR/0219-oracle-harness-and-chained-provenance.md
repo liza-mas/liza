@@ -225,9 +225,10 @@ default 60 s heartbeat.
   observation-based tracking stays rejected. The child keeps the parent's
   subtest selection: `-run` levels below the test's name, and `-skip`.
 - The parent builds the CLI once and hands it down (`ORACLE_PREBUILT_CLI`). It
-  also opens the package's `testdata` and reads `ORACLE_WRITE`, because go test
-  caches a result on what its own process reads, and goldens read by a child
-  would otherwise let a stale `(cached)` pass replay.
+  also replays the inputs the child recorded in its own test log
+  (`-test.testlogfile`), because go test caches a result on what the parent
+  process reads, and a file or variable read only by the child would otherwise
+  let a stale `(cached)` pass replay after it changed.
 - A child failure or skip fails or skips the parent, with the child's output.
   The child's coverage is not collected.
 - A9 isolates its supervisor-starting tests of 2 s or more (27 tests). Shorter

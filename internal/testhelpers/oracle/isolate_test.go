@@ -136,18 +136,41 @@ func TestPrebuiltCLI(t *testing.T) {
 	}
 }
 
-func TestRegisterTree(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "a", "b"), 0o755); err != nil {
+// TestIsolateInputProbe reads one variable and one file in its child; it is
+// driven by TestIsolateRecordsChildInputs.
+func TestIsolateInputProbe(t *testing.T) {
+	if Isolate(t) {
+		return
+	}
+	_ = os.Getenv("ORACLE_ISOLATE_INPUT_PROBE")
+	if _, err := os.ReadFile("isolate_test.go"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "a", "b", "f"), nil, 0o644); err != nil {
+}
+
+// What only the child read reaches the parent's test log, which go test uses
+// to decide whether a cached result still holds.
+func TestIsolateRecordsChildInputs(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := registerTree(root); err != nil {
-		t.Fatalf("registerTree: %v", err)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := registerTree(filepath.Join(root, "missing")); err != nil {
-		t.Fatalf("a missing tree registers nothing: %v", err)
+	logPath := filepath.Join(t.TempDir(), "testlog")
+	out, err := exec.Command(exe, "-test.run=^TestIsolateInputProbe$", "-test.count=1", "-test.testlogfile="+logPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"getenv ORACLE_ISOLATE_INPUT_PROBE\n", "open " + filepath.Join(wd, "isolate_test.go") + "\n"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("parent test log lacks %q:\n%s", want, data)
+		}
 	}
 }
