@@ -13,6 +13,9 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
+// Callers start their run deadline after this returns: its state write can be
+// slow on a loaded runner, and a deadline started before it can expire before
+// the first tick, so no beat runs.
 func newAuthenticatedTestHeartbeat(t *testing.T, config HeartbeatConfig) *Heartbeat {
 	t.Helper()
 	const generation = "test-generation"
@@ -194,10 +197,9 @@ func TestHeartbeatWithInvalidAgent(t *testing.T) {
 		LeaseDuration: 30 * time.Minute,
 	}
 
+	hb := newAuthenticatedTestHeartbeat(t, config)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-
-	hb := newAuthenticatedTestHeartbeat(t, config)
 
 	err := hb.Start(ctx)
 	if !ops.IsAgentAuthorityError(err) {
@@ -213,10 +215,9 @@ func TestHeartbeatWithInvalidStatePath(t *testing.T) {
 		LeaseDuration: 30 * time.Minute,
 	}
 
+	hb := newAuthenticatedTestHeartbeat(t, config)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-
-	hb := newAuthenticatedTestHeartbeat(t, config)
 
 	// Should handle invalid path gracefully
 	err := hb.Start(ctx)
@@ -599,10 +600,9 @@ func TestHeartbeatRenewsTaskLease(t *testing.T) {
 		LeaseDuration: 30 * time.Minute,
 	}
 
+	hb := newAuthenticatedTestHeartbeat(t, config)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-
-	hb := newAuthenticatedTestHeartbeat(t, config)
 	doneCh := make(chan error, 1)
 	go func() { doneCh <- hb.Start(ctx) }()
 	<-doneCh
@@ -670,10 +670,9 @@ func TestHeartbeatRenewsReviewLease(t *testing.T) {
 		ActiveProviderTask: func() string { return taskID },
 	}
 
+	hb := newAuthenticatedTestHeartbeat(t, config)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-
-	hb := newAuthenticatedTestHeartbeat(t, config)
 	doneCh := make(chan error, 1)
 	go func() { doneCh <- hb.Start(ctx) }()
 	<-doneCh
@@ -739,10 +738,9 @@ func TestHeartbeatSkipsClearedLease(t *testing.T) {
 		LeaseDuration: 30 * time.Minute,
 	}
 
+	hb := newAuthenticatedTestHeartbeat(t, config)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-
-	hb := newAuthenticatedTestHeartbeat(t, config)
 	doneCh := make(chan error, 1)
 	go func() { doneCh <- hb.Start(ctx) }()
 	<-doneCh
