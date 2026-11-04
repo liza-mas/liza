@@ -169,6 +169,9 @@ func TestOracleA9LaunchLines(t *testing.T) {
 		t.Skip("slow test: skipped in -short mode")
 	}
 	unixOnly(t)
+	if isolated(t) {
+		return
+	}
 	launchRequireCatalog(t)
 	for _, tool := range launchCatalog {
 		t.Run(tool, func(t *testing.T) {
@@ -375,6 +378,9 @@ var spawnCases = []spawnCase{
 // in this process and proves it reaches neither the helper nor the stub.
 func TestOracleA9SpawnGate(t *testing.T) {
 	unixOnly(t)
+	if isolated(t) {
+		return
+	}
 	t.Setenv(spawnSentinelVar, "fixture-only")
 	for _, c := range spawnCases {
 		t.Run(c.name, func(t *testing.T) { spawnRun(t, c) })

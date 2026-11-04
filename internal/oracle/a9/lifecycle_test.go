@@ -11,6 +11,9 @@ import (
 )
 
 func TestOracleA9Registration(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i01-success")
 	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
@@ -44,6 +47,9 @@ func TestOracleA9AutoAssignID(t *testing.T) {
 }
 
 func TestOracleA9DoerClaim(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i04-success")
 	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
@@ -84,6 +90,9 @@ func TestOracleA9DoerClaimRefused(t *testing.T) {
 }
 
 func TestOracleA9Restart42(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i06-restart")
 	r := p.runSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	requireCode(t, p, r, 0)
@@ -108,6 +117,9 @@ func TestOracleA9Restart42Limit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i06-limit")
 	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	p.await(t, "second exit-42 restart", func() bool {
@@ -130,6 +142,9 @@ func TestOracleA9Restart42Limit(t *testing.T) {
 func TestOracleA9SpinBlock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	p := newScenario(t, "i07-spin")
 	a := p.startSupervisor(t, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
@@ -167,6 +182,9 @@ func TestOracleA9SpinBlock(t *testing.T) {
 }
 
 func TestOracleA9SurplusRetire(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	for _, held := range []bool{false, true} {
 		name := "i16-idle"
 		if held {

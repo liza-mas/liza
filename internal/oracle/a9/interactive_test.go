@@ -29,6 +29,9 @@ func TestOracleA9InteractiveLaunch(t *testing.T) {
 		t.Skip("slow test: skipped in -short mode")
 	}
 	unixOnly(t)
+	if isolated(t) {
+		return
+	}
 	launchRequireCatalog(t)
 	for _, tool := range launchCatalog {
 		t.Run(tool, func(t *testing.T) {

@@ -53,9 +53,13 @@ var (
 
 // BuildCLI builds the main package mainPkg (a path such as ./cmd/liza,
 // relative to the module root) from the tree under test, once per test binary,
-// into the temporary root, and returns the binary path.
+// into the temporary root, and returns the binary path. In a child started by
+// Isolate it returns the parent's build instead.
 func BuildCLI(t testing.TB, mainPkg string) string {
 	t.Helper()
+	if bin, ok := prebuiltCLI(mainPkg); ok {
+		return bin
+	}
 	if runRoot == "" {
 		t.Fatal("oracle: BuildCLI needs RunMain in the package's TestMain")
 	}

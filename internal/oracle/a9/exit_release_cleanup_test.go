@@ -21,7 +21,7 @@ import (
 // itself is the existing orchGuard/orchReap shape, which
 // TestOracleA9OrchestratorReap and TestOracleA9OrchestratorAdoptedZombie already
 // cover, adopted zombies included. These tests prove that the exit-release rows
-// reach it: the rows are serial and start their supervisor only through
+// reach it: the rows never call t.Parallel and start their supervisor only through
 // exitReleaseStart, and a held provider left by a failed, cancelled or timed-out
 // row does not outlive it.
 
@@ -32,7 +32,7 @@ var exitReleaseConsumers = []string{
 }
 
 // TestOracleA9ExitReleaseConsumersOwned requires, from the source of
-// exit_release_test.go, that each consumer is serial and launches its supervisor
+// exit_release_test.go, that each consumer never calls t.Parallel and launches its supervisor
 // through exitReleaseStart rather than a start that owns no descendants, and that
 // exitReleaseStart is orchStart.
 func TestOracleA9ExitReleaseConsumersOwned(t *testing.T) {
@@ -70,7 +70,7 @@ func TestOracleA9ExitReleaseConsumersOwned(t *testing.T) {
 		}
 		got := calls(fn)
 		if got["Parallel"] {
-			t.Errorf("A9 exit-release source: %s must be serial (D48)", name)
+			t.Errorf("A9 exit-release source: %s must not call t.Parallel (D48)", name)
 		}
 		if !got["exitReleaseStart"] {
 			t.Errorf("A9 exit-release source: %s must start its supervisor with exitReleaseStart", name)
@@ -97,6 +97,9 @@ const exitReleaseProbeVar = "ORACLE_A9_EXIT_RELEASE_PROBE"
 func TestOracleA9ExitReleaseCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	if runtime.GOOS != "linux" {
 		t.Skip("A9: the child subreaper (decision D45) is Linux-only")

@@ -133,6 +133,16 @@ func unixOnly(t testing.TB) {
 	}
 }
 
+// isolated runs a supervisor-starting test in a child test process of its own
+// and reports whether the caller is the parent, which returns at once (D48 as
+// amended: see "Process ownership" in doc_test.go). It skips on Windows first,
+// as newScenario does, so no CLI is built for tests that cannot run there.
+func isolated(t *testing.T) bool {
+	t.Helper()
+	unixOnly(t)
+	return oracle.Isolate(t, "./cmd/liza")
+}
+
 func newScenario(t *testing.T, name string) *scenario {
 	t.Helper()
 	unixOnly(t)
@@ -337,8 +347,9 @@ func (p *scenario) records(t testing.TB) []stubRecord {
 // the child subreaper before the supervisor starts and, on success, failure and
 // cancellation, kills, reaps and asserts the absence of every child of the test
 // process (signalLaunch). That assertion is sound only when no other test owns a
-// child: callers are top-level tests that are not parallel and have no parallel
-// subtests, and start one supervisor at a time.
+// child of the process: callers are top-level tests without parallel subtests
+// that start one supervisor at a time and never call t.Parallel themselves; a
+// long one runs isolated, alone in a child test process.
 
 // runSupervisor runs `liza agent ...` to its exit under D48 ownership.
 func (p *scenario) runSupervisor(t *testing.T, args ...string) invocation {

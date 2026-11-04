@@ -61,9 +61,10 @@ func (p *scenario) installVersionProbeHook(t testing.TB, command string) {
 }
 
 // The three exit-release rows start a supervisor and a held provider, so they
-// follow the D48 isolation of the orchestrator rows: they are top-level and
-// serial (never t.Parallel: orchGuard's reap asserts that no other scenario owns
-// a child of the test process), and exitReleaseStart gives the supervisor its
+// follow the D48 isolation of the orchestrator rows: they are top-level, never
+// call t.Parallel, and run isolated in a child test process of their own
+// (orchGuard's reap asserts that no other scenario owns a child of the test
+// process), and exitReleaseStart gives the supervisor its
 // own process group and the test process the subreaper role before launch. The
 // cleanup waits for the direct supervisor first, then signals, reaps and
 // asserts the absence of every remaining child on success, assertion failure,
@@ -89,6 +90,9 @@ const exitReleaseRunLimit = 90 * time.Second
 func TestOracleA9HaltRelease(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	p := newScenario(t, "i05-halt-release")
 	p.installVersionProbeHook(t, "pause")
@@ -125,6 +129,9 @@ func TestOracleA9BlockReleasedStale(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i05-block-released-stale")
 	// Two crash exits (5 s and 10 s restart delays), then a third provider call
 	// that stops the run.
@@ -146,6 +153,9 @@ func TestOracleA9BlockReleasedStale(t *testing.T) {
 // before it exits, so by the time the failure loop reaches its threshold (1) the
 // task is no longer owned by the agent and the block leaves it untouched.
 func TestOracleA9BlockDoerStale(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	p := newScenario(t, "i05-block-doer-stale")
 	a := exitReleaseStart(t, p, "agent", "coder", "task-1", "--cli", "claude", "--agent-id", "coder-1")
 	// A run names two files by the UTC second: its saved prompt and, set up

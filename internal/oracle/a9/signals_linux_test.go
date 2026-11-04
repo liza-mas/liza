@@ -71,7 +71,8 @@ func signalChildrenOf(ppid int) ([]signalChild, error) {
 }
 
 // signalReap uses D48 isolation: the top-level signal tests and their subtests
-// are serial, so every child belongs to this test. No session, environment or
+// run alone in their process (serial, or isolated in a child test process), so
+// every child belongs to this test. No session, environment or
 // prior observation is needed, including for already-dead adopted children.
 // The supervisor has already been waited by exec.Cmd before this is called.
 func signalReap(_ int) bool {

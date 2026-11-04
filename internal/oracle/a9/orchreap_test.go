@@ -9,7 +9,9 @@ import "testing"
 // every orchestrator test is serial: Go runs a top-level test that does not call
 // t.Parallel while all parallel top-level tests are still paused, and its
 // subtests are serial too (the same reason as startNamed and AuthorityLost).
-// Do not add t.Parallel to a test that calls orchGuard.
+// A long one may instead run isolated (kit_test.go): its body then runs in a
+// child test process whose only test it is, and only the parent calls
+// t.Parallel. Never call t.Parallel in a test that calls orchGuard.
 //
 // Linux makes this test process the reaper of orphans through a child subreaper
 // (orchreap_linux_test.go), so a descendant is found whatever its leader did and

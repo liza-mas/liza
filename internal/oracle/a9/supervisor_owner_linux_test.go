@@ -96,6 +96,9 @@ func ownerAdopted(t *testing.T, p *scenario, provider int) {
 // ways that leave the provider behind. The subtest's cleanup is the ownership
 // cleanup under test; the assertions after it prove its effect.
 func TestOracleA9SupervisorOwnership(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	cases := []struct {
 		name string
 		end  func(t *testing.T, p *scenario, a *runningAgent, provider int)
@@ -151,6 +154,9 @@ func TestOracleA9SupervisorOwnership(t *testing.T) {
 // its provider remains.
 func TestOracleA9SupervisorOwnershipFailure(t *testing.T) {
 	unixOnly(t)
+	if isolated(t) {
+		return
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal("A9 owner probe: test executable")

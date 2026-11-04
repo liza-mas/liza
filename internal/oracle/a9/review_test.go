@@ -178,6 +178,9 @@ func reviewerArgs(extra ...string) []string {
 }
 
 func TestOracleA9ReviewerClaim(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	p := newReviewScenario(t, "i08-claim", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
 	r := p.runSupervisor(t, reviewerArgs()...)
 	requireCode(t, p, r, 0)
@@ -236,6 +239,9 @@ func TestOracleA9ReviewerClaimRefused(t *testing.T) {
 func TestOracleA9ReviewerWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	t.Run("i09-recovered", func(t *testing.T) {
 		p := newReviewScenario(t, "i09-recovered", reviewGit{state: reviewStateUnrecorded, branch: true})
@@ -331,6 +337,9 @@ func reviewHeartbeatRecord(t *testing.T, p *scenario, launch []byte) {
 func TestOracleA9Heartbeat(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	p := newReviewScenario(t, "i03-success", reviewGit{state: reviewStateRecorded, branch: true, worktree: true})
 	r := p.runSupervisor(t, reviewerArgs()...)

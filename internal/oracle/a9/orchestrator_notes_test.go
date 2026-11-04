@@ -11,6 +11,9 @@ import (
 // assessed task and the notes for all targets, and leaves a note aimed at a task
 // it did not assess unseen, so that note wakes the orchestrator again.
 func TestOracleA9OrchestratorNotes(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	t.Run("i12-assessed", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i12-assessed")
 		after := p.state(t)

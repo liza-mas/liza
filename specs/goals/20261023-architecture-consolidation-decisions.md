@@ -805,6 +805,8 @@ the whole test binary, and A9 has `t.Parallel` tests.
     are present on their base, otherwise add them identically.
 - Rejected: further observation-based tracking (racy by construction). Kind: test hygiene. Revert: a
   reviewed A9 correction.
+- Amended 2026-11-04 (ADR-0219, process-isolated oracle tests): a long supervisor-starting test may run
+  alone in a child test process of its own instead of in the serial phase; the cleanup is unchanged.
 
 ### D49 — D33 generalised: every Git or exec inside Modify inherited from the starting tree is a K1 exception (run, 2026-10-24)
 Operator, auto-approved, 2026-10-24T07:27Z. `arm-1-ar-12-amend-3` (AWAITING HUMAN) and `arm-1-ar-12-cp-3` blocked on A12 Scope 4:

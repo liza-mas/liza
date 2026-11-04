@@ -8,7 +8,8 @@ Clarified (2026-10-27) for one merged omission, the C5 golden change at
 `7e4e9f37d`: §4 gains the attributed record, §5 its binding, §7 the check-mode
 exclusion of an unresolved C package. D24, D53 and D56 text are unchanged.
 Amended (2026-10-28): golden drift of asset-capturing oracles is checked at
-commit (see the amendment at the end).
+commit (see the amendment at the end). Amended (2026-11-04): process-isolated
+oracle tests (`oracle.Isolate`), which amends D48.
 
 ## Context
 
@@ -207,3 +208,32 @@ Regenerating them meant knowing which packages were affected and remembering
   only. Their drift is still caught in CI.
 
 Sources: the commit body of `74fd0076b` and `docs/TESTING.md`.
+
+## Amendment (2026-11-04): process-isolated oracle tests
+
+D48 made every A9 test that starts a supervisor a serial top-level test. Its
+cleanup reaps and asserts the absence of every child of the test process, as
+the process-wide child subreaper sees them, so no other test may own a child.
+The serial phase made `internal/oracle/a9` take about 417 s under `-race`, the
+longest oracle package, although its tests mostly wait on supervisors and the
+default 60 s heartbeat.
+
+- `oracle.Isolate(t, mainPkgs...)` re-runs the test binary for one top-level
+  test, with `ORACLE_ISOLATED_TEST` naming it. The child runs the body alone in
+  its process, and only the parent calls `t.Parallel`. D48's assertion needs
+  the test to be alone in its process, which the child provides, so
+  observation-based tracking stays rejected.
+- The parent builds the CLI once and hands it down (`ORACLE_PREBUILT_CLI`). It
+  also opens the package's `testdata` and reads `ORACLE_WRITE`, because go test
+  caches a result on what its own process reads, and goldens read by a child
+  would otherwise let a stale `(cached)` pass replay.
+- A child failure or skip fails or skips the parent, with the child's output.
+  The child's coverage is not collected.
+- A9 isolates its supervisor-starting tests of 2 s or more (27 tests). Shorter
+  ones stay serial in the parent, as does `TestOracleA9AuthorityLost`, whose
+  canonically named supervisor would match other scenarios' process scans.
+  `TestOracleA9ExitReleaseConsumersOwned` still forbids a direct `t.Parallel`.
+- Measured locally: `internal/oracle/a9` under `-race` went from 417 s to 98 s.
+
+Sources: `internal/testhelpers/oracle/isolate.go`, the A9 package
+documentation (`doc_test.go`, "Process ownership").

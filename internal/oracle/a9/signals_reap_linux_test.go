@@ -101,6 +101,9 @@ func signalHasChild(kids []signalChild, pid int) bool {
 // supervisor and the provider must be gone and reaped either way; the cleanup
 // is the same on a failing test, which t.Cleanup runs too.
 func TestSignalProviderReap(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	for _, cancelled := range []bool{false, true} {
 		name := "cleanup"
 		if cancelled {

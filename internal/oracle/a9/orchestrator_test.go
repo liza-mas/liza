@@ -35,6 +35,9 @@ func TestOracleA9OrchestratorTurn(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	if isolated(t) {
+		return
+	}
 	t.Run("i12-success", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i12-success")
 		after := p.state(t)
@@ -66,6 +69,9 @@ func TestOracleA9OrchestratorTurn(t *testing.T) {
 }
 
 func TestOracleA9OrchestratorPlans(t *testing.T) {
+	if isolated(t) {
+		return
+	}
 	t.Run("i13-cleared", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i13-cleared")
 		if !bytes.Contains(p.before, []byte("checkpoint_trigger: PLANNING_COMPLETE")) ||
@@ -124,6 +130,9 @@ func TestOracleA9OrchestratorPlans(t *testing.T) {
 func TestOracleA9CheckpointSummary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
+	}
+	if isolated(t) {
+		return
 	}
 	t.Run("i15-emitted", func(t *testing.T) {
 		p, r, launch := orchRun(t, "i15-emitted")

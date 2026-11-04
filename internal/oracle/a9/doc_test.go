@@ -47,12 +47,19 @@
 //
 // Process ownership (D43/D45/D48): the supervisor-starting lifecycle and reviewer
 // tests (lifecycle_test.go, lifecycle_linux_test.go, review_test.go) are
-// top-level, nonparallel tests without parallel subtests, and start their
-// supervisor through the kit entry points runSupervisor, startSupervisor and
+// top-level tests without parallel subtests that never call t.Parallel, and start
+// their supervisor through the kit entry points runSupervisor, startSupervisor and
 // startNamedSupervisor. Those make the test process the child subreaper before the
 // start and, on success, failure and cancellation, signal, reap and assert the
 // absence of every child of the test process, adopted zombies included
-// (supervisor_owner_linux_test.go proves each path). The generic run, execute,
+// (supervisor_owner_linux_test.go proves each path). The assertion needs the test
+// to be alone in its process, not alone in the run: the supervisor-starting
+// tests of 2 s or more run isolated (kit_test.go isolated, oracle.Isolate). The
+// parent calls t.Parallel and re-runs the test binary for that test only, so the
+// scenarios run concurrently, each in a process of its own (D48 as amended
+// 2026-11-04, ADR-0219). Shorter ones stay serial in the parent, as does
+// TestOracleA9AuthorityLost: its supervisor carries the canonical binary name,
+// which process scans of other scenarios would match. The generic run, execute,
 // start and launch stay unowned for callers that start no supervisor, such as
 // TestOracleA9PendingMergeStall; exit_release_test.go's parallel supervisor cases
 // are outside this guarantee (residual D48 concern, recorded for global analysis).
