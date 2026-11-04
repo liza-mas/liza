@@ -23,7 +23,8 @@ import (
 )
 
 func TestProviderLaunchGenerationLinearization(t *testing.T) {
-	t.Parallel()
+	// Serial: its provider helpers prepend fake-provider directories to the
+	// process-wide PATH with os.Setenv.
 	t.Run("replacement wins before every start boundary", func(t *testing.T) {
 		cases := []struct {
 			name    string

@@ -54,12 +54,13 @@ type providerUnavailableSupervisorFixture struct {
 
 func newProviderUnavailableSupervisorFixture(t *testing.T) providerUnavailableSupervisorFixture {
 	t.Helper()
-	db.ResetInstances()
-	t.Cleanup(db.ResetInstances)
-
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
+	// Reset only this fixture's singleton: its callers run in parallel, and
+	// db.ResetInstances would drop other tests' registrations too.
+	db.ResetInstance(statePath)
+	t.Cleanup(func() { db.ResetInstance(statePath) })
 	testhelpers.SetupPipelineConfig(t, projectRoot)
 
 	state := testhelpers.CreateValidState()
