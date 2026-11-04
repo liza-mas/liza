@@ -68,11 +68,30 @@ func TestMismatchTruncatesLongLinesAndReportsEOF(t *testing.T) {
 	if strings.Contains(msg, strings.Repeat("x", 201)) {
 		t.Errorf("line not truncated to 200 bytes: %d chars message", len(msg))
 	}
+	if !strings.Contains(msg, `y"`) {
+		t.Errorf("the report must show the first differing byte, got %q", msg)
+	}
 	msg = expectFailure(t, func(tb testing.TB) {
 		compareGolden(tb, root, false, Artifact, "a.bin", []byte(long))
 	})
 	if !strings.Contains(msg, "<EOF>") {
 		t.Errorf("a missing final newline must report <EOF>, got %q", msg)
+	}
+}
+
+// Long lines that agree for more than the report width show the window around
+// their first difference, not their common start.
+func TestMismatchReportsTheDivergingField(t *testing.T) {
+	root := t.TempDir()
+	head := `{"id":"` + strings.Repeat("a", 250) + `",`
+	compareGolden(t, root, true, JSON, "r.jsonl", []byte(head+`"exit_code":0,"tail":"`+strings.Repeat("z", 300)+`"}`+"\n"))
+	msg := expectFailure(t, func(tb testing.TB) {
+		compareGolden(tb, root, false, JSON, "r.jsonl", []byte(head+`"exit_code":-1,"tail":"`+strings.Repeat("z", 300)+`"}`+"\n"))
+	})
+	for _, want := range []string{`exit_code\":0`, `exit_code\":-1`, `..."`} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message lacks %q:\n%s", want, msg)
+		}
 	}
 }
 

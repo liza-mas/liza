@@ -16,6 +16,10 @@ const WriteEnv = "ORACLE_WRITE"
 
 const maxLineReport = 200
 
+// reportContext is how many bytes before the first differing byte a long
+// line's report keeps, so the report shows where the two lines diverge.
+const reportContext = 40
+
 // goldenPath is the storage path of golden <name>: testdata/golden/<kind>/ plus
 // the name mapped by goldenStorageName, under root. Write and live read share it.
 func goldenPath(root string, kind Kind, name string) (string, error) {
@@ -115,7 +119,8 @@ func compareGolden(t testing.TB, root string, write bool, kind Kind, name string
 }
 
 // firstDifference returns the 1-based number of the first differing line and
-// both lines, truncated; a missing line reads <EOF>.
+// both lines; a long line is cut to a window that starts shortly before the
+// first differing byte, and a missing line reads <EOF>.
 func firstDifference(want, got []byte) (int, string, string) {
 	wl := bytes.Split(want, []byte("\n"))
 	gl := bytes.Split(got, []byte("\n"))
@@ -131,17 +136,33 @@ func firstDifference(want, got []byte) (int, string, string) {
 		if hasW && hasG && bytes.Equal(w, g) {
 			continue
 		}
-		return i + 1, describeLine(w, hasW), describeLine(g, hasG)
+		start := 0
+		if hasW && hasG {
+			n := 0
+			for n < len(w) && n < len(g) && w[n] == g[n] {
+				n++
+			}
+			start = max(n-reportContext, 0)
+		}
+		return i + 1, describeLine(w, hasW, start), describeLine(g, hasG, start)
 	}
 	return 0, "", ""
 }
 
-func describeLine(line []byte, present bool) string {
+func describeLine(line []byte, present bool, start int) string {
 	if !present {
 		return "<EOF>"
 	}
-	if len(line) > maxLineReport {
-		return fmt.Sprintf("%q...", line[:maxLineReport])
+	if len(line) <= maxLineReport {
+		return fmt.Sprintf("%q", line)
 	}
-	return fmt.Sprintf("%q", line)
+	end := min(start+maxLineReport, len(line))
+	before, after := "", ""
+	if start > 0 {
+		before = "..."
+	}
+	if end < len(line) {
+		after = "..."
+	}
+	return before + fmt.Sprintf("%q", line[start:end]) + after
 }
