@@ -8,11 +8,32 @@ import (
 	"github.com/liza-mas/liza/internal/gitenv"
 )
 
-// TreePathMode returns the raw Git object mode for a path in a treeish.
+type treePathModeAnswer struct {
+	mode    string
+	present bool
+}
+
+// TreePathMode returns the raw Git object mode for a path in a treeish. An
+// answer for a full object ID is memoized (see objectQueries).
 func (g *Git) TreePathMode(treeish, path string) (mode string, present bool, err error) {
 	if path == "" {
 		return "", false, fmt.Errorf("tree path mode requires a non-empty path")
 	}
+	key := objectQueryKey{root: g.projectRoot, query: "tree-path-mode", a: treeish, b: path}
+	if isFullObjectID(treeish) {
+		if cached, ok := cachedObjectQuery(key); ok {
+			answer := cached.(treePathModeAnswer)
+			return answer.mode, answer.present, nil
+		}
+	}
+	mode, present, err = g.queryTreePathMode(treeish, path)
+	if err == nil && isFullObjectID(treeish) {
+		storeObjectQuery(key, treePathModeAnswer{mode: mode, present: present}, len(mode))
+	}
+	return mode, present, err
+}
+
+func (g *Git) queryTreePathMode(treeish, path string) (mode string, present bool, err error) {
 	output, err := g.exec("ls-tree", "--full-tree", "-z", treeish, "--", literalPathspec(path))
 	if err != nil {
 		return "", false, fmt.Errorf("failed to query tree path mode for %q at %q: %w", path, treeish, err)
@@ -42,13 +63,34 @@ type TreeEntry struct {
 	Size int64
 }
 
+type treeEntryAnswer struct {
+	entry   TreeEntry
+	present bool
+}
+
 // TreeEntryAt returns mode, type, object ID and size for a path in a treeish
 // from a single ls-tree process, so a caller that needs all four does not
-// spawn one git process per attribute.
+// spawn one git process per attribute. An answer for a full object ID is
+// memoized (see objectQueries).
 func (g *Git) TreeEntryAt(treeish, path string) (entry TreeEntry, present bool, err error) {
 	if path == "" {
 		return TreeEntry{}, false, fmt.Errorf("tree entry requires a non-empty path")
 	}
+	key := objectQueryKey{root: g.projectRoot, query: "tree-entry", a: treeish, b: path}
+	if isFullObjectID(treeish) {
+		if cached, ok := cachedObjectQuery(key); ok {
+			answer := cached.(treeEntryAnswer)
+			return answer.entry, answer.present, nil
+		}
+	}
+	entry, present, err = g.queryTreeEntryAt(treeish, path)
+	if err == nil && isFullObjectID(treeish) {
+		storeObjectQuery(key, treeEntryAnswer{entry: entry, present: present}, len(entry.OID)+len(entry.Mode))
+	}
+	return entry, present, err
+}
+
+func (g *Git) queryTreeEntryAt(treeish, path string) (entry TreeEntry, present bool, err error) {
 	output, err := g.exec("ls-tree", "--full-tree", "-l", "-z", treeish, "--", literalPathspec(path))
 	if err != nil {
 		return TreeEntry{}, false, fmt.Errorf("failed to query tree entry for %q at %q: %w", path, treeish, err)
@@ -84,9 +126,29 @@ func (g *Git) ReadBlobObject(oid string) (string, error) {
 	if oid == "" || strings.HasPrefix(oid, "-") {
 		return "", fmt.Errorf("blob read requires an object ID, got %q", oid)
 	}
-	output, err := gitenv.CombinedOutput(g.projectRoot, "cat-file", "blob", oid)
+	output, err := g.catBlob(oid)
 	if err != nil {
 		return "", fmt.Errorf("failed to read blob %s: %w\nOutput: %s", oid, err, output)
+	}
+	return output, nil
+}
+
+// catBlob runs `git cat-file blob oid`; on failure it returns git's combined
+// output for the caller's error. Blobs read by full object ID are memoized
+// (see objectQueries).
+func (g *Git) catBlob(oid string) (string, error) {
+	key := objectQueryKey{root: g.projectRoot, query: "blob", a: oid}
+	if isFullObjectID(oid) {
+		if cached, ok := cachedObjectQuery(key); ok {
+			return cached.(string), nil
+		}
+	}
+	output, err := gitenv.CombinedOutput(g.projectRoot, "cat-file", "blob", oid)
+	if err != nil {
+		return string(output), err
+	}
+	if isFullObjectID(oid) && len(output) <= maxCachedBlobBytes {
+		storeObjectQuery(key, string(output), len(output))
 	}
 	return string(output), nil
 }
@@ -160,12 +222,11 @@ func (g *Git) readBlobByArgs(revision, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	output, err := gitenv.CombinedOutput(g.projectRoot,
-		"cat-file", "blob", oid)
+	output, err := g.catBlob(oid)
 	if err != nil {
 		return "", fmt.Errorf("failed to read blob %q at %q: %w\nOutput: %s", path, revision, err, output)
 	}
-	return string(output), nil
+	return output, nil
 }
 
 // BlobOID returns the blob object ID for path at revision without consulting
@@ -330,9 +391,20 @@ func (g *Git) CalculateDrift(baseCommit, targetBranch string) (int, error) {
 	return count, nil
 }
 
-// IsAncestor checks if commitA is an ancestor of commitB
+// IsAncestor checks if commitA is an ancestor of commitB. A true answer for
+// two full object IDs is memoized (see objectQueries).
 func (g *Git) IsAncestor(commitA, commitB string) (bool, error) {
+	key := objectQueryKey{root: g.projectRoot, query: "is-ancestor", a: commitA, b: commitB}
+	cacheable := isFullObjectID(commitA) && isFullObjectID(commitB)
+	if cacheable {
+		if _, ok := cachedObjectQuery(key); ok {
+			return true, nil
+		}
+	}
 	_, err := g.exec("merge-base", "--is-ancestor", commitA, commitB)
+	if err == nil && cacheable {
+		storeObjectQuery(key, true, 0)
+	}
 	if err != nil {
 		// Check if error is "not an ancestor" (exit code 1)
 		if strings.Contains(err.Error(), "exit status 1") {
