@@ -14,11 +14,11 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-main-pair",
-      "before_bytes": 292672,
-      "after_bytes": 287896,
+      "before_bytes": 293876,
+      "after_bytes": 289100,
       "delta_bytes": -4776,
-      "reference_before_bytes": 279328,
-      "reference_after_bytes": 274552
+      "reference_before_bytes": 280532,
+      "reference_after_bytes": 275756
     },
     {
       "role": "architect",
@@ -32,11 +32,11 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-pair",
-      "before_bytes": 289694,
-      "after_bytes": 284918,
+      "before_bytes": 290898,
+      "after_bytes": 286122,
       "delta_bytes": -4776,
-      "reference_before_bytes": 279328,
-      "reference_after_bytes": 274552
+      "reference_before_bytes": 280532,
+      "reference_after_bytes": 275756
     },
     {
       "role": "code-planner",
@@ -50,8 +50,8 @@
     {
       "role": "code-plan-reviewer",
       "variant": "code-planning-main-pair",
-      "before_bytes": 287749,
-      "after_bytes": 282973,
+      "before_bytes": 288950,
+      "after_bytes": 284174,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -68,8 +68,8 @@
     {
       "role": "code-plan-reviewer",
       "variant": "code-planning-pair",
-      "before_bytes": 294415,
-      "after_bytes": 289639,
+      "before_bytes": 295616,
+      "after_bytes": 290840,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -104,8 +104,8 @@
     {
       "role": "epic-plan-reviewer",
       "variant": "epic-planning-main-pair",
-      "before_bytes": 291938,
-      "after_bytes": 287162,
+      "before_bytes": 293139,
+      "after_bytes": 288363,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -122,8 +122,8 @@
     {
       "role": "epic-plan-reviewer",
       "variant": "epic-planning-pair",
-      "before_bytes": 289396,
-      "after_bytes": 284620,
+      "before_bytes": 290597,
+      "after_bytes": 285821,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
@@ -176,8 +176,8 @@
     {
       "role": "us-reviewer",
       "variant": "us-writing-pair",
-      "before_bytes": 287144,
-      "after_bytes": 282368,
+      "before_bytes": 288338,
+      "after_bytes": 283562,
       "delta_bytes": -4776,
       "reference_before_bytes": 266245,
       "reference_after_bytes": 261469
