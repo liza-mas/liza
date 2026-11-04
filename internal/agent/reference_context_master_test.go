@@ -117,6 +117,7 @@ func TestMasterReferenceContextHiddenReferenceValidation(t *testing.T) {
 }
 
 func TestMasterPromptReferenceBytes(t *testing.T) {
+	t.Parallel()
 	for _, role := range []string{models.RoleArchitect, models.RoleArchitectureReviewer} {
 		t.Run(role, func(t *testing.T) {
 			repo, state, _ := masterReferenceFixture(t, 10000)

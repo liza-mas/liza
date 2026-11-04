@@ -352,6 +352,7 @@ func (p *pauseGatedProvider) RunInteractive(context.Context, LLMAgentInteractive
 }
 
 func TestRunSupervisor_HaltedDoerLaunchResumesSameIteration(t *testing.T) {
+	t.Parallel()
 	// GIVEN a doer supervisor whose first two launches are refused by a pause
 	root, bb := setupPauseSupervisorProject(t, testhelpers.BuildTaskByStatus("pause-task", models.TaskStatusReady, time.Now().UTC()))
 	provider := newPauseGatedProvider(root, 2)

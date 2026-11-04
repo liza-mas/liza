@@ -839,6 +839,7 @@ func assertReviewerGitStatusClean(t *testing.T, worktreeDir string) {
 // executing status and discard completed review-ready work. The caller releases
 // the claim instead.
 func TestEnsureReviewerWorktree_MissingRecoverable_PostWorktreeCmdFailureDoesNotBlockTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)
@@ -928,6 +929,7 @@ func TestEnsureReviewerWorktree_IntactWorktree_RunsPostWorktreeCmd(t *testing.T)
 }
 
 func TestEnsureReviewerWorktree_IntactWorktree_PostWorktreeCmdFailureDoesNotBlockTask(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)

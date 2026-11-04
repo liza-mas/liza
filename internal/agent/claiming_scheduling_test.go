@@ -11,6 +11,7 @@ import (
 )
 
 func TestClaimDoerScheduling(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"owned rejection", "dependency provider"} {
 		t.Run(scenario, func(t *testing.T) {
 			// The baseline uniformly shuffles candidates. Every opportunity must

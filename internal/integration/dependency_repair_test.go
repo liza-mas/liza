@@ -53,6 +53,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestDependencyRepairWorkflow(t *testing.T) {
+	t.Parallel()
 	cliPath := buildDependencyRepairCLI(t)
 
 	t.Run("applies a command-free multi-task request", func(t *testing.T) {

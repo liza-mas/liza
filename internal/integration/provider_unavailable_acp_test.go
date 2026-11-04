@@ -215,6 +215,7 @@ func TestCodexACPProviderUnavailableLeavesUnrelatedFailureOnCrashPath(t *testing
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	fixture := newProviderUnavailableSupervisorFixture(t)
 	failingAgent := &deterministicLLMAgent{
 		result: agent.LLMAgentRunResult{ExitCode: 1, Output: "unrelated provider transport failure"},

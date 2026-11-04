@@ -170,6 +170,7 @@ func TestAwaitResubmissionWithBudget_OwnershipLossIsNotRetryable(t *testing.T) {
 }
 
 func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
+	t.Parallel()
 	verdictFixture := setupBoundedAwaitFixture(
 		t,
 		models.TaskStatusReadyForReview,
@@ -346,6 +347,7 @@ func assertBoundedAwaitOwnershipReleased(
 // never resumes, so a retained assigned_to would pin the task to a departed agent
 // until its lease lapsed.
 func TestAwaitVerdict_BudgetExhaustionReleasesDoerClaim(t *testing.T) {
+	t.Parallel()
 	fixture := setupBoundedAwaitFixture(
 		t,
 		models.TaskStatusReadyForReview,

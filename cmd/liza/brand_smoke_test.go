@@ -42,6 +42,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNonDefaultBrandBuildSmoke(t *testing.T) {
+	t.Parallel()
 	bin := buildNonDefaultBrandBinary(t)
 
 	version := runBrandSmokeCommand(t, bin, "version")

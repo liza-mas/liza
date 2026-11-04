@@ -17,6 +17,7 @@ func TestGlobalIntegrationCommitPreservation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration tests in short mode")
 	}
+	t.Parallel()
 
 	for _, releaseDoer := range []bool{false, true} {
 		name := "ordinary_merge"

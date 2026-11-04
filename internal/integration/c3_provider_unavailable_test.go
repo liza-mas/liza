@@ -42,6 +42,7 @@ func TestC3ProviderUnavailableOverrideSeparatesAliasSupervisor(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	fixture := newProviderUnavailableSupervisorFixture(t)
 	if err := fixture.blackboard.Modify(func(s *models.State) error {
 		s.Config.AgentTools = map[string]models.AgentToolConfig{"codex-acp": {ProviderKey: "acp-lane"}}

@@ -14,6 +14,7 @@ import (
 )
 
 func TestWtMergeCommand(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                string
 		taskID              string

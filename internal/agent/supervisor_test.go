@@ -896,6 +896,7 @@ fi
 const supervisorRunHangGuard = 60 * time.Second
 
 func TestSupervisor_Exit0ProviderAuditDegradedContinuesPostExecution(t *testing.T) {
+	t.Parallel()
 	t.Run("real provider diagnostic", func(t *testing.T) {
 		testSupervisorAuditPostExecution(t, `ERROR codex_core::session: failed to record rollout items: thread missing not found`, 1)
 	})
@@ -1001,6 +1002,7 @@ func testSupervisorAuditPostExecution(t *testing.T, auditOutput string, wantAnom
 }
 
 func TestRunSupervisor_HeartbeatMissingAgentStopsSupervisor(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
@@ -1520,6 +1522,7 @@ func TestObservedRuntimeFailureRetry_BlocksWithoutGenericSpin(t *testing.T) {
 }
 
 func TestRunSupervisor_CodexCommandRuntimeFailureBlocksWithoutGenericSpin(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)
@@ -1586,6 +1589,7 @@ func TestRunSupervisor_CodexCommandRuntimeFailureBlocksWithoutGenericSpin(t *tes
 }
 
 func TestRunSupervisor_OpenCodeNoProgressBlocksBeforeSecondExecution(t *testing.T) {
+	t.Parallel()
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	statePath, _ := testhelpers.SetupLizaDir(t, projectRoot)

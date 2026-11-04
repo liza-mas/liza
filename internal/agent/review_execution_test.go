@@ -136,6 +136,7 @@ func TestReviewExecutionReacquisitionRetiresOwnVerdict(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	config, bb, runtimeConfig := reviewExecutionFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		for i, status := range []models.TaskStatus{models.TaskStatusRejected, models.TaskStatusReviewing, models.TaskStatusReadyForReview} {
@@ -201,6 +202,7 @@ func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	config, bb, runtimeConfig, reviewCommit := rejectableReviewFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
@@ -230,6 +232,7 @@ func TestReviewExecutionSurvivesOwnRejection(t *testing.T) {
 // A forced release while the reviewer awaits resubmission retires its verdict:
 // the obsolete turn must stop instead of taking the review back.
 func TestReviewExecutionForcedReleaseRetiresOwnVerdict(t *testing.T) {
+	t.Parallel()
 	config, bb, runtimeConfig, reviewCommit := rejectableReviewFixture(t)
 	config.LLMAgent = &reviewExecutionProvider{run: func(ctx context.Context) error {
 		if _, err := ops.SubmitVerdictWithAuthority(config.ProjectRoot, "review-task", "REJECTED", "needs work", config.Authority, "", reviewCommit); err != nil {
@@ -303,6 +306,7 @@ func TestReviewExecutionOwnershipLifetime(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	for _, tc := range []struct {
 		name       string
 		wantCancel bool

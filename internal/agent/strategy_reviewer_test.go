@@ -299,6 +299,7 @@ func TestEnsureReviewerPromptClaimed_RejectsSubmittedUnclaimedTask(t *testing.T)
 // or reordering the claim release or the degradation at that call site fails
 // here rather than passing on helper-level coverage.
 func TestReviewerStrategy_ClaimTask_PostWorktreeCmdFailureReleasesClaimAndDegrades(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)

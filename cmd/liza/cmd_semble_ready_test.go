@@ -23,6 +23,7 @@ func TestSessionHookSembleProviderBudgetAndCorpusLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash unavailable")
 	}

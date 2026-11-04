@@ -702,6 +702,7 @@ func findPhase2PipelineTestdata(t *testing.T) string {
 // restart would hand a coder an unprepared worktree — the gap the claim path
 // already closes.
 func TestClaimDoerTask_ResumePostWorktreeCmdFailureDegradesAgent(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name           string
 		handoffPending bool
@@ -809,6 +810,7 @@ func TestClaimDoerTask_ResumeWithoutPostWorktreeCmdUnaffected(t *testing.T) {
 // Degraded classification must stop candidate iteration: a fresh-claim setup
 // failure returns immediately instead of trying the next candidate task.
 func TestClaimDoerTask_PostWorktreeCmdFailureStopsCandidateIteration(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
 	statePath, _ := testhelpers.SetupLizaDir(t, tmpDir)

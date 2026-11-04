@@ -26,6 +26,7 @@ func TestProviderCancellation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow test: skipped in -short mode")
 	}
+	t.Parallel()
 	for _, backend := range []string{"cli", "acpx-prompt", "acpx-setup"} {
 		for _, scenario := range []string{"cancel-group", "deadline-group", "cancel-escaped"} {
 			t.Run(backend+"/"+scenario, func(t *testing.T) {

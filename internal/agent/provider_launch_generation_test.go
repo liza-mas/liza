@@ -23,6 +23,7 @@ import (
 )
 
 func TestProviderLaunchGenerationLinearization(t *testing.T) {
+	t.Parallel()
 	t.Run("replacement wins before every start boundary", func(t *testing.T) {
 		cases := []struct {
 			name    string
