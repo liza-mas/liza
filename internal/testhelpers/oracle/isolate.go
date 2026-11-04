@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"flag"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -38,7 +39,9 @@ const isolateMargin = 10 * time.Second
 // body runs alone in its process. Every process-wide resource the body claims
 // (the child subreaper, every child of the process, the environment) is
 // therefore its own, while the parent runs in parallel with other tests.
-// Isolation comes from the process boundary instead of Go's serial phase.
+// Isolation comes from the process boundary instead of Go's serial phase. The
+// child applies the parent's subtest selection (-run below the top level, and
+// -skip).
 //
 // The parent builds mainPkgs first and hands them down. It also registers the
 // package's testdata as test inputs and reads WriteEnv: go test caches a result
@@ -66,7 +69,14 @@ func Isolate(t *testing.T, mainPkgs ...string) bool {
 	if err != nil {
 		t.Fatalf("oracle: test executable: %v", err)
 	}
-	args := []string{"-test.run=^" + regexp.QuoteMeta(t.Name()) + "$", "-test.count=1", "-test.v=true"}
+	run, err := childRunPattern(t.Name(), flag.Lookup("test.run").Value.String())
+	if err != nil {
+		t.Fatalf("oracle: -test.run: %v", err)
+	}
+	args := []string{"-test.run=" + run, "-test.count=1", "-test.v=true"}
+	if skip := flag.Lookup("test.skip").Value.String(); skip != "" {
+		args = append(args, "-test.skip="+skip)
+	}
 	if testing.Short() {
 		args = append(args, "-test.short")
 	}
@@ -92,6 +102,67 @@ func Isolate(t *testing.T, mainPkgs ...string) bool {
 		t.Logf("oracle: isolated %s output:\n%s", t.Name(), out)
 	}
 	return true
+}
+
+// childRunPattern narrows the parent's -test.run pattern to the top-level test
+// name, keeping the subtest levels of every alternative that selected it, so
+// the child runs the same subtests of that test and no other test.
+func childRunPattern(name, pattern string) (string, error) {
+	top := "^" + regexp.QuoteMeta(name) + "$"
+	var kept []string
+	for _, alt := range splitRunPattern(pattern) {
+		ok, err := regexp.MatchString(alt[0], name)
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case !ok:
+		case len(alt) == 1:
+			return top, nil // this alternative selects every subtest
+		default:
+			kept = append(kept, top+"/"+strings.Join(alt[1:], "/"))
+		}
+	}
+	if len(kept) == 0 {
+		return top, nil
+	}
+	return strings.Join(kept, "|"), nil
+}
+
+// splitRunPattern splits a -test.run pattern as go test does (testing's
+// splitRegexp): into "|" alternatives, each a list of "/" levels, splitting
+// only outside brackets and parentheses and never on an escaped character.
+func splitRunPattern(s string) [][]string {
+	var alts [][]string
+	var levels []string
+	brackets, parens := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '[':
+			brackets++
+		case ']':
+			brackets = max(brackets-1, 0) // an unmatched ']' is legal
+		case '(':
+			if brackets == 0 {
+				parens++
+			}
+		case ')':
+			if brackets == 0 {
+				parens--
+			}
+		case '\\':
+			i++
+		case '/', '|':
+			if brackets == 0 && parens == 0 {
+				levels = append(levels, s[:i])
+				if s[i] == '|' {
+					alts, levels = append(alts, levels), nil
+				}
+				s, i = s[i+1:], -1
+			}
+		}
+	}
+	return append(alts, append(levels, s))
 }
 
 // prebuiltCLI returns the path an isolating parent built for mainPkg.

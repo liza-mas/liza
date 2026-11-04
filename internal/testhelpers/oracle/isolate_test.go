@@ -71,6 +71,56 @@ func TestIsolatePropagatesOutcome(t *testing.T) {
 	}
 }
 
+// TestIsolateSubtestProbe is driven by TestIsolateForwardsSubtestFilter.
+func TestIsolateSubtestProbe(t *testing.T) {
+	if Isolate(t) {
+		return
+	}
+	t.Run("a", func(*testing.T) {})
+	t.Run("b", func(*testing.T) {})
+}
+
+// The child runs only the subtests that the parent's -run and -skip select.
+func TestIsolateForwardsSubtestFilter(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ name, run, skip, ran, notRan string }{
+		{"run", "^TestIsolateSubtestProbe$/^a$", "", "TestIsolateSubtestProbe/a", "TestIsolateSubtestProbe/b"},
+		{"skip", "^TestIsolateSubtestProbe$", "TestIsolateSubtestProbe/a", "TestIsolateSubtestProbe/b", "TestIsolateSubtestProbe/a"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := exec.Command(exe, "-test.run="+c.run, "-test.skip="+c.skip, "-test.count=1", "-test.v=true").CombinedOutput()
+			if err != nil {
+				t.Fatalf("%v:\n%s", err, out)
+			}
+			if !strings.Contains(string(out), "--- PASS: "+c.ran) || strings.Contains(string(out), c.notRan) {
+				t.Fatalf("child must run %s and not %s:\n%s", c.ran, c.notRan, out)
+			}
+		})
+	}
+}
+
+func TestChildRunPattern(t *testing.T) {
+	for _, c := range []struct{ pattern, want string }{
+		{"", "^X$"},
+		{"X", "^X$"},
+		{"X/a", "^X$/a"},
+		{"X/a/b", "^X$/a/b"},
+		{"Y|X/a", "^X$/a"},
+		{"X/a|X/b", "^X$/a|^X$/b"},
+		{"X|X/a", "^X$"},
+		{"(X|Z)/a", "^X$/a"},
+		{"X/[a/b]", "^X$/[a/b]"},
+		{`X/a\/b`, `^X$/a\/b`},
+	} {
+		if got, err := childRunPattern("X", c.pattern); err != nil || got != c.want {
+			t.Errorf("childRunPattern(X, %q) = %q, %v; want %q", c.pattern, got, err, c.want)
+		}
+	}
+}
+
 func TestPrebuiltCLI(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	t.Setenv(prebuiltEnv, "./cmd/a=/x/cli0"+sep+"./cmd/b=/x/cli1")

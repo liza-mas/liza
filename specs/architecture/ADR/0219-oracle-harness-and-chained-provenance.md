@@ -222,7 +222,8 @@ default 60 s heartbeat.
   test, with `ORACLE_ISOLATED_TEST` naming it. The child runs the body alone in
   its process, and only the parent calls `t.Parallel`. D48's assertion needs
   the test to be alone in its process, which the child provides, so
-  observation-based tracking stays rejected.
+  observation-based tracking stays rejected. The child keeps the parent's
+  subtest selection: `-run` levels below the test's name, and `-skip`.
 - The parent builds the CLI once and hands it down (`ORACLE_PREBUILT_CLI`). It
   also opens the package's `testdata` and reads `ORACLE_WRITE`, because go test
   caches a result on what its own process reads, and goldens read by a child
