@@ -77,7 +77,7 @@ func TestChildEnvGoToolchainForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]string{"GOCACHE": "/gc", "GOMODCACHE": "/gm", "GOFLAGS": "-buildvcs=false"} {
+	for name, want := range map[string]string{"GOCACHE": "/gc", "GOMODCACHE": "/gm", "GOFLAGS": "-buildvcs=false -trimpath"} {
 		if got, _ := envValue(env, name); got != want {
 			t.Errorf("%s has an unexpected value", name)
 		}

@@ -15,7 +15,10 @@ type EnvBase struct {
 	Path string
 	Tmp  string
 	// Go marks a Go-toolchain child: it also gets the build caches and
-	// GOFLAGS=-buildvcs=false.
+	// GOFLAGS=-buildvcs=false -trimpath. Children build in disposable trees
+	// (regen worktrees, mutated copies); without -trimpath the build cache keys
+	// every package on its absolute directory, so each tree recompiled the
+	// module.
 	Go bool
 }
 
@@ -53,7 +56,7 @@ func childEnv(goos string, base EnvBase, caches goCaches, systemRoot string, ext
 		env = append(env,
 			"GOCACHE="+caches.cache,
 			"GOMODCACHE="+caches.modCache,
-			"GOFLAGS=-buildvcs=false",
+			"GOFLAGS=-buildvcs=false -trimpath",
 		)
 	}
 	policy := map[string]bool{}
