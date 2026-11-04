@@ -209,6 +209,7 @@ func recordModels(models []LLMAgentModelUsage) []usage.ModelUsage {
 			OutputTokens:       m.OutputTokens,
 			ReasoningTokens:    m.ReasoningTokens,
 			CostUSD:            reportedCost(m.CostUSD, m.CostReported),
+			CostBasis:          m.CostBasis,
 		})
 	}
 	return out

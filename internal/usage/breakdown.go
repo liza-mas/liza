@@ -27,23 +27,26 @@ const unattributedKey = "(none)"
 
 // BreakdownRow is the authoritative usage of one group. TokensProcessed is
 // fresh + cache-write + cache-read + output; reasoning is already inside
-// output for the providers that report it. CacheHitPercent is cache-read over
-// all input (fresh + cache-write + cache-read), nil when there is no input.
-// CostUSD sums provider-reported cost; UnpricedRecords counts the records it
-// leaves out, so a partial cost is never mistaken for a total.
+// output for the providers that report it. InputCacheHitPercent is cache-read
+// over all input (fresh + cache-write + cache-read), nil when there is no
+// input; per_completed_task's cache_hit_percent leaves cache writes out.
+// CostUSD sums provider-reported cost; UnpricedRecords counts the shares it
+// leaves out, so a partial cost is never mistaken for a total. By model,
+// Records and UnpricedRecords count model shares, so a multi-model record
+// counts once in each of its model rows and the rows can sum above Totals.
 type BreakdownRow struct {
-	Key                string   `json:"key"`
-	Records            int      `json:"records"`
-	FreshInputTokens   int      `json:"fresh_input_tokens"`
-	CacheWriteTokens   int      `json:"cache_write_tokens"`
-	CacheWrite1hTokens int      `json:"cache_write_1h_tokens"`
-	CacheReadTokens    int      `json:"cache_read_tokens"`
-	OutputTokens       int      `json:"output_tokens"`
-	ReasoningTokens    int      `json:"reasoning_tokens"`
-	TokensProcessed    int      `json:"tokens_processed"`
-	CacheHitPercent    *float64 `json:"cache_hit_percent"`
-	CostUSD            float64  `json:"cost_usd"`
-	UnpricedRecords    int      `json:"unpriced_records"`
+	Key                  string   `json:"key"`
+	Records              int      `json:"records"`
+	FreshInputTokens     int      `json:"fresh_input_tokens"`
+	CacheWriteTokens     int      `json:"cache_write_tokens"`
+	CacheWrite1hTokens   int      `json:"cache_write_1h_tokens"`
+	CacheReadTokens      int      `json:"cache_read_tokens"`
+	OutputTokens         int      `json:"output_tokens"`
+	ReasoningTokens      int      `json:"reasoning_tokens"`
+	TokensProcessed      int      `json:"tokens_processed"`
+	InputCacheHitPercent *float64 `json:"input_cache_hit_percent"`
+	CostUSD              float64  `json:"cost_usd"`
+	UnpricedRecords      int      `json:"unpriced_records"`
 }
 
 // Breakdown groups a window's authoritative records by one dimension. Rows
@@ -157,7 +160,7 @@ func (row *BreakdownRow) finish() BreakdownRow {
 	row.TokensProcessed = input + row.OutputTokens
 	if input > 0 {
 		percent := float64(row.CacheReadTokens) * 100 / float64(input)
-		row.CacheHitPercent = &percent
+		row.InputCacheHitPercent = &percent
 	}
 	return *row
 }

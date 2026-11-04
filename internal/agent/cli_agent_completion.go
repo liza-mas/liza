@@ -24,7 +24,7 @@ func failCLIRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent,
 // printed none yields the empty usage, still emitted explicitly on every path,
 // so the supervisor sink pins unknown provenance instead of inferring zero tokens.
 func (d *CLIAgent) completeRun(ctx context.Context, req LLMAgentRunRequest, base LLMAgentEvent, streams *cliRunStreams, waitErr error) (LLMAgentRunResult, error) {
-	usage, _ := parseCLIUsage(streams.stdout.String())
+	usage, _ := parseCLIUsage(req.BackendName, streams.stdout.String())
 	if usage.Source != "" {
 		usage.Model = req.Model
 	}

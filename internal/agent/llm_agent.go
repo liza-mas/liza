@@ -140,6 +140,9 @@ type LLMAgentModelUsage struct {
 	ReasoningTokens     int
 	CostUSD             float64
 	CostReported        bool
+	// CostBasis is how the provider priced CostUSD; Claude's "list" is list price,
+	// not what a subscription bills.
+	CostBasis string
 }
 
 // LLMAgentInteractiveRequest contains parameters for interactive mode.

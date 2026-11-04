@@ -47,6 +47,9 @@ func TestBuildBreakdownByModel(t *testing.T) {
 	if sum.TokensProcessed != b.Totals.TokensProcessed {
 		t.Fatalf("model rows sum to %d tokens, totals say %d", sum.TokensProcessed, b.Totals.TokensProcessed)
 	}
+	if sum.CostUSD != b.Totals.CostUSD {
+		t.Fatalf("model rows sum to $%v, totals say $%v", sum.CostUSD, b.Totals.CostUSD)
+	}
 	if b.Totals.Records != 3 || b.Totals.UnpricedRecords != 2 || b.Totals.CostUSD != 0.25 {
 		t.Fatalf("totals = %+v, want 3 records, 2 unpriced, $0.25", b.Totals)
 	}
@@ -54,7 +57,7 @@ func TestBuildBreakdownByModel(t *testing.T) {
 	if opus.TokensProcessed != 2+900+3000+13 || opus.CacheWrite1hTokens != 600 || opus.CostUSD != 0.2 || opus.UnpricedRecords != 0 {
 		t.Fatalf("opus row = %+v", opus)
 	}
-	if hit := *opus.CacheHitPercent; hit < 76.8 || hit > 76.9 {
+	if hit := *opus.InputCacheHitPercent; hit < 76.8 || hit > 76.9 {
 		t.Fatalf("opus cache hit = %.2f, want cache read over all input (3000/3902)", hit)
 	}
 	if byKey["gpt-5.5"].UnpricedRecords != 1 || byKey[unattributedKey].Records != 1 {
@@ -76,7 +79,7 @@ func TestBuildBreakdownByRole(t *testing.T) {
 		}
 	}
 	empty := buildBreakdown(nil, BreakdownByRole)
-	if len(empty.Rows) != 0 || empty.Totals.CacheHitPercent != nil {
+	if len(empty.Rows) != 0 || empty.Totals.InputCacheHitPercent != nil {
 		t.Fatalf("empty breakdown = %+v, want no rows and no hit rate", empty)
 	}
 }

@@ -213,7 +213,7 @@ func formatUsageReport(report usage.Report, format string) (string, error) {
 	return out.String(), nil
 }
 
-var breakdownHeaders = []string{"KEY", "RECORDS", "FRESH", "CACHE WRITE", "CACHE WRITE 1H", "CACHE READ", "OUTPUT", "REASONING", "TOTAL", "CACHE HIT %", "COST USD", "UNPRICED"}
+var breakdownHeaders = []string{"KEY", "RECORDS", "FRESH", "CACHE WRITE", "CACHE WRITE 1H", "CACHE READ", "OUTPUT", "REASONING", "TOTAL", "INPUT CACHE HIT %", "COST USD", "UNPRICED"}
 
 func breakdownTableRows(rows []usage.BreakdownRow) [][]string {
 	out := make([][]string, 0, len(rows)+1)
@@ -225,13 +225,18 @@ func breakdownTableRows(rows []usage.BreakdownRow) [][]string {
 
 func breakdownTableRow(row usage.BreakdownRow) []string {
 	hit := "-"
-	if row.CacheHitPercent != nil {
-		hit = strconv.FormatFloat(*row.CacheHitPercent, 'f', 1, 64)
+	if row.InputCacheHitPercent != nil {
+		hit = strconv.FormatFloat(*row.InputCacheHitPercent, 'f', 1, 64)
+	}
+	// A group with no priced share has no cost, which is not $0.
+	cost := "-"
+	if row.UnpricedRecords < row.Records {
+		cost = strconv.FormatFloat(row.CostUSD, 'f', 4, 64)
 	}
 	return []string{
 		row.Key, strconv.Itoa(row.Records),
 		strconv.Itoa(row.FreshInputTokens), strconv.Itoa(row.CacheWriteTokens), strconv.Itoa(row.CacheWrite1hTokens),
 		strconv.Itoa(row.CacheReadTokens), strconv.Itoa(row.OutputTokens), strconv.Itoa(row.ReasoningTokens),
-		strconv.Itoa(row.TokensProcessed), hit, strconv.FormatFloat(row.CostUSD, 'f', 4, 64), strconv.Itoa(row.UnpricedRecords),
+		strconv.Itoa(row.TokensProcessed), hit, cost, strconv.Itoa(row.UnpricedRecords),
 	}
 }

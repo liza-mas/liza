@@ -115,6 +115,7 @@ type ModelUsage struct {
 	OutputTokens       int      `json:"output_tokens"`
 	ReasoningTokens    int      `json:"reasoning_tokens,omitempty"`
 	CostUSD            *float64 `json:"cost_usd,omitempty"`
+	CostBasis          string   `json:"cost_basis,omitempty"`
 }
 
 func (r Record) sameCounts(other Record) bool {
