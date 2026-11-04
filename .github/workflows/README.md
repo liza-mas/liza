@@ -24,8 +24,8 @@ integration, and CLI. `internal/ops` and `cmd/liza` have their own jobs because
 each takes a large share of a job's 30-minute limit under race instrumentation.
 Python tests run only in the integration job when enabled.
 macOS runs the same five suites as matrix jobs, without race instrumentation
-except integration, which reuses `ci-test-integration-nosync`. Its oracle job
-runs `internal/oracle/a9` in a lane of its own. The `macOS compatibility`
+except integration, which reuses `ci-test-integration-nosync`. Both oracle
+targets list `internal/oracle/a9` first so it starts first. The `macOS compatibility`
 aggregate check requires every macOS shard to succeed.
 The `Linux tests` aggregate check requires every shard to succeed and forwards
 their source SHA through the existing `verified_sha` output. Shards use separate

@@ -154,9 +154,12 @@ job (14 minutes on one 3-core runner, run 41762236975) became the slowest
 check on `main`. It now runs the five Linux suites as a matrix with a
 `macOS compatibility` aggregate check, which keeps the check name, the
 non-race policy (integration still runs with race, as before) and the
-pull-request skip. The user chose this together with a separate lane for
-`internal/oracle/a9`: `go test` starts packages in list order, so a9, which
-mostly waits, started about 7 minutes into the old job. Five shards stay
+pull-request skip. The user chose this together with an earlier start for
+`internal/oracle/a9`: `go test` starts packages in command-line order, so a9,
+which mostly waits, started about 7 minutes into the old job, and 2.5 minutes
+into the Linux oracle shard (`-p 2`). A separate a9 lane came first; listing
+a9 first in both oracle targets replaced it, because it gives the same start
+without adding a third race-instrumented process on Linux. Five shards stay
 within GitHub's limit of five concurrent macOS jobs on Free, Pro and Team
 plans (docs.github.com/en/actions/reference/limits, read 2026-11-04). Each shard
 keeps its own weekly cache; `ci-test-compat-nosync` and `ci-test-slow-nosync`

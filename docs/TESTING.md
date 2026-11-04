@@ -26,7 +26,7 @@ Linux tests run on five independent runners:
 |-------|-----------------|----------|
 | Core | `ci-test-core-nosync` | All Go packages except ops, oracle, integration, and CLI |
 | Ops | `ci-test-ops-nosync` | `internal/ops` |
-| Oracle | `ci-test-oracle-nosync` | All packages under `internal/oracle/` |
+| Oracle | `ci-test-oracle-nosync` | All packages under `internal/oracle/`, `a9` first |
 | Integration | `ci-test-integration-nosync` | `internal/integration` with the `e2e` tag |
 | CLI | `ci-test-cli-nosync` | `cmd/liza` |
 
@@ -45,9 +45,10 @@ macOS runs on `main` pushes, version tags and manual runs, as five runners
 covering the same packages as the Linux shards. Only integration keeps race
 instrumentation (`ci-test-integration-nosync`); core, ops, oracle and CLI use
 `ci-test-compat-core-nosync`, `ci-test-compat-ops-nosync`,
-`ci-test-compat-oracle-nosync` and `ci-test-compat-cli-nosync`. The oracle
-target runs `internal/oracle/a9` in its own lane: `go test` starts packages in
-list order, and a9 spends most of its run waiting. The CLI runner also builds
+`ci-test-compat-oracle-nosync` and `ci-test-compat-cli-nosync`. Both oracle
+targets list `internal/oracle/a9` first: `go test` starts packages in
+command-line order, and a9, the longest and mostly waiting, would otherwise
+start only when another package freed a slot. The CLI runner also builds
 the binary. The `macOS compatibility` aggregate check fails unless all five
 shards succeed.
 
