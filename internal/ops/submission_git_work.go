@@ -127,6 +127,9 @@ func (s *submissionRun) enforceTDD() error {
 	}
 	testDiagnostics, err := AnalyzeTestFiles(s.git, s.taskID, *s.task.BaseCommit, s.preRebaseCommit)
 	if err != nil {
+		// Err is withheld from the JSON/MCP envelope; stderr keeps git's own message
+		// (exit status and fatal line) for whoever reads the CLI or test output.
+		log.Printf("WARNING: task %s: test-file check failed: %v", s.taskID, err)
 		return &OperationalError{
 			Code:    operationalCodeGitOperation,
 			Phase:   "check-test-files",
