@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/commands"
+	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
 var nonDefaultBrandBuild struct {
@@ -25,6 +26,10 @@ var nonDefaultBrandBuild struct {
 func TestMain(m *testing.M) {
 	// In-process init must not depend on whether this host has pre-commit.
 	restorePreCommit := commands.SetInitPreCommitLookPathForTest(func(name string) (string, error) { return "/stub/" + name, nil })
+	// Developer shells set the index env gates and CI does not: with them on,
+	// every worktree removal here launches the host's real semble binary.
+	// Tests that exercise index activation opt in with t.Setenv.
+	testhelpers.DisableIndexEnvGates()
 	code := m.Run()
 	restorePreCommit()
 	if nonDefaultBrandBuild.tempDir != "" {

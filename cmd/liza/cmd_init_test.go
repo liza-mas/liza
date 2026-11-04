@@ -371,6 +371,9 @@ func TestHasExplicitInitFlags_SembleEnvDoesNotForceWorkspaceInit(t *testing.T) {
 	projectRoot := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, projectRoot)
 	fakeHome := testhelpers.SetupGlobalLiza(t)
+	// The fake keeps init's Semble prewarm off the host's real binary.
+	t.Setenv("SEMBLE_TEST_LOG", filepath.Join(t.TempDir(), "semble.log"))
+	writeFakeSembleForTest(t, filepath.Join(fakeHome, "bin", "semble"))
 
 	err := executeRootCommand(t, projectRoot, "init", "--gemini")
 	if err != nil {
