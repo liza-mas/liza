@@ -27,9 +27,8 @@ func (g *Git) MergeTree(baseCommit, branchCommit string) (treeSHA string, clean 
 	// Exit code 0 = clean merge, 1 = has conflicts
 	output, err := g.exec("merge-tree", "--write-tree", "--no-messages", baseCommit, branchCommit)
 	if err != nil {
-		// Check if it's a conflict (exit code 1)
-		errStr := err.Error()
-		if strings.Contains(errStr, "exit status 1") {
+		// Exit status 1 is a conflict; anything else is a failure.
+		if exitedWithStatus(err, 1) {
 			// Conflicts exist - the output still contains the tree SHA
 			// with best-effort merge (with conflict markers)
 			return output, false, nil

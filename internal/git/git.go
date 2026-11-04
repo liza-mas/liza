@@ -3,7 +3,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/gitenv"
@@ -35,6 +37,13 @@ func (g *Git) exec(args ...string) (string, error) {
 		return "", fmt.Errorf("git %v failed: %w\nOutput: %s", args, err, output)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// exitedWithStatus reports whether err is git exiting with status code. Match
+// the code, never the error text: "exit status 128" contains "exit status 1".
+func exitedWithStatus(err error, code int) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == code
 }
 
 // execInDir runs a git command in a specific directory

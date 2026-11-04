@@ -406,8 +406,8 @@ func (g *Git) IsAncestor(commitA, commitB string) (bool, error) {
 		storeObjectQuery(key, true, 0)
 	}
 	if err != nil {
-		// Check if error is "not an ancestor" (exit code 1)
-		if strings.Contains(err.Error(), "exit status 1") {
+		// Exit status 1 is "not an ancestor"; anything else is a failure.
+		if exitedWithStatus(err, 1) {
 			return false, nil
 		}
 		return false, fmt.Errorf("merge-base failed: %w", err)
