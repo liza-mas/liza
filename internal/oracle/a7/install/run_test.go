@@ -17,9 +17,12 @@ import (
 // becoming the oracle for an unreachable action boundary.
 func (f *fixture) invoke(t *testing.T, label, stdin string, omitStderr bool, expected int, args ...string) {
 	t.Helper()
+	// Build before starting the clock: a contended first build can outlast the
+	// run budget, and Start then fails on the expired context.
+	bin := oracle.BuildCLI(t, "./cmd/liza")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, oracle.BuildCLI(t, "./cmd/liza"), args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir, cmd.Env = f.project, f.env
 	cmd.Stdin = bytes.NewBufferString(stdin)
 	var stdout, stderr bytes.Buffer

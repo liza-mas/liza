@@ -136,9 +136,12 @@ func (p project) run(t *testing.T, generation bool, args ...string) observation 
 	if entries, err := os.ReadDir(p.path); err != nil || len(entries) != 1 || entries[0].Name() != gitName {
 		t.Fatal("CLI PATH must contain only Git")
 	}
+	// Build before starting the clock: a contended first build can outlast the
+	// run budget, and Start then fails on the expired context.
+	bin := oracle.BuildCLI(t, "./cmd/liza")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, oracle.BuildCLI(t, "./cmd/liza"), args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir, cmd.Env = p.root, env
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
