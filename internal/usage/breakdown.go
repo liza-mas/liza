@@ -107,7 +107,7 @@ func recordShares(r Record, by string) []share {
 	switch by {
 	case BreakdownByModel:
 		if len(r.Models) == 0 {
-			return []share{recordShare(r, r.RequestedModel)}
+			return []share{recordShare(r, fallbackModelKey(r))}
 		}
 		shares := make([]share, 0, len(r.Models))
 		for _, m := range r.Models {
@@ -127,6 +127,15 @@ func recordShares(r Record, by string) []share {
 	default:
 		return []share{recordShare(r, r.Provider)}
 	}
+}
+
+// fallbackModelKey names the model of a record without models[]. A launch on
+// the CLI's default model keeps its provider, so providers stay apart.
+func fallbackModelKey(r Record) string {
+	if r.RequestedModel == "" && r.Provider != "" {
+		return r.Provider + " (default)"
+	}
+	return r.RequestedModel
 }
 
 func recordShare(r Record, key string) share {

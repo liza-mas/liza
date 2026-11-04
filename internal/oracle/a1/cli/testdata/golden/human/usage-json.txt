@@ -132,7 +132,7 @@ exit_code: 0
 },
 "rows": [
 {
-"key": "(none)",
+"key": "codex (default)",
 "records": 2,
 "fresh_input_tokens": 1280,
 "cache_write_tokens": 60,

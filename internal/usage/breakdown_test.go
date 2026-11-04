@@ -25,9 +25,12 @@ func breakdownTestRecords() []Record {
 	codex.AgentID, codex.Role, codex.Provider, codex.RequestedModel = "reviewer-1", "reviewer", "codex", "gpt-5.5"
 	codex.FreshInputTokens, codex.CacheWriteTokens, codex.CacheReadTokens, codex.OutputTokens = 300, 0, 700, 50
 
-	// A record written before models existed: it lands in the unattributed group.
+	// A launch on the CLI's default model: it lands under its provider.
 	legacy := usageTestRecord(usageTestStart.Add(2 * time.Minute))
-	return []Record{multiModel, codex, legacy}
+	// No model and no provider: the unattributed group.
+	anonymous := usageTestRecord(usageTestStart.Add(3 * time.Minute))
+	anonymous.Provider = ""
+	return []Record{multiModel, codex, legacy, anonymous}
 }
 
 func TestBuildBreakdownByModel(t *testing.T) {
@@ -40,8 +43,8 @@ func TestBuildBreakdownByModel(t *testing.T) {
 		sum.TokensProcessed += row.TokensProcessed
 		sum.CostUSD += row.CostUSD
 	}
-	if len(b.Rows) != 4 {
-		t.Fatalf("rows = %+v, want opus, haiku, gpt-5.5 and the unattributed group", b.Rows)
+	if len(b.Rows) != 5 {
+		t.Fatalf("rows = %+v, want opus, haiku, gpt-5.5, claude (default) and the unattributed group", b.Rows)
 	}
 	// Model shares sum to the totals: a subagent model is neither lost nor double counted.
 	if sum.TokensProcessed != b.Totals.TokensProcessed {
@@ -50,8 +53,8 @@ func TestBuildBreakdownByModel(t *testing.T) {
 	if sum.CostUSD != b.Totals.CostUSD {
 		t.Fatalf("model rows sum to $%v, totals say $%v", sum.CostUSD, b.Totals.CostUSD)
 	}
-	if b.Totals.Records != 3 || b.Totals.UnpricedRecords != 2 || b.Totals.CostUSD != 0.25 {
-		t.Fatalf("totals = %+v, want 3 records, 2 unpriced, $0.25", b.Totals)
+	if b.Totals.Records != 4 || b.Totals.UnpricedRecords != 3 || b.Totals.CostUSD != 0.25 {
+		t.Fatalf("totals = %+v, want 4 records, 3 unpriced, $0.25", b.Totals)
 	}
 	opus := byKey["claude-opus-5-5"]
 	if opus.TokensProcessed != 2+900+3000+13 || opus.CacheWrite1hTokens != 600 || opus.CostUSD != 0.2 || opus.UnpricedRecords != 0 {
@@ -60,8 +63,8 @@ func TestBuildBreakdownByModel(t *testing.T) {
 	if hit := *opus.InputCacheHitPercent; hit < 76.8 || hit > 76.9 {
 		t.Fatalf("opus cache hit = %.2f, want cache read over all input (3000/3902)", hit)
 	}
-	if byKey["gpt-5.5"].UnpricedRecords != 1 || byKey[unattributedKey].Records != 1 {
-		t.Fatalf("rows = %+v, want the unpriced codex row and the legacy record unattributed", b.Rows)
+	if byKey["gpt-5.5"].UnpricedRecords != 1 || byKey["claude (default)"].Records != 1 || byKey[unattributedKey].Records != 1 {
+		t.Fatalf("rows = %+v, want the unpriced codex row, the default-model claude row and one unattributed record", b.Rows)
 	}
 	if b.Rows[0].Key != "claude-opus-5-5" {
 		t.Fatalf("first row = %q, want the largest consumer first", b.Rows[0].Key)
@@ -74,8 +77,8 @@ func TestBuildBreakdownByRole(t *testing.T) {
 		t.Fatalf("rows = %+v, want coder and reviewer", b.Rows)
 	}
 	for _, row := range b.Rows {
-		if row.Key == "coder" && row.Records != 2 {
-			t.Fatalf("coder row = %+v, want both coder records", row)
+		if row.Key == "coder" && row.Records != 3 {
+			t.Fatalf("coder row = %+v, want the three coder records", row)
 		}
 	}
 	empty := buildBreakdown(nil, BreakdownByRole)

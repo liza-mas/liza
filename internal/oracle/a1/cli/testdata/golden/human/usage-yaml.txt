@@ -103,7 +103,7 @@ inputcachehitpercent: 19.27710843373494
 costusd: 0
 unpricedrecords: 2
 rows:
-- key: (none)
+- key: codex (default)
 records: 2
 freshinputtokens: 1280
 cachewritetokens: 60

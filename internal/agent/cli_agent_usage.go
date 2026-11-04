@@ -184,6 +184,7 @@ func applyClaudeModels(usage *LLMAgentUsage, models map[string]claudeModelUsage)
 
 // parseCodexStream reads codex exec --json. turn.completed carries the thread's
 // running total (codex-rs exec usage_from_last_total), so the last one wins.
+// Codex reports no call count, so APICalls stays empty rather than counting turns.
 func parseCodexStream(stdout string) (LLMAgentUsage, bool) {
 	var usage LLMAgentUsage
 	saw := false
@@ -208,7 +209,6 @@ func parseCodexStream(stdout string) (LLMAgentUsage, bool) {
 			CachedWriteTokens: u.CacheWriteInput,
 			OutputTokens:      u.OutputTokens,
 			ReasoningTokens:   u.ReasoningOutputs,
-			APICalls:          usage.APICalls + 1,
 			Source:            usageSourceStreamResult,
 		}
 		saw = true

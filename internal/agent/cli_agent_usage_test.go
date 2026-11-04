@@ -89,7 +89,7 @@ func TestParseCLIUsageCodexTurns(t *testing.T) {
 	// input_tokens include the cache, so fresh input is what remains.
 	want := LLMAgentUsage{
 		InputTokens: 300, CachedReadTokens: 1100, CachedWriteTokens: 100, OutputTokens: 50, ReasoningTokens: 30,
-		APICalls: 2, Source: usageSourceStreamResult,
+		Source: usageSourceStreamResult,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("parseCLIUsage = %+v, want %+v", got, want)
