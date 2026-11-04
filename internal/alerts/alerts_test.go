@@ -85,6 +85,12 @@ func TestWriteOnceKeyKeepsDistinctEpisodesAndReasons(t *testing.T) {
 }
 
 func TestWriteOnceKeyConcurrentWritersLogOnce(t *testing.T) {
+	// Eight writers queue on the ledger lock. On a loaded runner the last one can
+	// wait past the production bound, which TestWriteOnceKeyAppendsWhenLedgerIsLocked
+	// covers; this test checks once-semantics only.
+	previous := onceLedgerLockTimeout
+	onceLedgerLockTimeout = time.Minute
+	t.Cleanup(func() { onceLedgerLockTimeout = previous })
 	episode := time.Date(2026, 9, 24, 8, 2, 14, 0, time.UTC)
 	alertsLog := filepath.Join(t.TempDir(), "alerts.log")
 

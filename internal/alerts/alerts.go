@@ -122,8 +122,9 @@ func AwaitingHumanOccurrenceKey(taskID string, index int, at time.Time, ask stri
 }
 
 // onceLedgerLockTimeout bounds the wait of a watch tick or lifecycle writer on
-// the once-ledger; past it the alert is written without the ledger.
-const onceLedgerLockTimeout = 2 * time.Second
+// the once-ledger; past it the alert is written without the ledger. A variable
+// only so tests can lengthen it.
+var onceLedgerLockTimeout = 2 * time.Second
 
 // LedgerUnavailableError reports that an alert carrying an OnceKey was written
 // without consulting the once-ledger, so it may duplicate an earlier line.
