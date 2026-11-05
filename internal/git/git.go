@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/gitenv"
@@ -103,10 +104,44 @@ func (g *Git) CreateBranch(branch string) error {
 	return err
 }
 
-// DeleteBranch deletes a branch (force delete with -D)
+// DeleteBranch force-deletes a branch. `git branch -D` also removes the
+// branch's config section, and to do so replaces the shared config file even
+// when there is none; on Windows a git process reading the config meanwhile
+// fails ("unable to access '.git/config': Permission denied"), as a
+// concurrent merge did. A branch that exists, has no config section and is
+// checked out in no worktree is therefore deleted with update-ref, which
+// leaves the config alone; any other case keeps `git branch -D` and its
+// refusals (missing branch, branch checked out).
 func (g *Git) DeleteBranch(branch string) error {
+	ref := "refs/heads/" + branch
+	if sha, err := g.exec("rev-parse", "--verify", "--quiet", ref); err == nil && !g.branchHasConfig(branch) && !g.branchCheckedOut(branch) {
+		_, err := g.exec("update-ref", "-d", ref, sha)
+		return err
+	}
 	_, err := g.exec("branch", "-D", branch)
 	return err
+}
+
+// branchHasConfig reports whether branch has a config section; an
+// unreadable config counts as having one, so the caller keeps `branch -D`.
+func (g *Git) branchHasConfig(branch string) bool {
+	_, err := g.exec("config", "--get-regexp", `^branch\.`+regexp.QuoteMeta(branch)+`\.`)
+	return !exitedWithStatus(err, 1)
+}
+
+// branchCheckedOut reports whether a worktree has branch checked out; an
+// unreadable worktree list counts as checked out.
+func (g *Git) branchCheckedOut(branch string) bool {
+	worktrees, err := g.ListWorktrees()
+	if err != nil {
+		return true
+	}
+	for _, wt := range worktrees {
+		if wt.Branch == branch {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckoutBranch checks out a branch
