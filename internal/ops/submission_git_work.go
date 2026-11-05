@@ -127,9 +127,12 @@ func (s *submissionRun) enforceTDD() error {
 	}
 	testDiagnostics, err := AnalyzeTestFiles(s.git, s.taskID, *s.task.BaseCommit, s.preRebaseCommit)
 	if err != nil {
-		// Err is withheld from the JSON/MCP envelope; stderr keeps git's own message
-		// (exit status and fatal line) for whoever reads the CLI or test output.
+		// Err is withheld from the JSON/MCP envelope, and JSON mode discards
+		// this log, so the envelope carries git's exit status and a closed
+		// failure class instead of git's text; the log keeps the text for
+		// plain CLI output.
 		log.Printf("WARNING: task %s: test-file check failed: %v", s.taskID, err)
+		exitCode, failure := gitpkg.ClassifyFailure(err)
 		return &OperationalError{
 			Code:    operationalCodeGitOperation,
 			Phase:   "check-test-files",
@@ -137,6 +140,8 @@ func (s *submissionRun) enforceTDD() error {
 			Details: map[string]any{
 				"operation":     integrationOperationSubmitForReview,
 				"task_id":       s.taskID,
+				"git_exit_code": exitCode,
+				"git_failure":   string(failure),
 				"recovery_hint": "Inspect the task worktree git history and retry submit-for-review after the diff range can be analyzed.",
 			},
 			Err: err,

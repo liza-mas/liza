@@ -16,7 +16,9 @@ import (
 )
 
 // The JSON envelope withholds OperationalError.Err, so a failed test-file check
-// must leave git's own message on stderr for the CLI or test output to show.
+// must leave git's own message on stderr for the CLI or test output to show,
+// and name git's exit status and failure class in the envelope details, which
+// JSON mode (whose log goes nowhere) still returns.
 // Not parallel: it redirects the process-wide standard logger.
 func TestSubmitForReview_TestFileCheckFailureLogsGitCause(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -84,5 +86,10 @@ func TestSubmitForReview_TestFileCheckFailureLogsGitCause(t *testing.T) {
 		if !strings.Contains(logged.String(), want) {
 			t.Errorf("stderr log lacks %q; got:\n%s", want, logged.String())
 		}
+	}
+	// JSON mode discards that log; the envelope names the failure without git's text.
+	details := operational.SafeDetails()
+	if details["git_exit_code"] != 128 || details["git_failure"] != string(git.FailureBadRevision) {
+		t.Errorf("details git_exit_code=%v git_failure=%v, want 128 and %s", details["git_exit_code"], details["git_failure"], git.FailureBadRevision)
 	}
 }
