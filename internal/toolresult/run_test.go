@@ -63,6 +63,8 @@ func TestRunSmallReadAndCancellation(t *testing.T) {
 	}
 	// Cancel once the command has printed, not after a fixed delay: a loaded
 	// Windows runner can take longer than any short timeout just to start sh.
+	// The ready file follows the background fork: killing an MSYS sh mid-fork
+	// makes the child print a child_copy error into the captured output.
 	ready := filepath.Join(t.TempDir(), "ready")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -82,7 +84,7 @@ func TestRunSmallReadAndCancellation(t *testing.T) {
 		}
 	}()
 	output.Reset()
-	code, err = Run(ctx, store, Result{Tool: "Bash", Command: "sleep"}, []string{"sh", "-c", `printf before; : > "$1"; sleep 30 & wait`, "sh", filepath.ToSlash(ready)}, nil, &output)
+	code, err = Run(ctx, store, Result{Tool: "Bash", Command: "sleep"}, []string{"sh", "-c", `printf before; sleep 30 & : > "$1"; wait`, "sh", filepath.ToSlash(ready)}, nil, &output)
 	if err != nil || code == 0 || output.String() != "before" {
 		t.Fatalf("%q code=%d err=%v", output.String(), code, err)
 	}
