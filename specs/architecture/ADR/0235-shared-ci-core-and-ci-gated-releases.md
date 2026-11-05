@@ -4,7 +4,7 @@
 
 ACCEPTED — implemented 2026-10-22 to 2026-10-23; backfilled 2026-10-25. Amends
 ADR-0017. Amended 2026-11-02 (Linux shards; Windows skipped on pull requests)
-and 2026-11-04 (macOS shards).
+2026-11-04 (macOS shards) and 2026-11-05 (Linux ops shards).
 
 ## Context and Problem Statement
 
@@ -165,6 +165,22 @@ plans (docs.github.com/en/actions/reference/limits, read 2026-11-04). Each shard
 keeps its own weekly cache; `ci-test-compat-nosync` and `ci-test-slow-nosync`
 were removed, and the new `ci-test-compat-*-nosync` targets are fork extension
 points.
+
+## Amendment (2026-11-05): Linux ops shards
+
+Downstream, where private-repository runners have 2 vCPUs, the Linux `ops`
+shard became the longest Linux check: `internal/ops` under race took 684 to
+688 s of a 13-minute job (runs 41835286598, 41943768878, 41948304117), and
+making 153 more of its tests parallel, which halved its race time on an 8-core
+host, left it unchanged there. It now runs as three matrix jobs, each running a
+weighted contiguous range of the package's top-level test names planned by
+`scripts/ci/testshard` (the tool the Windows shards use) from the Windows
+weights. The plan fails unless every listed test falls in exactly one range,
+and the open first and last ranges keep tests added after the weights covered.
+The three jobs share the `ops` weekly cache. `ci-test-ops-nosync` is no longer
+a fork extension point, since no CI job calls it; it stays for local runs. On
+this repository's 4-vCPU public runners the shard took about 4 minutes (run
+41946904203), so the split costs it two more jobs for a smaller gain.
 
 ---
 *Reconstructed from commits `8e117e1fa`..`63596d743` (2026-10-22 to 2026-10-23); context from `bc82b2757` (2026-09-24).*

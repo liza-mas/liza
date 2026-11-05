@@ -155,6 +155,8 @@ ci-test-go-nosync:
 
 # Linux CI uses separate runners for core, ops, oracle, integration, and CLI
 # tests; internal/ops and cmd/liza each fill too much of a 30-minute job to share one.
+# ci-core.yml further splits internal/ops into test-name ranges planned by
+# scripts/ci/testshard; ci-test-ops-nosync runs all of them in one process.
 # The combined targets above retain two local lanes, including all oracle tests.
 # Integration runs once with the e2e tag, which adds the sprint tests.
 CI_UNIT_PACKAGES = $$(go list ./... | grep -v -e '/internal/integration$$' -e '/cmd/liza$$')
@@ -404,7 +406,7 @@ help:
 	@echo "  ci-test-nosync     - Run race, integration, and Python tests without syncing"
 	@echo "  ci-test-go-nosync  - Run race units and integration tests concurrently without syncing"
 	@echo "  ci-test-core-nosync - Run units except ops and oracle with race (Linux CI shard)"
-	@echo "  ci-test-ops-nosync - Run internal/ops tests with race (Linux CI shard)"
+	@echo "  ci-test-ops-nosync - Run internal/ops tests with race (all Linux CI ops shards)"
 	@echo "  ci-test-oracle-nosync - Run oracle tests with race, a9 first (Linux CI shard)"
 	@echo "  ci-test-integration-nosync - Run integration tests with race and e2e (Linux CI shard)"
 	@echo "  ci-test-cli-nosync - Run cmd/liza tests with race (Linux CI shard)"

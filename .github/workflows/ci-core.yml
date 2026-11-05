@@ -28,9 +28,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # internal/ops under -race filled a 2-vCPU runner for ~11 minutes
+        # (downstream, private-repository runners), and parallelizing more of
+        # its tests did not shorten that. It runs as weighted contiguous
+        # ranges of its top-level test names, planned by scripts/ci/testshard
+        # from the Windows weights (only their relative size matters). Update
+        # the count here only; `total` must match the entries listed.
         include:
           - { suite: core, target: ci-test-core-nosync }
-          - { suite: ops, target: ci-test-ops-nosync }
+          - { suite: ops-1, cache: ops, group: ops, index: 1, total: 3 }
+          - { suite: ops-2, cache: ops, group: ops, index: 2, total: 3 }
+          - { suite: ops-3, cache: ops, group: ops, index: 3, total: 3 }
           - { suite: oracle, target: ci-test-oracle-nosync }
           - { suite: integration, target: ci-test-integration-nosync }
           - { suite: cli, target: ci-test-cli-nosync }
@@ -74,10 +82,10 @@ jobs:
           path: |
             ${{ steps.go-dirs.outputs.gocache }}
             ${{ steps.go-dirs.outputs.gomodcache }}
-          key: go-linux-test-${{ matrix.suite }}-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
+          key: go-linux-test-${{ matrix.cache || matrix.suite }}-${{ hashFiles('go.sum') }}-${{ steps.go-dirs.outputs.week }}
           restore-keys: |
-            go-linux-test-${{ matrix.suite }}-${{ hashFiles('go.sum') }}-
-            go-linux-test-${{ matrix.suite }}-
+            go-linux-test-${{ matrix.cache || matrix.suite }}-${{ hashFiles('go.sum') }}-
+            go-linux-test-${{ matrix.cache || matrix.suite }}-
             go-linux-test-${{ hashFiles('go.sum') }}-
             go-linux-test-
 
@@ -96,8 +104,33 @@ jobs:
       - name: Prepare generated artifacts
         run: make ci-prepare
 
+      # -race -list builds the same test binary the run below reuses. The
+      # plan fails unless every listed test falls in exactly one shard; the
+      # first and last ranges are open, so tests added later still run.
+      - name: Plan shard
+        if: matrix.group
+        env:
+          SHARD_GROUP: ${{ matrix.group }}
+          SHARD_INDEX: ${{ matrix.index }}
+          SHARD_TOTAL: ${{ matrix.total }}
+        run: |
+          shard_dir="$RUNNER_TEMP/shard"
+          mkdir -p "$shard_dir"
+          go build -o "$RUNNER_TEMP/testshard" ./scripts/ci/testshard
+          go test -race -list . ./internal/ops > "$shard_dir/list.txt"
+          "$RUNNER_TEMP/testshard" plan -group "$SHARD_GROUP" -shards "$SHARD_TOTAL" -index "$SHARD_INDEX" \
+            -weights scripts/ci/testshard/windows-weights.json -list "$shard_dir/list.txt" -out "$shard_dir"
+
       - name: Run Go tests
-        run: make ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [ -z "$TARGET" ]; then
+            mapfile -t args < "$RUNNER_TEMP/shard/args.txt"
+            go test -race -timeout 30m "${args[@]}"
+          else
+            make "$TARGET"
+          fi
 
       - name: Run Python tests
         if: matrix.suite == 'integration' && inputs.setup_python

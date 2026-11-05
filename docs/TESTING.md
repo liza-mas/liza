@@ -20,12 +20,12 @@ Running tests, coverage targets, and test utilities for the Liza Go codebase.
 
 ### Linux CI
 
-Linux tests run on five independent runners:
+Linux tests run on seven independent runners:
 
 | Shard | Makefile target | Coverage |
 |-------|-----------------|----------|
 | Core | `ci-test-core-nosync` | All Go packages except ops, oracle, integration, and CLI |
-| Ops | `ci-test-ops-nosync` | `internal/ops` |
+| Ops (3 runners) | `scripts/ci/testshard` plan, then `go test -race -run <range>` | `internal/ops`, as weighted contiguous ranges of its top-level test names |
 | Oracle | `ci-test-oracle-nosync` | All packages under `internal/oracle/`, `a9` first |
 | Integration | `ci-test-integration-nosync` | `internal/integration` with the `e2e` tag |
 | CLI | `ci-test-cli-nosync` | `cmd/liza` |
@@ -34,7 +34,11 @@ Each runner executes `make ci-prepare` first. All Go tests retain race
 instrumentation; core and oracle limit package concurrency to two. CI sets
 `GOFLAGS=-count=1` so restored build caches cannot replay test results. Python
 tests run after integration when enabled. The `Linux tests` aggregate check
-fails unless all five shards succeed.
+fails unless all seven shards succeed. Each ops runner plans from
+`scripts/ci/testshard/windows-weights.json`, and its plan fails unless every
+listed test falls in exactly one range; the first and last ranges are open, so
+a test added after the weights still runs. `make ci-test-ops-nosync` runs the
+whole package locally.
 
 For a combined local run, use `make ci-prepare` followed by
 `GOFLAGS=-count=1 make ci-test-nosync` (or `ci-test-go-nosync` without Python).

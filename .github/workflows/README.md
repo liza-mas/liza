@@ -9,7 +9,7 @@ Customize it without editing it, so upstream merges stay conflict-free:
 
 - Repository policy goes through its inputs (`setup_python`, `macos_on_pr`).
 - Suites go through the Makefile targets it calls: `ci-prepare`,
-  `lint-nosync`, `ci-test-core-nosync`, `ci-test-ops-nosync`,
+  `lint-nosync`, `ci-test-core-nosync`,
   `ci-test-oracle-nosync`, `ci-test-integration-nosync`,
   `ci-test-cli-nosync`, the macOS `ci-test-compat-core-nosync`,
   `ci-test-compat-ops-nosync`, `ci-test-compat-oracle-nosync` and
@@ -19,9 +19,12 @@ Customize it without editing it, so upstream merges stay conflict-free:
 - Repository-specific jobs (Windows shards, publishing, releases) live in the
   caller's `ci.yml`.
 
-Linux tests run as five independent matrix jobs: core, ops, oracle,
-integration, and CLI. `internal/ops` and `cmd/liza` have their own jobs because
-each takes a large share of a job's 30-minute limit under race instrumentation.
+Linux tests run as seven independent matrix jobs: core, three ops shards,
+oracle, integration, and CLI. `internal/ops` and `cmd/liza` have their own jobs
+because each takes a large share of a job's 30-minute limit under race
+instrumentation. The ops shards run weighted contiguous ranges of the package's
+top-level test names, planned by `scripts/ci/testshard` from
+`scripts/ci/testshard/windows-weights.json`, so they call no Makefile target.
 Python tests run only in the integration job when enabled.
 macOS runs the same five suites as matrix jobs, without race instrumentation
 except integration, which reuses `ci-test-integration-nosync`. Both oracle
