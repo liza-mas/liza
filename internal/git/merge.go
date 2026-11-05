@@ -128,8 +128,13 @@ func (g *Git) AbortMerge() error {
 
 // DiffFiles returns the list of files changed between two commits in a directory.
 // Typically used as DiffFiles(wtPath, baseCommit, "HEAD") to get files changed in a worktree.
+//
+// Revision arguments here and in the other range commands end with "--":
+// without it git also stats each one as a possible file name, and dies when
+// that path is too long, which on Windows a deep worktree plus an 82-char
+// range exceeds (MAX_PATH).
 func (g *Git) DiffFiles(dir, commitA, commitB string) ([]string, error) {
-	output, err := g.execInDir(dir, "diff", "--name-only", commitA+".."+commitB)
+	output, err := g.execInDir(dir, "diff", "--name-only", commitA+".."+commitB, "--")
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +156,7 @@ func (g *Git) DiffFiles(dir, commitA, commitB string) ([]string, error) {
 func (g *Git) SyncMergedFiles(fromCommit, toCommit string) error {
 	// Use --name-status to distinguish change types, including renames.
 	// Format: "<status>\t<path>" or "<status>\t<old>\t<new>" for renames/copies.
-	output, err := g.exec("diff", "--name-status", fromCommit+".."+toCommit)
+	output, err := g.exec("diff", "--name-status", fromCommit+".."+toCommit, "--")
 	if err != nil {
 		return fmt.Errorf("failed to diff %s..%s: %w", shortSHA(fromCommit), shortSHA(toCommit), err)
 	}
@@ -232,7 +237,7 @@ func (g *Git) SyncMergedFiles(fromCommit, toCommit string) error {
 // handles both cases naturally.
 func (g *Git) RestoreSyncedFiles(syncFrom, syncTo, restoreRef string) error {
 	// Get affected files using --no-renames so renames flatten to delete+add.
-	output, err := g.exec("diff", "--no-renames", "--name-only", syncFrom+".."+syncTo)
+	output, err := g.exec("diff", "--no-renames", "--name-only", syncFrom+".."+syncTo, "--")
 	if err != nil {
 		return fmt.Errorf("failed to diff %s..%s: %w", shortSHA(syncFrom), shortSHA(syncTo), err)
 	}

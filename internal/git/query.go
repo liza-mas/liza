@@ -378,7 +378,7 @@ func (g *Git) ResolveCommits(refs []string) ([]ObjectIDResult, error) {
 // This indicates how far the integration branch has moved since the task started
 func (g *Git) CalculateDrift(baseCommit, targetBranch string) (int, error) {
 	// git rev-list --count base..target
-	output, err := g.exec("rev-list", "--count", baseCommit+".."+targetBranch)
+	output, err := g.exec("rev-list", "--count", baseCommit+".."+targetBranch, "--")
 	if err != nil {
 		return 0, fmt.Errorf("failed to calculate drift: %w", err)
 	}

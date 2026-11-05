@@ -43,7 +43,7 @@ func (g *Git) RangeCommits(base, head string) ([]string, bool, error) {
 	if base == "" || head == "" {
 		return nil, false, fmt.Errorf("commit range requires non-empty base and head")
 	}
-	output, err := g.exec("rev-list", "--reverse", "--parents", "--end-of-options", base+".."+head)
+	output, err := g.exec("rev-list", "--reverse", "--parents", "--end-of-options", base+".."+head, "--")
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to list commits in %s..%s: %w", base, head, err)
 	}

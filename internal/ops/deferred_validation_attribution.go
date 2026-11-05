@@ -320,7 +320,7 @@ func (r *deferredValidationRunner) bisectSearch(ctx context.Context, state *mode
 // bisectCandidates lists forward merges whose resulting commit lies on the
 // ancestry path baseline..head, ordered by that path.
 func (r *deferredValidationRunner) bisectCandidates(ctx context.Context, state *models.State, baseline, head string) ([]bisectCandidate, execResult) {
-	list := r.git(ctx, r.root, "rev-list", "--ancestry-path", "--reverse", baseline+".."+head)
+	list := r.git(ctx, r.root, "rev-list", "--ancestry-path", "--reverse", baseline+".."+head, "--")
 	if list.err != nil {
 		return nil, list
 	}
