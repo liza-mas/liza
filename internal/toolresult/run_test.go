@@ -67,12 +67,18 @@ func TestRunSmallReadAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	go func() {
-		for ctx.Err() == nil {
-			if _, err := os.Stat(ready); err == nil {
-				cancel()
+		tick := time.NewTicker(10 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
 				return
+			case <-tick.C:
+				if _, err := os.Stat(ready); err == nil {
+					cancel()
+					return
+				}
 			}
-			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 	output.Reset()
