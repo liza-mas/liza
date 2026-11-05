@@ -127,11 +127,12 @@ func (s *submissionRun) enforceTDD() error {
 	}
 	testDiagnostics, err := AnalyzeTestFiles(s.git, s.taskID, *s.task.BaseCommit, s.preRebaseCommit)
 	if err != nil {
-		// Err is withheld from the JSON/MCP envelope, and JSON mode discards
-		// this log, so the envelope carries git's exit status and a closed
-		// failure class instead of git's text; the log keeps the text for
-		// plain CLI output.
-		log.Printf("WARNING: task %s: test-file check failed: %v", s.taskID, err)
+		// Err is withheld from the JSON/MCP envelope, which carries git's exit
+		// status and a closed failure class instead of git's text. The text
+		// goes to stderr directly, not through the logger that --json
+		// discards, as submit progress does (ADR-0210), so every output mode
+		// keeps it for whoever reads the CLI or test output.
+		fmt.Fprintf(os.Stderr, "WARNING: task %s: test-file check failed: %v\n", s.taskID, err)
 		exitCode, failure := gitpkg.ClassifyFailure(err)
 		return &OperationalError{
 			Code:    operationalCodeGitOperation,

@@ -3,6 +3,7 @@ package ops
 import (
 	"bytes"
 	stderrors "errors"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,9 +18,9 @@ import (
 
 // The JSON envelope withholds OperationalError.Err, so a failed test-file check
 // must leave git's own message on stderr for the CLI or test output to show,
-// and name git's exit status and failure class in the envelope details, which
-// JSON mode (whose log goes nowhere) still returns.
-// Not parallel: it redirects the process-wide standard logger.
+// even with the logger discarded as --json does, and name git's exit status
+// and failure class in the envelope details.
+// Not parallel: it redirects the process-wide standard logger and os.Stderr.
 func TestSubmitForReview_TestFileCheckFailureLogsGitCause(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
@@ -72,12 +73,26 @@ func TestSubmitForReview_TestFileCheckFailureLogsGitCause(t *testing.T) {
 		Agents: map[string]models.Agent{agentID: {Status: models.AgentStatusWorking, CurrentTask: &taskID}},
 	})
 
-	var logged bytes.Buffer
-	previousOutput, previousFlags := log.Writer(), log.Flags()
-	log.SetOutput(&logged)
-	t.Cleanup(func() { log.SetOutput(previousOutput); log.SetFlags(previousFlags) })
+	// --json discards the standard logger, so the line must reach stderr
+	// directly; a discarded logger proves it does not go through it.
+	previousOutput := log.Writer()
+	log.SetOutput(io.Discard)
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousStderr := os.Stderr
+	os.Stderr = stderrW
+	var stderrText bytes.Buffer
+	copied := make(chan struct{})
+	go func() { _, _ = io.Copy(&stderrText, stderrR); close(copied) }()
+	_, err = SubmitForReview(tmpDir, taskID, wtCommit, agentID)
+	os.Stderr = previousStderr
+	_ = stderrW.Close()
+	<-copied
+	logged := &stderrText
 
-	_, err := SubmitForReview(tmpDir, taskID, wtCommit, agentID)
 	var operational *OperationalError
 	if !stderrors.As(err, &operational) || operational.Phase != "check-test-files" {
 		t.Fatalf("SubmitForReview() error = %v, want the check-test-files OperationalError", err)
@@ -87,7 +102,7 @@ func TestSubmitForReview_TestFileCheckFailureLogsGitCause(t *testing.T) {
 			t.Errorf("stderr log lacks %q; got:\n%s", want, logged.String())
 		}
 	}
-	// JSON mode discards that log; the envelope names the failure without git's text.
+	// The envelope names the failure without git's text.
 	details := operational.SafeDetails()
 	if details["git_exit_code"] != 128 || details["git_failure"] != string(git.FailureBadRevision) {
 		t.Errorf("details git_exit_code=%v git_failure=%v, want 128 and %s", details["git_exit_code"], details["git_failure"], git.FailureBadRevision)
