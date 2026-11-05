@@ -10,8 +10,9 @@ import (
 )
 
 // cmdWeights refreshes the weights file from downloaded Windows CI artifacts:
-// each ops top-level test and each package gets the median of its observed
-// elapsed seconds; entries without new observations are kept.
+// each top-level test of the ops and split packages and each other package
+// gets the median of its observed elapsed seconds; entries without new
+// observations are kept.
 func cmdWeights(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("weights", flag.ContinueOnError)
 	base := fs.String("base", "", "existing weights JSON file")
@@ -30,31 +31,44 @@ func cmdWeights(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	tests, pkgs := map[string][]float64{}, map[string][]float64{}
+	if w.Tests == nil {
+		w.Tests = map[string]float64{}
+	}
+	// The test table of each package sharded by test name, ops included.
+	tables := map[string]map[string]float64{w.OpsPackage: w.Tests}
+	for _, s := range w.Split {
+		if s.Tests == nil {
+			s.Tests = map[string]float64{}
+		}
+		tables[s.Package] = s.Tests
+	}
+	tests, pkgs := map[string]map[string][]float64{}, map[string][]float64{}
 	for _, f := range files {
 		p, t, err := readResultsFile(f[0], f[1])
 		if err != nil {
 			return err
 		}
 		for _, r := range t {
-			if r.Package == w.OpsPackage && r.Action != "skip" {
-				tests[r.Test] = append(tests[r.Test], r.Elapsed)
+			if _, split := tables[r.Package]; split && r.Action != "skip" {
+				if tests[r.Package] == nil {
+					tests[r.Package] = map[string][]float64{}
+				}
+				tests[r.Package][r.Test] = append(tests[r.Package][r.Test], r.Elapsed)
 			}
 		}
 		for _, r := range p {
-			if r.Package != w.OpsPackage {
+			if _, split := tables[r.Package]; !split {
 				pkgs[r.Package] = append(pkgs[r.Package], r.Elapsed)
 			}
 		}
 	}
-	if w.Tests == nil {
-		w.Tests = map[string]float64{}
-	}
 	if w.Packages == nil {
 		w.Packages = map[string]float64{}
 	}
-	for k, v := range tests {
-		w.Tests[k] = roundTo(median(v), 3)
+	for pkg, byTest := range tests {
+		for k, v := range byTest {
+			tables[pkg][k] = roundTo(median(v), 3)
+		}
 	}
 	for k, v := range pkgs {
 		w.Packages[k] = roundTo(median(v), 1)

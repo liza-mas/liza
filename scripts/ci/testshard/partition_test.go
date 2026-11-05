@@ -174,7 +174,7 @@ func TestRangeRegexOfAdjacentShardsCoversAnyName(t *testing.T) {
 	shards := partitionRanges(groupOps, items, testWeights(), 4)
 	var res []*regexp.Regexp
 	for i := range shards {
-		args := shardArgs(groupOps, shards, i, "pkg")
+		args := shardArgs(shards, i, "pkg")
 		if strings.Contains(args[1], "/") {
 			t.Fatalf("pattern contains '/', which go test would split into subtest levels: %s", args[1])
 		}
@@ -255,7 +255,7 @@ func TestParseTestListKeepsOnlyRunnableTopLevelNames(t *testing.T) {
 
 func TestParsePackageListExcludesOpsPackage(t *testing.T) {
 	in := "example.com/m/b\r\nexample.com/m/internal/ops\nexample.com/m/a\n\n"
-	got, err := parsePackageList(strings.NewReader(in), "example.com/m/internal/ops")
+	got, err := parsePackageList(strings.NewReader(in), map[string]bool{"example.com/m/internal/ops": true})
 	if err != nil {
 		t.Fatal(err)
 	}

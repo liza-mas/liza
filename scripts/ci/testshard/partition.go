@@ -12,7 +12,8 @@ import (
 )
 
 // Group names. The ops group partitions the top-level tests of a single
-// package; the rest group partitions whole packages.
+// package; the rest group partitions whole packages. The weights may name
+// further split groups that, like ops, partition one package's tests.
 const (
 	groupOps  = "ops"
 	groupRest = "rest"
@@ -27,6 +28,16 @@ type Weights struct {
 	DefaultPackageSecs float64            `json:"default_package_secs"`
 	Tests              map[string]float64 `json:"tests"`
 	Packages           map[string]float64 `json:"packages"`
+	// Split names further groups that shard one package's top-level tests
+	// by name range, as ops does, instead of running it whole in rest.
+	Split map[string]*SplitPackage `json:"split,omitempty"`
+}
+
+// SplitPackage is a package whose top-level tests a split group shards, with
+// their estimated seconds.
+type SplitPackage struct {
+	Package string             `json:"package"`
+	Tests   map[string]float64 `json:"tests"`
 }
 
 func loadWeights(path string) (*Weights, error) {
@@ -44,13 +55,58 @@ func loadWeights(path string) (*Weights, error) {
 	if w.DefaultTestSecs <= 0 || w.DefaultPackageSecs <= 0 {
 		return nil, fmt.Errorf("%s: default weights must be positive", path)
 	}
+	owner := map[string]string{w.OpsPackage: groupOps}
+	for g, s := range w.Split {
+		switch {
+		case g == groupOps || g == groupRest || g == "":
+			return nil, fmt.Errorf("%s: split group %q is reserved", path, g)
+		case s == nil || s.Package == "":
+			return nil, fmt.Errorf("%s: split group %q needs a package", path, g)
+		case owner[s.Package] != "":
+			return nil, fmt.Errorf("%s: split group %q repeats package %s of group %q", path, g, s.Package, owner[s.Package])
+		}
+		owner[s.Package] = g
+	}
 	return &w, nil
+}
+
+// splitGroup returns the package whose top-level tests group shards and their
+// weights; ok is false for rest and for groups the weights do not name.
+func (w *Weights) splitGroup(group string) (pkg string, tests map[string]float64, ok bool) {
+	if group == groupOps {
+		return w.OpsPackage, w.Tests, true
+	}
+	if s, found := w.Split[group]; found {
+		return s.Package, s.Tests, true
+	}
+	return "", nil, false
+}
+
+// splitPackages is the set of packages the split groups own; rest leaves
+// them out.
+func (w *Weights) splitPackages() map[string]bool {
+	set := map[string]bool{w.OpsPackage: true}
+	for _, s := range w.Split {
+		set[s.Package] = true
+	}
+	return set
+}
+
+// groups lists every group the weights define: ops, rest and the split
+// groups, sorted.
+func (w *Weights) groups() []string {
+	gs := []string{groupOps, groupRest}
+	for g := range w.Split {
+		gs = append(gs, g)
+	}
+	sort.Strings(gs)
+	return gs
 }
 
 func (w *Weights) weight(group, item string) float64 {
 	table, def := w.Packages, w.DefaultPackageSecs
-	if group == groupOps {
-		table, def = w.Tests, w.DefaultTestSecs
+	if _, tests, ok := w.splitGroup(group); ok {
+		table, def = tests, w.DefaultTestSecs
 	}
 	if v, ok := table[item]; ok && v > 0 {
 		return v
@@ -83,13 +139,13 @@ func parseTestList(r io.Reader) ([]string, error) {
 }
 
 // parsePackageList extracts import paths from `go list` output, excluding the
-// package whose tests the ops group owns.
-func parsePackageList(r io.Reader, opsPackage string) ([]string, error) {
+// packages whose tests the split groups (ops among them) own.
+func parsePackageList(r io.Reader, exclude map[string]bool) ([]string, error) {
 	var pkgs []string
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if line == "" || line == opsPackage || strings.ContainsAny(line, " \t") {
+		if line == "" || exclude[line] || strings.ContainsAny(line, " \t") {
 			continue
 		}
 		pkgs = append(pkgs, line)
@@ -183,10 +239,11 @@ func partitionRanges(group string, items []string, w *Weights, n int) []Shard {
 	return shards
 }
 
-// partitionFor selects the strategy per group: contiguous ranges for the ops
-// tests (keeps the -run pattern short), LPT bin-packing for packages.
+// partitionFor selects the strategy per group: contiguous ranges for the
+// tests of a split group (keeps the -run pattern short), LPT bin-packing for
+// packages.
 func partitionFor(group string, items []string, w *Weights, n int) []Shard {
-	if group == groupOps {
+	if _, _, ok := w.splitGroup(group); ok {
 		return partitionRanges(group, items, w, n)
 	}
 	return partition(group, items, w, n)
@@ -315,11 +372,12 @@ func betweenRE(lo, hi []rune) string {
 }
 
 // shardArgs returns the `go test` arguments (after the fixed flags) for shard
-// i of a partition.
-func shardArgs(group string, shards []Shard, i int, opsPackage string) []string {
-	if group == groupOps {
+// i of a partition: a -run range over splitPkg's tests, or with splitPkg
+// empty (rest) the shard's packages.
+func shardArgs(shards []Shard, i int, splitPkg string) []string {
+	if splitPkg != "" {
 		lo, hi := rangeBounds(shards, i)
-		return []string{"-run", rangeRegex(lo, hi), opsPackage}
+		return []string{"-run", rangeRegex(lo, hi), splitPkg}
 	}
 	return append([]string(nil), shards[i].Items...)
 }
@@ -338,9 +396,9 @@ func commandLength(args []string) int {
 
 // checkPartition verifies the coverage invariants for a full partition:
 // every item is assigned to exactly one shard, no shard holds an unknown item,
-// every ops shard's -run pattern matches exactly its own names among all
-// items, and no command line exceeds maxLen.
-func checkPartition(group string, items []string, shards []Shard, opsPackage string, maxLen int) error {
+// every split shard's -run pattern (splitPkg set) matches exactly its own
+// names among all items, and no command line exceeds maxLen.
+func checkPartition(group string, items []string, shards []Shard, splitPkg string, maxLen int) error {
 	owner := make(map[string]int, len(items))
 	for _, s := range shards {
 		for _, it := range s.Items {
@@ -370,11 +428,11 @@ func checkPartition(group string, items []string, shards []Shard, opsPackage str
 		if len(s.Items) == 0 {
 			return fmt.Errorf("%s shard %d is empty; reduce the shard count", group, s.Index+1)
 		}
-		args := shardArgs(group, shards, i, opsPackage)
+		args := shardArgs(shards, i, splitPkg)
 		if l := commandLength(args); l > maxLen {
 			return fmt.Errorf("%s shard %d: command line is %d chars, limit %d; add shards", group, s.Index+1, l, maxLen)
 		}
-		if group != groupOps {
+		if splitPkg == "" {
 			continue
 		}
 		if strings.Contains(args[1], "/") {

@@ -74,15 +74,16 @@ func loadShardRun(dir string) (*shardRun, error) {
 
 // reconcile proves, from the artifacts of every shard, that each group's
 // shards form an exact partition of the item list and that every item was
-// actually executed exactly once, by the shard it was assigned to.
-func reconcile(runs []*shardRun, out io.Writer) []string {
+// actually executed exactly once, by the shard it was assigned to. Each of
+// the required groups must have produced artifacts.
+func reconcile(runs []*shardRun, required []string, out io.Writer) []string {
 	var problems []string
 	add := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	byGroup := map[string][]*shardRun{}
 	for _, r := range runs {
 		byGroup[r.meta.Group] = append(byGroup[r.meta.Group], r)
 	}
-	for _, g := range []string{groupOps, groupRest} {
+	for _, g := range required {
 		if len(byGroup[g]) == 0 {
 			add("%s: no shard artifacts found", g)
 		}
@@ -119,28 +120,34 @@ func reconcile(runs []*shardRun, out io.Writer) []string {
 		for _, r := range rs {
 			shards = append(shards, Shard{Index: r.meta.Index - 1, Items: r.assigned})
 		}
-		partErr := checkPartition(g, items, shards, rs[0].meta.OpsPackage, 1<<30)
+		splitPkg := rs[0].meta.Package
+		for _, r := range rs {
+			if r.meta.Package != splitPkg {
+				add("%s: shards disagree on the split package (%q vs %q)", g, r.meta.Package, splitPkg)
+			}
+		}
+		partErr := checkPartition(g, items, shards, splitPkg, 1<<30)
 		if partErr != nil {
 			add("%s", partErr)
 		}
 		// The arguments each shard actually ran with must be the ones derived
-		// from the assignments, and an ops pattern must select exactly the
-		// shard's own names among all listed names.
+		// from the assignments, and a split group's pattern must select
+		// exactly the shard's own names among all listed names.
 		complete := len(rs) == total && partErr == nil
 		for i, r := range rs {
 			if !complete {
 				break
 			}
-			if want := shardArgs(g, shards, i, r.meta.OpsPackage); strings.Join(r.args, "\n") != strings.Join(want, "\n") {
+			if want := shardArgs(shards, i, splitPkg); strings.Join(r.args, "\n") != strings.Join(want, "\n") {
 				add("%s shard %d: args.txt differs from the arguments derived from the assignments", g, r.meta.Index)
 				continue
 			}
-			if g != groupOps {
+			if splitPkg == "" {
 				continue
 			}
 			re, err := regexp.Compile(r.args[1])
 			if err != nil {
-				add("ops shard %d: %v", r.meta.Index, err)
+				add("%s shard %d: %v", g, r.meta.Index, err)
 				continue
 			}
 			own := map[string]bool{}
@@ -149,7 +156,7 @@ func reconcile(runs []*shardRun, out io.Writer) []string {
 			}
 			for _, it := range items {
 				if got := re.MatchString(it); got != own[it] {
-					add("ops shard %d: -run pattern match(%q)=%v, want %v", r.meta.Index, it, got, own[it])
+					add("%s shard %d: -run pattern match(%q)=%v, want %v", g, r.meta.Index, it, got, own[it])
 					break
 				}
 			}
@@ -168,9 +175,9 @@ func reconcile(runs []*shardRun, out io.Writer) []string {
 				add("%s shard %d: test.json missing", g, r.meta.Index)
 				continue
 			}
-			if g == groupOps {
+			if splitPkg != "" {
 				for _, t := range r.tests {
-					if t.Package == r.meta.OpsPackage {
+					if t.Package == splitPkg {
 						ran[t.Test] = append(ran[t.Test], r.meta.Index)
 					}
 				}
@@ -243,11 +250,20 @@ func findShardDirs(root string) ([]string, error) {
 func cmdReconcile(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("reconcile", flag.ContinueOnError)
 	dir := fs.String("dir", "", "directory holding the downloaded shard artifacts")
+	weightsPath := fs.String("weights", "", "weights JSON file; every group it defines must have artifacts (default: ops and rest)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *dir == "" {
 		return errors.New("-dir is required")
+	}
+	required := []string{groupOps, groupRest}
+	if *weightsPath != "" {
+		w, err := loadWeights(*weightsPath)
+		if err != nil {
+			return err
+		}
+		required = w.groups()
 	}
 	dirs, err := findShardDirs(*dir)
 	if err != nil {
@@ -261,7 +277,7 @@ func cmdReconcile(args []string, out io.Writer) error {
 		}
 		runs = append(runs, r)
 	}
-	problems := reconcile(runs, out)
+	problems := reconcile(runs, required, out)
 	for _, p := range problems {
 		fmt.Fprintln(out, "FAIL:", p)
 	}

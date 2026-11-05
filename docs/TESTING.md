@@ -67,7 +67,11 @@ equating a writable attribute with a private file.
 
 The CI job shards the suite into a `test-windows-shard` matrix planned by
 `scripts/ci/testshard`, and the aggregate job's `reconcile` step proves every
-test ran exactly once in its assigned shard. Refresh
+test ran exactly once in its assigned shard. The `ops` group shards the
+top-level tests of `internal/ops` by name range and `rest` runs every other
+package whole; a weights file may name further groups under `split`, each
+sharding one more package's tests by name range, which `rest` then leaves out.
+Refresh
 `scripts/ci/testshard/windows-weights.json` from downloaded shard artifacts
 with `go run ./scripts/ci/testshard weights -base <file> <artifact-dirs>`.
 

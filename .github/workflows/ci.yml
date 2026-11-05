@@ -253,7 +253,7 @@ jobs:
       # Proves from the shards' go test -json streams that every listed ops
       # test and every package ran exactly once, in its assigned shard.
       - name: Reconcile coverage
-        run: go run ./scripts/ci/testshard reconcile -dir "$RUNNER_TEMP/shards"
+        run: go run ./scripts/ci/testshard reconcile -dir "$RUNNER_TEMP/shards" -weights scripts/ci/testshard/windows-weights.json
 
       - name: Summarize timings
         if: always()

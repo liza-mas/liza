@@ -1,11 +1,12 @@
-// Command testshard splits the Windows CI test run into balanced shards and
-// checks that the shards together run every test exactly once.
+// Command testshard splits a CI test run into balanced shards and checks that
+// the shards together run every test exactly once.
 //
 // It is CI tooling for this repository only and is not part of the product.
+// GROUP is ops, rest, or a split group named in the weights file.
 //
-//	testshard plan      -group ops|rest -shards N -index I -weights W -list L -out DIR
-//	testshard verify    -group ops|rest -shards N -weights W -list L
-//	testshard reconcile -dir ARTIFACTS
+//	testshard plan      -group GROUP -shards N -index I -weights W -list L -out DIR
+//	testshard verify    -group GROUP -shards N -weights W -list L
+//	testshard reconcile -dir ARTIFACTS [-weights W]
 //	testshard fmt       [-heartbeat 60s]            < go-test-json
 //	testshard summary   [-title T] [-top 30] PATH... (test.json files or artifact dirs)
 //	testshard weights   -base W PATH...             (refresh weights from CI artifacts)
@@ -69,51 +70,59 @@ type partitionFlags struct {
 }
 
 func (p *partitionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&p.group, "group", "", "ops (top-level tests of the ops package) or rest (all other packages)")
+	fs.StringVar(&p.group, "group", "", "ops (top-level tests of the ops package), a split group of the weights (top-level tests of its package) or rest (all other packages)")
 	fs.IntVar(&p.shards, "shards", 0, "number of shards in the group")
 	fs.StringVar(&p.weights, "weights", "", "weights JSON file")
-	fs.StringVar(&p.list, "list", "", "`go test -list .` output (ops) or `go list ./...` output (rest)")
+	fs.StringVar(&p.list, "list", "", "`go test -list .` output (ops, split groups) or `go list ./...` output (rest)")
 	fs.IntVar(&p.maxLen, "max-len", defaultMaxLen, "maximum command-line length per shard")
 }
 
-// load parses the inputs and returns the item list, the full partition, and
-// the weights. It fails if the partition violates any coverage invariant.
-func (p *partitionFlags) load() ([]string, []Shard, *Weights, error) {
-	if p.group != groupOps && p.group != groupRest {
-		return nil, nil, nil, fmt.Errorf("-group must be %q or %q", groupOps, groupRest)
-	}
+// loaded is a validated partition of one group.
+type loaded struct {
+	items    []string
+	shards   []Shard
+	splitPkg string // package whose tests the group shards; empty for rest
+}
+
+// load parses the inputs and returns the item list and the full partition.
+// It fails if the partition violates any coverage invariant.
+func (p *partitionFlags) load() (*loaded, error) {
 	if p.shards < 1 {
-		return nil, nil, nil, errors.New("-shards must be >= 1")
+		return nil, errors.New("-shards must be >= 1")
 	}
 	w, err := loadWeights(p.weights)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
+	}
+	splitPkg, _, split := w.splitGroup(p.group)
+	if !split && p.group != groupRest {
+		return nil, fmt.Errorf("-group must be one of %s", strings.Join(w.groups(), ", "))
 	}
 	f, err := os.Open(p.list)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	defer f.Close()
 	var items []string
-	if p.group == groupOps {
+	if split {
 		items, err = parseTestList(f)
 	} else {
-		items, err = parsePackageList(f, w.OpsPackage)
+		items, err = parsePackageList(f, w.splitPackages())
 	}
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	if len(items) == 0 {
-		return nil, nil, nil, fmt.Errorf("%s: no items parsed from %s", p.group, p.list)
+		return nil, fmt.Errorf("%s: no items parsed from %s", p.group, p.list)
 	}
 	shards := partitionFor(p.group, items, w, p.shards)
-	if err := checkPartition(p.group, items, shards, w.OpsPackage, p.maxLen); err != nil {
-		return nil, nil, nil, err
+	if err := checkPartition(p.group, items, shards, splitPkg, p.maxLen); err != nil {
+		return nil, err
 	}
-	return items, shards, w, nil
+	return &loaded{items: items, shards: shards, splitPkg: splitPkg}, nil
 }
 
-func printTable(out io.Writer, group string, items []string, shards []Shard, opsPackage string, current int) {
+func printTable(out io.Writer, group string, items []string, shards []Shard, splitPkg string, current int) {
 	fmt.Fprintf(out, "%s: %d items in %d shards (coverage check passed)\n", group, len(items), len(shards))
 	fmt.Fprintf(out, "  %-8s %6s %10s %8s\n", "shard", "items", "est-secs", "cmd-len")
 	for i, s := range shards {
@@ -122,7 +131,7 @@ func printTable(out io.Writer, group string, items []string, shards []Shard, ops
 			mark = "  <- this shard"
 		}
 		fmt.Fprintf(out, "  %-8s %6d %10.1f %8d%s\n", fmt.Sprintf("%s-%d", group, s.Index+1),
-			len(s.Items), s.Weight, commandLength(shardArgs(group, shards, i, opsPackage)), mark)
+			len(s.Items), s.Weight, commandLength(shardArgs(shards, i, splitPkg)), mark)
 	}
 }
 
@@ -133,20 +142,22 @@ func cmdVerify(args []string, out io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	items, shards, w, err := p.load()
+	l, err := p.load()
 	if err != nil {
 		return err
 	}
-	printTable(out, p.group, items, shards, w.OpsPackage, -1)
+	printTable(out, p.group, l.items, l.shards, l.splitPkg, -1)
 	return nil
 }
 
 // shardMeta is written next to each shard's artifacts for reconcile.
 type shardMeta struct {
-	Group      string `json:"group"`
-	Index      int    `json:"index"` // 1-based
-	Total      int    `json:"total"`
-	OpsPackage string `json:"ops_package"`
+	Group string `json:"group"`
+	Index int    `json:"index"` // 1-based
+	Total int    `json:"total"`
+	// Package is the package whose top-level tests the group shards; empty
+	// for rest.
+	Package string `json:"package,omitempty"`
 }
 
 func cmdPlan(args []string, out io.Writer) error {
@@ -163,25 +174,25 @@ func cmdPlan(args []string, out io.Writer) error {
 	if dir == "" {
 		return errors.New("-out is required")
 	}
-	items, shards, w, err := p.load()
+	l, err := p.load()
 	if err != nil {
 		return err
 	}
-	if index < 1 || index > len(shards) {
-		return fmt.Errorf("-index must be in 1..%d", len(shards))
+	if index < 1 || index > len(l.shards) {
+		return fmt.Errorf("-index must be in 1..%d", len(l.shards))
 	}
-	s := shards[index-1]
+	s := l.shards[index-1]
 	if len(s.Items) == 0 {
 		return fmt.Errorf("%s shard %d is empty; reduce the shard count", p.group, index)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	meta := shardMeta{Group: p.group, Index: index, Total: len(shards), OpsPackage: w.OpsPackage}
+	meta := shardMeta{Group: p.group, Index: index, Total: len(l.shards), Package: l.splitPkg}
 	files := map[string]string{
-		"items.txt":    strings.Join(items, "\n") + "\n",
+		"items.txt":    strings.Join(l.items, "\n") + "\n",
 		"assigned.txt": strings.Join(s.Items, "\n") + "\n",
-		"args.txt":     strings.Join(shardArgs(p.group, shards, index-1, w.OpsPackage), "\n") + "\n",
+		"args.txt":     strings.Join(shardArgs(l.shards, index-1, l.splitPkg), "\n") + "\n",
 		"meta.json":    mustJSON(meta),
 	}
 	for name, content := range files {
@@ -189,7 +200,7 @@ func cmdPlan(args []string, out io.Writer) error {
 			return err
 		}
 	}
-	printTable(out, p.group, items, shards, w.OpsPackage, index-1)
+	printTable(out, p.group, l.items, l.shards, l.splitPkg, index-1)
 	return nil
 }
 
