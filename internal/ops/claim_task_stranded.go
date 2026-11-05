@@ -35,7 +35,7 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 		return nil, nil, lifecycleRequestError(task, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone,
 			"stranded claim takeover changes the task boundary; claim without an expected transition")
 	}
-	if err := requireFreeClaimant(state, agentID, runtimeRole, task.ID); err != nil {
+	if err := requireFreeClaimant(state, agentID, runtimeRole, task.ID, authority); err != nil {
 		return nil, nil, err
 	}
 	initial, err := resolver.InitialStatus(task.RolePair)
@@ -65,7 +65,7 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 				return lifecycleRequestError(live, request, models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone,
 					"stranded claim changed before it could be taken over")
 			}
-			if err := requireFreeClaimant(state, agentID, runtimeRole, live.ID); err != nil {
+			if err := requireFreeClaimant(state, agentID, runtimeRole, live.ID, authority); err != nil {
 				return err
 			}
 			holder := *live.AssignedTo
@@ -103,8 +103,8 @@ func takeOverStrandedDoerClaim(bb *db.Blackboard, statePath string, state *model
 
 // requireFreeClaimant refuses a claimant that is unregistered for its role or
 // already working on another task.
-func requireFreeClaimant(state *models.State, agentID, runtimeRole, taskID string) error {
-	agent, err := requireRegisteredClaimAgent(state, agentID, runtimeRole)
+func requireFreeClaimant(state *models.State, agentID, runtimeRole, taskID string, authority *models.AgentAuthority) error {
+	agent, err := requireRegisteredClaimAgent(state, agentID, runtimeRole, authority)
 	if err != nil {
 		return err
 	}

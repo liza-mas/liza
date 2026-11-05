@@ -76,7 +76,7 @@ func admitClaimTask(projectRoot, taskID, agentID string, authority *models.Agent
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := requireRegisteredClaimAgent(state, agentID, runtimeRole); err != nil {
+	if _, err := requireRegisteredClaimAgent(state, agentID, runtimeRole, authority); err != nil {
 		return nil, nil, err
 	}
 	state, task, replay, err := establishClaimRequest(bb, lp.StatePath(), state, task, agentID, runtimeRole, resolver, authority, invocation)
@@ -87,7 +87,7 @@ func admitClaimTask(projectRoot, taskID, agentID string, authority *models.Agent
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := requireFreeClaimant(state, agentID, runtimeRole, taskID); err != nil {
+	if err := requireFreeClaimant(state, agentID, runtimeRole, taskID, authority); err != nil {
 		return nil, nil, err
 	}
 	op := &claimOperation{
@@ -388,7 +388,7 @@ func (op *claimOperation) persistPreparation() (models.LifecyclePreparation, err
 		if task.Status != op.taskStatus {
 			return fmt.Errorf("task changed before claim preparation")
 		}
-		if _, err := requireRegisteredClaimAgent(state, op.agentID, op.runtimeRole); err != nil {
+		if _, err := requireRegisteredClaimAgent(state, op.agentID, op.runtimeRole, op.authority); err != nil {
 			return err
 		}
 		if reason := models.DoerClaimBlockedReason(state, task, op.runtimeRole, op.agentID, op.ctx.resolver, time.Now().UTC()); reason != "" {

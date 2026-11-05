@@ -219,7 +219,7 @@ func (h *orphanHeal) admit(state *models.State, task *models.Task) error {
 	if task == nil {
 		return &lizaerrors.NotFoundError{Entity: notFoundEntityTask, ID: h.in.TaskID}
 	}
-	if _, err := requireRegisteredClaimAgent(state, h.in.AgentID, h.in.Role); err != nil {
+	if _, err := requireRegisteredClaimAgent(state, h.in.AgentID, h.in.Role, nil); err != nil {
 		return err
 	}
 	if role, err := h.reviewerOf(task.RolePair); err != nil || role != h.in.Role {

@@ -250,7 +250,7 @@ func (c *reviewerClaim) transaction(state *models.State) error {
 	if err := RequireWorkAdmitted(state, claimReviewerTaskOperation); err != nil {
 		return err
 	}
-	claimingAgent, err := requireRegisteredClaimAgent(state, c.input.AgentID, c.role)
+	claimingAgent, err := requireRegisteredClaimAgent(state, c.input.AgentID, c.role, nil)
 	if err != nil {
 		return err
 	}

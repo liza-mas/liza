@@ -78,7 +78,7 @@ func projectReviewerClaimEligibility(input ReviewerClaimEligibilityInput) review
 	if input.State == nil || input.Task == nil || input.Resolver == nil {
 		return reviewerClaimEligibility{registrationErr: &PreconditionError{Reason: "reviewer claim eligibility inputs are incomplete"}}
 	}
-	agent, err := requireRegisteredClaimAgent(input.State, input.AgentID, input.ReviewerRole)
+	agent, err := requireRegisteredClaimAgent(input.State, input.AgentID, input.ReviewerRole, nil)
 	if err != nil {
 		return reviewerClaimEligibility{registrationErr: err}
 	}

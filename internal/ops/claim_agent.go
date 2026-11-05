@@ -25,11 +25,17 @@ func HasValidClaimRegistration(state *models.State, agentID, expectedRole string
 	if state == nil {
 		return false
 	}
-	_, err := requireRegisteredClaimAgent(state, agentID, expectedRole)
+	_, err := requireRegisteredClaimAgent(state, agentID, expectedRole, nil)
 	return err == nil
 }
 
-func requireRegisteredClaimAgent(state *models.State, agentID, expectedRole string) (models.Agent, error) {
+// requireRegisteredClaimAgent refuses a claimant that is unregistered for its
+// role or whose registered process is not running. A caller presenting the
+// agent's current registration authority is that live registration, so the
+// process probe is skipped for it: the probe cannot see the registered PID from
+// a private PID namespace such as the Codex sandbox, where every host PID
+// reads as dead.
+func requireRegisteredClaimAgent(state *models.State, agentID, expectedRole string, authority *models.AgentAuthority) (models.Agent, error) {
 	agent, exists := state.Agents[agentID]
 	if !exists {
 		return models.Agent{}, &PreconditionError{Reason: fmt.Sprintf("agent %s is not registered", agentID)}
@@ -46,10 +52,16 @@ func requireRegisteredClaimAgent(state *models.State, agentID, expectedRole stri
 	if agent.PID <= 0 {
 		return models.Agent{}, &PreconditionError{Reason: fmt.Sprintf("agent %s has no registered process PID", agentID)}
 	}
-	if !IsProcessAlive(agent.PID) {
+	if !holdsCurrentAuthority(state, agentID, authority) && !IsProcessAlive(agent.PID) {
 		return models.Agent{}, &PreconditionError{Reason: fmt.Sprintf("agent %s registered process PID %d is not running", agentID, agent.PID)}
 	}
 	return agent, nil
+}
+
+// holdsCurrentAuthority reports whether authority is agentID's current
+// registration generation.
+func holdsCurrentAuthority(state *models.State, agentID string, authority *models.AgentAuthority) bool {
+	return authority != nil && authority.ID == agentID && compareAgentAuthority(state, *authority) == nil
 }
 
 func reviewerCapacityInvalidReasons(agent models.Agent, expectedRole string, now time.Time) []reviewerCapacityInvalidReason {

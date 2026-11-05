@@ -115,3 +115,21 @@ evidence never authorizes takeover. The takeover adds no schema fields.
 The takeover shares one registration-liveness rule, `models.AgentRegistrationLive`,
 with pool repair, status and watch. `approvedMergeOwner` still keeps an inline
 copy, tracked in `TECH_DEBT.md`.
+
+## 2026-11-05 Amendment: Current Authority Proves Claimant Liveness
+
+Claim admission refuses a registration whose recorded PID is not running. A
+Codex doer runs commands in a private PID namespace, where every host PID,
+including the supervisor PID the registration records, reads as dead. Its
+in-session auto-reclaim after a rejection was therefore always refused, and
+await-verdict answered the rejection with TERMINAL/stop instead of continuing
+in session as [ADR-0054](0054-blocking-await-primitives-for-review-flow.md)
+specifies.
+
+A caller presenting the agent's current registration generation
+([ADR-0130](0130-generation-fenced-agent-authority.md)) is that live
+registration, so doer claim admission skips the process probe for it. Role,
+provider and nonzero-PID checks still apply, and claims without authority or
+with a superseded generation keep the probe. A session orphaned by its
+supervisor can thus still reclaim its own work until the agent is re-registered,
+which supersedes its generation.

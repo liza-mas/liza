@@ -187,7 +187,7 @@ func completeClaimTaskAfterValidation(op *claimOperation) (result *ClaimResult, 
 	if err != nil || replay != nil {
 		return replay, err
 	}
-	lockedTask, err := recheckClaimTaskBeforeWorktree(op.bb, op.taskID, op.agentID, op.runtimeRole, op.taskStatus, op.strategy, op.ctx.resolver)
+	lockedTask, err := recheckClaimTaskBeforeWorktree(op.bb, op.taskID, op.agentID, op.runtimeRole, op.taskStatus, op.strategy, op.ctx.resolver, op.authority)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +233,7 @@ func recheckClaimTaskBeforeWorktree(
 	expectedStatus models.TaskStatus,
 	strategy claimStrategy,
 	resolver models.PipelineResolver,
+	authority *models.AgentAuthority,
 ) (*models.Task, error) {
 	state, task, err := readTaskState(bb, taskID)
 	if err != nil {
@@ -249,7 +250,7 @@ func recheckClaimTaskBeforeWorktree(
 			return nil, fmt.Errorf("race condition: dependencies changed: %s", formatDependencyResults(unmet))
 		}
 	}
-	agent, err := requireRegisteredClaimAgent(state, agentID, runtimeRole)
+	agent, err := requireRegisteredClaimAgent(state, agentID, runtimeRole, authority)
 	if err != nil {
 		return nil, err
 	}

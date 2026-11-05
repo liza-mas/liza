@@ -217,6 +217,78 @@ func TestClaimTask_MissingRegisteredAgentDoesNotCreateGhost(t *testing.T) {
 	}
 }
 
+// A caller holding the agent's current registration authority is that live
+// registration, even when it cannot observe the registered PID (a probe from a
+// private PID namespace such as the Codex sandbox sees every host PID as dead);
+// without that authority the liveness probe still refuses the claim.
+func TestClaimTask_UnobservableRegisteredPID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		claim       func(projectRoot string) error
+		errContains string
+	}{
+		{
+			name: "current authority claims",
+			claim: func(projectRoot string) error {
+				_, err := ClaimTaskWithAuthority(projectRoot, "task-1", models.AgentAuthority{ID: "coder-1", Generation: testhelpers.TestAgentGeneration})
+				return err
+			},
+		},
+		{
+			name: "no authority is refused",
+			claim: func(projectRoot string) error {
+				_, err := ClaimTask(projectRoot, "task-1", "coder-1")
+				return err
+			},
+			errContains: "is not running",
+		},
+		{
+			name: "stale authority is refused",
+			claim: func(projectRoot string) error {
+				_, err := ClaimTaskWithAuthority(projectRoot, "task-1", models.AgentAuthority{ID: "coder-1", Generation: "superseded-generation"})
+				return err
+			},
+			errContains: "coder-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN a registered coder whose registered PID the caller sees as dead
+			tmpDir := t.TempDir()
+			testhelpers.SetupTestGitRepo(t, tmpDir)
+			stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+			state := testhelpers.CreateValidState()
+			agent := testhelpers.RegisteredTestAgent("coder")
+			agent.PID = exitedProcessPID(t)
+			state.Agents["coder-1"] = agent
+			state.Tasks = []models.Task{testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReady, time.Now().UTC())}
+			testhelpers.WriteInitialState(t, stateFile, state)
+
+			// WHEN it claims
+			err := tt.claim(tmpDir)
+
+			// THEN only the current authority holder is admitted
+			if tt.errContains == "" {
+				if err != nil {
+					t.Fatalf("claim with current authority: %v", err)
+				}
+				s, readErr := db.For(stateFile).Read()
+				if readErr != nil {
+					t.Fatalf("read state: %v", readErr)
+				}
+				if task := s.FindTask("task-1"); task.AssignedTo == nil || *task.AssignedTo != "coder-1" {
+					t.Fatalf("AssignedTo = %v, want coder-1", task.AssignedTo)
+				}
+				return
+			}
+			testhelpers.RequireErrorContains(t, err, tt.errContains)
+		})
+	}
+}
+
 func TestClaimTask_CorruptRegisteredAgentRejected(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

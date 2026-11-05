@@ -129,7 +129,7 @@ func (a *claimAssignment) recheckCurrent(state *models.State) (*models.Task, mod
 		}
 	}
 	// Re-check agent availability
-	agent, err := requireRegisteredClaimAgent(state, op.agentID, op.runtimeRole)
+	agent, err := requireRegisteredClaimAgent(state, op.agentID, op.runtimeRole, op.authority)
 	if err != nil {
 		return nil, models.Agent{}, err
 	}

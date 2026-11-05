@@ -567,6 +567,76 @@ func TestAwaitVerdict_Rejected_SameAttempt(t *testing.T) {
 	}
 }
 
+// A Codex doer runs await-verdict in a private PID namespace, where the
+// supervisor's registered PID looks dead. The authenticated auto-reclaim must
+// still continue the session (ADR-0054) instead of answering TERMINAL/stop.
+func TestAwaitVerdict_Rejected_AuthorityReclaimsWithUnobservablePID(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// GIVEN a submitted task whose doer's registered PID is unobservable
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 10
+	state.Config.MaxReviewCycles = 5
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Iteration = 1
+	task.History = append(task.History, models.TaskHistoryEntry{Time: now, Event: models.TaskEventSubmittedForReview, Agent: strPtr("coder-1")})
+	state.Tasks = []models.Task{task}
+	agent := testhelpers.RegisteredTestAgent("coder")
+	agent.PID = exitedProcessPID(t)
+	state.Agents["coder-1"] = agent
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+
+	var result *AwaitVerdictResult
+	var awaitErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, awaitErr = AwaitVerdictWithAuthority(context.Background(), tmpDir, "task-1",
+			models.AgentAuthority{ID: "coder-1", Generation: testhelpers.TestAgentGeneration}, 30*time.Second)
+	}()
+	testhelpers.WaitForAsyncSetup()
+
+	// WHEN the reviewer rejects
+	if err := bb.Modify(func(s *models.State) error {
+		tk := s.FindTask("task-1")
+		tk.Status = models.TaskStatusRejected
+		reason := "Missing error handling"
+		tk.RejectionReason = &reason
+		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+		tk.LeaseExpires = &leaseExpires
+		reviewer := "code-reviewer-1"
+		tk.History = append(tk.History, models.TaskHistoryEntry{Time: time.Now().UTC(), Event: models.TaskEventRejected, Agent: &reviewer})
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	// THEN the doer is told to revise and owns the reclaimed task
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("AwaitVerdict did not observe the rejection")
+	}
+	if awaitErr != nil {
+		t.Fatalf("AwaitVerdict error: %v", awaitErr)
+	}
+	if result.Verdict != string(VerdictRejected) {
+		t.Fatalf("Verdict = %q, want REJECTED; reason=%q guidance=%q", result.Verdict, result.Reason, result.Guidance)
+	}
+	s, readErr := db.For(stateFile).Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	reclaimed := s.FindTask("task-1")
+	if reclaimed.Status != models.TaskStatusImplementing || reclaimed.AssignedTo == nil || *reclaimed.AssignedTo != "coder-1" {
+		t.Errorf("task = %v assigned %v, want %v assigned coder-1", reclaimed.Status, reclaimed.AssignedTo, models.TaskStatusImplementing)
+	}
+}
+
 func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)
