@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -59,12 +61,27 @@ func TestRunSmallReadAndCancellation(t *testing.T) {
 	if err != nil || code != 0 || output.String() != "targeted\n \n" {
 		t.Fatalf("%q code=%d err=%v", output.String(), code, err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	// Cancel once the command has printed, not after a fixed delay: a loaded
+	// Windows runner can take longer than any short timeout just to start sh.
+	ready := filepath.Join(t.TempDir(), "ready")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(ready); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 	output.Reset()
-	code, err = Run(ctx, store, Result{Tool: "Bash", Command: "sleep"}, []string{"sh", "-c", "printf before; sleep 30 & wait"}, nil, &output)
+	code, err = Run(ctx, store, Result{Tool: "Bash", Command: "sleep"}, []string{"sh", "-c", `printf before; : > "$1"; sleep 30 & wait`, "sh", filepath.ToSlash(ready)}, nil, &output)
 	if err != nil || code == 0 || output.String() != "before" {
 		t.Fatalf("%q code=%d err=%v", output.String(), code, err)
+	}
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatalf("the command was not cancelled after printing: %v", ctx.Err())
 	}
 }
 
