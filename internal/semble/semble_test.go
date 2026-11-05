@@ -815,8 +815,12 @@ func TestStartClearOrphansRunsDetachedOfflineCommand(t *testing.T) {
 	// The marker path travels through the environment so TMPDIR spaces or
 	// quotes cannot split it.
 	t.Setenv("FAKE_SEMBLE_MARKER", marker)
+	// A regular file the script creates first, so a timeout tells a child that
+	// never ran from one blocked on the FIFO.
+	started := filepath.Join(dir, "started")
+	t.Setenv("FAKE_SEMBLE_STARTED", started)
 	script := filepath.Join(dir, "semble")
-	content := "#!/bin/sh\nprintf '%s HF_HUB_OFFLINE=%s\\n' \"$*\" \"$HF_HUB_OFFLINE\" > \"$FAKE_SEMBLE_MARKER\"\n"
+	content := "#!/bin/sh\n: > \"$FAKE_SEMBLE_STARTED\"\nprintf '%s HF_HUB_OFFLINE=%s\\n' \"$*\" \"$HF_HUB_OFFLINE\" > \"$FAKE_SEMBLE_MARKER\"\n"
 	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake semble) error = %v", err)
 	}
@@ -836,7 +840,10 @@ func TestStartClearOrphansRunsDetachedOfflineCommand(t *testing.T) {
 			t.Fatalf("fake semble invocation = %q, want %q", invocation, want)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("fake semble was not run")
+		if _, err := os.Stat(started); err != nil {
+			t.Fatalf("fake semble was not run: it did not start within 10s (%v)", err)
+		}
+		t.Fatal("fake semble started but did not write the marker FIFO within 10s")
 	}
 }
 
