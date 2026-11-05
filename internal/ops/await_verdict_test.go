@@ -170,6 +170,133 @@ func TestAwaitVerdict_ReviewingStatus(t *testing.T) {
 	}
 }
 
+// stageOneApprovedTask is a quorum-2 coding task submitted by coder-1 whose
+// first reviewer already approved, in the given second-stage status.
+func stageOneApprovedTask(status models.TaskStatus, now time.Time) models.Task {
+	task := testhelpers.BuildTaskByStatus("task-1", status, now)
+	task.Iteration = 1
+	task.History = append(task.History,
+		models.TaskHistoryEntry{Time: now.Add(-2 * time.Minute), Event: models.TaskEventSubmittedForReview, Agent: strPtr("coder-1")},
+		models.TaskHistoryEntry{Time: now.Add(-time.Minute), Event: models.TaskEventApproved, Agent: strPtr("code-reviewer-1")},
+	)
+	return task
+}
+
+// The second quorum review stage still owes the doer a verdict: entering the
+// await there must wait, not recover the first reviewer's approval as a stop.
+func TestAwaitVerdict_SecondReviewStage_IsAwaitable(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// GIVEN a task in REVIEWING_CODE_2 after a stage-1 approval
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{stageOneApprovedTask(models.TaskStatusReviewingCode2, time.Now().UTC())}
+	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+	testhelpers.WriteInitialState(t, stateFile, state)
+
+	// WHEN the doer awaits (pre-cancelled so the event loop exits at once)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := AwaitVerdict(ctx, tmpDir, "task-1", "coder-1", 30*time.Second)
+
+	// THEN preconditions pass and the wait is entered
+	if !stderrors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled (REVIEWING_CODE_2 awaitable), got result=%+v err=%v", result, err)
+	}
+}
+
+// A second reviewer claiming the task moves it from partially-approved to
+// reviewing-2; the doer must keep waiting and auto-reclaim the later rejection
+// in session (ADR-0054).
+func TestAwaitVerdict_SecondReviewStageClaim_KeepsWaitingThenReclaimsRejection(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// GIVEN a doer waiting on a stage-1-approved task
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 10
+	state.Config.MaxReviewCycles = 5
+	state.Tasks = []models.Task{stageOneApprovedTask(models.TaskStatusPartiallyApproved, time.Now().UTC())}
+	state.Agents["coder-1"] = testhelpers.RegisteredTestAgent("coder")
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+
+	var result *AwaitVerdictResult
+	var awaitErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, awaitErr = AwaitVerdictWithOptions(context.Background(), tmpDir, "task-1", "coder-1", 30*time.Second,
+			AwaitVerdictOptions{AbortPollInterval: 10 * time.Millisecond})
+	}()
+	testhelpers.WaitForAsyncSetup()
+
+	// WHEN the second reviewer claims the task
+	if err := bb.Modify(func(s *models.State) error {
+		tk := s.FindTask("task-1")
+		tk.Status = models.TaskStatusReviewingCode2
+		reviewer := "code-reviewer-2"
+		tk.ReviewingBy = &reviewer
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	// THEN the await keeps waiting (the 10ms tick has many chances to observe it)
+	select {
+	case <-done:
+		t.Fatalf("await ended on second-stage claim: result=%+v err=%v", result, awaitErr)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	// WHEN the second reviewer rejects
+	if err := bb.Modify(func(s *models.State) error {
+		tk := s.FindTask("task-1")
+		tk.Status = models.TaskStatusRejected
+		reason := "Stage 2: missing error handling"
+		tk.RejectionReason = &reason
+		tk.ReviewingBy = nil
+		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+		tk.LeaseExpires = &leaseExpires
+		reviewer := "code-reviewer-2"
+		tk.History = append(tk.History, models.TaskHistoryEntry{
+			Time: time.Now().UTC(), Event: models.TaskEventRejected, Agent: &reviewer, Reason: &reason,
+		})
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	// THEN the doer gets REJECTED and owns the reclaimed task in session
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("AwaitVerdict did not observe the second-stage rejection")
+	}
+	if awaitErr != nil {
+		t.Fatalf("AwaitVerdict error: %v", awaitErr)
+	}
+	if result.Verdict != string(VerdictRejected) {
+		t.Fatalf("Verdict = %q, want REJECTED; reason=%q guidance=%q", result.Verdict, result.Reason, result.Guidance)
+	}
+	if result.ReviewerAgent != "code-reviewer-2" {
+		t.Errorf("ReviewerAgent = %q, want code-reviewer-2", result.ReviewerAgent)
+	}
+	s, readErr := db.For(stateFile).Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	reclaimed := s.FindTask("task-1")
+	if reclaimed.Status != models.TaskStatusImplementing {
+		t.Errorf("Task status = %v, want %v", reclaimed.Status, models.TaskStatusImplementing)
+	}
+	if reclaimed.AssignedTo == nil || *reclaimed.AssignedTo != "coder-1" {
+		t.Errorf("AssignedTo = %v, want coder-1", reclaimed.AssignedTo)
+	}
+}
+
 func TestAwaitVerdict_BudgetExhausted_IterationLimit(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

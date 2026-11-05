@@ -300,7 +300,7 @@ func (r awaitVerdictRun) observe(abortedStatus models.TaskStatus) awaitObservati
 	if state.Config.Mode.HaltsWork() {
 		return endedAwaitObservation(r.finishPaused(currentTask, state.Config.Mode))
 	}
-	if vc := checkVerdictStatus(currentTask, r.resolver, r.rolePair); vc != nil {
+	if vc := checkVerdictStatus(currentTask, r.resolver); vc != nil {
 		return endedAwaitObservation(r.handle(currentTask))
 	}
 	return awaitObservation{task: currentTask}
@@ -312,11 +312,13 @@ func (r awaitVerdictRun) handle(task *models.Task) (*AwaitVerdictResult, error) 
 }
 
 // checkAwaitableStatus verifies the task is in a status where awaiting a
-// verdict is valid: submitted, reviewing, or partially-approved.
+// verdict is valid: submitted, reviewing, partially-approved, or the second
+// quorum review stage.
 func checkAwaitableStatus(task *models.Task, resolver interface {
 	SubmittedStatus(string) (models.TaskStatus, error)
 	ReviewingStatus(string) (models.TaskStatus, error)
 	PartiallyApprovedStatus(string) (models.TaskStatus, error)
+	Reviewing2Status(string) (models.TaskStatus, error)
 }) error {
 	submitted, err := resolver.SubmittedStatus(task.RolePair)
 	if err != nil {
@@ -334,6 +336,12 @@ func checkAwaitableStatus(task *models.Task, resolver interface {
 	// PartiallyApproved may not exist for all role-pairs — that's fine.
 	partiallyApproved, paErr := resolver.PartiallyApprovedStatus(task.RolePair)
 	if paErr == nil && task.Status == partiallyApproved {
+		return nil
+	}
+
+	// Reviewing-2 exists only for quorum role-pairs; the doer's verdict is still pending there.
+	reviewing2, r2Err := resolver.Reviewing2Status(task.RolePair)
+	if r2Err == nil && task.Status == reviewing2 {
 		return nil
 	}
 
@@ -378,22 +386,12 @@ func acquireAwaitOwnership(bb *db.Blackboard, agentID, taskID string, authority 
 }
 
 // checkVerdictStatus determines if the task has left the awaitable set
-// (submitted/reviewing/partially-approved). Returns nil if still waiting;
-// returns the observed status if a verdict has arrived.
-func checkVerdictStatus(task *models.Task, resolver *pipeline.Resolver, rolePair string) *verdictCheck {
-	submitted, _ := resolver.SubmittedStatus(rolePair)
-	reviewing, _ := resolver.ReviewingStatus(rolePair)
-
-	if task.Status == submitted || task.Status == reviewing {
+// (see checkAwaitableStatus). Returns nil if still waiting; returns the
+// observed status if a verdict has arrived.
+func checkVerdictStatus(task *models.Task, resolver *pipeline.Resolver) *verdictCheck {
+	if checkAwaitableStatus(task, resolver) == nil {
 		return nil
 	}
-
-	// PartiallyApproved keeps waiting — quorum not yet met.
-	partiallyApproved, paErr := resolver.PartiallyApprovedStatus(rolePair)
-	if paErr == nil && task.Status == partiallyApproved {
-		return nil
-	}
-
 	return &verdictCheck{status: task.Status}
 }
 

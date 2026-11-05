@@ -28,7 +28,7 @@ Premise 3 is why budget exhaustion ends in a clean exit rather than an escalatio
 |---|---|---|
 | Caller | doer, after `submit-for-review` | reviewer, after a REJECTED verdict |
 | Waiting for | a reviewer's verdict | the doer's next submission |
-| Awaitable statuses | submitted, reviewing, partially-approved | rejected, executing, submitted |
+| Awaitable statuses | submitted, reviewing, partially-approved, reviewing-2 | rejected, executing, submitted |
 | Wake outcome | REJECTED → auto-reclaim via `ClaimTask`, continue in session | RESUBMITTED → `reclaimForReview`, re-review in session |
 | Terminal outcomes | APPROVED, TERMINAL, NEW_ATTEMPT, ABORTED, ALREADY_TRANSITIONED | TERMINAL, ABORTED |
 | Budget exhausted | TIMEOUT → exit | TIMEOUT → exit |
