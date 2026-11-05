@@ -26,6 +26,14 @@ func shortenSubmitHandback(t *testing.T, window time.Duration) {
 	t.Cleanup(func() { submitHandbackWindow = previous })
 }
 
+// handbackForTest is the hand-back window of the tests that check the
+// session stays live during it. A check starts only after the test goroutine
+// changes the submit's state, so the window must outlast the check plus any
+// scheduling delay before it: at 200 ms against a 100 ms check, a goroutine
+// delayed past 100 ms on a loaded 2-vCPU CI runner under -race failed
+// (EE run 41991929165).
+const handbackForTest = time.Second
+
 func noInflightSubmit(time.Time) (time.Time, bool) { return time.Time{}, false }
 
 func noSubmitRunning() bool { return false }
@@ -102,7 +110,7 @@ func TestExecutionDeadlineParentTimeoutIsATimeout(t *testing.T) {
 // keeps the hand-back window to act on its outcome, then the session ends.
 func TestExecutionDeadlineHandsBackAfterInflightSubmitEnds(t *testing.T) {
 	shortenExecutionDeadlineRecheck(t)
-	shortenSubmitHandback(t, 300*time.Millisecond)
+	shortenSubmitHandback(t, handbackForTest)
 	var running atomic.Bool
 	running.Store(true)
 	inflight := func(now time.Time) (time.Time, bool) { return now.Add(time.Hour), running.Load() }
@@ -113,10 +121,10 @@ func TestExecutionDeadlineHandsBackAfterInflightSubmitEnds(t *testing.T) {
 	running.Store(false)
 	ended := time.Now()
 	requireLive(t, ctx, 200*time.Millisecond, "during the hand-back")
-	waitDone(t, ctx, time.Second)
+	waitDone(t, ctx, 2*handbackForTest)
 
-	if waited := time.Since(ended); waited < 300*time.Millisecond || waited > 600*time.Millisecond {
-		t.Fatalf("session ended %s after the submit, want about the 300ms hand-back", waited)
+	if waited := time.Since(ended); waited < handbackForTest || waited > 2*handbackForTest {
+		t.Fatalf("session ended %s after the submit, want about the %s hand-back", waited, handbackForTest)
 	}
 	requireCause(t, ctx, errSubmitHandbackEnded)
 }
@@ -187,7 +195,7 @@ func TestExecutionDeadlineSubmitEndingAtTheCapGetsFullHandback(t *testing.T) {
 // original submit's interruption.
 func TestExecutionDeadlineResubmitDoesNotExtendHandback(t *testing.T) {
 	shortenExecutionDeadlineRecheck(t)
-	shortenSubmitHandback(t, 200*time.Millisecond)
+	shortenSubmitHandback(t, handbackForTest)
 	var running atomic.Bool
 	inflight := func(now time.Time) (time.Time, bool) { return now.Add(time.Hour), true }
 	ctx, cancel := withExecutionDeadline(context.Background(), 20*time.Millisecond, "task-1", inflight, running.Load)
@@ -195,7 +203,7 @@ func TestExecutionDeadlineResubmitDoesNotExtendHandback(t *testing.T) {
 
 	requireLive(t, ctx, 100*time.Millisecond, "early in the hand-back")
 	running.Store(true) // the agent resubmits; its marker has an hour left
-	waitDone(t, ctx, time.Second)
+	waitDone(t, ctx, 2*handbackForTest)
 
 	requireCause(t, ctx, errHandbackSubmitInterrupted)
 	if !errors.Is(context.Cause(ctx), errInflightSubmitInterrupted) {
@@ -255,7 +263,7 @@ func TestExecutionDeadlineMarkerPastItsDeadlineWithLiveProcessIsInterrupted(t *t
 
 func TestExecutionDeadlineRemovedRealMarkerHandsBack(t *testing.T) {
 	shortenExecutionDeadlineRecheck(t)
-	shortenSubmitHandback(t, 200*time.Millisecond)
+	shortenSubmitHandback(t, handbackForTest)
 	root := t.TempDir()
 	config := SupervisorConfig{ProjectRoot: root, Authority: models.AgentAuthority{ID: "coder-1", Generation: "generation-1"}}
 	remove := ops.WriteInflightSubmitMarkerForTest(root, config.Authority, "task-1", time.Now().Add(time.Hour))
@@ -265,7 +273,7 @@ func TestExecutionDeadlineRemovedRealMarkerHandsBack(t *testing.T) {
 
 	remove()
 	requireLive(t, ctx, 100*time.Millisecond, "during the hand-back")
-	waitDone(t, ctx, time.Second)
+	waitDone(t, ctx, 2*handbackForTest)
 
 	requireCause(t, ctx, errSubmitHandbackEnded)
 }
