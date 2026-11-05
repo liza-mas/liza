@@ -1,6 +1,9 @@
 package db
 
 import (
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -22,7 +25,10 @@ type stateWatcher struct {
 // WatchForChanges creates a watcher for state file changes
 // Returns a stateWatcher that sends notifications when the state file is modified
 func (bb *Blackboard) WatchForChanges() (*stateWatcher, error) {
-	watcher, err := fsnotify.NewWatcher()
+	// Watch the directory containing the state file
+	// We watch the directory because atomic renames (used in Write/Modify)
+	// create new inodes, and watching the file directly would miss those changes
+	watcher, err := watchDir(filepath.Dir(bb.statePath), (*fsnotify.Watcher).Add)
 	if err != nil {
 		return nil, err
 	}
@@ -34,19 +40,40 @@ func (bb *Blackboard) WatchForChanges() (*stateWatcher, error) {
 		done:    make(chan struct{}),
 	}
 
-	// Watch the directory containing the state file
-	// We watch the directory because atomic renames (used in Write/Modify)
-	// create new inodes, and watching the file directly would miss those changes
-	dir := filepath.Dir(bb.statePath)
-	if err := watcher.Add(dir); err != nil {
-		watcher.Close()
-		return nil, err
-	}
-
 	// Start event processing goroutine
 	go sw.processEvents(bb.statePath)
 
 	return sw, nil
+}
+
+// stateWatchAddAttempts bounds watchDir's retries.
+const stateWatchAddAttempts = 5
+
+// watchDir returns a watcher on dir. On kqueue (macOS, BSD) fsnotify's Add
+// lists dir and lstats each entry, so an entry renamed away in between —
+// filelock's owner-metadata temp file lives beside state.yaml — fails the
+// whole Add with ErrNotExist, a transient failure while dir itself exists.
+// A failed Add leaves the watcher partly registered, so each attempt starts
+// from a new one.
+func watchDir(dir string, add func(*fsnotify.Watcher, string) error) (*fsnotify.Watcher, error) {
+	var err error
+	for range stateWatchAddAttempts {
+		watcher, newErr := fsnotify.NewWatcher()
+		if newErr != nil {
+			return nil, newErr
+		}
+		if err = add(watcher, dir); err == nil {
+			return watcher, nil
+		}
+		_ = watcher.Close()
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		if _, statErr := os.Stat(dir); statErr != nil {
+			return nil, err
+		}
+	}
+	return nil, err
 }
 
 // stateWatchDebounce coalesces a burst of state-file events into one.

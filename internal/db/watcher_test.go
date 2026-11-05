@@ -1,11 +1,15 @@
 package db
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/liza-mas/liza/internal/models"
 	"gopkg.in/yaml.v3"
 )
@@ -279,5 +283,107 @@ func TestStateWatcherExternalModification(t *testing.T) {
 		t.Fatalf("Unexpected error from watcher: %v", err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Timeout waiting for notification")
+	}
+}
+
+// vanishedEntryErr has the shape of fsnotify's kqueue Add failure when a
+// directory entry is renamed away between its listing and its lstat.
+func vanishedEntryErr(dir string) error {
+	entry := filepath.Join(dir, "state.yaml.lock.owner.json.tmp-1")
+	return fmt.Errorf("%q: %w", entry, &fs.PathError{Op: "lstat", Path: entry, Err: fs.ErrNotExist})
+}
+
+func TestWatchDirRetriesEntryVanishedDuringAdd(t *testing.T) {
+	// GIVEN an Add that loses two races with a vanishing entry, then succeeds
+	dir := t.TempDir()
+	calls := 0
+	add := func(w *fsnotify.Watcher, name string) error {
+		calls++
+		if calls <= 2 {
+			return vanishedEntryErr(name)
+		}
+		return w.Add(name)
+	}
+
+	// WHEN the directory watch is set up
+	watcher, err := watchDir(dir, add)
+
+	// THEN it succeeds on the third attempt with a working watcher
+	if err != nil {
+		t.Fatalf("watchDir failed: %v", err)
+	}
+	defer watcher.Close()
+	if calls != 3 {
+		t.Fatalf("add calls = %d, want 3", calls)
+	}
+	path := filepath.Join(dir, "state.yaml")
+	if err := os.WriteFile(path, []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case event := <-watcher.Events:
+			if event.Name == path {
+				return
+			}
+		case err := <-watcher.Errors:
+			t.Fatalf("watcher error: %v", err)
+		case <-timeout:
+			t.Fatal("returned watcher reported no event for a write in the directory")
+		}
+	}
+}
+
+func TestWatchDirMissingDirFailsWithoutRetry(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	calls := 0
+	add := func(w *fsnotify.Watcher, name string) error {
+		calls++
+		return w.Add(name)
+	}
+
+	_, err := watchDir(dir, add)
+
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("watchDir error = %v, want ErrNotExist", err)
+	}
+	if calls != 1 {
+		t.Fatalf("add calls = %d, want 1", calls)
+	}
+}
+
+func TestWatchDirOtherAddErrorFailsWithoutRetry(t *testing.T) {
+	addErr := errors.New("watch limit reached")
+	calls := 0
+	add := func(*fsnotify.Watcher, string) error {
+		calls++
+		return addErr
+	}
+
+	_, err := watchDir(t.TempDir(), add)
+
+	if !errors.Is(err, addErr) {
+		t.Fatalf("watchDir error = %v, want %v", err, addErr)
+	}
+	if calls != 1 {
+		t.Fatalf("add calls = %d, want 1", calls)
+	}
+}
+
+func TestWatchDirGivesUpAfterBoundedAttempts(t *testing.T) {
+	calls := 0
+	add := func(_ *fsnotify.Watcher, name string) error {
+		calls++
+		return vanishedEntryErr(name)
+	}
+
+	_, err := watchDir(t.TempDir(), add)
+
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("watchDir error = %v, want ErrNotExist", err)
+	}
+	if calls != stateWatchAddAttempts {
+		t.Fatalf("add calls = %d, want %d", calls, stateWatchAddAttempts)
 	}
 }
