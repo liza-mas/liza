@@ -2,6 +2,7 @@
 package subprocess
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -22,9 +23,19 @@ var DefaultWaitDelay = 5 * time.Second
 // process-tree cancellation and bounded output draining. Use only for headless
 // commands: Unix process groups would change interactive terminal ownership.
 // Callers that read StdoutPipe/StderrPipe themselves must also bound those reads.
+// Start the command with Start or Run: on Windows they attach the process tree
+// that cancellation terminates.
 func ConfigureCancellation(cmd *exec.Cmd) {
 	configProcessGroupKill(cmd)
 	cmd.WaitDelay = DefaultWaitDelay
+}
+
+// Run starts cmd with Start and waits for it, as cmd.Run does.
+func Run(cmd *exec.Cmd) error {
+	if err := Start(cmd); err != nil {
+		return err
+	}
+	return cmd.Wait()
 }
 
 // TimeoutError reports a killed subprocess after exceeding its deadline.
@@ -63,7 +74,11 @@ func CombinedOutputWithTimeout(timeout time.Duration, name string, args []string
 	cmd.Dir = dir
 	ConfigureCancellation(cmd)
 
-	output, err := cmd.CombinedOutput()
+	var combined bytes.Buffer
+	cmd.Stdout = &combined
+	cmd.Stderr = &combined
+	err := Run(cmd)
+	output := combined.Bytes()
 	if ctx.Err() == context.DeadlineExceeded {
 		return string(output), &TimeoutError{
 			Name:    name,

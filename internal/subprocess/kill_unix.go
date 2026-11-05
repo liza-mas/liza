@@ -17,3 +17,9 @@ func configProcessGroupKill(cmd *exec.Cmd) {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 }
+
+// Start starts cmd. Its process group, set by ConfigureCancellation, already
+// lets cancellation reach every descendant.
+func Start(cmd *exec.Cmd) error {
+	return cmd.Start()
+}

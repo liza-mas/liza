@@ -217,7 +217,7 @@ func (a *ACPXAgent) startACPXPrompt(ctx context.Context, req LLMAgentRunRequest,
 		process.stderrLogWriter = process.stderrLog
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := subprocess.Start(cmd); err != nil {
 		closeAgentOutputLogs(process.stdoutLog, process.stderrLog, req.AgentID)
 		return nil, err
 	}

@@ -188,7 +188,7 @@ func runCommandPlanWithFiles(plan CommandPlan, files []*os.File) (CommandResult,
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err := subprocess.Run(cmd)
 	result := CommandResult{Stdout: stdout.String(), Stderr: stderr.String()}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {

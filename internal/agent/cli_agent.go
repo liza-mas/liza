@@ -12,6 +12,7 @@ import (
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/providers"
+	"github.com/liza-mas/liza/internal/subprocess"
 )
 
 type codexLaunchConfig struct {
@@ -57,7 +58,7 @@ func (d *CLIAgent) Run(ctx context.Context, req LLMAgentRunRequest) (LLMAgentRun
 	streams := d.attachRunStreams(ctx, cmd, req, eventBase)
 	defer closeAgentOutputLogs(streams.stdoutLog, streams.stderrLog, req.AgentID)
 
-	if err := req.LaunchGate.launch(ctx, cmd.Start); err != nil {
+	if err := req.LaunchGate.launch(ctx, func() error { return subprocess.Start(cmd) }); err != nil {
 		close(streams.ready)
 		return failCLIRun(ctx, req, eventBase, err)
 	}

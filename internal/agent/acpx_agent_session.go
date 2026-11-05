@@ -117,6 +117,6 @@ func (a *ACPXAgent) runACPX(ctx context.Context, plan agentlaunch.LaunchPlan, ar
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err = cmd.Run()
+	err = subprocess.Run(cmd)
 	return stdout.String() + stderr.String(), err
 }
