@@ -425,8 +425,14 @@ func (g *Git) UntrackedFilesOverwrittenBy(worktreePath, targetTreeish string) ([
 // EnableWorktreeConfigExtension ensures the main repo has
 // extensions.worktreeConfig enabled so each worktree can override config
 // values (notably core.hooksPath) without polluting the shared repo config.
-// Idempotent: safe to call repeatedly.
+// Idempotent: safe to call repeatedly. It writes only when the extension is
+// not already on: git replaces the shared config file on every write, even of
+// an unchanged value, and on Windows a concurrent reader can fail to open it
+// meanwhile.
 func (g *Git) EnableWorktreeConfigExtension() error {
+	if value, err := g.exec("config", "--bool", "--get", "extensions.worktreeConfig"); err == nil && value == "true" {
+		return nil
+	}
 	_, err := g.exec("config", "extensions.worktreeConfig", "true")
 	return err
 }

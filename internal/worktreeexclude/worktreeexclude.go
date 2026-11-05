@@ -164,12 +164,17 @@ func ensureWorktreeExcludeConfig(worktreeRoot, excludePath string) (bool, error)
 		return false, err
 	}
 
-	output, err := gitConfigWrite(worktreeRoot, "config", "extensions.worktreeConfig", "true")
-	if err != nil {
-		return false, fmt.Errorf("enable worktree config for private exclude: %w%s", err, outputSuffix(string(output)))
+	// Git replaces the shared config file on every write, even of an
+	// unchanged value, and on Windows a concurrent reader can fail to open it
+	// meanwhile, so write only when the extension is not already on.
+	if output, err := gitenv.Output(worktreeRoot, "config", "--bool", "--get", "extensions.worktreeConfig"); err != nil || strings.TrimSpace(string(output)) != "true" {
+		output, err := gitConfigWrite(worktreeRoot, "config", "extensions.worktreeConfig", "true")
+		if err != nil {
+			return false, fmt.Errorf("enable worktree config for private exclude: %w%s", err, outputSuffix(string(output)))
+		}
 	}
 
-	output, err = gitenv.Output(worktreeRoot, "config", "--worktree", "--get", "core.excludesFile")
+	output, err := gitenv.Output(worktreeRoot, "config", "--worktree", "--get", "core.excludesFile")
 	if err == nil {
 		current := strings.TrimSpace(string(output))
 		if current != "" && filepath.Clean(current) != filepath.Clean(excludePath) {

@@ -430,3 +430,28 @@ func assertGitConfigUnset(t *testing.T, dir, key string) {
 	}
 	t.Fatalf("git config --get %s = %q, want unset", key, strings.TrimSpace(string(output)))
 }
+
+// Git replaces the shared config file on every write; once the extension is on,
+// setting up another worktree must not replace it (a Windows reader can fail
+// to open it meanwhile).
+func TestEnsurePrivateExcludeLeavesEnabledSharedConfigInPlace(t *testing.T) {
+	repo := newGitRepoWithWorktrees(t, "task-one", "task-two")
+	if err := EnsurePrivateExclude(repo.worktrees["task-one"], ".sembleignore"); err != nil {
+		t.Fatalf("EnsurePrivateExclude(task-one) error = %v", err)
+	}
+	config := filepath.Join(repo.root, ".git", "config")
+	before, err := os.Stat(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsurePrivateExclude(repo.worktrees["task-two"], ".sembleignore"); err != nil {
+		t.Fatalf("EnsurePrivateExclude(task-two) error = %v", err)
+	}
+	after, err := os.Stat(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Fatal("the shared config was replaced although extensions.worktreeConfig was already on")
+	}
+}
