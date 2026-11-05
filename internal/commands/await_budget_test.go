@@ -169,6 +169,12 @@ func TestAwaitResubmissionWithBudget_OwnershipLossIsNotRetryable(t *testing.T) {
 	}
 }
 
+// boundedAwaitGuard only bounds liveness: the result checks carry the budget
+// semantics (POLL with the remainder, then TIMEOUT). Each round also pays
+// state reads, a pipeline load and ownership writes outside its interval,
+// which a loaded 2-vCPU Windows runner stretched past 3s.
+const boundedAwaitGuard = 10 * time.Second
+
 func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 	t.Parallel()
 	verdictFixture := setupBoundedAwaitFixture(
@@ -199,10 +205,10 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 			resubmissionFixture.projectRoot, boundedAwaitTaskID, boundedAwaitReviewerID, 2*time.Second, interval)
 	})
 
-	verdictResult := receiveAsyncAwait(t, verdictCall, 3*time.Second)
-	resubmissionResult := receiveAsyncAwait(t, resubmissionCall, 3*time.Second)
-	if elapsed := time.Since(firstStarted); elapsed >= 3*time.Second {
-		t.Fatalf("first bounded await round took %s, want < 3s", elapsed)
+	verdictResult := receiveAsyncAwait(t, verdictCall, boundedAwaitGuard)
+	resubmissionResult := receiveAsyncAwait(t, resubmissionCall, boundedAwaitGuard)
+	if elapsed := time.Since(firstStarted); elapsed >= boundedAwaitGuard {
+		t.Fatalf("first bounded await round took %s, want < %s", elapsed, boundedAwaitGuard)
 	}
 	if verdictResult.Verdict != string(ops.VerdictPoll) || verdictResult.TimeoutSeconds != 1 {
 		t.Fatalf("AwaitVerdict result = (%q, %d), want (%q, 1)",
@@ -242,8 +248,8 @@ func TestAwaitCompositionWithInterval_BoundedBudgetLifecycle(t *testing.T) {
 		)
 	})
 
-	verdictResult = receiveAsyncAwait(t, verdictCall, 3*time.Second)
-	resubmissionResult = receiveAsyncAwait(t, resubmissionCall, 3*time.Second)
+	verdictResult = receiveAsyncAwait(t, verdictCall, boundedAwaitGuard)
+	resubmissionResult = receiveAsyncAwait(t, resubmissionCall, boundedAwaitGuard)
 	if verdictResult.Verdict != string(ops.VerdictTimeout) || verdictResult.TimeoutSeconds != 0 {
 		t.Fatalf("final AwaitVerdict result = (%q, %d), want (%q, 0)",
 			verdictResult.Verdict, verdictResult.TimeoutSeconds, string(ops.VerdictTimeout))
