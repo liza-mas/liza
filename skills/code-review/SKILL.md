@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Two-sided code review protocol — reviewers raise findings, authors answer them. Use when reviewing code (PRs, pending changes) or when responding to review feedback, review comments, or a rejected verdict.
+description: Two-sided review protocol — reviewers raise findings, authors answer them. Use when reviewing a change to code or to another artifact (spec, plan, doc, contract, proposal), pending or in a PR, or when responding to review feedback, review comments, or a rejected verdict. For a consistency-and-gap audit of a specification, use spec-review.
 ---
 
 Code review is risk mitigation, not gatekeeping — catching what the author couldn't see, and occasionally sharing a better pattern when it genuinely helps.
@@ -15,10 +15,10 @@ Format* is shared; *Answering Findings* is author-side.
 Before reviewing, establish context:
 - **Scope:** Default to staged files (`git diff --cached --name-only`, then `git diff --cached --stat`, then targeted path diffs). For PRs or commits, inspect changed files and stats before reading targeted hunks. Only broaden if explicitly asked.
 - **Local working tree:** For local reviews, triage unstaged and untracked files before review. If related but not staged, surface this explicitly and include only if the review target is "pending changes"; if unrelated, ignore; if unclear, ask before including.
-- **Initial scope:** Before reading the diff, record in one line what the change set out to do — take it from the author's stated intent when supplied (Pairing: Change Summary; multi-agent: task description and done-when; PRs: description and linked ticket), derive it only when it is not, and clarify with the author when it is unclear. This is the anchor for every later round: it bounds which *behavior* is required, not which code is inspected. Every submitted line is still reviewed for P0-P2 defects. Work beyond the initial scope is scope creep, not thoroughness — review it, then flag it `[overreach]`.
+- **Initial scope:** Before reading the diff, record in one line what the change set out to do and the objective it serves (goal entry, parent task, ticket) — intent is what it does, objective is why. Take them from the author's stated intent when supplied (Pairing: Change Summary; multi-agent: task description and done-when; PRs: description and linked ticket), derive them only when they are not, and clarify with the author when unclear. This is the anchor for every later round: it bounds which *behavior* is required, not which code is inspected. Every submitted line is still reviewed for P0-P2 defects. Work beyond the initial scope is scope creep, not thoroughness — review it, then flag it `[overreach]`.
 - **Timing:** Is now the right time for this functionality? Half-baked or premature additions warrant a `[question]`.
 - **Approach:** Round 1 only. Is the approach sound, not merely correct — would another team take this shape, and was the first workable rung of CORE's Minimality Ladder taken? Raise an alternative only when it is named and its benefit demonstrable (`have-you-considered`); "I'd have done it differently" is not a finding. `[question]` when exploratory, `[concern]` when materially cheaper and still cheap to switch. After round 1 the approach is settled — reopening it is relitigation.
-- **Absence:** Review what should be here and is not. Take the baseline from the author's declarations (Pairing: Change Summary success criteria, doc impact, test impact; multi-agent: done-when) and check each against the diff. Diff-first reading optimizes for what is present; absence has to be sought deliberately. Where no declarations exist, say so — it caps confidence.
+- **Absence:** Review what should be here and is not. Take the baseline from the author's declarations (Pairing: Change Summary success criteria, doc impact, test impact; multi-agent: done-when) and check each against the diff. Diff-first reading optimizes for what is present; absence has to be sought deliberately. Where no declarations exist, say so — it caps confidence. Declared limits — out of scope, accepted risks, withheld paths — are evidence, not closure: assess what each leaves unmet of the objective (user-facing: dead ends, what grows with use; technical: the architectural target).
 - **Diff-first:** Read bounded diff context before source files. Prefer name-only/stat first, then targeted path or hunk diffs. Only read source when a finding needs surrounding context. Never pre-read the entire codebase.
 - **Sources:** State what you have read before drawing conclusions, per CORE Rule 5, and extend it as you read. The summary line reports this list; it does not create it. A conclusion reached before its source was read is not grounded by reading that source afterwards.
 - **Size:** Beyond 800 lines, 20 files, 80K chars total, or 20K chars in one file — large diffs hide bugs. Consider suggesting a split (PR) or incremental commits (pending); avoid unbounded full-diff reads, classify files and inspect targeted paths or hunks, and verify critical findings against source before tagging `[blocker]` or `[concern]`.
@@ -133,7 +133,7 @@ irreversible can still block.
 **Net value gate — mandatory at the approval boundary.** A clean ledger is not
 approval. Every verdict states two values, one concrete sentence each: **as submitted**
 and **with the findings resolved** — benefit obtained, complexity or risk retained,
-versus not merging. No verdict is exempt; the assessment is the forcing function.
+versus not merging — and the gap left to the objective. No verdict is exempt; the assessment is the forcing function.
 
 The resolved value decides. Negative as submitted but positive resolved is ordinary
 Request Changes. Still marginal or negative once resolved means the change should not
@@ -301,7 +301,7 @@ The format is the content:
 **Compact** (Approve/Comment, zero blockers/concerns, ≤3 suggestions, approach sound, high confidence — size is not a criterion):
 ```
 Review: [mode] — Approve
-Net value: [one sentence: benefit obtained, complexity retained, versus not merging]
+Net value: [one sentence: benefit obtained, complexity retained, versus not merging — gap to objective: what remains, or none]
 ```
 
 **Full** (everything else):
@@ -316,7 +316,7 @@ Overall: [1-2 sentence assessment]
 Approach: [round 1 — sound, or the named alternative and its benefit]
 Absence: [baseline used — nothing missing, or what is]
 Sweep: [from round 3 or a mid-review design change — vestigial or disproportionate, or neither]
-Net value: [as submitted — one line] / [with findings resolved — one line]
+Net value: [as submitted — one line] / [with findings resolved — one line] — gap to objective: [what remains | none, checked against what]
 Blast Radius: [Low: internal refactor | Medium: logic change | High: migration/public API]
 Confidence: [high: thorough | medium: focused on key areas | low: quick pass]
 Sources: [what was read — diff, source files, specs, ADRs and decision records, validation output]
