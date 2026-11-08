@@ -77,8 +77,8 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 291086,
-      "after_bytes": 286310,
+      "before_bytes": 291365,
+      "after_bytes": 286589,
       "delta_bytes": -4776,
       "reference_before_bytes": 266437,
       "reference_after_bytes": 261661
@@ -131,8 +131,8 @@
     {
       "role": "integration-analyst",
       "variant": "integration-pair",
-      "before_bytes": 290831,
-      "after_bytes": 286055,
+      "before_bytes": 291110,
+      "after_bytes": 286334,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -149,8 +149,8 @@
     {
       "role": "integration-analyst",
       "variant": "slice-integration-pair",
-      "before_bytes": 290831,
-      "after_bytes": 286055,
+      "before_bytes": 291110,
+      "after_bytes": 286334,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -194,8 +194,8 @@
     {
       "role": "orchestrator",
       "variant": "wake BLOCKED_TASKS",
-      "before_bytes": 30462,
-      "after_bytes": 30462,
+      "before_bytes": 30580,
+      "after_bytes": 30580,
       "delta_bytes": 0,
       "reference_before_bytes": 0,
       "reference_after_bytes": 0
