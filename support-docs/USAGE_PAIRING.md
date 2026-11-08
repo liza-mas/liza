@@ -101,7 +101,7 @@ The agent never commits to git unless you explicitly ask it to. You own the comm
 
 ### The agent is forced into thinking and asking before acting
 
-Before producing any solution, if anything is ambiguous — the problem, goals, scope, constraints, or success criteria — the agent asks for clarification. It does not guess, infer unstated requirements, or silently choose defaults.
+Before producing any solution, if anything is ambiguous — the problem, goals, scope, constraints, or success criteria — the agent asks for clarification. It does not guess, infer unstated requirements, or silently choose defaults. Ambiguity that only a later step needs resolved is parked as a visible `TBD` rather than pressed for now: the agent works at the precision the next step needs.
 
 All assumptions are explicitly tagged (`ASSUMPTION: ...`). If too many assumptions accumulate on critical-path decisions, the agent blocks itself and asks rather than proceeding on shaky ground.
 

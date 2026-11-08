@@ -185,7 +185,9 @@ When struggling (random attempts, repeated failures, unclear rationale), IMMEDIA
 
 ### Rule 2: Definition of Ready (DoR)
 
-Before producing any solution, if ANY ambiguity exists, clarify. MUST NOT guess, infer unstated requirements, or silently choose defaults.
+Before producing any solution, if ANY ambiguity on the current step's critical path exists, clarify. MUST NOT guess, infer unstated requirements, or silently choose defaults.
+
+**Precision:** Ask for and produce only the detail the next step needs to start; add precision as each step needs it. Ambiguity owned by a later step is parked, not resolved or guessed: `TBD: [what] — needed by [step], decided by [owner]`. Nothing may rely on a parked TBD. Dive briefly into higher precision only to check a risk, then come back up.
 
 **Core Requirements:**
 - Practice active listening: summarize understanding, confirm

@@ -219,6 +219,7 @@ Halt only when the human asks for work behind an ordering while its criterion is
 - An independent session's gate run returns `Ready` or `Ready with notes` for the chosen entry point.
 - No unclaimed marker is unresolved.
 - No critical-path TBD remains.
+- Every other TBD names the pipeline stage that needs it and who decides it. One the human decides is settled now or listed as an open question.
 
 Then the human runs `§BRAND_BINARY_NAME§ init --spec <path>`. Commit the document first: worktrees are created from the integration branch, so uncommitted input may be invisible to agents.
 

@@ -1,7 +1,7 @@
 + .liza directory 0755 -
 + .liza/AGENT_TOOLS.md file 0644 f764254dec2a16d13af201e368bd7438307651388c98d0b8f28f170196fb46a0
 + .liza/COLLABORATION_CONTINUITY.md file 0644 b0e072990ea3a6ab47e62480132acc31a8d65f9e8759c471da2f1d55c01584d0
-+ .liza/CORE.md file 0644 8319f4c8ab690307d366b5e315635aeb7039aa93c1ffb002f32ce9b4dd3f4509
++ .liza/CORE.md file 0644 5ac6510ab2e1d2c8610b359286833fe60b95dc5f2ede893e429e9098c15028f3
 + .liza/MULTI_AGENT_MODE.md file 0644 21b938b72641142c1dcc5329af678c99fb5b905ddf6072956fc4591a31593306
 + .liza/PAIRING_MODE.md file 0644 2332864596fee92f5cba0bccc6966ec1531bd6f8dd878cf90a62385a2c1e096e
 + .liza/SUBAGENT_MODE.md file 0644 e27a266cefa291807e1a298d2fa87dd3fc98c3e9e3c57941c7c0f18f7e65938f
@@ -64,7 +64,7 @@
 + .liza/skills/generic-subagent directory 0755 -
 + .liza/skills/generic-subagent/SKILL.md file 0644 1c099bec596b802545ad5033f2230c9a44ef02ba329e8625f0a3418aebc1ab85
 + .liza/skills/goal-writing directory 0755 -
-+ .liza/skills/goal-writing/SKILL.md file 0644 0522154c1737aa1a08177c9c1b5d5fdd38d3d649a9336793e37dde65de2b6fbf
++ .liza/skills/goal-writing/SKILL.md file 0644 b75e66464fa8e2870437b2b5d51715f1953a6ef5d4855141d15e60cb7a618aff
 + .liza/skills/goal-writing/references directory 0755 -
 + .liza/skills/goal-writing/references/rubrics.md file 0644 c089e09678bf632c6aa36efab1a06245d56a9df69646f90d1dea56038933ba81
 + .liza/skills/have-you-considered directory 0755 -
@@ -138,7 +138,7 @@
 + .liza/support-docs/TOOLCHAIN.md file 0644 f065d4e488a119eae0c54fba59c1f67d154ef618074e387a032004d3272ac537
 + .liza/support-docs/TROUBLESHOOTING.md file 0644 7e4c80b94e37f9a26f65aff7678d878a54c6f69604ac4380ec11e6924daab5a2
 + .liza/support-docs/USAGE_MULTI_AGENTS.md file 0644 587c8821fbdb911912d2b4c12a2341fb3c40f65268527241017ff97e1c3ec577
-+ .liza/support-docs/USAGE_PAIRING.md file 0644 2725db2c773259739c576201f96b5f6c5fdc33428573b0e00042049e4f6282f1
++ .liza/support-docs/USAGE_PAIRING.md file 0644 6bf7bb60bcf543fcac7e72dc9cb46257b68da455f767bc5475431703cf4ca7e8
 + .liza/support-docs/how-to-produce-a-goal.md file 0644 a99a41f765a209b638eecd57464b3c58dd3741d258546ff74a9984095b51680a
 + .vibe directory 0755 -
 + .vibe/prompts directory 0755 -
