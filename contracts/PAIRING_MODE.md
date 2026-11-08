@@ -143,7 +143,7 @@ Reference specific files, functions, or line numbers — not abstract intentions
 | Success Criteria | Observable outcome that could prove the change wrong (not "tests pass"). |
 | Deliverables | Code + tests + docs |
 | Analysis | Reasoning with tagged assumptions |
-| Scope | Files/touchlist + concise diff preview |
+| Scope | Files/touchlist + concise diff preview + adjacent items deliberately not done |
 | Doc Impact | Docs affected by this change (from DoR declaration) |
 | Test Impact | Tests to write/update (from DoR declaration) |
 | Commands | Exact commands in execution order |
