@@ -31,6 +31,8 @@ Lean is about *who still had the choice*, not about how technical the prose look
 
 **Non-functional requirements are never the detail lean excludes.** A constraint bounds the solution space; a design picks a point inside it. Supported stack candidates, load and scalability targets, latency budgets, availability, security, privacy, regulatory and data-residency rules, operability and cost ceilings are constraints, and they are the human's at every altitude — a `general-objective` document carries them just as a `technical-spec` one does. Only functional and structural detail scales with the entry point. Stripping an NFR because it "sounds technical" hands the agent a solution space with no walls, and it will pick a point outside them.
 
+**Trade-off priorities are owed at every altitude.** MoSCoW settles scope and non-functional requirements bound the solution; neither says which quality yields first when two conflict mid-run. The human ranks qualities and project properties (date, cost, correctness, maintainability, human attention) in three tiers: *above all* (at most two), *try to keep*, *gives way first*. Delivery speed and correctness cannot both be above all. A lower tier yields first under pressure; it never drops a Must, breaches a bound or skips a gate.
+
 ## Ownership contract
 
 | The human | You |
@@ -201,6 +203,7 @@ Each names a way a decision appears made but is not.
 | **Not lean** | A detail is being recorded that downstream agents could infer without guessing, or decide without risking the solution. Ask who still had the choice: if a downstream stage did and this takes it, the detail is foreclosing. If nobody did — the decision was already made elsewhere — recording it is a constraint, however structural it reads. |
 | **Stale unclaimed** | A marker you set survives three exchanges without being resolved. |
 | **Environment by assumption** | The success criteria need real systems, credentials or recorded external data, and the document does not say, at its altitude, where proof runs, who provides it, or what it must never touch. |
+| **Wish-list priorities** | No trade-off tier gives way, more than two sit above all, or delivery speed and correctness share the top. |
 
 ## Binding orderings
 

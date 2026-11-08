@@ -60,7 +60,7 @@
 + .liza/skills/black-box-red-testing directory 0755 -
 + .liza/skills/black-box-red-testing/SKILL.md file 0644 18e751d7937eb458276b5b7e5895bc9d86a490f01645f3f02ed3edaf8a5ad180
 + .liza/skills/check-liza-input-readiness directory 0755 -
-+ .liza/skills/check-liza-input-readiness/SKILL.md file 0644 388c553245bfee464320faa0ea7ebd3dda5fcdb3b16af12f1ccf2e1bcc5e0cfb
++ .liza/skills/check-liza-input-readiness/SKILL.md file 0644 0433dea1dda5171751c5f8c5057465db0b195239aed85a4bec76da20ae7c98a8
 + .liza/skills/checkpoint-summary directory 0755 -
 + .liza/skills/checkpoint-summary/SKILL.md file 0644 8fa23cd601f26324e960daa8cfe038abd5f6524632e6066a86baf378cf9f41e1
 + .liza/skills/clean-code directory 0755 -
@@ -97,7 +97,7 @@
 + .liza/skills/generic-subagent directory 0755 -
 + .liza/skills/generic-subagent/SKILL.md file 0644 1c099bec596b802545ad5033f2230c9a44ef02ba329e8625f0a3418aebc1ab85
 + .liza/skills/goal-writing directory 0755 -
-+ .liza/skills/goal-writing/SKILL.md file 0644 b75e66464fa8e2870437b2b5d51715f1953a6ef5d4855141d15e60cb7a618aff
++ .liza/skills/goal-writing/SKILL.md file 0644 778c7e9f3683e523cbbf3cf1ea5d4c57b25c926f02343512941dee66f9c0503e
 + .liza/skills/goal-writing/references directory 0755 -
 + .liza/skills/goal-writing/references/rubrics.md file 0644 c089e09678bf632c6aa36efab1a06245d56a9df69646f90d1dea56038933ba81
 + .liza/skills/have-you-considered directory 0755 -
