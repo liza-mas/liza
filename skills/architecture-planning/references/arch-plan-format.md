@@ -77,6 +77,8 @@ Annotate transformations at each stage.
 | Configuration | <what's configurable, where it lives> |
 | Testing | <integration boundaries, what's mockable> |
 
+Fill a row only where the source or an inherited NFR names the concern, or components must agree on it to compose (e.g. error propagation). Otherwise write `Not named by source`.
+
 ---
 
 ## Decomposition

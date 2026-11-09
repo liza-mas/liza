@@ -161,7 +161,7 @@ Before submitting:
 - [ ] Shared-file conflicts identified and resolved
 - [ ] Architecture scopes are locally sufficient from their direct references and task envelopes
 - [ ] No decisions prescribe implementation detail below interface level
-- [ ] Cross-cutting concerns addressed for all components
+- [ ] Cross-cutting concerns the source names, or composition needs, are addressed for all components
 - [ ] Every proof honours the inherited proof environment; each shared or slow one has isolation, runtime basis and stage, and fits the envelope or is an Open Question
 - [ ] Every assigned obligation maps to a direct reference whose anchor span contains it
 - [ ] Structural decisions do not silently redefine inherited behavior
@@ -223,4 +223,4 @@ Fix issues before submitting.
 | "NFR unclear or overkill?" | Open Question with its proof cost; never default to the strictest |
 | "Scope too broad — split?" | Decompose further; document split rationale |
 | "Existing pattern X — follow or deviate?" | State rationale; reviewer evaluates |
-| "Cross-cutting concern Y unaddressed" | Must be addressed before submission |
+| "Cross-cutting concern Y unaddressed" | Address it if the source names it or composition needs it; otherwise Open Question with its cost |

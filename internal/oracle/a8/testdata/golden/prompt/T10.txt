@@ -216,7 +216,7 @@ REVIEW CHECKLIST:
 | Decomposition completeness | Architecture does not cover the full scope of the goal spec |
 | Component boundaries | Boundaries are unclear, overlapping, or don't follow natural seams in the codebase |
 | Interface contracts | Interfaces between components are vague or undefined |
-| Cross-cutting concerns | Cross-cutting concerns (error handling, observability, security) are unaddressed or assigned to no component |
+| Cross-cutting concerns | A concern the source names or composition needs (error handling, observability, security) is unaddressed or assigned to no component |
 | Composability | The M code-planning scopes would not compose into a working whole — integration gaps exist |
 | Single intent per scope | An output[] entry bundles multiple unrelated concerns |
 | Domain-level scopes | Scopes split within a domain by implementation steps rather than by domain boundaries. Sequencing within a domain is code-planner territory. |

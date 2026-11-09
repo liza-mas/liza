@@ -14,11 +14,11 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-main-pair",
-      "before_bytes": 293876,
-      "after_bytes": 289100,
+      "before_bytes": 293900,
+      "after_bytes": 289124,
       "delta_bytes": -4776,
-      "reference_before_bytes": 280532,
-      "reference_after_bytes": 275756
+      "reference_before_bytes": 280556,
+      "reference_after_bytes": 275780
     },
     {
       "role": "architect",
@@ -32,11 +32,11 @@
     {
       "role": "architecture-reviewer",
       "variant": "architecture-pair",
-      "before_bytes": 290898,
-      "after_bytes": 286122,
+      "before_bytes": 290922,
+      "after_bytes": 286146,
       "delta_bytes": -4776,
-      "reference_before_bytes": 280532,
-      "reference_after_bytes": 275756
+      "reference_before_bytes": 280556,
+      "reference_after_bytes": 275780
     },
     {
       "role": "code-planner",
