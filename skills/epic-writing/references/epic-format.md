@@ -105,10 +105,10 @@ Explicit list of what this epic does NOT cover. Adjacent capabilities the Story 
 Items where the vision material was ambiguous and you made a judgment call.
 - **ASM-000-1**: <what you assumed> — *Why*: <reasoning> — Confidence: HIGH | MEDIUM | LOW
 
-LOW confidence assumptions are blocking: the human must resolve them before story-writing begins.
+LOW confidence assumptions are blocking: the human must resolve them before story-writing begins on what they affect.
 
 ### Open Questions
-Questions that cannot be resolved by assumption. Must be answered before Story Writers begin work.
+Questions that cannot be resolved by assumption. Each must be answered before story-writing begins on what its impact names.
 - **OQ-000-1**: <question> — *Impact if unresolved*: <what remains unbounded or contradictory>
 
 ---

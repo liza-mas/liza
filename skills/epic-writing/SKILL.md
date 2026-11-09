@@ -190,7 +190,7 @@ state the behavioral constraint only.
 **Confidence discipline:**
 - HIGH: The source material strongly implies this; any reasonable reader would agree.
 - MEDIUM: Reasonable inference, but the source is silent or oblique.
-- LOW: You had to guess. This is blocking — a human must resolve it before story-writing begins.
+- LOW: You had to guess. This is blocking — a human must resolve it before story-writing begins on what it affects.
 
 **Open Questions** at the epic level are product-level decisions only: personas, scope boundaries,
 completion criteria, or capability ordering. Technical open questions belong in story documents,
@@ -306,7 +306,7 @@ If it reads like a goal in an OKR, it's too high. Narrow it to something a Story
 
 | Skill | Relationship |
 |-------|-------------|
-| **user-story-writing** | Direct downstream consumer. Each capability section and its direct references form the Story Writer task brief. Unresolved epic assumptions and Open Questions block story-writing from starting. |
+| **user-story-writing** | Direct downstream consumer. Each capability section and its direct references form the Story Writer task brief. Unresolved epic assumptions and Open Questions block story-writing on what they affect. |
 | **detailed-spec-writing** | Complementary. Epics capture product intent; PRDs capture system requirements. An approved epic can seed a PRD for a capability. |
 | **spec-review** | Downstream. Validates epics against completeness/consistency/testability. |
 

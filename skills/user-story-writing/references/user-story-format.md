@@ -108,10 +108,10 @@ Items where the source material was ambiguous and you made a judgment call. Each
 - **ASM-000-1**: <what you assumed> — *Why*: <reasoning> — Confidence: HIGH | MEDIUM | LOW
 - ...
 
-LOW confidence assumptions are blocking: the human must resolve them before stories move to coding.
+LOW confidence assumptions are blocking: the human must resolve them before the stories they affect move to coding.
 
 ### Open Questions
-Questions you cannot resolve by assumption. These MUST be answered by a human before stories are coded.
+Questions you cannot resolve by assumption. Each MUST be answered by a human before the stories its impact names are coded.
 - **OQ-000-1**: <question> — *Impact if unresolved*: <what breaks or stays ambiguous>
 - ...
 

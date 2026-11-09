@@ -37,10 +37,10 @@ Items where the source material was ambiguous and you made a judgment call. Each
 - **ASM-000-1**: <what you assumed> — *Why*: <reasoning> — ⚠️ Confidence: HIGH | MEDIUM | LOW
 - ...
 
-LOW confidence assumptions are blocking: the human must resolve them before this spec moves to coding.
+LOW confidence assumptions are blocking: the human must resolve them before the parts of this spec they affect move to coding.
 
 ### Open Questions
-Questions you cannot resolve by assumption. These MUST be answered by a human before this spec is coded.
+Questions you cannot resolve by assumption. Each MUST be answered by a human before the parts of this spec its impact names are coded.
 - **OQ-000-1**: <question> — *Impact if unresolved*: <what breaks or stays ambiguous>
 - ...
 
