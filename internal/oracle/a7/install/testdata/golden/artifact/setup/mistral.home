@@ -64,7 +64,7 @@
 + .liza/skills/generic-subagent directory 0755 -
 + .liza/skills/generic-subagent/SKILL.md file 0644 1c099bec596b802545ad5033f2230c9a44ef02ba329e8625f0a3418aebc1ab85
 + .liza/skills/goal-writing directory 0755 -
-+ .liza/skills/goal-writing/SKILL.md file 0644 e409a73face8faa38b32c7222c020ec073d2becb19f06467f0b99a8fc40d24f8
++ .liza/skills/goal-writing/SKILL.md file 0644 ecf7a7404b7f552b828ec28fd49498ebef6aac8db17a197e7e5fab99e384f40e
 + .liza/skills/goal-writing/references directory 0755 -
 + .liza/skills/goal-writing/references/rubrics.md file 0644 c089e09678bf632c6aa36efab1a06245d56a9df69646f90d1dea56038933ba81
 + .liza/skills/have-you-considered directory 0755 -
@@ -139,7 +139,7 @@
 + .liza/support-docs/TROUBLESHOOTING.md file 0644 7e4c80b94e37f9a26f65aff7678d878a54c6f69604ac4380ec11e6924daab5a2
 + .liza/support-docs/USAGE_MULTI_AGENTS.md file 0644 587c8821fbdb911912d2b4c12a2341fb3c40f65268527241017ff97e1c3ec577
 + .liza/support-docs/USAGE_PAIRING.md file 0644 9612aa8dd120da09e959c782fcd76232ed0b00c10f3406507375f42039f00673
-+ .liza/support-docs/how-to-produce-a-goal.md file 0644 a99a41f765a209b638eecd57464b3c58dd3741d258546ff74a9984095b51680a
++ .liza/support-docs/how-to-produce-a-goal.md file 0644 cbf7af9df2c899d32aae195048d6ad38dade38d07cc104550f9c9a101a7c0645
 + .vibe directory 0755 -
 + .vibe/prompts directory 0755 -
 + .vibe/prompts/liza.md symlink 0777 <HOME>/.liza/CORE.md

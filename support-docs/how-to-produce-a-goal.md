@@ -27,7 +27,7 @@ Open the coding CLI in a terminal and invoke:
 /goal-writing
 ```
 
-The skill opens with your idea — a sentence, a solution, use cases or a brief — and works from it as a hypothesis. It then proposes a depth sized to what a wrong decision would cost: `light` for a simple, low-stakes idea, `standard`, or `full`. You can override it either way; the skill states the cost in one line and records your choice.
+The skill opens with your idea — a sentence, a solution, use cases or a brief — and works from it as a hypothesis. It first talks with you about the idea for a few turns (who it is for, what happens today, what should exist afterwards) and plays your intent back in one line for you to correct; material you bring replaces this conversation. It then picks a depth sized to what a wrong decision would cost (`light` for a simple, low-stakes idea, `standard`, or `full`) and tells you in one line; it asks only when `full` looks warranted. You can name a depth yourself or override it either way; the skill states the cost in one line and records your choice.
 
 It then switches to **Coach**: it first asks which frictions your idea addresses, so you settle the problem statement before any option is ranked, then surfaces the decisions your chosen entry point requires, questioning purpose rather than supplying solutions. Next it switches to **Challenger** to stress-test them, including what proving each acceptance criterion would cost, then drafts from what settled, then hands off for verification. It will not make your product decisions for you: whatever it proposes comes with pros, cons and its recommendation, one question at a time, and stays unclaimed until you accept or reject it.
 
