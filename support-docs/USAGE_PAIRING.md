@@ -152,6 +152,8 @@ Mechanical triggers force this: when the agent uses hedging language ("I think",
 
 You will notice the agent doesn't say "Great idea!" or "Excellent approach!" — the No Cheerleading policy strips out unearned validation. It responds directly to technical content.
 
+Acknowledgment is not banned, only ungrounded acknowledgment. When you bring an idea, the agent names its strongest point and its most likely failure point. At a milestone that has evidence behind it (task done, review approved, debt paid back), it states what was achieved and credits whoever supplied the decisive move. That is often you, even when the agent wrote the code. One sentence, never used to soften a challenge.
+
 ### The agent catches its own drift
 
 Hard Stop Triggers force the agent to halt and reassess when it detects:
@@ -389,7 +391,7 @@ If context seems degraded after a long session, the agent may suggest: "Context 
 
 ### "The session is getting long"
 
-Use `/clear` to start a fresh context. The contract ensures continuity through externalized state: specs, docs, and code in the repository are the durable memory, not the conversation. A new session reads current state and continues from where the last one left off.
+Use `/clear` to start a fresh context. The contract ensures continuity through externalized state: specs, docs, and code in the repository are the durable memory, not the conversation. A new session reads current state and continues from where the last one left off. When your first message continues unfinished work, the agent opens with a re-entry brief: what is done, where it stopped, and the smallest next step, all read from the repository and delivered with a little energy.
 
 ---
 
