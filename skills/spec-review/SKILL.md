@@ -103,7 +103,7 @@ Review against these categories. For each issue found, record:
 | Type | Definition |
 |------|------------|
 | **Inconsistency** | Same concept defined differently in different places |
-| **Gap** | Missing information needed for implementation |
+| **Gap** | Missing information the artifact's next consumer needs |
 | **Contradiction** | Two statements that cannot both be true |
 | **Ambiguity** | Statement that can be interpreted multiple ways |
 | **Missing Reference** | Cross-reference to non-existent section or document |
@@ -120,7 +120,7 @@ Review against these categories. For each issue found, record:
 
 ### Phase 3: Systematic Checks
 
-Apply these checks to the specification corpus:
+Apply these checks to the specification corpus at the precision its next consumer needs. Detail a later stage owns (formats, thresholds, field specs below an epic or story) is not a Gap. Never ask an artifact to originate or tighten a bound.
 
 #### 1. Cross-Document Consistency
 - [ ] Same term defined identically everywhere
