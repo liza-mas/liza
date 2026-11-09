@@ -33,6 +33,8 @@ Lean is about *who still had the choice*, not about how technical the prose look
 
 **Trade-off priorities are owed at every altitude.** MoSCoW settles scope and non-functional requirements bound the solution; neither says which quality yields first when two conflict mid-run. The human ranks qualities and project properties (date, cost, correctness, maintainability, human attention) in three tiers: *above all* (at most two), *try to keep*, *gives way first*. Delivery speed and correctness cannot both be above all. A lower tier yields first under pressure; it never drops a Must, breaches a bound or skips a gate.
 
+**Precision stops at the run's boundary.** The core Precision rule parks ambiguity that a later step owns. Here the later steps belong to agents, and no human is around between them. Park a TBD only for a stage of this run that may decide it itself, or one that nothing in this run needs. Settle anything else the human owns before hand-off. Otherwise the run reaches it, blocks, and raises a call for decision.
+
 ## Ownership contract
 
 | The human | You |
@@ -221,8 +223,8 @@ Halt only when the human asks for work behind an ordering while its criterion is
 - At `standard` and `full`, an independent reviewer tested the document against solid and lean, and every finding reached closure — resolved, accepted with rationale, or escalated and disposed of by the human. An open escalation leaves the run incomplete.
 - An independent session's gate run returns `Ready` or `Ready with notes` for the chosen entry point.
 - No unclaimed marker is unresolved.
-- No critical-path TBD remains.
-- Every other TBD names the pipeline stage that needs it and who decides it. One the human decides is settled now or listed as an open question.
+- No critical-path TBD remains. Every stage of the run is on the critical path.
+- Every other TBD names the pipeline stage that needs it and who decides it. A stage of this run decides it only when it is a choice agents may make there (an implementation choice, or design this entry point leaves to that stage). A TBD the human decides is settled now. It may stay open only when nothing in this run needs it (it's in Won't, or belongs to a later run), and is listed as an open question with that stage.
 
 Then the human runs `§BRAND_BINARY_NAME§ init --spec <path>`. Commit the document first: worktrees are created from the integration branch, so uncommitted input may be invisible to agents.
 

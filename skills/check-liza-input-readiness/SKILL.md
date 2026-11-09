@@ -58,7 +58,7 @@ Check every input document for:
 | Testability | Success criteria or acceptance criteria are observable and falsifiable. |
 | Edge cases | Important error states, boundaries, and exclusions are named. |
 | Dependencies | External systems, prerequisites, sequencing, and constraints are explicit. |
-| Ambiguity | Critical-path TBDs, open questions, contradictions, and low-confidence assumptions are surfaced. |
+| Ambiguity | Critical-path TBDs, open questions, contradictions, and low-confidence assumptions are surfaced. Each TBD and open question names the stage that needs it and who decides it. |
 | Priority | Each outcome and constraint carries Must/Should/Could/Won't. The Must set is coherent and independently useful at the entry point and respects every Won't; a Must that needs a Won't capability is a source conflict, not a readiness pass. Uncertainty confined to separable optional scope is a note; uncertainty on Must feasibility, shared interfaces, or mandatory constraints is a blocker. Trade-off priorities rank qualities in three tiers, at most two above all, with something that gives way first. |
 | Proportionality | Each Must is a need, not a want: it names what fails, for whom, without it or with a simpler alternative. Scope, targets and required evidence are the least that meets that need, and success criteria say what evidence is enough (a demonstration, a focused check, one rehearsal) — a ceiling as well as a floor. A want belongs in Should/Could. A Must, target or proof demand that is overkill for the stated context (criticality, users, cost of failure, comparable product baseline) stands only with a recorded human decision stating its cost. A success criterion fixing the proof level (e.g. every mechanic through the API) is an evidence demand too. |
 | Non-functional constraints | Load, latency, availability, security, privacy, regulatory, stack, operability, and cost bounds are stated wherever they apply. Each is a clear bound (it is evident what would violate it; for a load target, which load and where measured) or is marked indicative; detail inside a clear bound is refinement, not a gap. |
@@ -78,6 +78,8 @@ An unclear gating bound, or overkill that materially drives build or proof cost 
 decision, is a **blocker**, never a note: a note asking later stages to "make it explicit" hands
 them a decision the human owns, and they will resolve it to the strictest reading. A missing
 ceiling or a minor want is a note: later stages take the least costly sufficient reading.
+
+A TBD or open question that a stage of this run needs, and that the human decides, is a **blocker**. No human is around between stages, so it surfaces mid-run as a blocked task and a call for decision. It is a note only when nothing in this run needs it (it's in Won't, or belongs to a later run), or when it names an agent stage that may make that choice. A product decision handed to an agent stage is a critical product choice deferred to agents.
 
 ## 4. Apply Entry-Point Rubric
 
