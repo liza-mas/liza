@@ -42,6 +42,11 @@ const (
 // await matches it in the reason, so that producer must keep containing it.
 const attemptTransitionReasonMarker = "transitioned to attempt"
 
+// blockedTransitionReasonMarker is the text of the claim refusal that reports an
+// exhausted-limit escalation to BLOCKED (claim_task_admission.go). The await
+// matches it in the reason, so that producer must keep containing it.
+const blockedTransitionReasonMarker = "transitioned to BLOCKED"
+
 // ErrBudgetExhausted is returned when the iteration/review-cycle budget
 // would be exceeded on rejection — the agent should exit normally.
 var ErrBudgetExhausted = stderrors.New("budget exhausted: iteration or review-cycle limit reached")
@@ -164,6 +169,18 @@ func (r awaitVerdictRun) reclaimFailureResult(task *models.Task, claimErr error,
 		// transition); history holds the verdict to answer with.
 		if result, ok := recoveredVerdictAfterReclaimFailure(r.bb, task.ID, r.agentID, rejected); ok {
 			return r.finish(result, nil)
+		}
+		if strings.Contains(pe.Reason, blockedTransitionReasonMarker) {
+			// The claim itself escalated the task on an exhausted limit: answer
+			// with the reviewer's rejection, not as a refused reclaim.
+			return r.finish(&AwaitVerdictResult{
+				Verdict:       string(VerdictTerminal),
+				Reason:        verdict.reason,
+				ReviewerAgent: verdict.reviewer,
+				TaskStatus:    task.Status,
+				Guidance:      stopVerdictGuidance(task.Status),
+				SafeAction:    string(SafeActionStop),
+			}, nil)
 		}
 		return r.reclaimRefusedResult(task, pe, verdict)
 	}
