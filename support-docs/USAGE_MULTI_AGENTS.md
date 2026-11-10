@@ -491,6 +491,12 @@ abandoning it and creating a replacement while it is still in its initial state:
 §BRAND_BINARY_NAME§ add-tasks --tasks-file <path.json> --agent-id orchestrator-1 --json
 ```
 
+`add-tasks` runs in the orchestrator's session only: it needs the orchestrator's registration
+generation, so an operator shell gets `agent generation required`. From an operator shell, write
+the JSON where the orchestrator can read it, relay it with
+`§BRAND_BINARY_NAME§ add-human-note all --note-file <note>` naming that path, and check with
+`§BRAND_BINARY_NAME§ get <new-id>` that the replacement exists.
+
 The replacement needs a new task ID — `add-tasks` rejects an ID that already exists,
 and `cancel-task` keeps the original for audit rather than removing it. A master
 planner corrects an output classification by updating and resubmitting its master

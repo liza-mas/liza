@@ -474,7 +474,8 @@ comes first. The next report lists these rulings under `Auto-approved:`, most ex
   integration moved while it waited, use `§BRAND_BINARY_NAME§ unblock-task <id> --rebase-on <branch> --reason "..."`.
   Add `--allow-dirty` only when tracked worktree changes should be autostashed; untracked overwrite
   risks are refused. Rebase conflicts remain `BLOCKED` with fresh repair metadata.
-- **Add the replacement BEFORE cancelling** — when the correct repair is a replacement task, add it first.
+- **Add the replacement BEFORE cancelling** — when the correct repair is a replacement task, have the
+  orchestrator add it first (relay it as in "Inject a new requirement" below) and confirm it exists.
   Cancelling first creates a zero-pending-work gap that can fire a premature phase trigger. A provider named
   in consumers' `provider_reservations` cannot be cancelled until those placements are released.
 - **Preflight a proposed ruling** — verify its route exists (the engine carrier; a command's semantics in
@@ -489,7 +490,12 @@ comes first. The next report lists these rulings under `Auto-approved:`, most ex
 - **Inject a new requirement via the source spec, not the merged phase output** — editing a merged phase's
   output JSON does **not** change already-created tasks (only re-derived/superseded ones re-read it);
   edit the goal spec + the `spec_ref`/`arch_ref` doc agents read, verify at the next checkpoint, and
-  `§BRAND_BINARY_NAME§ add-tasks` (your own `done_when`) as the reliable fallback. First search live carriers'
+  relay a task to the orchestrator as the reliable fallback: `add-task`/`add-tasks` need the orchestrator's
+  registration generation, so they fail from your shell with `agent generation required`. Write the
+  `add-tasks` JSON (your own `done_when`) to a file the orchestrator can read, send
+  `§BRAND_BINARY_NAME§ add-human-note all --note-file <note>` asking it to add the tasks from that path (a note
+  holds at most 4096 bytes, so reference the JSON rather than inlining it), then confirm with
+  `§BRAND_BINARY_NAME§ get <id>` that it landed. First search live carriers'
   Direct References (arch plans, task worktrees) for the section: reviewed carriers pin section text,
   and changing a pinned section stalls their review. Then record the ruling in the decision record,
   adding entries without changing any pinned section's span.
