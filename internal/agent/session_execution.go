@@ -9,6 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/filelock"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 )
 
 // sessionLaunch records what the launch gate observed for one provider session.
@@ -18,6 +19,9 @@ type sessionLaunch struct {
 	startAttempted bool
 	launchErr      error
 	halted         bool
+	// providerAnswered is what the backend's own result showed, before the
+	// supervisor's classification maps it to a policy exit code (#114).
+	providerAnswered bool
 }
 
 // gate wraps the checked launch gate: it marks the start attempt no later than
@@ -48,6 +52,11 @@ func (l *sessionLaunch) settle(runErr error) error {
 	if l.startAttempted {
 		return runErr
 	}
+	// A backend may mask the refusal as an exit code; the gate's own outcome
+	// is the authority, as for a halt.
+	if errors.Is(l.launchErr, errLaunchQuotaBlocked) {
+		return l.launchErr
+	}
 	if filelock.IsLockErrorType(l.launchErr, filelock.LockErrorTimeout) {
 		runErr = l.launchErr
 	}
@@ -73,7 +82,12 @@ type agentSession struct {
 func executeAgent(ctx context.Context, config SupervisorConfig, prompt string, additionalDirs []string, taskID string, runtimeConfig models.Config) (exitCode int, output string, runErr error) {
 	defer config.sessionActivity.stop()
 	launch := &sessionLaunch{}
-	defer func() { runErr = launch.settle(runErr) }()
+	defer func() {
+		runErr = launch.settle(runErr)
+		if launch.startAttempted {
+			settleQuotaProbe(config, launch.providerAnswered, output)
+		}
+	}()
 
 	session, err := prepareAgentSession(ctx, config, taskID, runtimeConfig, launch)
 	if err != nil {
@@ -163,6 +177,7 @@ func (s *agentSession) runInteractive(ctx context.Context, additionalDirs []stri
 	if s.launch.halted {
 		return 0, "", errLaunchHalted
 	}
+	s.launch.providerAnswered = err == nil && answeredExitCode(exitCode)
 	return exitCode, "", err
 }
 
@@ -228,7 +243,25 @@ func (s *agentSession) runWatched(ctx context.Context, prompt string, additional
 		return 0, "", errLaunchHalted
 	}
 	run.reviewLost = stopReviewWatchdog()
+	s.launch.providerAnswered = run.providerAnswered()
 	return s.classify(run)
+}
+
+// providerAnswered reports whether the backend's own result shows that the
+// provider answered the turn: no backend error, a normal or graceful-abort
+// exit, and no watchdog, deadline, cancellation or ownership loss ending it.
+// classify's policy codes are not answers: a session the progress watchdog
+// killed is classified 0 to settle its task, not because the provider spoke.
+func (r sessionRun) providerAnswered() bool {
+	if r.err != nil || r.reviewLost || r.progress.Blocked || executionTimedOut(r.execCtx) || context.Cause(r.execCtx) != nil {
+		return false
+	}
+	return answeredExitCode(r.result.ExitCode)
+}
+
+// answeredExitCode reports whether a provider exit code is a finished turn.
+func answeredExitCode(exitCode int) bool {
+	return exitCode == 0 || exitCode == exitCodeGracefulAbort
 }
 
 // classify maps a finished run to the supervisor's exit code, output and error.
@@ -291,4 +324,22 @@ func (s *agentSession) classifyStalled(run sessionRun) (int, string, error) {
 		"task_id", taskID,
 		"reason", run.progress.Reason)
 	return 0, run.result.Output, nil
+}
+
+// settleQuotaProbe settles the recovery probe this start held, if any (#114).
+// Only a provider answer, as the backend reported it, proves recovery.
+// Renewed exhaustion is left to the crash path, whose raise re-blocks the
+// provider before it drops this agent's probe. Anything else frees the probe
+// for the next attempt. It is a no-op for a start that held no probe.
+func settleQuotaProbe(config SupervisorConfig, providerAnswered bool, output string) {
+	if providersignal.DetectQuotaExhaustion(output, config.CLIName) != nil {
+		return
+	}
+	outcome := providersignal.QuotaProbeInconclusive
+	if providerAnswered {
+		outcome = providersignal.QuotaProbeRecovered
+	}
+	if err := providersignal.ResolveQuotaProbe(config.ProjectRoot, config.CLIName, config.AgentID, outcome); err != nil {
+		GetLogger().Warn("Failed to settle quota recovery probe", "error", err, "agent_id", config.AgentID, "provider", config.CLIName)
+	}
 }

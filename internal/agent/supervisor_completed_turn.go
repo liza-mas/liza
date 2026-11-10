@@ -25,6 +25,12 @@ const (
 func (lt *supervisorLifetime) executeTurn(turn *supervisorTurn) (loopFlow, error) {
 	config := lt.config
 	exitCode, output, err := executeAgent(lt.supervisorCtx, config, turn.prompt, nil, turn.effectiveTask, turn.stateBefore.Config)
+	if errors.Is(err, errLaunchQuotaBlocked) {
+		// The next loop-top quota check stops the supervisor while the block
+		// or another agent's recovery probe holds.
+		GetLogger().Info("Provider start refused by quota lifecycle, releasing turn", "agent_id", config.AgentID, "task_id", turn.effectiveTask, "reason", err)
+		return lt.releaseUnstarted(turn, false, true)
+	}
 	if halted := errors.Is(err, errLaunchHalted); halted || errors.Is(err, errReviewOwnershipLost) || errors.Is(err, errLaunchContended) {
 		return lt.releaseUnstarted(turn, halted, errors.Is(err, errLaunchContended))
 	}

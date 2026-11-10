@@ -238,18 +238,61 @@ func TestResumeCommand_KeepsUnexpiredQuotaSignal(t *testing.T) {
 	if !providersignal.CheckQuotaSignal(tmpDir, "codex") {
 		t.Error("codex should still be blocked after resume")
 	}
-	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
-		t.Error("expired claude quota signal should have been removed after resume")
+	// #114: an expired signal is not proof of recovery; it awaits its probe.
+	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); err != nil {
+		t.Errorf("expired claude quota signal should survive resume pending its recovery probe: %v", err)
 	}
 	signalFile := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex")
 	until := resetsAt.Add(time.Minute).Format(time.RFC3339)
 	for _, want := range []string{
 		"Kept quota signal for provider: codex until " + until + "; delete " + signalFile + " to lift it earlier",
-		"Cleared expired quota signal for provider: claude",
+		"Quota signal for provider: claude expired at ",
+		"recovery pending: the next provider start probes it (delete " + filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-claude") + " to lift it now)",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout)
 		}
+	}
+}
+
+// #114: resume reports an expired quota signal and keeps it, so the agents
+// it lets restart still elect one recovery probe instead of starting clear.
+func TestResumeCommand_ExpiredQuotaSignalStillElectsOneProbe(t *testing.T) {
+	tmpDir := t.TempDir()
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+	testhelpers.SetupPipelineConfig(t, tmpDir)
+	state := testhelpers.CreateValidState()
+	state.Config.Mode = models.SystemModePaused
+	testhelpers.WriteInitialState(t, stateFile, state)
+	writeExpiredQuotaSignal(t, tmpDir, "claude")
+
+	captureStdout(t, func() {
+		if err := ResumeCommand(tmpDir, "human"); err != nil {
+			t.Fatalf("ResumeCommand() error = %v", err)
+		}
+	})
+
+	results := make(chan providersignal.QuotaAdmission, 2)
+	for _, agentID := range []string{"coder-1", "coder-2"} {
+		go func() {
+			result, err := providersignal.AdmitQuotaStart(tmpDir, "claude", agentID)
+			if err != nil {
+				t.Errorf("AdmitQuotaStart(%s): %v", agentID, err)
+			}
+			results <- result.Admission
+		}()
+	}
+	probes, refusals := 0, 0
+	for range 2 {
+		switch <-results {
+		case providersignal.QuotaProbe:
+			probes++
+		case providersignal.QuotaRefused:
+			refusals++
+		}
+	}
+	if probes != 1 || refusals != 1 {
+		t.Fatalf("after resume: %d probe(s) and %d refusal(s), want one of each", probes, refusals)
 	}
 }
 

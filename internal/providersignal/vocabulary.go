@@ -30,6 +30,9 @@ const alertLevel = string(alerts.AlertLevelCritical)
 const (
 	alertCategoryQuotaExhausted          = "PROVIDER QUOTA EXHAUSTED"
 	alertCategoryQuotaSpawnBlocked       = "PROVIDER QUOTA SPAWN BLOCKED"
+	alertCategoryQuotaRecovered          = "PROVIDER QUOTA RECOVERED"
+	alertCategoryQuotaProbeSuperseded    = "PROVIDER QUOTA PROBE SUPERSEDED"
+	alertCategoryQuotaProbeInconclusive  = "PROVIDER QUOTA PROBE INCONCLUSIVE"
 	alertCategoryUnavailable             = "PROVIDER UNAVAILABLE"
 	alertCategoryUnavailableSpawnBlocked = "PROVIDER UNAVAILABLE SPAWN BLOCKED"
 )

@@ -128,7 +128,7 @@ func SpawnConfiguredAgent(projectRoot, role, cli string, extraArgs ...string) (*
 	return spawnAgent(projectRoot, role, cli, false, extraArgs...)
 }
 
-func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string) (*exec.Cmd, error) {
+func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string) (startedCmd *exec.Cmd, spawnErr error) {
 	guardKey := projectRoot + "\x00" + role
 	agentSpawnGuard.Lock()
 	if agentSpawnGuard.inFlight[guardKey] {
@@ -143,12 +143,33 @@ func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string
 		agentSpawnGuard.Unlock()
 	}()
 
-	if providersignal.CheckQuotaSignal(projectRoot, cli) {
+	// After a quota block expires, one spawn per provider starts the agent
+	// whose first provider start probes recovery (#114).
+	quota, err := providersignal.ReserveQuotaProbe(projectRoot, cli, role)
+	if err != nil {
+		return nil, fmt.Errorf("spawn %s with %s: %w", role, cli, err)
+	}
+	if quota.Admission == providersignal.QuotaRefused {
 		err := fmt.Errorf("provider quota exhausted for %s; refusing to spawn %s", cli, role)
+		if quota.AttemptHolder != "" {
+			err = fmt.Errorf("provider quota recovery in progress for %s (%s); refusing to spawn %s", cli, quota.AttemptHolder, role)
+		}
 		if alertErr := providersignal.LogQuotaSpawnBlockedAlert(projectRoot, cli, role); alertErr != nil {
 			return nil, errors.Join(err, fmt.Errorf("write quota spawn-blocked alert: %w", alertErr))
 		}
 		return nil, err
+	}
+	reserved := quota.Admission == providersignal.QuotaReserved
+	agentPID := 0 // the started agent, once there is one
+	if reserved {
+		defer func() {
+			if spawnErr == nil {
+				return
+			}
+			if releaseErr := providersignal.ReleaseQuotaReservation(projectRoot, cli, role, agentPID); releaseErr != nil {
+				spawnErr = errors.Join(spawnErr, fmt.Errorf("release quota recovery reservation: %w", releaseErr))
+			}
+		}()
 	}
 	runtimeConfig := readRuntimeConfig(projectRoot)
 	keys := func() providersignal.MatchKeys {
@@ -176,6 +197,12 @@ func spawnAgent(projectRoot, role, cli string, passCLI bool, extraArgs ...string
 
 	if err := cmd.Start(); err != nil {
 		return nil, errors.Join(err, devNull.Close(), removeSupervisorReadyFile(readyPath))
+	}
+	if reserved {
+		agentPID = cmd.Process.Pid
+		// Best effort: on failure the reservation names this process, and is
+		// then bounded by its hold or this process's exit.
+		_ = providersignal.HandOverQuotaReservation(projectRoot, cli, role, agentPID)
 	}
 	waitCh := make(chan error, 1)
 	go func() {

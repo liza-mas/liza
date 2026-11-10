@@ -401,6 +401,84 @@ func TestSpawnAgent_ExpiredQuotaSignalNoLongerBlocksSpawn(t *testing.T) {
 	}
 }
 
+// #114: after a quota block expires, one spawn per provider starts the agent
+// that probes recovery; others are refused while that attempt is coordinated.
+func TestSpawnAgent_ExpiredQuotaSignalAdmitsOneRecoverySpawn(t *testing.T) {
+	// GIVEN an expired quota signal whose recovery attempt another spawn holds
+	projectRoot := t.TempDir()
+	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())
+	if err := os.MkdirAll(lizaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeExpiredSpawnQuotaSignal(t, projectRoot, "codex")
+	if got, err := providersignal.ReserveQuotaProbe(projectRoot, "codex", "coder"); err != nil || got.Admission != providersignal.QuotaReserved {
+		t.Fatalf("ReserveQuotaProbe = %+v, %v; want reserved", got, err)
+	}
+
+	// WHEN another role is spawned on the same provider
+	cmd, err := SpawnAgent(projectRoot, "code-reviewer", "codex")
+
+	// THEN it is refused, naming the attempt, and the alert says how to lift it
+	if cmd != nil {
+		t.Fatalf("SpawnAgent command = %#v, want nil", cmd)
+	}
+	if err == nil || !strings.Contains(err.Error(), "provider quota recovery in progress for codex (reservation by spawn:coder") {
+		t.Fatalf("SpawnAgent error = %v, want the recovery-in-progress refusal", err)
+	}
+	data, readErr := os.ReadFile(filepath.Join(lizaDir, "alerts.log"))
+	if readErr != nil {
+		t.Fatalf("failed to read alerts log: %v", readErr)
+	}
+	for _, want := range []string{
+		"PROVIDER QUOTA SPAWN BLOCKED",
+		"codex: refused to spawn code-reviewer while the quota recovery reservation by spawn:coder",
+		"delete " + filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex") + " and " + filepath.Join(paths.ProjectDirName(), "provider-quota-probe-codex") + " to lift the block now",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("alerts log lacks %q:\n%s", want, data)
+		}
+	}
+}
+
+func TestSpawnAgent_FailedRecoverySpawnReleasesItsReservation(t *testing.T) {
+	// GIVEN an expired quota signal and a provider-unavailable signal that
+	// stops the spawn after the quota gate reserved the recovery attempt
+	projectRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectRoot, paths.ProjectDirName()), 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeExpiredSpawnQuotaSignal(t, projectRoot, "codex")
+	if err := providersignal.WriteProviderUnavailableSignal(projectRoot, &providersignal.ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// WHEN the spawn fails
+	if _, err := SpawnAgent(projectRoot, "coder", "codex"); err == nil || !strings.Contains(err.Error(), "provider unavailable for codex") {
+		t.Fatalf("SpawnAgent error = %v, want the provider-unavailable refusal", err)
+	}
+
+	// THEN its reservation is released, so the next spawn may take it
+	if _, err := os.Stat(providersignal.QuotaProbePath(projectRoot, "codex")); !os.IsNotExist(err) {
+		t.Fatalf("recovery reservation survived the failed spawn: %v", err)
+	}
+	if got, err := providersignal.ReserveQuotaProbe(projectRoot, "codex", "code-reviewer"); err != nil || got.Admission != providersignal.QuotaReserved {
+		t.Fatalf("next reservation = %+v, %v; want reserved", got, err)
+	}
+}
+
+func writeExpiredSpawnQuotaSignal(t *testing.T, projectRoot, provider string) {
+	t.Helper()
+	past := time.Now().UTC().Add(-time.Hour)
+	expired := "provider: " + provider + "\n" +
+		"detected: " + past.Add(-time.Hour).Format(time.RFC3339) + "\n" +
+		"message: You've hit your usage limit\n" +
+		"resets_at: " + past.Format(time.RFC3339) + "\n" +
+		"expires: " + past.Format(time.RFC3339) + "\n"
+	if err := os.WriteFile(providersignal.QuotaSignalPath(projectRoot, provider), []byte(expired), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSpawnAgent_ProviderUnavailableSignalBlocksSpawnAndAlerts(t *testing.T) {
 	projectRoot := t.TempDir()
 	lizaDir := filepath.Join(projectRoot, paths.ProjectDirName())

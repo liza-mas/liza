@@ -46,6 +46,18 @@ Chose **Option 1**: three independent detection layers, each addressing a distin
 
 **Amended 2026-10-23: Claude limits are recognised from the API status.** The limit in #184 ended each session with a failed result carrying `api_error_status: 429` and "Quota resets in 3h 43m", worded like neither Claude quota pattern, so no signal was raised. For Claude, a top-level failed result with status 429 now counts as quota exhaustion when it announces a reset: a rejected `rate_limit_event`, an absolute reset time, or the new relative form `resets in Xh Ym`, which also applies to pattern-matched messages. A 429 without a reset raises nothing: a short throttle would otherwise stop every Claude agent for the 30-minute fallback, and the crash backoff above bounds its retries. Only the terminal result is read; the assistant message's `error: "rate_limit"` is not a trigger.
 
+**Amended 2026-11-10: recovery after expiry is one coordinated, observable attempt (#114).** The 2026-09-24 expiry made the deadline a broadcast. Every caller saw the block lift at the same instant: spawn gate, pool repair, supervisor loop top and orchestrator wake. Agents were serialised only by an in-process guard keyed by project and role, and the provider start itself never checked quota. So one repair pass could start every role on the exhausted provider at once, each turn being an unelected "first turn" probe. A still-exhausted provider then cost N failed turns, N alerts and N re-latches. A provider that had recovered left the expired file in place, with no record of the outcome. An expired signal now means *recovering*, not *clear*. A per-provider lease file `.liza/provider-quota-probe-<provider>` elects the attempt across processes, and every mutation of the signal and lease runs under the leaf lock `.liza/quota-recovery-<provider>.lock`:
+- **Admission.** The supervisor launch gate, the one boundary every CLI and ACPX start crosses, admits a start last, right before it. An unexpired signal refuses it, which also stops a supervisor a peer's raise overtook after its loop-top check. An expired signal admits one probe, recorded by agent ID, PID and the sha256 of the signal it was admitted on, and refuses every other agent while that probe's holder process lives. A probe has no time cap, so no replacement overlaps a running turn; the execution timeout bounds the turn.
+- **Spawn reservation.** A spawn on an expired signal takes a reservation for the agent it starts and hands it to that agent's PID after `cmd.Start`. Further spawns are refused while the reservation lives. The first start through the gate converts it into the probe. A reservation lapses after a 10-minute hold or when its process dies, and a failed spawn releases it.
+- **Outcomes.**
+  - An exit 0, or the agent's graceful abort, proves recovery, as the backend reported it, with no backend error, watchdog kill, deadline or cancellation. The supervisor's classification is not used: it maps a watchdog-killed session to 0 to settle its task. If the signal still has the probe's generation, the signal and lease are removed and `PROVIDER QUOTA RECOVERED` is logged.
+  - A newer exhaustion raised meanwhile is kept and logged as `PROVIDER QUOTA PROBE SUPERSEDED`.
+  - Renewed exhaustion takes the existing crash path. Its raise writes the new signal before dropping the raiser's own probe or a reservation, never another agent's running probe. It writes only under the lifecycle lock, retrying contention for two minutes; past that it writes no signal and raises a `PROVIDER QUOTA EXHAUSTED` alert saying so, rather than racing a settling success.
+  - Any other end frees only the lease and logs `PROVIDER QUOTA PROBE INCONCLUSIVE`.
+- **Visibility and override.** A probe starting raises no alert (every alert here is critical, and a start is routine); while it runs, resume reports it and the spawn-blocked alert names it, and only its outcome is alerted. Running agents stop at loop top while another agent's probe runs; a reservation does not stop the agent it is for. Pool repair and the spawn gate stay blocked while any attempt is coordinated, and the spawn-blocked alert names the attempt and the two files to delete for a manual unblock. Resume and TUI resume now remove no quota signal. They report expired ones as `recovery pending`, because a sweep before the first election turned an unproven expiry into a clear state and a burst.
+
+None of this touches sprint status, checkpoints or pending transitions. Residual limits: a SIGKILLed supervisor whose provider child outlives it, or a reused PID of a dead holder, can make a probe look dead or alive for that process's lifetime; the manual unblock remains the remedy. A reserved agent that exits without a provider start, for lack of work, delays the next attempt by at most the reservation hold.
+
 **Layer 2 — Crash-Restart Tracker:**
 - In-memory counter per task tracking consecutive non-zero, non-42 exits
 - Maintains a task state signature (JSON snapshot); resets counter when state changes (progress detected)
@@ -62,10 +74,10 @@ Chose **Option 1**: three independent detection layers, each addressing a distin
 
 ```
 Supervisor Loop (per iteration):
-  ├─ Check quota signal file → if present, terminate
+  ├─ Check quota signal file → if unexpired, or another agent's recovery probe runs, terminate
   ├─ Claim task
   │   └─ Spinning tracker: if same task re-executed N times without progress → block task
-  ├─ Execute agent
+  ├─ Execute agent (launch gate: quota admission; expired signal → one probe, settled after the turn)
   ├─ Read output tail (8KB)
   │   ├─ Quota pattern match → WIP-commit owned worktree → release → signal file + alert + terminate
   │   ├─ Exit 42 → existing backoff + limit (now all roles)

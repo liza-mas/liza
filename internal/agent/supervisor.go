@@ -188,7 +188,7 @@ func handleClassifiedProviderCrash(config SupervisorConfig, output string) bool 
 			"provider", qe.Provider,
 			"agent_id", config.AgentID,
 			"message", qe.Message)
-		if err := providersignal.RaiseQuotaExhaustion(config.ProjectRoot, qe); err != nil {
+		if err := providersignal.RaiseQuotaExhaustionBy(config.ProjectRoot, qe, config.AgentID); err != nil {
 			GetLogger().Warn("Failed to raise quota exhaustion", "error", err)
 		}
 		return true

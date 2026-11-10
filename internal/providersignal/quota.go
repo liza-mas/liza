@@ -6,6 +6,7 @@
 package providersignal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -122,26 +123,44 @@ func writeQuotaSignal(projectRoot, provider, message string, resetsAt, detected 
 	return os.WriteFile(QuotaSignalPath(projectRoot, provider), []byte(content), signalFileMode)
 }
 
-// CheckQuotaSignal returns true while a quota signal for the provider exists
-// and has not reached its expiry.
+// CheckQuotaSignal reports whether a running agent on the provider must stop
+// before its next provider start: the quota signal has not reached its
+// expiry, or another agent's recovery probe is running. A spawn reservation
+// does not stop it: the reserved agent must reach its first start.
 func CheckQuotaSignal(projectRoot, provider string) bool {
-	_, blocked := QuotaBlockedUntil(projectRoot, provider)
-	return blocked
+	now := time.Now()
+	expires, ok, readable := readQuotaSignalState(QuotaSignalPath(projectRoot, provider), now)
+	if !ok {
+		return false
+	}
+	if !readable || now.Before(expires) {
+		return true
+	}
+	_, probing := liveQuotaProbe(projectRoot, provider, now)
+	return probing
 }
 
-// QuotaBlockedUntil reports whether a quota signal still blocks spawns on the
-// provider, and its expiry when it does. An unreadable signal blocks (fail
-// closed) with a zero expiry: none is known.
+// QuotaBlockedUntil reports whether starting a new agent on the provider is
+// blocked, and until when: while the quota signal has not expired, and after
+// its expiry while a recovery attempt (reservation or probe) is coordinated.
+// The expiry is zero when none is known: an unreadable signal (fail closed)
+// or a running probe, which lasts as long as its turn.
 func QuotaBlockedUntil(projectRoot, provider string) (time.Time, bool) {
 	now := time.Now()
 	expires, ok, readable := readQuotaSignalState(QuotaSignalPath(projectRoot, provider), now)
-	if !ok || !now.Before(expires) {
+	if !ok {
 		return time.Time{}, false
 	}
 	if !readable {
 		return time.Time{}, true
 	}
-	return expires, true
+	if now.Before(expires) {
+		return expires, true
+	}
+	if lease, live := readLiveQuotaLease(projectRoot, provider, now); live {
+		return lease.until(), true
+	}
+	return time.Time{}, false
 }
 
 // HeldQuotaSignal is a quota signal that still blocks its provider.
@@ -152,20 +171,43 @@ type HeldQuotaSignal struct {
 	File string
 }
 
-// QuotaSignalSweep reports what ClearExpiredQuotaSignals did.
-type QuotaSignalSweep struct {
-	Cleared  []string
-	Held     []HeldQuotaSignal
-	Failures []string // "quota/<provider>: <error>"
+// RecoveringQuotaSignal is an expired quota signal awaiting its recovery
+// probe: the provider is not known to have recovered yet.
+type RecoveringQuotaSignal struct {
+	Provider string
+	Expired  time.Time
+	// File is the signal file relative to the project root.
+	File string
+	// Attempt names the coordinated reservation or probe; empty when the next
+	// provider start will take it.
+	Attempt string
 }
 
-// ClearExpiredQuotaSignals removes the quota signals that no longer block and
-// keeps the others. Resume uses it: a provider-announced reset outlives a
-// pause, and recovering one provider (an account switch) must not lift
-// another's block, so the early lift is deleting that provider's file. An
-// unreadable signal is held, as the spawn gate treats it.
-func ClearExpiredQuotaSignals(projectRoot string) QuotaSignalSweep {
-	var sweep QuotaSignalSweep
+// Describe states the signal's recovery state and the manual override, as
+// resume prints it.
+func (r RecoveringQuotaSignal) Describe() string {
+	state := "recovery pending: the next provider start probes it"
+	if r.Attempt != "" {
+		state = "recovery in progress: " + r.Attempt
+	}
+	return fmt.Sprintf("Quota signal for provider: %s expired at %s; %s (delete %s to lift it now)",
+		r.Provider, r.Expired.UTC().Format(time.RFC3339), state, r.File)
+}
+
+// QuotaSignalReport is what ReportQuotaSignals found.
+type QuotaSignalReport struct {
+	Held       []HeldQuotaSignal
+	Recovering []RecoveringQuotaSignal
+}
+
+// ReportQuotaSignals reports the quota signals and removes none. Resume uses
+// it: a provider-announced reset outlives a pause, and an expired signal
+// leaves only through its recovery probe's proof, a renewed exhaustion, or a
+// deliberate manual unblock (deleting that provider's file), so a resume
+// cannot turn an unproven recovery into a spawn burst. An unreadable signal
+// is held, as the spawn gate treats it.
+func ReportQuotaSignals(projectRoot string) QuotaSignalReport {
+	var report QuotaSignalReport
 	matches, _ := filepath.Glob(QuotaSignalGlob(projectRoot)) // the pattern is well formed
 	now := time.Now()
 	for _, path := range matches {
@@ -175,16 +217,16 @@ func ClearExpiredQuotaSignals(projectRoot string) QuotaSignalSweep {
 			continue // removed since the glob
 		}
 		if now.Before(expires) {
-			sweep.Held = append(sweep.Held, HeldQuotaSignal{Provider: provider, Until: expires, File: QuotaSignalFile(provider)})
+			report.Held = append(report.Held, HeldQuotaSignal{Provider: provider, Until: expires, File: QuotaSignalFile(provider)})
 			continue
 		}
-		if err := ClearQuotaSignal(projectRoot, provider); err != nil {
-			sweep.Failures = append(sweep.Failures, fmt.Sprintf("quota/%s: %v", provider, err))
-			continue
+		recovering := RecoveringQuotaSignal{Provider: provider, Expired: expires, File: QuotaSignalFile(provider)}
+		if lease, live := readLiveQuotaLease(projectRoot, provider, now); live {
+			recovering.Attempt = attemptHolderText(lease)
 		}
-		sweep.Cleared = append(sweep.Cleared, provider)
+		report.Recovering = append(report.Recovering, recovering)
 	}
-	return sweep
+	return report
 }
 
 // LogAlert appends an alert line to alerts.log.
@@ -210,34 +252,96 @@ func logQuotaAlert(projectRoot string, qe *QuotaExhaustion, detected time.Time) 
 	return LogAlert(projectRoot, alertLevel, alertCategoryQuotaExhausted, qe.Provider+": "+qe.Message+" (spawns blocked until "+until+")")
 }
 
-// RaiseQuotaExhaustion records both human-visible and process-visible quota state.
+// RaiseQuotaExhaustion records both human-visible and process-visible quota
+// state for an exhaustion no agent's probe observed.
 func RaiseQuotaExhaustion(projectRoot string, qe *QuotaExhaustion) error {
-	detected := time.Now().UTC()
-	return errors.Join(
-		logQuotaAlert(projectRoot, qe, detected),
-		writeQuotaSignal(projectRoot, qe.Provider, qe.Message, qe.ResetsAt, detected),
-	)
+	return RaiseQuotaExhaustionBy(projectRoot, qe, "")
 }
 
-// LogQuotaSpawnBlockedAlert appends an alert when an unexpired quota signal blocks spawn.
+// RaiseQuotaExhaustionBy is RaiseQuotaExhaustion for the agent raiserID that
+// observed the exhaustion. The new signal is written before any recovery
+// lease is dropped, so no start sees an expired signal without its attempt.
+// The lease dropped is a spawn reservation (no provider ran under it) or the
+// raiser's own probe; another agent's running probe stays, so no replacement
+// overlaps it.
+func RaiseQuotaExhaustionBy(projectRoot string, qe *QuotaExhaustion, raiserID string) error {
+	// Only under the lifecycle lock, so a probe settling its success cannot
+	// read the old signal and then remove this newer one. Contention is
+	// retried for a bounded budget; past it the signal is not written outside
+	// the lock, and the failure is alerted and returned instead.
+	ctx, cancel := context.WithTimeout(context.Background(), quotaRaiseLockBudget)
+	defer cancel()
+	raised := false
+	lockErr := quotaLifecycleLock(projectRoot, qe.Provider).WithRetryContext(ctx).WithLockOperation(quotaLifecycleLockOperation, func() error {
+		raised = true
+		detected := time.Now().UTC()
+		if err := errors.Join(
+			logQuotaAlert(projectRoot, qe, detected),
+			writeQuotaSignal(projectRoot, qe.Provider, qe.Message, qe.ResetsAt, detected),
+		); err != nil {
+			return err
+		}
+		data, err := os.ReadFile(QuotaProbePath(projectRoot, qe.Provider))
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read quota recovery lease: %w", err)
+		}
+		if lease, parsed := parseQuotaLease(data); parsed && (lease.Kind == quotaLeaseReservation || lease.holds(raiserID)) {
+			return removeQuotaLease(projectRoot, qe.Provider)
+		}
+		return nil
+	})
+	if raised {
+		return lockErr
+	}
+	notWritten := fmt.Errorf("quota signal for %s not written: recovery lifecycle lock unavailable: %w", qe.Provider, lockErr)
+	alertErr := LogAlert(projectRoot, alertLevel, alertCategoryQuotaExhausted,
+		fmt.Sprintf("%s: %s (quota signal NOT written: the recovery lifecycle lock %s stayed unavailable; spawns are not blocked by this detection)",
+			canonicalQuotaProvider(qe.Provider), qe.Message, quotaLifecycleLockFile(qe.Provider)))
+	return errors.Join(notWritten, alertErr)
+}
+
+// LogQuotaSpawnBlockedAlert appends an alert when the quota lifecycle refuses
+// a spawn: an unexpired signal, or an expired one whose recovery attempt is
+// already coordinated.
 func LogQuotaSpawnBlockedAlert(projectRoot, provider, role string) error {
 	now := time.Now()
+	path := QuotaSignalPath(projectRoot, provider)
 	until := "its expiry"
-	if expires, ok := readQuotaSignalExpiry(QuotaSignalPath(projectRoot, provider), now); ok {
+	expires, ok := readQuotaSignalExpiry(path, now)
+	if ok {
 		until = expires.UTC().Format(time.RFC3339)
 	}
 	message := fmt.Sprintf("%s: refused to spawn %s while quota signal is set until %s; it lifts automatically then, or delete %s to lift it earlier", provider, role, until, QuotaSignalFile(provider))
+	if ok && !now.Before(expires) {
+		if lease, live := readLiveQuotaLease(projectRoot, provider, now); live {
+			message = fmt.Sprintf("%s: refused to spawn %s while the quota recovery %s is in progress; spawns resume when it proves recovery, or delete %s and %s to lift the block now", provider, role, attemptHolderText(lease), QuotaSignalFile(provider), QuotaProbeFile(provider))
+		}
+	}
 	return LogAlert(projectRoot, alertLevel, alertCategoryQuotaSpawnBlocked, message)
 }
 
-// ClearQuotaSignal removes the quota signal file for a provider.
-// Intended for use by the resume command or manual recovery.
+// ClearQuotaSignal is the deliberate manual unblock: it removes the
+// provider's quota signal and its recovery lease, whatever their state.
 func ClearQuotaSignal(projectRoot, provider string) error {
-	err := os.Remove(QuotaSignalPath(projectRoot, provider))
-	if os.IsNotExist(err) {
+	remove := func(path string) error {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		return nil
 	}
-	return err
+	exists := func(path string) bool {
+		_, err := os.Lstat(path)
+		return !os.IsNotExist(err)
+	}
+	if !exists(QuotaSignalPath(projectRoot, provider)) && !exists(QuotaProbePath(projectRoot, provider)) {
+		return nil // nothing to unblock, and maybe no project directory to lock in
+	}
+	return withQuotaLifecycleLock(projectRoot, provider, func() error {
+		return errors.Join(remove(QuotaSignalPath(projectRoot, provider)), remove(QuotaProbePath(projectRoot, provider)))
+	})
 }
 
 func canonicalQuotaProvider(cliName string) string {

@@ -9,7 +9,8 @@ import (
 )
 
 // Resume signal cleanup. `liza resume` on a paused system sweeps the provider
-// signal files: an expired quota signal is cleared, an unexpired one is kept and
+// signal files: an expired quota signal is kept as recovery pending (#114: only
+// its recovery probe proves the provider back), an unexpired one is kept and
 // reported, and a provider-unavailable signal is cleared. The fixture holds one
 // of each, so the human output, the state and the remaining signal listing pin
 // the presentation-side cleanup that the signal extraction touches.
@@ -21,7 +22,8 @@ func TestOracleA9ResumeSignalCleanup(t *testing.T) {
 	r := p.run(t, "resume")
 	requireCode(t, p, r, 0)
 	for _, want := range []string{
-		"Cleared expired quota signal for provider: claude",
+		"Quota signal for provider: claude expired at ",
+		"recovery pending: the next provider start probes it",
 		"Kept quota signal for provider: codex until ",
 		"Cleared provider-unavailable signal for provider: codex",
 	} {
@@ -31,7 +33,7 @@ func TestOracleA9ResumeSignalCleanup(t *testing.T) {
 	}
 	remaining := signalFiles(p)
 	sort.Strings(remaining)
-	if len(remaining) != 1 || remaining[0] != "provider-quota-exhausted-codex" {
+	if len(remaining) != 2 || remaining[0] != "provider-quota-exhausted-claude" || remaining[1] != "provider-quota-exhausted-codex" {
 		t.Fatalf("A9 %s collect: remaining signal files %v", p.name, remaining)
 	}
 	if _, err := os.Stat(filepath.Join(p.dir, ".liza", "provider-quota-exhausted-codex")); err != nil {

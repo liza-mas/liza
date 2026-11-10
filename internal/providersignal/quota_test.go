@@ -3,7 +3,6 @@ package providersignal
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -343,9 +342,10 @@ func TestClearQuotaSignal_Idempotent(t *testing.T) {
 
 // GIVEN signals that still block (announced reset, fresh legacy file,
 // unreadable path) and signals that no longer do (past expiry, old legacy file)
-// WHEN resume sweeps them
-// THEN only the latter are removed, and each held one names its expiry and file.
-func TestClearExpiredQuotaSignals_KeepsBlockingSignals(t *testing.T) {
+// WHEN resume reports them
+// THEN none is removed: the blocking ones are held with their expiry and file,
+// and the expired ones await their recovery probe (#114).
+func TestReportQuotaSignals_HoldsAndReportsRecovering(t *testing.T) {
 	projectRoot := t.TempDir()
 	makeQuotaProjectDir(t, projectRoot)
 	now := time.Now().UTC()
@@ -362,14 +362,14 @@ func TestClearExpiredQuotaSignals_KeepsBlockingSignals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sweep := ClearExpiredQuotaSignals(projectRoot)
+	report := ReportQuotaSignals(projectRoot)
 
-	held := make(map[string]HeldQuotaSignal, len(sweep.Held))
-	for _, signal := range sweep.Held {
+	held := make(map[string]HeldQuotaSignal, len(report.Held))
+	for _, signal := range report.Held {
 		held[signal.Provider] = signal
 	}
 	if len(held) != 3 || held["codex"].Provider == "" || held["cursor"].Provider == "" || held["opencode"].Provider == "" {
-		t.Fatalf("held = %+v, want codex, cursor and opencode", sweep.Held)
+		t.Fatalf("held = %+v, want codex, cursor and opencode", report.Held)
 	}
 	if want := resetsAt.Add(quotaResetGrace); !held["codex"].Until.Equal(want) {
 		t.Errorf("codex held until %v, want %v", held["codex"].Until, want)
@@ -377,37 +377,27 @@ func TestClearExpiredQuotaSignals_KeepsBlockingSignals(t *testing.T) {
 	if want := filepath.Join(paths.ProjectDirName(), "provider-quota-exhausted-codex"); held["codex"].File != want {
 		t.Errorf("codex file = %q, want %q", held["codex"].File, want)
 	}
-	slices.Sort(sweep.Cleared)
-	if !slices.Equal(sweep.Cleared, []string{"claude", "gemini"}) || len(sweep.Failures) != 0 {
-		t.Fatalf("cleared = %v, failures = %v; want claude and gemini cleared without failures", sweep.Cleared, sweep.Failures)
+	var recovering []string
+	for _, signal := range report.Recovering {
+		recovering = append(recovering, signal.Provider)
+		if signal.Attempt != "" {
+			t.Errorf("%s attempt = %q, want none taken yet", signal.Provider, signal.Attempt)
+		}
+		if line := signal.Describe(); !strings.Contains(line, "recovery pending: the next provider start probes it") || !strings.Contains(line, signal.File) {
+			t.Errorf("%s description = %q, want the pending recovery and the manual override", signal.Provider, line)
+		}
 	}
-	for _, provider := range []string{"claude", "gemini"} {
-		if _, err := os.Stat(QuotaSignalPath(projectRoot, provider)); !os.IsNotExist(err) {
-			t.Errorf("%s signal still present after the sweep", provider)
+	slices.Sort(recovering)
+	if !slices.Equal(recovering, []string{"claude", "gemini"}) {
+		t.Fatalf("recovering = %v, want claude and gemini", recovering)
+	}
+	for _, provider := range []string{"claude", "gemini", "codex", "cursor"} {
+		if _, err := os.Stat(QuotaSignalPath(projectRoot, provider)); err != nil {
+			t.Errorf("%s signal removed by the report: %v", provider, err)
 		}
 	}
 	if !CheckQuotaSignal(projectRoot, "codex") || !CheckQuotaSignal(projectRoot, "cursor") {
 		t.Error("held signals must still block")
-	}
-}
-
-func TestClearExpiredQuotaSignals_ReportsRemovalFailure(t *testing.T) {
-	if runtime.GOOS == "windows" || os.Getuid() == 0 {
-		t.Skip("needs POSIX directory permissions enforced for this user")
-	}
-	projectRoot := t.TempDir()
-	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
-	writeRawQuotaSignal(t, projectRoot, "claude", "provider: claude\ndetected: "+past+"\nexpires: "+past+"\n")
-	dir := paths.New(projectRoot).LizaDir()
-	if err := os.Chmod(dir, 0555); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
-
-	sweep := ClearExpiredQuotaSignals(projectRoot)
-
-	if len(sweep.Cleared) != 0 || len(sweep.Failures) != 1 || !strings.HasPrefix(sweep.Failures[0], "quota/claude: ") {
-		t.Fatalf("sweep = %+v, want one quota/claude failure", sweep)
 	}
 }
 

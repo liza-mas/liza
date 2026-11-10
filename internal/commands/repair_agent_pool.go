@@ -118,7 +118,7 @@ func (w ProviderBlockedRoleWork) describe() (summary, hint string) {
 	if w.Reason != "" {
 		demand = w.Reason
 	}
-	until := "an unknown time (its signal file cannot be read)"
+	until := "an unknown time (its signal file cannot be read, or its recovery probe is still running)"
 	if !w.Until.IsZero() {
 		until = w.Until.UTC().Format(time.RFC3339)
 	}

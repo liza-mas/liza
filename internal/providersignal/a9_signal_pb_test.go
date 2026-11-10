@@ -78,8 +78,8 @@ func TestA9UnreadableQuotaSignalFailsClosed(t *testing.T) {
 	if !CheckQuotaSignal(root, "codex") {
 		t.Fatal("CheckQuotaSignal = false for an unreadable signal")
 	}
-	sweep := ClearExpiredQuotaSignals(root)
-	if len(sweep.Held) != 1 || len(sweep.Cleared) != 0 || sweep.Held[0].Provider != "codex" || !strings.HasSuffix(sweep.Held[0].File, "provider-quota-exhausted-codex") {
-		t.Fatalf("sweep = %+v, want the unreadable signal held", sweep)
+	report := ReportQuotaSignals(root)
+	if len(report.Held) != 1 || len(report.Recovering) != 0 || report.Held[0].Provider != "codex" || !strings.HasSuffix(report.Held[0].File, "provider-quota-exhausted-codex") {
+		t.Fatalf("report = %+v, want the unreadable signal held", report)
 	}
 }

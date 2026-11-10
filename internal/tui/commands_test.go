@@ -298,7 +298,7 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 	state.Config.Mode = models.SystemModePaused
 	testhelpers.WriteInitialState(t, stateFile, state)
 
-	// An expired quota signal no longer blocks; resume removes it.
+	// An expired quota signal awaits its recovery probe; resume reports it (#114).
 	writeExpiredQuotaSignal(t, tmpDir, "codex")
 	quotaSignalPath := providersignal.QuotaSignalPath(tmpDir, "codex")
 	if err := providersignal.WriteProviderUnavailableSignal(tmpDir, &providersignal.ProviderUnavailable{Provider: "codex", Message: "session access denied"}); err != nil {
@@ -318,13 +318,15 @@ func TestResumeSystemCmd_ClearsProviderSignals(t *testing.T) {
 	if !result.Success {
 		t.Fatalf("resume failed: %s", result.Message)
 	}
-	if result.Message != "System resumed" {
-		t.Errorf("message = %q, want %q", result.Message, "System resumed")
+	if !strings.HasPrefix(result.Message, "System resumed (Quota signal for provider: codex expired at ") ||
+		!strings.Contains(result.Message, "recovery pending: the next provider start probes it") {
+		t.Errorf("message = %q, want the resume and codex's pending recovery", result.Message)
 	}
 
-	// Provider-scoped signal files should be removed
-	if _, err := os.Stat(quotaSignalPath); !os.IsNotExist(err) {
-		t.Error("quota signal file should have been removed after resume")
+	// The provider-unavailable signal is cleared; the quota signal stays
+	// until its recovery probe proves the provider back.
+	if _, err := os.Stat(quotaSignalPath); err != nil {
+		t.Errorf("expired quota signal should survive resume pending its recovery probe: %v", err)
 	}
 	if _, err := os.Stat(unavailableSignalPath); !os.IsNotExist(err) {
 		t.Error("provider unavailable signal file should have been removed after resume")
@@ -357,8 +359,8 @@ func TestResumeSystemCmd_KeepsUnexpiredQuotaSignal(t *testing.T) {
 	if !providersignal.CheckQuotaSignal(tmpDir, "codex") {
 		t.Error("codex should still be blocked after resume")
 	}
-	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); !os.IsNotExist(err) {
-		t.Error("expired claude quota signal should have been removed after resume")
+	if _, err := os.Stat(providersignal.QuotaSignalPath(tmpDir, "claude")); err != nil {
+		t.Errorf("expired claude quota signal should survive resume pending its recovery probe: %v", err)
 	}
 	until := resetsAt.Add(time.Minute).Format(time.RFC3339)
 	if !strings.Contains(result.Message, "codex") || !strings.Contains(result.Message, until) {

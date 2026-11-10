@@ -7,6 +7,7 @@ import (
 
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/providersignal"
 	"github.com/liza-mas/liza/internal/sessionvalidation"
 )
 
@@ -16,6 +17,12 @@ import (
 var errLaunchHalted = errors.New("provider start refused: system halted")
 
 var errLaunchContended = errors.New("provider start delayed: lock contention")
+
+// errLaunchQuotaBlocked reports a provider start the quota lifecycle refused:
+// the provider's block has not expired, or another agent's recovery probe is
+// running (#114). No provider ran; the claim is released without charging any
+// budget and the loop-top quota check then stops the supervisor.
+var errLaunchQuotaBlocked = errors.New("provider start refused: provider quota blocked")
 
 func newProviderLaunchGate(config SupervisorConfig) LLMAgentLaunchGate {
 	return newTaskProviderLaunchGate(config, "", nil)
@@ -50,8 +57,28 @@ func newTaskProviderLaunchGate(config SupervisorConfig, taskID string, validatio
 				if err := ops.RequireWorkAdmitted(state, "provider-start"); err != nil {
 					return err
 				}
+				// Last, so a quota admission is a start: an expired signal
+				// admits one probe, settled by executeAgent after the turn.
+				if err := admitQuotaStart(config); err != nil {
+					return err
+				}
 				return start()
 			})
 		})
 	}
+}
+
+// admitQuotaStart asks the quota lifecycle to admit this agent's provider start.
+func admitQuotaStart(config SupervisorConfig) error {
+	admission, err := providersignal.AdmitQuotaStart(config.ProjectRoot, config.CLIName, config.AgentID)
+	if err != nil {
+		return fmt.Errorf("quota recovery admission: %w", err)
+	}
+	if admission.Admission != providersignal.QuotaRefused {
+		return nil
+	}
+	if admission.AttemptHolder != "" {
+		return fmt.Errorf("%w: recovery %s is running for %s", errLaunchQuotaBlocked, admission.AttemptHolder, config.CLIName)
+	}
+	return fmt.Errorf("%w: %s is quota-exhausted", errLaunchQuotaBlocked, config.CLIName)
 }

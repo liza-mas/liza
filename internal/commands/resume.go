@@ -41,16 +41,17 @@ func ResumeCommand(projectRoot, changedBy string) error {
 		fmt.Printf("  ⚠️  Transition error: %s\n", result.TransitionError)
 	}
 
-	// Clear provider-scoped stop signals so restarted agents aren't immediately
-	// blocked; a quota block whose expiry has not passed stays.
-	sweep := providersignal.ClearExpiredQuotaSignals(projectRoot)
-	for _, provider := range sweep.Cleared {
-		fmt.Printf("  Cleared expired quota signal for provider: %s\n", provider)
-	}
-	for _, held := range sweep.Held {
+	// Report quota signals without removing any: an unexpired block stays, and
+	// an expired one stays until its recovery probe proves the provider back.
+	// Clear provider-unavailable signals so restarted agents aren't blocked.
+	report := providersignal.ReportQuotaSignals(projectRoot)
+	for _, held := range report.Held {
 		fmt.Printf("  Kept quota signal for provider: %s until %s; delete %s to lift it earlier\n", held.Provider, held.Until.UTC().Format(time.RFC3339), held.File)
 	}
-	clearErrors := sweep.Failures
+	for _, recovering := range report.Recovering {
+		fmt.Printf("  %s\n", recovering.Describe())
+	}
+	var clearErrors []string
 	for _, cleared := range providersignal.ClearProviderUnavailableSignals(projectRoot) {
 		if cleared.Err == nil {
 			fmt.Printf("  Cleared provider-unavailable signal for provider: %s\n", cleared.Provider)

@@ -13,9 +13,10 @@ import (
 // A quota block lifts at the provider's announced reset plus quotaResetGrace,
 // but never sooner than quotaMinBlock after detection, so a provider repeating
 // an already-past reset cannot drive a tight respawn loop. Without an announced
-// reset the block lifts after quotaFallbackBlock. The first provider turn after
-// a lift is the probe: if the provider is still exhausted it re-raises the
-// signal with the newly announced reset.
+// reset the block lifts after quotaFallbackBlock. After the lift the signal
+// stays until one elected provider turn, the recovery probe (quota_probe.go),
+// proves the provider back; a still-exhausted provider re-raises the signal
+// with the newly announced reset.
 const (
 	quotaResetGrace    = time.Minute
 	quotaMinBlock      = 5 * time.Minute
