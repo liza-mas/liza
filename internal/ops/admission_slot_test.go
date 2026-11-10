@@ -129,6 +129,51 @@ func TestSubmitAdmissionSlotWaitHasAFloor(t *testing.T) {
 	}
 }
 
+// TestAdmissionTicketDropWaitsForTheQueueLock pins that a waiter removes its own
+// ticket only under the queue lock that every probe of a ticket holds: on
+// Windows, a probe opening a ticket while its owner deletes it fails with a
+// sharing violation.
+func TestAdmissionTicketDropWaitsForTheQueueLock(t *testing.T) {
+	queue := t.TempDir()
+	ticketPath := filepath.Join(queue, "0-ticket")
+	ticket, acquired, err := filelock.New(ticketPath).TryHold(admissionWaitLockOperation)
+	if err != nil || !acquired {
+		t.Fatalf("ticket hold: acquired=%v err=%v", acquired, err)
+	}
+	locked, unlock := make(chan struct{}), make(chan struct{})
+	lockErr := make(chan error, 1)
+	go func() {
+		lockErr <- filelock.New(queue).WithLockOperation(admissionQueueLockOperation, func() error {
+			close(locked)
+			<-unlock
+			return nil
+		})
+	}()
+	<-locked
+	dropped := make(chan struct{})
+	go func() {
+		dropAdmissionTicket(filelock.New(queue), ticketPath, ticket)
+		close(dropped)
+	}()
+	select {
+	case <-dropped:
+		close(unlock)
+		t.Fatal("the ticket was dropped while another process held the queue lock")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if _, err := os.Stat(ticketPath + admissionLockFileSuffix); err != nil {
+		t.Fatalf("ticket gone while the queue lock is held: %v", err)
+	}
+	close(unlock)
+	if err := <-lockErr; err != nil {
+		t.Fatal(err)
+	}
+	<-dropped
+	if _, err := os.Stat(ticketPath + admissionLockFileSuffix); !os.IsNotExist(err) {
+		t.Fatalf("ticket left after the queue lock freed: %v", err)
+	}
+}
+
 func TestAdmissionSlotsNeverExceedMaxConcurrent(t *testing.T) {
 	shortAdmissionSlotPoll(t)
 	root := t.TempDir()

@@ -285,7 +285,7 @@ func acquireAdmissionSlot(ctx context.Context, dir string, limit models.Admissio
 	if err != nil {
 		return nil, err
 	}
-	defer removeAdmissionTicket(ticketPath, ticket)
+	defer dropAdmissionTicket(queueLock, ticketPath, ticket)
 
 	logged := false
 	full := false // the head found every slot held
@@ -383,6 +383,21 @@ func admissionQueueAhead(queueLock *filelock.FileLock, queue, ticketPath string)
 		return errors.New("admission slot ticket vanished from its queue")
 	})
 	return ahead, err
+}
+
+// dropAdmissionTicket removes the caller's own ticket under the queue lock,
+// which every probe of a ticket also holds: on Windows, opening a file while
+// another process deletes it fails with a sharing violation instead of finding
+// it free or gone. Without the lock the ticket is only released, so the next
+// waiter that probes it prunes it.
+func dropAdmissionTicket(queueLock *filelock.FileLock, path string, held *filelock.Held) {
+	err := queueLock.WithLockOperation(admissionQueueLockOperation, func() error {
+		removeAdmissionTicket(path, held)
+		return nil
+	})
+	if err != nil {
+		_ = held.Release()
+	}
 }
 
 func removeAdmissionTicket(path string, held *filelock.Held) {
