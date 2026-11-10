@@ -1291,6 +1291,61 @@ func TestReaffirmProof_UsesSpecRefWhenPlanRefIsAbsent(t *testing.T) {
 	}
 }
 
+// A task re-affirmation cannot help must be told which route does (#173): with
+// no allocation no proof can drift, so a stale block comes from its
+// current-review carrier; a heading-less allocation can still refuse proof
+// drift but cannot be granted, so its ref must name the reviewed heading.
+func TestReaffirmProof_RefusalNamesTheApplicableRoute(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		mutate func(task *models.Task)
+		want   []string
+	}{
+		{
+			name:   "no allocation",
+			mutate: func(task *models.Task) { task.PlanRef, task.SpecRef = "", "" },
+			want:   []string{"no acceptance allocation", "nothing to re-affirm", "current-review carrier", "unblock-task"},
+		},
+		{
+			name: "allocation without a heading",
+			mutate: func(task *models.Task) {
+				file, _, _ := strings.Cut(task.PlanRef, "#")
+				task.PlanRef = file
+			},
+			want: []string{"names no section heading", "replace-task"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, taskID, _, bb := proofDriftScenario(t)
+			const orchestratorID = "orchestrator-1"
+			agent := testhelpers.RegisteredTestAgent(models.RoleOrchestrator)
+			if err := bb.Modify(func(state *models.State) error {
+				state.Agents[orchestratorID] = agent
+				tc.mutate(state.FindTask(taskID))
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			authority := models.AgentAuthority{ID: orchestratorID, Generation: agent.Generation}
+
+			_, err := ReaffirmProof(root, taskID, "identity", "", "because", authority)
+			if err == nil {
+				t.Fatal("ReaffirmProof = nil, want refusal")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to mention %q", err, want)
+				}
+			}
+			if n := len(readAcceptanceState(t, bb).ProofReaffirmations); n != 0 {
+				t.Errorf("recorded %d re-affirmations on a refusal, want none", n)
+			}
+		})
+	}
+}
+
 func TestAcceptanceProvenance_SamePairReplacementKeepsAllocation(t *testing.T) {
 	t.Parallel()
 	for _, lineage := range []string{"singular parent", "plural parents"} {

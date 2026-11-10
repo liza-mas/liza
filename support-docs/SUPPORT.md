@@ -506,6 +506,63 @@ or authorize scope, contract or ordering changes. Such defects require reviewed
 amendment/replan or a human hold. See
 [ADR-0197](../specs/architecture/ADR/0197-reviewed-plan-amendments-and-validation-notes.md).
 
+### Recording a human decision in a cited spec section mid-run
+
+Planning carriers pin what they cite: each `### Direct References` entry
+(`- "<id>": "<path>#<Heading>"`, optionally `@ "<revision>"`, otherwise the
+carrier's `Source revision:`) names a section, and every prompt build compares
+that section at its pin with integration HEAD. The compared span runs from the
+cited heading to the next heading of the same or higher level, byte for byte.
+Editing it, appending inside it, renaming its heading or adding a second
+heading with the same text all count as drift. An enclosing heading is a span
+too: a carrier that cites `## Scope` covers every `###` beneath it. An edit
+outside every cited span is not drift.
+
+**Safe pattern.** Record the decision outside every cited span, then relay it:
+
+1. Write it in a separate decision document. This is the default whenever you
+   cannot establish that no enclosing heading of the target is cited. A new
+   heading in the spec is equally safe only when the impact check below shows
+   it sits outside every cited span.
+2. Commit it to the integration branch as for any manual change (pause for
+   manual work at a checkpoint).
+3. Tell the affected tasks with `§BRAND_BINARY_NAME§ add-human-note <task-id|all> --note-file <path>`.
+   A note is input to their prompts: it relays the decision, but does not
+   change a task's scope or acceptance. A decision that must change either goes
+   through reviewed amendment or replan.
+
+**Impact check before editing a cited file.** List every citation of the file
+on integration (merged and scalar carriers) and in each active task worktree
+(carriers still under review; `§BRAND_BINARY_NAME§ get tasks --json` gives each
+`worktree`):
+
+```bash
+git grep -n '"specs/goal.md#' <integration-branch> -- '*.md'
+git -C <task-worktree> grep -n '"specs/goal.md#' -- '*.md'
+```
+
+Compare every cited heading, enclosing ones included, with the lines you will
+touch. For coding tasks also check whether their allocation asserts a proof
+against a matching reference: `§BRAND_BINARY_NAME§ get tasks <task-id> --json`
+gives `plan_ref` (otherwise `spec_ref`), whose section's Acceptance Contract
+lists `approved_proofs` by reference ID.
+
+**When a cited span does change**, what happens depends on the carrier
+([ADR-0133](../specs/architecture/ADR/0133-reference-first-planning-artifacts.md)):
+
+| Carrier citing the changed span | Effect | Recovery |
+|---|---|---|
+| Merged parent or scalar carrier; the reference is not an approved proof of the task's allocation | Nothing blocks. The prompt carries the current section with its pinned revision and a `git diff` to compare; a renamed or deleted heading or file keeps the pinned section with the reason | None |
+| Carrier in the task's current review | The reviewer's prompt build blocks the task: `prompt context build failed: … direct reference "<id>" is stale at integration HEAD` | Hand the task back to its doer: `§BRAND_BINARY_NAME§ unblock-task <task-id> --rebase-on <integration-branch> --reason "<section> amended at <sha>; re-pin Source revision (or the reference's @ pin) and resubmit"`. The stale review does not launch again: the doer's prompt carries the reason, and submission refuses a carrier that is still stale. `reaffirm-proof` does not apply |
+| Approved proof of the task's own allocation, pin left behind (the merged carrier still pins the old revision) | The task's prompt build blocks it as stale | First merge a re-pin of the carrier — through reviewed work, or an operator commit on the integration branch. Acceptance then compares the moved proof and refuses it, which is the next row |
+| Approved proof of the task's own allocation, content moved (the pins resolve to different content than the reviewed one) | Acceptance refuses the claim; after three identical refusals the task is `BLOCKED` with `acceptance_claim_refused_repeatedly` | An orchestrator with the `reaffirm-proof` capability inspects the change, runs `§BRAND_BINARY_NAME§ reaffirm-proof <task-id> <reference-id> --reason "<why the move is an extension>"` once to learn the current section identity, re-runs it with `--expected-section <id>`, then `§BRAND_BINARY_NAME§ unblock-task <task-id> --reason "Approved-proof content transition inspected and reaffirmed"` if the task is `BLOCKED` |
+
+Re-affirmation never moves a pin and does not clear a prompt-build stale
+block on its own; it only lets acceptance admit content an orchestrator
+inspected. It refuses tasks with no allocation (no proof can drift; see the
+current-review row) and allocations whose ref names no heading (correct the ref
+with `§BRAND_BINARY_NAME§ replace-task`).
+
 ### Failed Hand-off
 
 `PLAN HANDOFF FAILED` and status `REPAIR_REQUIRED` mean an initial output or
@@ -1117,7 +1174,7 @@ this by editing `state.yaml` or deleting only the analysis task.
 ### Coding task blocked by an acceptance refusal
 **Symptom**: A coding task goes from its initial (or rejected) status to `BLOCKED` without ever being claimed, with a `blocked_reason` starting `acceptance_evidence_invalid:` or `acceptance_claim_refused_repeatedly:`. The doer supervisor log shows `Refused claim escalated to BLOCKED for the orchestrator`.
 **Diagnosis**: `§BRAND_BINARY_NAME§ get tasks <task-id> --json` — `blocked_reason` names the field, the allocation (`plan_ref`, or `spec_ref` when there is none) and the refusal; `plan_ref`, `spec_ref`, `validation` and `parent_tasks` are the inputs it was judged on. `acceptance_evidence_invalid` means the allocation cannot match the reviewed section (for example a slug instead of the section's heading text, `validation` that differs from the reviewed commands, or a carrier or pinned reference that is missing, not a regular file, or over its size bound). `acceptance_claim_refused_repeatedly` means three identical allocation refusals: usually no reviewed, merged planning parent allocates the task (or an approved proof drifted), but a persistent repository read failure looks the same.
-**Fix**: The orchestrator corrects the allocation — normally `§BRAND_BINARY_NAME§ replace-task` with the reviewed values, or `§BRAND_BINARY_NAME§ reaffirm-proof` for a drifted proof — and, if the task itself is kept, `§BRAND_BINARY_NAME§ unblock-task <task-id>` restores it for a new claim. Unclassified refusals (a failed Git read of the carrier or a pinned reference) are not escalated and keep retrying.
+**Fix**: The orchestrator corrects the allocation — normally `§BRAND_BINARY_NAME§ replace-task` with the reviewed values, or `§BRAND_BINARY_NAME§ reaffirm-proof` for a drifted proof — and, if the task itself is kept, `§BRAND_BINARY_NAME§ unblock-task <task-id>` restores it for a new claim. Unclassified refusals (a failed Git read of the carrier or a pinned reference) are not escalated and keep retrying. When the drift came from amending a cited spec section, [Recording a human decision in a cited spec section mid-run](#recording-a-human-decision-in-a-cited-spec-section-mid-run) separates a proof whose pin was left behind (re-pin first) from one whose content moved (re-affirm).
 
 ### Integration waits or blocks on deferred validation
 **Symptom**: Once the latest global generation is clean at integration HEAD, integration progress reports `deferred_validation_pending`, `deferred_validation_failed`, `deferred_validation_infra`, `deferred_validation_unsettled` or `deferred_validation_aborted` instead of completing; a red batch also leaves an immediate discovery by `deferred-validation` naming a culprit task, and an alert. Global generations do not wait for a batch: the gate binds completion only.

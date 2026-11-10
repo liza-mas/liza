@@ -606,6 +606,7 @@ Answer every open decision before `§BRAND_BINARY_NAME§ resume`: downstream age
 | Answer a human-owned block | Do the ask, then its closure step or `§BRAND_BINARY_NAME§ add-human-note <task-id> --note-file <path>` | A BLOCKED task named an action only a human can take (`AWAITING HUMAN` alert); the orchestrator unblocks it |
 | Pipeline transition | `§BRAND_BINARY_NAME§ proceed <task-id> <transition>` | Create child tasks for the next role-pair from output or a ready cohort. Automatically done in batch by `§BRAND_BINARY_NAME§ resume` |
 | Pause for manual work | (no command) | Want to make manual changes before continuing                                                        |
+| Record a decision in a cited spec | Write it outside every cited section, commit, then `§BRAND_BINARY_NAME§ add-human-note <task-id\|all> --note-file <path>` | A human decision must reach running tasks; see SUPPORT.md "Recording a human decision in a cited spec section mid-run" |
 | Abort | `§BRAND_BINARY_NAME§ stop` | Want to stop entirely                                                                                |
 
 **`§BRAND_BINARY_NAME§ proceed`** creates child tasks from a completed task's `output[]` entries based on the pipeline transition's cardinality (`per-subtask`: one child per output entry, `one-to-one`: single child from parent, `many-to-one`: all sibling tasks in a cohort must reach approved status, then one child is created linked to all parents — used by the `us-to-coding` transition to fan N approved user stories into one architecture task). Per-subtask children copy `output[].validation` and `output[].destructive_db`; explicit `output[].rca_required` overrides the parent default, while omission inherits it. One-to-one and many-to-one children do not inherit parent task validation metadata. Use `§BRAND_BINARY_NAME§ status` to see available transitions for tasks at terminal states. Transition checkpoints run this in batch during `§BRAND_BINARY_NAME§ resume`; manual use is for explicit one-off transition execution.
@@ -622,6 +623,8 @@ When a transition checkpoint fires, the human reviews the proposed downstream wo
 
 1. **Accept the transition** — run `§BRAND_BINARY_NAME§ resume` to continue
 2. **Amend the plan** — edit the plan markdown file, commit, then run `§BRAND_BINARY_NAME§ replan`
+
+Editing a section that a carrier's `Source References` cites makes that citation drift: a carrier under review or an approved proof blocks its task. Before editing a spec that running tasks cite, follow SUPPORT.md "Recording a human decision in a cited spec section mid-run".
 
 `§BRAND_BINARY_NAME§ replan` invalidates the old planning task's output and creates a new planning task with the same role-pair and spec. At CHECKPOINT the sprint returns to IN_PROGRESS; at IN_PROGRESS it stays as is. The planner agent picks up the new task, re-reads the amended plan, and regenerates `output[]`. `--reason "<text>"` is appended to the new task's description so the planner and plan reviewer see what must change. A plan held for a human action cannot be replanned until its hold is cleared.
 

@@ -118,8 +118,15 @@ func observeProofDrift(projectRoot string, state *models.State, task *models.Tas
 	// adopted and for allocations carried by spec_ref.
 	ref := acceptanceAllocationRef(task)
 	path, heading := paths.SplitRefFile(ref), paths.SplitRefFragment(ref)
-	if path == "" || heading == "" {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s names no allocation section to re-affirm against", task.ID)}
+	// Each refusal names the route that does apply (#173). Without an
+	// allocation, prompt build discloses every scalar and parent drift, so only
+	// the current-review carrier can refuse one. A heading-less allocation can
+	// still refuse proof drift, but a grant is keyed by heading.
+	if path == "" {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s has no acceptance allocation (plan_ref or spec_ref), so no approved proof can drift and there is nothing to re-affirm; a stale-reference block on it comes from its current-review carrier, whose author re-pins it: unblock-task returns the task to its doer", task.ID)}
+	}
+	if heading == "" {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("task %s allocation %q names no section heading, so no re-affirmation can be recorded against it; correct its plan_ref (or spec_ref) to the reviewed allocation heading with replace-task", task.ID, ref)}
 	}
 
 	integrationCommit, err := git.New(projectRoot).ResolveCommit(state.Config.IntegrationBranch)
