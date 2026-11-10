@@ -28,6 +28,7 @@ const (
 	CategoryOrchestratorMissing    Category = "ORCHESTRATOR MISSING"
 	CategoryOrphanedRejected       Category = "ORPHANED REJECTED"
 	CategoryPipelineConfig         Category = "PIPELINE CONFIG"
+	CategoryProviderBlockLifted    Category = "PROVIDER BLOCK LIFTED"
 	CategoryRegisteredAgentProcess Category = "REGISTERED AGENT PROCESS"
 	CategoryReviewLeaseExpired     Category = "REVIEW LEASE EXPIRED"
 	CategoryReviewLoop             Category = "REVIEW LOOP"

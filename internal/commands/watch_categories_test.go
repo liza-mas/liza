@@ -32,6 +32,8 @@ func TestWatchCategoryMatchSetsKeepTheirSpellings(t *testing.T) {
 		{alerts.CategoryStalled, "STALLED", false, false},
 		{alerts.CategoryOrchestratorMissing, "ORCHESTRATOR MISSING", false, false},
 		{alerts.CategoryAutoRepairFailed, "AUTO REPAIR FAILED", false, false},
+		{alerts.CategoryNoUsableProvider, "NO USABLE PROVIDER", false, false},
+		{alerts.CategoryProviderBlockLifted, "PROVIDER BLOCK LIFTED", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.spelling, func(t *testing.T) {

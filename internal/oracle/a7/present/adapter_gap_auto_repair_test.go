@@ -200,10 +200,12 @@ func autoRepairCases() []autoRepairCase {
 			}},
 		}},
 		{name: "disabled", project: "demand", env: "no", ticks: []autoRepairTick{
-			{label: "variable disables repair and clears its episode", before: func(r *autoRepairRun) {
+			// The provider-blocked episode outlives disabling (issue #115): its
+			// condition is durable, so re-enabling must not re-announce it.
+			{label: "variable disables repair, clears its start episode, keeps the provider episode", before: func(r *autoRepairRun) {
 				r.cache[autoRepairBackoffPrefix+"coder"] = time.Now().UTC()
 				r.cache[autoRepairStartCountPrefix+"coder"] = time.Date(2001, 1, 1, 0, 0, 0, 2, time.UTC)
-				r.cache["auto-repair-agent-pool-provider-blocked:coder#0@claude@2099-01-01T00:00:00Z"] = time.Now().UTC()
+				r.cache["auto-repair-agent-pool-provider-blocked:coder#0@claude@2099-01-01T00:00:00Z@0123456789abcdef"] = time.Now().UTC()
 			}},
 		}},
 		{name: "unrecognised-env", project: "demand", env: "perhaps", ticks: []autoRepairTick{

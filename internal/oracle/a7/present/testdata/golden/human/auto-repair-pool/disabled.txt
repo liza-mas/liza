@@ -1,4 +1,4 @@
-=== tick 1: variable disables repair and clears its episode
+=== tick 1: variable disables repair, clears its start episode, keeps the provider episode
 --- start requests
 none
 --- outcome
@@ -10,6 +10,6 @@ none
 --- warnings
 none
 --- cache
-none
+auto-repair-agent-pool-provider-blocked:coder#0@claude@<TIME>@0123456789abcdef
 === spawn log
 none

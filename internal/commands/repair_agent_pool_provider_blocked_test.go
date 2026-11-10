@@ -227,7 +227,9 @@ func TestRunAutoRepairAgentPool_BlockedOrchestratorIsReportedNotStarted(t *testi
 // GIVEN a blocked coder role
 // WHEN its demand disappears for a tick and returns, and later the provider
 // re-raises its signal with a later reset
-// THEN each is a new episode and alerts again.
+// THEN the returning demand is the same quota event and is not re-announced
+// (issue #115: the episode is durable per event, as alerts.log records it),
+// while the re-raise is a new event and alerts again.
 func TestRunAutoRepairAgentPool_BlockedEpisodeEndsAndRestarts(t *testing.T) {
 	h := newPoolRepairHarness(t)
 	state := coderBlockedDemand()
@@ -242,8 +244,8 @@ func TestRunAutoRepairAgentPool_BlockedEpisodeEndsAndRestarts(t *testing.T) {
 	if got := count(h.tick(idle)); got != 0 {
 		t.Fatalf("no demand: %d alert(s), want 0", got)
 	}
-	if got := count(h.tick(state)); got != 1 {
-		t.Fatalf("demand back: %d alert(s), want 1 for the new episode", got)
+	if got := count(h.tick(state)); got != 0 {
+		t.Fatalf("demand back: %d alert(s), want 0 within the same quota event", got)
 	}
 	if got := count(h.tick(state)); got != 0 {
 		t.Fatalf("unchanged episode: %d alert(s), want 0", got)

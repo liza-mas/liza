@@ -134,10 +134,10 @@
 + .liza/support-docs/ADVERSARIAL_PAIRING.md file 0644 6fc80354a339102286398b0feeb2b5b0f790bb103b122ee5e75482cf2b9f7770
 + .liza/support-docs/CONFIGURATION.md file 0644 17b0d118fac86296ac19c86b989fa82b15a8e4ddd32f1ae18b8c0ba910c7a328
 + .liza/support-docs/CUSTOMIZING_AGENT_TOOLS.md file 0644 94ce9753f1cc06de37f3beee23bfd2535e6c2319e20eb12aac395d8cd824389d
-+ .liza/support-docs/SUPPORT.md file 0644 c1cfd426e1fdc86537c8a0db8a1b12961e6511acefc14ad592b47b4c5c5b6180
++ .liza/support-docs/SUPPORT.md file 0644 eb6f3994bab2095ab6a64af82200683fa8f01a6ab12a10d5e5582429eac117f2
 + .liza/support-docs/TOOLCHAIN.md file 0644 f065d4e488a119eae0c54fba59c1f67d154ef618074e387a032004d3272ac537
-+ .liza/support-docs/TROUBLESHOOTING.md file 0644 7e4c80b94e37f9a26f65aff7678d878a54c6f69604ac4380ec11e6924daab5a2
-+ .liza/support-docs/USAGE_MULTI_AGENTS.md file 0644 f1092ad6b76803cb75be55d809e7f21f39a778e13b53e460e07630997babe88b
++ .liza/support-docs/TROUBLESHOOTING.md file 0644 9cba34624cfb3bc68b7a768aa7dbd720302b4f5c215342242886511cec2ddf50
++ .liza/support-docs/USAGE_MULTI_AGENTS.md file 0644 dc38303ad93afc78b86c36933789db095d61d0db199d688c59dbd486ba28d9c3
 + .liza/support-docs/USAGE_PAIRING.md file 0644 9612aa8dd120da09e959c782fcd76232ed0b00c10f3406507375f42039f00673
 + .liza/support-docs/how-to-produce-a-goal.md file 0644 cbf7af9df2c899d32aae195048d6ad38dade38d07cc104550f9c9a101a7c0645
 + .vibe directory 0755 -

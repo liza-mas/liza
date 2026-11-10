@@ -112,7 +112,9 @@ type autoRepairPlan struct {
 
 // autoRepairEnabled reports whether the environment enables pool repair. An
 // unrecognised value warns once per run of ticks; a disabled repair ends the
-// episodes it kept in the cache, so re-enabling announces a still-blocked role.
+// start episodes it kept in the cache. Provider conditions outlive it: their
+// record is durable, so re-enabling does not re-announce an unchanged quota
+// event, and announces a lift that happened meanwhile.
 func autoRepairEnabled(config WatchConfig) bool {
 	enabled, envWarning := AutoRepairAgentPoolEnabledFromEnv()
 	if envWarning != "" {
@@ -125,7 +127,6 @@ func autoRepairEnabled(config WatchConfig) bool {
 	}
 	if !enabled {
 		clearAutoRepairAgentPoolCache(config.StateCache, nil)
-		autoRepairProviderBlockedAlerts(nil, config.StateCache, time.Now().UTC())
 	}
 	return enabled
 }
@@ -166,7 +167,10 @@ func planAutoRepairStarts(state *models.State, pr models.PipelineResolver, roleM
 	// against what this writes.
 	outcome.Alerts = append(outcome.Alerts, reconcilePoolReservations(state, pr, capacity.Missing, plan.pending, config, now)...)
 	missing := capacity.Missing
-	outcome.Alerts = append(outcome.Alerts, autoRepairProviderBlockedAlerts(providerBlocked, config.StateCache, now)...)
+	conditions := reconcileProviderConditions(config.ProjectRoot, providerBlocked, QuotaProviderBlock(config.ProjectRoot), autoRepairAlertsLog(config), now)
+	warnProviderConditions(config, conditions.warnings, now)
+	outcome.Alerts = append(outcome.Alerts, conditions.lifted...)
+	outcome.Alerts = append(outcome.Alerts, autoRepairProviderBlockedAlerts(providerBlocked, conditions, config.StateCache, now)...)
 	for _, work := range providerBlocked {
 		if !slices.Contains(outcome.BlockedRoles, work.Role) {
 			outcome.BlockedRoles = append(outcome.BlockedRoles, work.Role)
@@ -369,30 +373,67 @@ func resolveAutoRepairPendingSpawns(state *models.State, cache map[string]time.T
 	return pending, pendingIDs
 }
 
+// autoRepairAlertsLog is the alerts log the watcher writes.
+func autoRepairAlertsLog(config WatchConfig) string {
+	if config.AlertsLog != "" {
+		return config.AlertsLog
+	}
+	return paths.New(config.ProjectRoot).AlertsLogPath()
+}
+
 // autoRepairProviderBlockedAlerts raises one NO USABLE PROVIDER alert per
-// episode: a role, list item and CLI blocked until one expiry. blocked must
-// be the whole pool's blocked work for this tick; an episode absent from it
-// has ended, so a later block of the same work alerts again.
-func autoRepairProviderBlockedAlerts(blocked []ProviderBlockedRoleWork, cache map[string]time.Time, now time.Time) []Alert {
-	current := make(map[string]bool, len(blocked))
+// episode: a role, list item and CLI held by one quota event of an open
+// provider condition. The cache dedups within this watcher; the OnceKey, built
+// from the durable condition and event, dedups across watchers and restarts.
+// An episode lasts while its event does, whether or not its work still waits,
+// so work that leaves and returns during one event is not re-announced. Work
+// whose provider has no open condition after reconciliation (a stale snapshot,
+// or a provider left for the next tick) raises nothing.
+func autoRepairProviderBlockedAlerts(blocked []ProviderBlockedRoleWork, conditions providerConditions, cache map[string]time.Time, now time.Time) []Alert {
 	var out []Alert
 	for _, work := range blocked {
-		key := fmt.Sprintf("%s%s#%d@%s@%s", autoRepairAgentPoolProviderBlockedPrefix, work.Role, work.Item, work.CLI, work.Until.UTC().Format(time.RFC3339))
-		current[key] = true
+		provider := quotaProvider(work.CLI)
+		condition, open := conditions.open[provider]
+		if !open {
+			continue
+		}
+		// State the deadline observed with the event the alert is keyed to.
+		work.Until = conditions.until[provider]
+		episode := fmt.Sprintf("%s#%d@%s@%s@%s", work.Role, work.Item, work.CLI, condition.Condition, condition.Event)
+		key := autoRepairAgentPoolProviderBlockedPrefix + episode
 		if _, seen := cache[key]; seen {
 			continue
 		}
 		cache[key] = now
 		summary, hint := work.describe()
+		message := summary + "; " + hint + "; blocked since " + condition.Started.UTC().Format(time.RFC3339)
+		if condition.Events > 1 {
+			message += fmt.Sprintf(" (%d quota events observed)", condition.Events)
+		}
 		out = append(out, Alert{
 			Timestamp: now,
 			Level:     AlertLevelCritical,
 			Category:  alerts.CategoryNoUsableProvider.String(),
-			Message:   summary + "; " + hint,
+			Message:   message,
+			OnceKey:   alerts.CategoryNoUsableProvider.String() + "|" + episode,
 		})
 	}
 	for key := range cache {
-		if strings.HasPrefix(key, autoRepairAgentPoolProviderBlockedPrefix) && !current[key] {
+		episode, ok := strings.CutPrefix(key, autoRepairAgentPoolProviderBlockedPrefix)
+		if !ok {
+			continue
+		}
+		// role#item@cli@condition@event; none of the parts contains '@'.
+		parts := strings.Split(episode, "@")
+		if len(parts) != 4 {
+			delete(cache, key)
+			continue
+		}
+		provider := quotaProvider(parts[1])
+		if conditions.skipped[provider] {
+			continue
+		}
+		if condition, open := conditions.open[provider]; !open || condition.Condition != parts[2] || condition.Event != parts[3] {
 			delete(cache, key)
 		}
 	}

@@ -32,6 +32,7 @@ func TestCategoryConstantsKeepTheirLogSpelling(t *testing.T) {
 		{CategoryOrchestratorMissing, "ORCHESTRATOR MISSING"},
 		{CategoryOrphanedRejected, "ORPHANED REJECTED"},
 		{CategoryPipelineConfig, "PIPELINE CONFIG"},
+		{CategoryProviderBlockLifted, "PROVIDER BLOCK LIFTED"},
 		{CategoryRegisteredAgentProcess, "REGISTERED AGENT PROCESS"},
 		{CategoryReviewLeaseExpired, "REVIEW LEASE EXPIRED"},
 		{CategoryReviewLoop, "REVIEW LOOP"},
