@@ -8,7 +8,8 @@ execution records evidence for review, without certifying test adequacy.
 ## Reviewed declaration
 
 Within each coding child's exact `plan_ref` heading, add one eligible ATX heading
-named `Acceptance Contract` containing one fenced JSON object:
+named `Acceptance Contract` whose body is one fenced JSON object labelled `json`,
+and nothing else:
 
 ```json
 {
@@ -21,9 +22,15 @@ named `Acceptance Contract` containing one fenced JSON object:
 }
 ```
 
+The declaration accepts only the fields shown plus the optional `deferred`
+(below); each `approved_proofs` entry only `obligation_id`, `reference_id` and
+`rationale`. Put any prose under a sibling heading: content after the closing
+fence is refused (`unexpected content after JSON fence`).
+
 Replace the illustrative command with the project's executable command. Every ID
 must already exist in the document's strict `Source References` → `Obligation
-Coverage`. Allocate the child's complete subset without copying requirement prose.
+Coverage`, one row per line: a row wrapped onto a second line is refused (for
+example `expected ', ' between covered reference IDs`). Allocate the child's complete subset without copying requirement prose.
 The declaration's ordered `validation` must equal the child's `output[].validation`
 and eventual task `validation`. Name the child's own proofs plus shared tests
 covering code it changes. Place each proof at the level the architecture's proof
@@ -78,6 +85,9 @@ Commit the manifest at the declared path, with exactly one mapping per allocated
 test/assertion for reviewer inspection; `command_index` is zero-based into the
 canonical command list. Missing, extra and duplicate IDs fail. Every canonical
 command not deferred runs, including commands that do not directly own a mapping.
+The manifest accepts only `version` and `mappings`, and a mapping only the
+fields shown here or, for an approved proof, below; any other key is refused
+(`json: unknown field`).
 
 For an obligation that cannot use executable proof, the independently reviewed
 declaration must explicitly authorize an exception:
