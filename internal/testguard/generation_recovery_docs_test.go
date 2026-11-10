@@ -38,6 +38,7 @@ func TestGenerationFencedRecoveryDocumentation(t *testing.T) {
 		"observer-visible pid",
 		"correlation unavailable",
 		"cannot authorize takeover",
+		"live agent takeover",
 		"deterministic current-generation reviewer",
 		"immutable approval actors, quorum, provider-diversity evidence, review commit, and reviewer role",
 		"git not advanced",

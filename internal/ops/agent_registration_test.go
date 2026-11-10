@@ -164,8 +164,8 @@ func TestC6RegisterAgentTakesOverExpiredRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterAgent over an expired registration: %v", err)
 	}
-	if !got.TookOver || got.PreviousOwnership == "" {
-		t.Fatalf("takeover = %v / previous %q, want a reported takeover", got.TookOver, got.PreviousOwnership)
+	if !got.TookOver || got.Previous.Effective == "" {
+		t.Fatalf("takeover = %v / previous %q, want a reported takeover", got.TookOver, got.Previous.Effective)
 	}
 	if f.read(t).Agents["coder-1"].Generation != got.Authority.Generation || got.Authority.Generation == c6Generation {
 		t.Fatal("takeover did not mint a new generation")

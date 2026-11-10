@@ -32,9 +32,12 @@ type RegisterAgentInput struct {
 type RegisterAgentResult struct {
 	Authority models.AgentAuthority
 	// TookOver is set when an expired or stale registration of the same ID was
-	// replaced; PreviousOwnership is its effective ownership state.
-	TookOver          bool
-	PreviousOwnership string
+	// replaced. Previous is that registration's observation and PreviousPID its
+	// recorded PID; Previous.Raw is diagnostic evidence for the caller's report
+	// and never changed the lease-first decision (ADR-0130).
+	TookOver    bool
+	Previous    AgentProcessObservation
+	PreviousPID int
 	// SweepErr is the failure of the liveness-record sweep, which never fails
 	// the registration.
 	SweepErr error
@@ -58,7 +61,8 @@ func RegisterAgent(bb *db.Blackboard, in RegisterAgentInput) (RegisterAgentResul
 				return fmt.Errorf("%w; %s", &lizaerrors.AgentCollisionError{AgentID: in.AgentID}, observation.Diagnostic(existing.PID))
 			}
 			result.TookOver = true
-			result.PreviousOwnership = string(observation.Effective)
+			result.Previous = observation
+			result.PreviousPID = existing.PID
 		}
 
 		if err := requireRoleCapacity(state, in, now, livenessWindow); err != nil {

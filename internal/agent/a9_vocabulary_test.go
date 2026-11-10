@@ -25,6 +25,7 @@ func TestA9NamedVocabularyKeepsStringValues(t *testing.T) {
 		"alertCategoryToolFailureRetryLoop":    {alertCategoryToolFailureRetryLoop, "TOOL FAILURE RETRY LOOP"},
 		"alertCategoryIndexHooksUnavailable":   {alertCategoryIndexHooksUnavailable, "INDEX HOOKS UNAVAILABLE"},
 		"alertCategoryCheckpointSummaryFailed": {alertCategoryCheckpointSummaryFailed, "CHECKPOINT SUMMARY FAILED"},
+		"alertCategoryLiveAgentTakeover":       {alertCategoryLiveAgentTakeover, "LIVE AGENT TAKEOVER"},
 		"streamJSONObjectPrefix":               {streamJSONObjectPrefix, "{"},
 		"streamTaskNotification":               {string(streamTaskNotification), "task_notification"},
 		"streamToolResult":                     {string(streamToolResult), "tool_result"},

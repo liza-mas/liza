@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/liza-mas/liza/internal/alerts"
 	"github.com/liza-mas/liza/internal/db"
 	"github.com/liza-mas/liza/internal/errors"
 	"github.com/liza-mas/liza/internal/identity"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/ops"
+	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/roles"
 )
@@ -87,7 +89,7 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 		return models.AgentAuthority{}, err
 	}
 	if registered.TookOver {
-		logger.Info("Taking over expired or stale agent lease", "agent_id", agentID, "ownership_state", registered.PreviousOwnership)
+		reportTakeover(projectRoot, agentID, registered)
 	}
 	if registered.SweepErr != nil {
 		logger.Warn("Failed to sweep liveness records", "error", registered.SweepErr, "agent_id", agentID)
@@ -104,6 +106,31 @@ func registerAgentLocked(bb *db.Blackboard, projectRoot, agentID, role, terminal
 	}
 
 	return registered.Authority, nil
+}
+
+// reportTakeover logs a lease-first takeover. Replacing a registration whose
+// recorded PID still runs a matching supervisor fences a working agent, so it
+// warns and writes an alert instead of reading as dead-agent recovery (issue
+// #172). The evidence is namespace-relative and never changed the decision; a
+// failed alert write is logged and never fails the registration.
+func reportTakeover(projectRoot, agentID string, registered ops.RegisterAgentResult) {
+	logger := GetLogger()
+	previous := registered.Previous
+	if !previous.Raw.IsLiveMatching() {
+		logger.Info("Taking over expired or stale agent lease", "agent_id", agentID, "ownership_state", previous.Effective)
+		return
+	}
+	diagnostic := previous.Diagnostic(registered.PreviousPID)
+	logger.Warn("Taking over the lapsed registration of a live supervisor", "agent_id", agentID, "diagnostic", diagnostic)
+	if err := alerts.Write(paths.New(projectRoot).AlertsLogPath(), alerts.Alert{
+		Timestamp: time.Now().UTC(),
+		Level:     alerts.AlertLevelWarning,
+		Category:  alertCategoryLiveAgentTakeover,
+		Message: fmt.Sprintf("%s: registration replaced after its liveness lapsed while recorded pid %d still runs a matching supervisor; that supervisor exits at its next authority check",
+			agentID, registered.PreviousPID),
+	}); err != nil {
+		logger.Warn("Failed to write live agent takeover alert", "agent_id", agentID, "error", err)
+	}
 }
 
 // AutoAssignAgentID reads state, picks the first available <role>-N, and calls

@@ -20,4 +20,5 @@ const (
 	alertCategoryToolFailureRetryLoop    = "TOOL FAILURE RETRY LOOP"
 	alertCategoryIndexHooksUnavailable   = "INDEX HOOKS UNAVAILABLE"
 	alertCategoryCheckpointSummaryFailed = "CHECKPOINT SUMMARY FAILED"
+	alertCategoryLiveAgentTakeover       = "LIVE AGENT TAKEOVER"
 )

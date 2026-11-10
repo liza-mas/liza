@@ -143,6 +143,30 @@ release itself before its prerequisite merges; state validation catches
 illegal graphs, not a dishonest legal one. A real operator credential would close
 it. `reconcile-verdict` stays orchestrator-only (INVARIANTS §6).
 
+## 2026-11-10 Amendment: A Live-Matching Takeover Is Alerted, Not Refused
+
+Issue #172 reported spawns that took over the registrations of live reviewers.
+The cause was the lease-less window fixed on 2026-10-10 (D-17), made wider by
+heartbeats that needed the state lock, which liveness side records removed
+(ADR-0177). One live-agent takeover remains possible by design. A supervisor
+whose process still runs, but which published no liveness for the whole lease
+(or for the liveness window while it has no lease), is
+`lease_expired_or_stale` and can be replaced. Before this amendment that
+takeover read as ordinary dead-agent recovery, logged at Info.
+
+Ownership stays lease-first (user decision, 2026-11-10). When registration
+replaces a row whose recorded PID is still live-matching in the registering
+observer's namespace, it logs at Warn and writes a `LIVE AGENT TAKEOVER`
+warning to alerts.log. A failed alert write is logged and never fails the
+registration. The evidence does not change the decision.
+
+Rejected alternative: a live-matching PID blocks takeover after the lease
+expires. Observers in different namespaces would decide differently on the
+same state. A wedged process would keep its ID and its capacity until it is
+killed. And the readers that share `models.AgentRegistrationLive` (the ID
+allocators, capacity, stranded-claim recovery) would disagree with
+registration.
+
 ## Related Decisions
 
 Extends [ADR-0062](0062-ghost-agent-claim-prevention-and-ownership-reconciliation.md)
