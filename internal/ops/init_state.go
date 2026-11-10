@@ -34,6 +34,7 @@ type InitialStateInputs struct {
 	CopyWorktreeEnvFiles            bool
 	MaxGlobalIntegrationGenerations int
 	MaxInstances                    int
+	MaxAgents                       int
 	ScipSearch                      []string
 	PostWorktreeCmd                 string
 	AgentEnvDeny                    []string
@@ -123,6 +124,7 @@ func composeInitialConfig(in InitialStateInputs) models.Config {
 		MaxReviewCycles:                 models.DefaultMaxReviewCycles,
 		MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(in.MaxGlobalIntegrationGenerations),
 		MaxInstances:                    models.EffectiveMaxInstances(0, in.MaxInstances),
+		MaxAgents:                       models.EffectiveMaxAgents(in.MaxAgents),
 		HeartbeatInterval:               models.DefaultHeartbeatIntervalSec,
 		LeaseDuration:                   models.DefaultLeaseDurationSeconds,
 		CoderPollInterval:               models.DefaultCoderPollInterval,

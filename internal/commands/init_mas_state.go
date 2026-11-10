@@ -100,6 +100,7 @@ func (m *masInit) initialStateInputs(timestamp time.Time) ops.InitialStateInputs
 		CopyWorktreeEnvFiles:            params.CopyWorktreeEnvFiles || envgate.TruthyEnv(models.EnvEnableCopyWorktreeEnvFiles),
 		MaxGlobalIntegrationGenerations: params.MaxGlobalIntegrationGenerations,
 		MaxInstances:                    params.MaxInstances,
+		MaxAgents:                       params.MaxAgents,
 		ScipSearch:                      m.scipSearchConfig.LanguageNames(),
 		PostWorktreeCmd:                 m.postWorktreeCmd,
 		AgentEnvDeny:                    m.agentEnvDeny,

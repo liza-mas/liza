@@ -35,8 +35,12 @@ type State struct {
 	// when another role auto-resumes a terminal checkpoint into a new sprint
 	// before the orchestrator has looked.
 	PendingCheckpointSummary *PendingCheckpointSummary `yaml:"pending_checkpoint_summary,omitempty"`
-	Config                   Config                    `yaml:"config"`
-	Extra                    map[string]any            `yaml:",inline"`
+	// PoolReservations hold run-wide slots for roles with actionable work and
+	// no agent, in reservation order. Pool auto-repair is the only writer;
+	// registration and surplus retirement read them (ADR-0245).
+	PoolReservations []PoolReservation `yaml:"pool_reservations,omitempty"`
+	Config           Config            `yaml:"config"`
+	Extra            map[string]any    `yaml:",inline"`
 }
 
 // FindTask returns a pointer to the task with the given ID, or nil if not found.

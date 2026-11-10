@@ -9,7 +9,7 @@ import (
 // not covered, then what was started (or would be). A blank line separates a
 // section from the missing-role list that follows it.
 func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
-	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 && len(result.Unservable) == 0 && len(result.ProviderBlocked) == 0 {
+	if len(result.Missing) == 0 && len(result.Degraded) == 0 && len(result.Validation) == 0 && len(result.Unservable) == 0 && len(result.ProviderBlocked) == 0 && len(result.RunBudget.HeldRoles) == 0 {
 		fmt.Println("No role needs more agents for claimable work.")
 		return
 	}
@@ -17,6 +17,7 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 	printDegradedCapacity(result)
 	printUnservableWork(result)
 	printProviderBlockedWork(result)
+	printRunCapHeld(result)
 
 	if len(result.Missing) == 0 {
 		return
@@ -34,6 +35,24 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 
 	fmt.Println()
 	printStartOutcomes(result)
+}
+
+// printRunCapHeld explains work the run-wide max_agents budget left without
+// a start (ADR-0245), so a full run does not read as no demand.
+func printRunCapHeld(result *RepairAgentPoolResult) {
+	budget := result.RunBudget
+	if len(budget.HeldRoles) == 0 {
+		return
+	}
+	fmt.Printf("Held by the run-wide cap (max_agents %d: %d of %d non-orchestrator slot(s) occupied, %d pending start(s)):\n",
+		budget.MaxAgents, budget.Occupied, budget.Budget, budget.Pending)
+	fmt.Printf("  %s\n", strings.Join(budget.HeldRoles, ", "))
+	if len(budget.Reservations) > 0 {
+		fmt.Printf("  slots held for: %s; another role gives one up at its next task boundary\n", strings.Join(budget.Reservations, ", "))
+	}
+	if len(result.Missing) > 0 {
+		fmt.Println()
+	}
 }
 
 func printValidationCapacity(validation []ValidationAgentCapacity) {

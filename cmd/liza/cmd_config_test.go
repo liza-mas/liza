@@ -220,6 +220,7 @@ func TestConfigPoolKeys(t *testing.T) {
 		key, value, want string
 	}{
 		{ops.MaxInstancesConfigKey, "0", "at least 1"},
+		{ops.MaxAgentsConfigKey, "2", "at least 3"},
 		{ops.DoerMaxWaitConfigKey, "120", "at least 300"},
 		{ops.ReviewerMaxWaitConfigKey, "ten", "integer"},
 	} {
@@ -235,6 +236,13 @@ func TestConfigPoolKeys(t *testing.T) {
 	}
 	if got := readState(t, statePath).Config.ReviewerMaxWait; got != 900 {
 		t.Fatalf("reviewer_max_wait = %d, want 900", got)
+	}
+	stdout, err = run("set", ops.MaxAgentsConfigKey, "6", "--replace", "--reason", "shared host", "--json")
+	if err != nil || parseEnvelope(t, stdout)["ok"] != true {
+		t.Fatalf("max_agents set failed: %v %s", err, stdout)
+	}
+	if got := readState(t, statePath).Config.MaxAgents; got != 6 {
+		t.Fatalf("max_agents = %d, want 6", got)
 	}
 
 	// Agents cannot resize their own pool.

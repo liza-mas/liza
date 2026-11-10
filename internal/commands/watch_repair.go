@@ -161,6 +161,10 @@ func planAutoRepairStarts(state *models.State, pr models.PipelineResolver, roleM
 	plan := autoRepairPlan{}
 	plan.pending, plan.pendingIDs = resolveAutoRepairPendingSpawns(state, config.StateCache, now)
 	capacity, providerBlocked := autoRepairDemand(state, pr, roleModels, plan.pendingIDs, config, now)
+	// Reservations come from demand before pending starts and the run budget
+	// are applied (ADR-0245); RepairAgentPool reloads state and allocates
+	// against what this writes.
+	outcome.Alerts = append(outcome.Alerts, reconcilePoolReservations(state, pr, capacity.Missing, plan.pending, config, now)...)
 	missing := capacity.Missing
 	outcome.Alerts = append(outcome.Alerts, autoRepairProviderBlockedAlerts(providerBlocked, config.StateCache, now)...)
 	for _, work := range providerBlocked {

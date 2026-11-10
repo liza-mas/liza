@@ -125,6 +125,7 @@ func SetPostWorktreeCmd(projectRoot string, input SetPostWorktreeCmdInput) (*Con
 // agent must not resize its own pool.
 const (
 	MaxInstancesConfigKey    = "config.max_instances"
+	MaxAgentsConfigKey       = "config.max_agents"
 	DoerMaxWaitConfigKey     = "config.doer_max_wait"
 	ReviewerMaxWaitConfigKey = "config.reviewer_max_wait"
 )
@@ -133,7 +134,7 @@ const (
 const MinPoolMaxWaitSeconds = 300
 
 // PoolConfigKeys lists the integer agent-pool keys in display order.
-var PoolConfigKeys = []string{MaxInstancesConfigKey, DoerMaxWaitConfigKey, ReviewerMaxWaitConfigKey}
+var PoolConfigKeys = []string{MaxInstancesConfigKey, MaxAgentsConfigKey, DoerMaxWaitConfigKey, ReviewerMaxWaitConfigKey}
 
 // SetPoolConfigInput describes an operator write of one agent-pool key.
 type SetPoolConfigInput struct {
@@ -147,6 +148,8 @@ func poolConfigField(config *models.Config, key string) (*int, int, bool) {
 	switch key {
 	case MaxInstancesConfigKey:
 		return &config.MaxInstances, 1, true
+	case MaxAgentsConfigKey:
+		return &config.MaxAgents, models.MinMaxAgents, true
 	case DoerMaxWaitConfigKey:
 		return &config.DoerMaxWait, MinPoolMaxWaitSeconds, true
 	case ReviewerMaxWaitConfigKey:

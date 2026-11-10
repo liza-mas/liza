@@ -64,6 +64,9 @@ func RegisterAgent(bb *db.Blackboard, in RegisterAgentInput) (RegisterAgentResul
 		if err := requireRoleCapacity(state, in, now, livenessWindow); err != nil {
 			return err
 		}
+		if err := requireRunCapacity(state, in, now); err != nil {
+			return err
+		}
 
 		generation, err := models.NewAgentGeneration()
 		if err != nil {
@@ -160,7 +163,8 @@ func occupiedRolePeers(state *models.State, resolver *pipeline.Resolver, role, r
 
 // PoolSurplus reports whether agentID should leave its role's pool: the role
 // is not an orchestrator, its other live registrations already fill the
-// effective max-instances, and the agent holds no in-flight ownership.
+// effective max-instances or the run-wide budget asks its role for a slot
+// (runSurplus), and the agent holds no in-flight ownership.
 // In-flight ownership is a current task, an executing (or handoff) doer
 // assignment, rejected rework under an unexpired lease (reserved for this
 // agent), any review claim, or a pending approved merge it owns. Retained
@@ -185,9 +189,10 @@ func PoolSurplus(state *models.State, resolver *pipeline.Resolver, agentID strin
 		return false
 	}
 	// Count peers first: it is the cheap test, and waiting agents evaluate
-	// this on every state read.
+	// this on every state read. The run-wide test (ADR-0245) counts every
+	// registration, then reads history only when a handoff is due.
 	peers := occupiedRolePeers(state, resolver, agent.Role, string(roleType), agentID, now, models.AgentLivenessWindow(state.Config))
-	if len(peers) < models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) {
+	if len(peers) < models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) && !runSurplus(state, resolver, agentID, agent, now) {
 		return false
 	}
 	for i := range state.Tasks {

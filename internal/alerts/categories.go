@@ -31,6 +31,7 @@ const (
 	CategoryRegisteredAgentProcess Category = "REGISTERED AGENT PROCESS"
 	CategoryReviewLeaseExpired     Category = "REVIEW LEASE EXPIRED"
 	CategoryReviewLoop             Category = "REVIEW LOOP"
+	CategoryRunCap                 Category = "RUN CAP"
 	CategorySprintStalled          Category = "SPRINT STALLED"
 	CategoryStaleDraft             Category = "STALE DRAFT"
 	CategoryStaleSentinel          Category = "STALE SENTINEL"

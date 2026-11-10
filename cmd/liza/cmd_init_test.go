@@ -160,6 +160,16 @@ func TestInitDispatch_WorkspaceFlagsRequireDescription(t *testing.T) {
 			wantErr: "invalid --max-instances: 0",
 		},
 		{
+			name:    "agent flag with max-agents and no description errors",
+			args:    []string{"init", "--codex", "--max-agents", "5"},
+			wantErr: "workspace flags",
+		},
+		{
+			name:    "max-agents below three errors",
+			args:    []string{"init", "--max-agents", "2", "Goal"},
+			wantErr: "invalid --max-agents: 2 (must be at least 3)",
+		},
+		{
 			name:    "invalid default-cli value errors",
 			args:    []string{"init", "--default-cli", "invalid", "Goal"},
 			wantErr: "invalid --default-cli",

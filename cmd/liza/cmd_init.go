@@ -119,6 +119,12 @@ set its own max-instances (default 3). Auto-repair starts agents for claimable
 work up to that cap; idle agents exit after doer_max_wait/reviewer_max_wait.
 For existing workspaces, use %[4]s config set config.max_instances <n>.
 
+Use --max-agents to cap live agents across all roles, orchestrator included
+(default 9, minimum 3). One slot is always held for the orchestrator. When the
+run is full, a role with work and no agent gets the next slot another role's
+agent gives up at its task boundary.
+For existing workspaces, use %[4]s config set config.max_agents <n>.
+
 PAIRING MODE: Use agent flags without a description to create only the contract
 symlinks needed for pairing (no %[2]s/ workspace):
   %[4]s init --claude           # activates Claude's global contract
@@ -139,9 +145,13 @@ symlinks needed for pairing (no %[2]s/ workspace):
 		copyWorktreeEnvFiles, _ := cmd.Flags().GetBool("copy-worktree-env-files")
 		agentEnvDeny, _ := cmd.Flags().GetStringArray("agent-env-deny")
 		maxInstances, _ := cmd.Flags().GetInt("max-instances")
+		maxAgents, _ := cmd.Flags().GetInt("max-agents")
 		yes, _ := cmd.Flags().GetBool("yes")
 		if maxInstances < 1 {
 			return fmt.Errorf("invalid --max-instances: %d (must be at least 1)", maxInstances)
+		}
+		if maxAgents < models.MinMaxAgents {
+			return fmt.Errorf("invalid --max-agents: %d (must be at least %d)", maxAgents, models.MinMaxAgents)
 		}
 		if err := validateDefaultCLIFlag("default-cli", defaultCLI); err != nil {
 			return err
@@ -213,6 +223,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				AutoResume:           autoResume,
 				NoFollowUp:           noFollowUp,
 				MaxInstances:         maxInstances,
+				MaxAgents:            maxAgents,
 				DefaultCLI:           defaultCLI,
 				DefaultDoerCLI:       defaultDoerCLI,
 				DefaultReviewerCLI:   defaultReviewerCLI,
@@ -241,7 +252,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 				return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
 			}
 			if hasExplicitInitFlags(cmd) {
-				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --agent-env-deny, --max-instances, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
+				return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --agent-env-deny, --max-instances, --max-agents, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
 			}
 			if err := commands.InitPairingCommand(commands.InitPairingParams{
 				Agents:          agents,
@@ -277,6 +288,7 @@ symlinks needed for pairing (no %[2]s/ workspace):
 			AutoResume:           autoResume,
 			NoFollowUp:           noFollowUp,
 			MaxInstances:         maxInstances,
+			MaxAgents:            maxAgents,
 			DefaultCLI:           defaultCLI,
 			DefaultDoerCLI:       defaultDoerCLI,
 			DefaultReviewerCLI:   defaultReviewerCLI,
@@ -500,7 +512,7 @@ var agentFlagNames = []string{"claude", "codex", "cursor", "opencode", "gemini",
 // hasExplicitInitFlags returns true if any workspace-specific flag was explicitly set.
 // This prevents the interactive wizard from silently swallowing CLI flags it doesn't collect.
 func hasExplicitInitFlags(cmd *cobra.Command) bool {
-	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "agent-env-deny", "max-instances", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
+	for _, name := range []string{"spec", "config", "entry-point", "branch", "post-worktree-cmd", "validation-execution", "copy-worktree-env-files", "agent-env-deny", "max-instances", "max-agents", "default-cli", "default-doer-cli", "default-reviewer-cli"} {
 		if cmd.Flags().Changed(name) {
 			return true
 		}
@@ -708,6 +720,7 @@ func init() {
 	initCmd.Flags().Bool("copy-worktree-env-files", false, "copy ignored root env files into worktrees before setup commands")
 	initCmd.Flags().StringArray("agent-env-deny", nil, "withhold a host variable from agents, their processes and copied env files (repeatable)")
 	initCmd.Flags().Int("max-instances", models.DefaultMaxInstances, "default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it")
+	initCmd.Flags().Int("max-agents", models.DefaultMaxAgents, "max live agents across all roles, orchestrator included; one slot is held for the orchestrator")
 	initCmd.Flags().Bool("auto-resume", false, "automatically resume at checkpoint and sprint completion")
 	initCmd.Flags().Bool("no-follow-up", false, "run only the entry-point subpipeline by suppressing top-level pipeline transitions")
 	initCmd.Flags().Bool("yes", false, "auto-confirm init prompts, including deletion of displayed existing workspace targets")

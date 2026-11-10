@@ -21,7 +21,7 @@ var configCmd = &cobra.Command{
 	Short: "Read and update supported runtime configuration",
 	Long: fmt.Sprintf(`Read and update runtime configuration using the same dotted keys as %s.
 Supported keys: config.post_worktree_cmd, config.auto_resume, config.max_instances,
-config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval,
+config.max_agents, config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval,
 config.runtime_input_registry and config.agent_env_deny.
 The general state query remains available: %s config.post_worktree_cmd --json`, brand.Command("get"), brand.Command("get")),
 }
@@ -62,13 +62,16 @@ Agent-pool keys take a positive integer and are operator-only (an identified
 agent is refused):
   config.max_instances      live agents per non-orchestrator role without its
                             own max-instances (minimum 1, default 3)
+  config.max_agents         live agents across all roles, orchestrator
+                            included (minimum 3, default 9); one slot is
+                            always held for the orchestrator
   config.doer_max_wait      seconds an idle doer waits before leaving the pool
   config.reviewer_max_wait  seconds an idle reviewer waits before leaving the
                             pool (minimum 300, default 600 for each wait)
 Replacing a different value needs --replace and --reason, as above. A changed
 wait applies to agents started afterwards; running ones keep theirs. A lowered
-max_instances applies to running agents: each one over the cap retires at its
-next task boundary once it holds no in-flight work.
+max_instances or max_agents applies to running agents: each one over the cap
+retires at its next task boundary once it holds no in-flight work.
 
 config.await_poll_interval takes positive seconds (default 10 when unset)
 and is operator-only. It controls periodic checks and fallback polling for

@@ -105,6 +105,13 @@ const (
 	// DefaultMaxInstances caps live agents per non-orchestrator role when
 	// neither the role's max-instances nor config.max_instances is set.
 	DefaultMaxInstances = 3
+	// DefaultMaxAgents caps live agents across all roles, orchestrator
+	// included, when config.max_agents is unset (ADR-0245).
+	DefaultMaxAgents = 9
+	// MinMaxAgents is the smallest accepted run-wide cap: the orchestrator's
+	// held-back slot, a doer and a reviewer. A review loop keeps both alive at
+	// once, each waiting on the other (await-verdict, await-resubmission).
+	MinMaxAgents = 3
 )
 
 var EnvEnableCopyWorktreeEnvFiles = brand.EnvName("ENABLE_COPY_ENV_FILES")
@@ -174,6 +181,22 @@ func EffectiveMaxInstances(roleMax, configured int) int {
 	return DefaultMaxInstances
 }
 
+// EffectiveMaxAgents returns the run-wide live-agent cap: the configured
+// value when positive, else DefaultMaxAgents. One slot is always held back for
+// the orchestrator, so other roles share EffectiveMaxAgents - 1 (ADR-0245).
+func EffectiveMaxAgents(configured int) int {
+	if configured > 0 {
+		return configured
+	}
+	return DefaultMaxAgents
+}
+
+// NonOrchestratorAgentBudget is the number of slots non-orchestrator roles
+// share under the run-wide cap.
+func NonOrchestratorAgentBudget(config Config) int {
+	return EffectiveMaxAgents(config.MaxAgents) - 1
+}
+
 // Config holds system configuration parameters
 type Config struct {
 	// TerminalTaskArchival is on for runs initialized since ADR-0215; operator
@@ -188,7 +211,10 @@ type Config struct {
 	HighChurnRejectionThreshold int `yaml:"high_churn_rejection_threshold,omitempty"`
 	// MaxInstances is the project default live-agent cap for roles without
 	// their own max-instances. Non-positive means DefaultMaxInstances.
-	MaxInstances      int `yaml:"max_instances,omitempty"`
+	MaxInstances int `yaml:"max_instances,omitempty"`
+	// MaxAgents caps live agents across all roles, orchestrator included.
+	// Non-positive means DefaultMaxAgents (ADR-0245).
+	MaxAgents         int `yaml:"max_agents,omitempty"`
 	HeartbeatInterval int `yaml:"heartbeat_interval"`
 	LeaseDuration     int `yaml:"lease_duration"`
 	CoderPollInterval int `yaml:"coder_poll_interval"`

@@ -27,6 +27,7 @@
 | `spec_changes` | Spec modification history | Append-only |
 | `sprint` | Current sprint state | Atomic update |
 | `circuit_breaker` | CB status and history | Atomic update |
+| `pool_reservations` | Run-wide slots held for roles with work and no agent (ADR-0245) | Replaced whole by pool auto-repair only |
 
 ---
 
@@ -1418,6 +1419,17 @@ pending_checkpoint_summary:
   trigger: SPRINT_COMPLETE  # empty for a circuit-breaker checkpoint
   since: 2025-01-18T15:10:00Z  # previous checkpoint; absent for the sprint's first (summary covers merges in (since, at])
 
+# Run-wide slots held for roles that have actionable work and no occupied
+# registration while max_agents is full (ADR-0245), in reservation order. Pool
+# auto-repair is the only writer: it keeps a reservation while its role has no
+# agent and still has demand or a pending start, refreshes it at half-life, and
+# drops it on registration, suppression or vanished demand. Registration and
+# surplus retirement ignore an entry whose until has passed.
+pool_reservations:
+  - role: code-reviewer
+    selected_at: 2025-01-18T17:25:00Z
+    until: 2025-01-18T17:30:00Z
+
 circuit_breaker:
   last_check: 2025-01-18T17:30:00Z
   status: OK  # OK, TRIGGERED
@@ -1433,6 +1445,7 @@ config:
   max_review_cycles: 5          # Default for all tasks
   high_churn_rejection_threshold: 4  # Durable rejections per RCA cycle; non-positive uses default 4
   max_instances: 3              # Live agents per non-orchestrator role without its own max-instances; non-positive uses default 3
+  max_agents: 9                 # Live agents across all roles, orchestrator included (one slot held for it); non-positive uses default 9
   heartbeat_interval: 60        # Seconds
   lease_duration: 1800          # Seconds (default 1800 = 30 minutes; non-positive uses the default)
   coder_poll_interval: 30       # Seconds between work availability checks

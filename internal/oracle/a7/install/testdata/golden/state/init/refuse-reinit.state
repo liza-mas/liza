@@ -54,6 +54,7 @@ config:
     max_review_cycles: 5
     max_global_integration_generations: 3
     max_instances: 3
+    max_agents: 9
     heartbeat_interval: 60
     lease_duration: 1800
     coder_poll_interval: 30
@@ -121,6 +122,7 @@ config:
     max_review_cycles: 5
     max_global_integration_generations: 3
     max_instances: 3
+    max_agents: 9
     heartbeat_interval: 60
     lease_duration: 1800
     coder_poll_interval: 30

@@ -58,6 +58,7 @@ type InitParams struct {
 	NoFollowUp                      bool     // --no-follow-up: suppress top-level pipeline-transitions after the entry subpipeline
 	MaxGlobalIntegrationGenerations int
 	MaxInstances                    int      // --max-instances: default live-agent cap per non-orchestrator role
+	MaxAgents                       int      // --max-agents: run-wide live-agent cap, orchestrator included
 	DefaultCLI                      string   // --default-cli: default CLI for agent spawning
 	DefaultDoerCLI                  string   // --default-doer-cli: default CLI for doer and orchestrator agent spawning
 	DefaultReviewerCLI              string   // --default-reviewer-cli: default CLI for reviewer agent spawning

@@ -21,6 +21,11 @@ Use --max-instances to cap live agents per non-orchestrator role that does not
 set its own max-instances (default 3). Auto-repair starts agents for claimable
 work up to that cap; idle agents exit after doer_max_wait/reviewer_max_wait.
 For existing workspaces, use liza config set config.max_instances <n>.
+Use --max-agents to cap live agents across all roles, orchestrator included
+(default 9, minimum 3). One slot is always held for the orchestrator. When the
+run is full, a role with work and no agent gets the next slot another role's
+agent gives up at its task boundary.
+For existing workspaces, use liza config set config.max_agents <n>.
 PAIRING MODE: Use agent flags without a description to create only the contract
 symlinks needed for pairing (no .liza/ workspace):
 liza init --claude # activates Claude's global contract
@@ -46,6 +51,7 @@ Flags:
 --entry-point string entry-point name: "general-objective", "functional-spec", "technical-spec", or legacy "detailed-spec" in default pipeline (default: auto-classified by orchestrator)
 --gemini activate the global Gemini contract from ~/.liza/CORE.md
 -h, --help help for init
+--max-agents int max live agents across all roles, orchestrator included; one slot is held for the orchestrator (default 9)
 --max-instances int default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it (default 3)
 --mistral set up ~/.vibe/ for Liza contract
 --no-follow-up run only the entry-point subpipeline by suppressing top-level pipeline transitions

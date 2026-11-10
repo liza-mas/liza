@@ -29,7 +29,14 @@
 ],
 "commands": [
 "liza agent code-reviewer --cli claude"
-]
+],
+"run_budget": {
+"max_agents": 9,
+"budget": 8,
+"occupied": 0,
+"pending": 0,
+"free": 8
+}
 }
 --- error
 none

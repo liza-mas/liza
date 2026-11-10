@@ -15,7 +15,14 @@ none
 ],
 "reason": "no reviewer this CLI could start would be allowed to claim these tasks (provider diversity, claim cooldown or models.yaml slot); they wait for an eligible reviewer"
 }
-]
+],
+"run_budget": {
+"max_agents": 9,
+"budget": 8,
+"occupied": 0,
+"pending": 0,
+"free": 8
+}
 }
 --- error
 none

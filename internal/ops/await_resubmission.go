@@ -295,6 +295,12 @@ func (w *awaitedResubmission) observe(state *models.State, abortedStatus models.
 	if reservationLost(w.bb, w.reservation, state, task, w.agentID) {
 		return endResubmission(w.finish(reviewOwnershipLostResult(task.Status), nil))
 	}
+	if RunCapYieldDue(state, w.resolver, w.agentID, time.Now().UTC()) {
+		return endResubmission(w.finish(&AwaitResubmissionResult{
+			Verdict: string(ResubmissionAborted), TaskStatus: task.Status,
+			Reason: runCapYieldReason, SafeAction: string(SafeActionStop),
+		}, nil))
+	}
 	return nil
 }
 

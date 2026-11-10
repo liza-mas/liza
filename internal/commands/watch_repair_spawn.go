@@ -45,16 +45,25 @@ func executeAutoRepairStarts(config WatchConfig, plan autoRepairPlan, outcome *A
 	})
 }
 
-// recordAutoRepairStarts stamps every attempted role, including failures, to
-// avoid hammering a broken spawn path on every watch tick. This cache is
-// process-local; agent registration and max-instances remain the cross-process
-// safety net. Each started process stays pending until it registers or exits.
+// recordAutoRepairStarts stamps every role that started or failed to start a
+// process, to avoid hammering a broken spawn path on every watch tick. A role
+// the run budget gave no start (ADR-0245) is not stamped, so it starts on the
+// tick its slot frees; without a result every attempted role is stamped. This
+// cache is process-local; agent registration and the per-role and run-wide
+// caps remain the cross-process safety net. Each started process stays
+// pending until it registers or exits.
 func recordAutoRepairStarts(config WatchConfig, roles []string, result *RepairAgentPoolResult, now time.Time, outcome *AutoRepairAgentPoolOutcome) {
-	for _, role := range roles {
-		config.StateCache[autoRepairAgentPoolCachePrefix+role] = now
-	}
 	if result == nil {
+		for _, role := range roles {
+			config.StateCache[autoRepairAgentPoolCachePrefix+role] = now
+		}
 		return
+	}
+	for _, spawned := range result.Spawned {
+		config.StateCache[autoRepairAgentPoolCachePrefix+spawned.Role] = now
+	}
+	for _, failed := range result.Failed {
+		config.StateCache[autoRepairAgentPoolCachePrefix+failed.Role] = now
 	}
 	outcome.Spawned = append(outcome.Spawned, result.Spawned...)
 	outcome.Failed = append(outcome.Failed, result.Failed...)

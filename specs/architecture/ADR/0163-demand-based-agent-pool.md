@@ -5,7 +5,10 @@
 ACCEPTED — 2026-09-29. Closes GitHub issue #169.
 Amended by [ADR-0205](0205-surplus-supervisors-self-release.md): a surplus
 supervisor retires itself when the cap drops. Amended 2026-10-19 (D-199):
-approved merges without an eligible owner are reviewer demand.
+approved merges without an eligible owner are reviewer demand. Amended by
+[ADR-0245](0245-run-wide-agent-cap.md): scale-up is also bounded by the
+run-wide `config.max_agents`, with slots reserved for roles that have work and
+no agent.
 
 ## Context
 

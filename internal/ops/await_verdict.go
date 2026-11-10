@@ -303,6 +303,12 @@ func (r awaitVerdictRun) observe(abortedStatus models.TaskStatus) awaitObservati
 	if vc := checkVerdictStatus(currentTask, r.resolver); vc != nil {
 		return endedAwaitObservation(r.handle(currentTask))
 	}
+	if RunCapYieldDue(state, r.resolver, r.agentID, awaitVerdictNow().UTC()) {
+		return endedAwaitObservation(r.finish(&AwaitVerdictResult{
+			Verdict: string(VerdictAborted), TaskStatus: currentTask.Status,
+			Reason: runCapYieldReason, SafeAction: string(SafeActionStop),
+		}, nil))
+	}
 	return awaitObservation{task: currentTask}
 }
 

@@ -2,7 +2,7 @@ exit 0
 --- stdout
 Read and update runtime configuration using the same dotted keys as liza get.
 Supported keys: config.post_worktree_cmd, config.auto_resume, config.max_instances,
-config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval,
+config.max_agents, config.doer_max_wait, config.reviewer_max_wait, config.await_poll_interval,
 config.runtime_input_registry and config.agent_env_deny.
 The general state query remains available: liza get config.post_worktree_cmd --json
 Usage:

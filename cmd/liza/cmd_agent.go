@@ -484,7 +484,10 @@ var repairAgentPoolCmd = &cobra.Command{
 By default, counts per role the immediately claimable tasks that idle live usable
 agents do not cover, then starts that many agent processes, bounded by the role's
 max-instances (its own pipeline value, else config.max_instances, default 3) minus
-the agents already occupying the role. For reviewer work, an idle agent covers a
+the agents already occupying the role, and by the run-wide config.max_agents
+(default 9, one slot held for the orchestrator): a role with work and no agent
+gets the next slot first, and the dry run reports the budget. For reviewer work,
+an idle agent covers a
 task only if it passes the existing claim filters for that task, including
 prior-approval and configured provider-diversity eligibility; tasks that a new
 reviewer started with the selected CLI could not claim are reported, not staffed.

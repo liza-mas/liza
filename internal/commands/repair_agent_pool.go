@@ -170,6 +170,8 @@ type RepairAgentPoolResult struct {
 	Failed          []FailedAgentSpawn        `json:"failed,omitempty"`
 	Commands        []string                  `json:"commands,omitempty"`
 	Validation      []ValidationAgentCapacity `json:"validation,omitempty"`
+	// RunBudget is the run-wide budget the starts in Missing were bounded by.
+	RunBudget RunBudgetReport `json:"run_budget"`
 }
 
 // ValidationAgentCapacity is a task-specific observation, not a reusable proof
@@ -270,10 +272,12 @@ func assessRepairDemand(opts RepairAgentPoolOptions, in repairInputs) *RepairAge
 	}
 	missing = subtractPendingSpawns(missing, opts.PendingSpawns)
 	missing = filterMissingRoleWork(missing, opts.Roles)
+	missing, runBudget := allocateRunBudget(missing, in.state, in.pr, opts.PendingSpawns, now)
 	return &RepairAgentPoolResult{
 		CLI:        opts.CLI,
 		DryRun:     opts.DryRun,
 		Missing:    missing,
+		RunBudget:  runBudget,
 		Unservable: filterUnservableRoleWork(capacity.Unservable, opts.Roles),
 		ProviderBlocked: slices.DeleteFunc(providerBlocked, func(work ProviderBlockedRoleWork) bool {
 			return len(opts.Roles) > 0 && !slices.Contains(opts.Roles, work.Role)

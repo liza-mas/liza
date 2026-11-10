@@ -49,7 +49,14 @@ none
 "status": "unverified",
 "recover_hint": "Let this session run fresh validation preflight; successful observations are not reusable launch authorization."
 }
-]
+],
+"run_budget": {
+"max_agents": 9,
+"budget": 8,
+"occupied": 1,
+"pending": 0,
+"free": 7
+}
 }
 --- error
 none

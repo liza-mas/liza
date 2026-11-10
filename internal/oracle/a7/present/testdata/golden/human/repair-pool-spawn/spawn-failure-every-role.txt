@@ -87,7 +87,14 @@
 "status": "unverified",
 "recover_hint": "Let this session run fresh validation preflight; successful observations are not reusable launch authorization."
 }
-]
+],
+"run_budget": {
+"max_agents": 9,
+"budget": 8,
+"occupied": 1,
+"pending": 0,
+"free": 7
+}
 }
 --- error
 started 0 of 4 planned agent(s): code-reviewer: oracle launcher refused code-reviewer; coder: oracle launcher refused coder; orchestrator: oracle launcher refused orchestrator

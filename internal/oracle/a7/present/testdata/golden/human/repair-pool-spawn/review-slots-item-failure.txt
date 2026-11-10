@@ -45,7 +45,14 @@
 "commands": [
 "liza agent code-reviewer --models-item 1 --agent-id code-reviewer-1",
 "liza agent code-reviewer --models-item 2 --agent-id code-reviewer-2"
-]
+],
+"run_budget": {
+"max_agents": 9,
+"budget": 8,
+"occupied": 0,
+"pending": 0,
+"free": 8
+}
 }
 --- error
 started 1 of 2 planned agent(s): code-reviewer: oracle launcher refused item 1

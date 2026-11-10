@@ -35,6 +35,7 @@ func TestCategoryConstantsKeepTheirLogSpelling(t *testing.T) {
 		{CategoryRegisteredAgentProcess, "REGISTERED AGENT PROCESS"},
 		{CategoryReviewLeaseExpired, "REVIEW LEASE EXPIRED"},
 		{CategoryReviewLoop, "REVIEW LOOP"},
+		{CategoryRunCap, "RUN CAP"},
 		{CategorySprintStalled, "SPRINT STALLED"},
 		{CategoryStaleDraft, "STALE DRAFT"},
 		{CategoryStaleSentinel, "STALE SENTINEL"},

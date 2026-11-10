@@ -58,6 +58,7 @@ func TestC6InitStateKeepsFormerValues(t *testing.T) {
 		MaxReviewCycles:                 5,
 		MaxGlobalIntegrationGenerations: models.NormalizeGlobalIntegrationGenerationLimit(0),
 		MaxInstances:                    models.EffectiveMaxInstances(0, 0),
+		MaxAgents:                       models.EffectiveMaxAgents(0),
 		HeartbeatInterval:               60,
 		LeaseDuration:                   1800,
 		CoderPollInterval:               30,
