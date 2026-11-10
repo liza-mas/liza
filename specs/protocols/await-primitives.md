@@ -34,6 +34,13 @@ Premise 3 is why budget exhaustion ends in a clean exit rather than an escalatio
 | Budget exhausted | TIMEOUT → exit | TIMEOUT → exit |
 | System halted | PAUSED → exit with stop/resume guidance | PAUSED → exit with stop/resume guidance |
 
+When the doer's auto-reclaim is refused by a non-limit precondition (registration,
+worktree health, a concurrent claim), `await-verdict` answers TERMINAL/stop with
+`reason` naming the refusal (`auto-reclaim refused: …`), and releases the departed
+doer's assignment through the same fenced release as the paused exit, which records
+`doer_claim_released` with that reason. When a newer submission or claim has taken
+over the task, the release leaves it untouched (or fails with STATE_CHANGED).
+
 Below the prompt layer both share `awaitWithBudget` (`internal/commands/await_budget.go`),
 the same registered-tool interval policy (`providers.AwaitInterval`), and the same
 fsnotify-with-polling-fallback event model. **Their budget and transport policy must stay symmetric.** The

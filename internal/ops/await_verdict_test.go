@@ -637,6 +637,158 @@ func TestAwaitVerdict_Rejected_AuthorityReclaimsWithUnobservablePID(t *testing.T
 	}
 }
 
+// A reclaim refused by a non-limit precondition (here the authority-less PID
+// probe) reports the refusal, not the reviewer's reason, and releases the
+// departed doer's assignment on both sides with an audit entry (#144).
+func TestAwaitVerdict_Rejected_ReclaimRefusedReportsCauseAndReleases(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// GIVEN a submitted task whose doer's registered PID is unobservable and
+	// an await without registration authority
+	now := time.Now().UTC()
+	state := testhelpers.CreateValidState()
+	state.Config.MaxCoderIterations = 10
+	state.Config.MaxReviewCycles = 5
+	task := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusReadyForReview, now)
+	task.Iteration = 1
+	task.History = append(task.History, models.TaskHistoryEntry{Time: now, Event: models.TaskEventSubmittedForReview, Agent: strPtr("coder-1")})
+	state.Tasks = []models.Task{task}
+	agent := testhelpers.RegisteredTestAgent("coder")
+	agent.PID = exitedProcessPID(t)
+	state.Agents["coder-1"] = agent
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+
+	var result *AwaitVerdictResult
+	var awaitErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, awaitErr = AwaitVerdict(context.Background(), tmpDir, "task-1", "coder-1", 30*time.Second)
+	}()
+	testhelpers.WaitForAsyncSetup()
+
+	// WHEN the reviewer rejects
+	rejection := "Missing error handling"
+	if err := bb.Modify(func(s *models.State) error {
+		tk := s.FindTask("task-1")
+		tk.Status = models.TaskStatusRejected
+		reason := rejection
+		tk.RejectionReason = &reason
+		leaseExpires := time.Now().UTC().Add(30 * time.Minute)
+		tk.LeaseExpires = &leaseExpires
+		reviewer := "code-reviewer-1"
+		tk.History = append(tk.History, models.TaskHistoryEntry{Time: time.Now().UTC(), Event: models.TaskEventRejected, Agent: &reviewer})
+		return nil
+	}); err != nil {
+		t.Fatalf("Failed to modify state: %v", err)
+	}
+
+	// THEN the result names the refused reclaim and the doer stops
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("AwaitVerdict did not observe the rejection")
+	}
+	if awaitErr != nil {
+		t.Fatalf("AwaitVerdict error: %v", awaitErr)
+	}
+	if result.Verdict != string(VerdictTerminal) || result.SafeAction != string(SafeActionStop) {
+		t.Fatalf("result = %s/%s, want TERMINAL/stop", result.Verdict, result.SafeAction)
+	}
+	if !strings.Contains(result.Reason, "auto-reclaim refused") || !strings.Contains(result.Reason, "is not running") {
+		t.Errorf("Reason = %q, want the refused reclaim's cause", result.Reason)
+	}
+
+	// AND both sides of the assignment are released with an audit entry
+	s, readErr := db.For(stateFile).Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	released := s.FindTask("task-1")
+	if released.Status != models.TaskStatusRejected {
+		t.Errorf("task status = %s, want %s", released.Status, models.TaskStatusRejected)
+	}
+	if released.RejectionReason == nil || *released.RejectionReason != rejection {
+		t.Errorf("rejection_reason = %v, want %q preserved", released.RejectionReason, rejection)
+	}
+	if released.AssignedTo != nil || released.LeaseExpires != nil {
+		t.Errorf("task assigned_to=%v lease_expires=%v, want both nil", released.AssignedTo, released.LeaseExpires)
+	}
+	last := released.History[len(released.History)-1]
+	if last.Event != models.TaskEventDoerClaimReleased || last.Reason == nil || !strings.Contains(*last.Reason, "auto-reclaim refused") {
+		t.Errorf("last history = %s reason %v, want %s with the refusal cause", last.Event, last.Reason, models.TaskEventDoerClaimReleased)
+	}
+	if current := s.Agents["coder-1"].CurrentTask; current != nil {
+		t.Errorf("agent current_task = %q, want nil", *current)
+	}
+}
+
+// A refusal observed by a stale await must not strip ownership the same agent
+// acquired since: a newer submission of task-1 keeps its assignment, lease and
+// agent pointer, and no release is audited (#144).
+func TestReclaimFailureResult_StaleRefusalKeepsNewerClaim(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, tmpDir)
+	stateFile, _ := testhelpers.SetupLizaDir(t, tmpDir)
+
+	// GIVEN the stale await's snapshot: first submission rejected
+	now := time.Now().UTC()
+	reviewer := "code-reviewer-1"
+	stale := testhelpers.BuildTaskByStatus("task-1", models.TaskStatusRejected, now)
+	stale.History = append(stale.History,
+		models.TaskHistoryEntry{Time: now, Event: models.TaskEventSubmittedForReview, Agent: strPtr("coder-1")},
+		models.TaskHistoryEntry{Time: now.Add(time.Second), Event: models.TaskEventRejected, Agent: &reviewer},
+	)
+	staleSubmission, ok := latestSubmissionByAgent(&stale, "coder-1")
+	if !ok {
+		t.Fatal("stale snapshot has no submission")
+	}
+
+	// AND current state: the same agent has since resubmitted and awaits again
+	current := stale
+	current.History = append(append([]models.TaskHistoryEntry(nil), stale.History...),
+		models.TaskHistoryEntry{Time: now.Add(2 * time.Second), Event: models.TaskEventSubmittedForReview, Agent: strPtr("coder-1")},
+	)
+	current.Status = models.TaskStatusReadyForReview
+	current.AssignedTo = strPtr("coder-1")
+	leaseExpires := now.Add(30 * time.Minute)
+	current.LeaseExpires = &leaseExpires
+	state := testhelpers.CreateValidState()
+	state.Tasks = []models.Task{current}
+	agent := testhelpers.RegisteredTestAgent("coder")
+	agent.Status = models.AgentStatusWaiting
+	agent.CurrentTask = strPtr("task-1")
+	state.Agents["coder-1"] = agent
+	bb := testhelpers.WriteInitialState(t, stateFile, state)
+	historyLen := len(current.History)
+
+	// WHEN the stale await maps a refused reclaim
+	run := awaitVerdictRun{bb: bb, projectRoot: tmpDir, taskID: "task-1", agentID: "coder-1", submissionIndex: staleSubmission.index}
+	result, err := run.reclaimFailureResult(&stale, &PreconditionError{Reason: "agent coder-1 registered process PID 1 is not running"},
+		models.TaskStatusRejected, rejectedVerdict{reviewer: reviewer, reason: "Missing error handling"})
+	t.Logf("result=%+v err=%v", result, err)
+
+	// THEN the newer ownership is untouched on both sides
+	s, readErr := bb.Read()
+	if readErr != nil {
+		t.Fatalf("Failed to read state: %v", readErr)
+	}
+	if got := s.Agents["coder-1"].CurrentTask; got == nil || *got != "task-1" {
+		t.Errorf("agent current_task = %v, want task-1 kept", got)
+	}
+	kept := s.FindTask("task-1")
+	if kept.AssignedTo == nil || *kept.AssignedTo != "coder-1" || kept.LeaseExpires == nil || !kept.LeaseExpires.Equal(leaseExpires) {
+		t.Errorf("task assigned_to=%v lease_expires=%v, want coder-1 and the newer lease kept", kept.AssignedTo, kept.LeaseExpires)
+	}
+	if len(kept.History) != historyLen {
+		t.Errorf("history grew from %d to %d entries, want no release audited", historyLen, len(kept.History))
+	}
+}
+
 func TestAwaitVerdict_Rejected_ObservedByTickWhenWatcherSilent(t *testing.T) {
 	tmpDir := t.TempDir()
 	testhelpers.SetupTestGitRepo(t, tmpDir)

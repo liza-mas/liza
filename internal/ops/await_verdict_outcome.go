@@ -160,18 +160,12 @@ func (r awaitVerdictRun) reclaimFailureResult(task *models.Task, claimErr error,
 				TaskStatus:    task.Status,
 			}, nil)
 		}
-		// Blocked or other limit exhaustion.
+		// The task moved on (a limit escalation to BLOCKED, a concurrent
+		// transition); history holds the verdict to answer with.
 		if result, ok := recoveredVerdictAfterReclaimFailure(r.bb, task.ID, r.agentID, rejected); ok {
 			return r.finish(result, nil)
 		}
-		return r.finish(&AwaitVerdictResult{
-			Verdict:       string(VerdictTerminal),
-			Reason:        verdict.reason,
-			ReviewerAgent: verdict.reviewer,
-			TaskStatus:    task.Status,
-			Guidance:      stopVerdictGuidance(task.Status),
-			SafeAction:    string(SafeActionStop),
-		}, nil)
+		return r.reclaimRefusedResult(task, pe, verdict)
 	}
 	// A degraded claim already recorded agent health and bounded retries;
 	// surface it instead of converting it into a verdict, so the failure
@@ -185,6 +179,25 @@ func (r awaitVerdictRun) reclaimFailureResult(task *models.Task, claimErr error,
 		return r.finish(result, nil)
 	}
 	return r.finish(nil, fmt.Errorf("auto-reclaim failed: %w", claimErr))
+}
+
+// reclaimRefusedResult maps an auto-reclaim refused by a non-limit precondition
+// (registration, worktree health, a concurrent claim) to a TERMINAL stop that
+// names the refusal. The departed doer's assignment is released through the
+// fenced, audited release the paused exit uses; r.finish is not called, because
+// its unconditional agent-side cleanup would strip a newer claim the fence
+// deliberately left in place.
+func (r awaitVerdictRun) reclaimRefusedResult(task *models.Task, pe *PreconditionError, verdict rejectedVerdict) (*AwaitVerdictResult, error) {
+	cause := "auto-reclaim refused: " + pe.Reason
+	err := releaseDepartedDoerAssignment(r.projectRoot, task.ID, r.agentID, r.authority, cause, models.TaskTransitionID(task), r.submissionIndex)
+	return &AwaitVerdictResult{
+		Verdict:       string(VerdictTerminal),
+		Reason:        cause,
+		ReviewerAgent: verdict.reviewer,
+		TaskStatus:    task.Status,
+		Guidance:      "Auto-reclaim of this rejected task was refused (see reason). Stop this session; do not run more worktree commands for this submission.",
+		SafeAction:    string(SafeActionStop),
+	}, err
 }
 
 // finishNonAwaitable maps a task that left the awaitable set for a status that
