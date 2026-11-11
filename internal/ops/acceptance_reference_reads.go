@@ -175,13 +175,6 @@ func readBoundedBlob(root, commit, path string, limit int64) (string, string, er
 	return readBoundedEntry(g, path, entry, present, err, limit)
 }
 
-// readAcceptanceEntry applies readAcceptanceBlob's bounds to a tree entry the
-// caller already looked up, so a caller that inspected the entry itself does
-// not pay a second ls-tree for the same path.
-func readAcceptanceEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error) (string, string, error) {
-	return readBoundedEntry(g, path, entry, present, err, referencecontract.AcceptanceMaxBytes)
-}
-
 // readScalarArtifactEntry reads a scalar artifact ref (spec_ref, plan_ref,
 // arch_ref, epic_ref) that the amendment drift check compares by section. It
 // applies no size bound: admission resolves these refs uncapped
