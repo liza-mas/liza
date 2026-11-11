@@ -311,3 +311,20 @@ func TestScalarFragmentPolicyAgreesAtSubmitAndClaim(t *testing.T) {
 		})
 	}
 }
+
+// #215: the 256 KiB bound applies to a strict declaration, so a large carrier
+// whose selected section declares no Acceptance Contract stays legacy.
+func TestParseAcceptanceLegacyIsNotBoundByTheCarrierLimit(t *testing.T) {
+	padding := "\n## Appendix\n" + strings.Repeat("x\n", AcceptanceMaxBytes)
+	for _, tc := range []struct{ name, document string }{
+		{"marker-free", "# Spec\n\n## C-4\nRepair.\n" + padding},
+		{"marker elsewhere", acceptanceDocument(acceptanceDeclaration) + "\n## C-4\nRepair.\n" + padding},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			contract, err := ParseAcceptance(tc.document, "C-4")
+			if err != nil || contract != nil {
+				t.Fatalf("ParseAcceptance(%d bytes) = %#v, %v; want legacy (nil, nil)", len(tc.document), contract, err)
+			}
+		})
+	}
+}

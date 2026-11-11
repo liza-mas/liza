@@ -133,7 +133,7 @@
 + .liza/skills/liza-operator/scripts/watch-until.py file 0644 0d513b4537d67c878c78f2998fb2fdc3ce349a3f73a3c92d78e071229b998db8
 + .liza/skills/shared directory 0755 -
 + .liza/skills/shared/references directory 0755 -
-+ .liza/skills/shared/references/acceptance-evidence.md file 0644 e73757a58afdbbec6def31d655e9c99a1a62a67a6d178da3edb3c04a86c9db10
++ .liza/skills/shared/references/acceptance-evidence.md file 0644 18f10512768041eca1cbd59a53d161ddd98bbf9dd83b0669382124bde91dea52
 + .liza/skills/shared/references/reference-first-authoring.md file 0644 25583d127ae60a43bbe69c983bbf3930b42109b91ddd2202d5ef821382c52366
 + .liza/skills/software-architecture-review directory 0755 -
 + .liza/skills/software-architecture-review/SKILL.md file 0644 88d5cfc8551e05b48babd84aa9c2d5903679f0739d5a6a210ac00e1f19d0c695

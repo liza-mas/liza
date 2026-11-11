@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	// AcceptanceMaxBytes bounds each source carrier and submitted manifest.
+	// AcceptanceMaxBytes bounds each strict source carrier (one whose selected
+	// section declares an Acceptance Contract) and submitted manifest. A legacy
+	// allocation is not a source declaration and is not bounded by it (#215).
 	AcceptanceMaxBytes = 256 * 1024
 	// ReferenceSectionMaxBytes bounds the section a Direct Reference cites,
 	// measured after line-ending normalization; ReferenceFileMaxBytes caps the
@@ -76,9 +78,14 @@ type AcceptanceManifest struct {
 // fragment is only a display hint. Once present, both its source references
 // and declaration must be valid. An empty heading selects the whole carrier,
 // which must contain at most one declaration.
+//
+// Classification comes before the strict bound: AcceptanceMaxBytes applies only
+// once the selected section declares an Acceptance Contract, so a small legacy
+// section of a large file stays legacy (#215). ReferenceFileMaxBytes bounds the
+// scan that classifies it, as it bounds every Direct Reference file.
 func ParseAcceptance(markdown, heading string) (*AcceptanceContract, error) {
-	if len(markdown) > AcceptanceMaxBytes {
-		return nil, fmt.Errorf("acceptance.source: exceeds %d bytes", AcceptanceMaxBytes)
+	if len(markdown) > ReferenceFileMaxBytes {
+		return nil, fmt.Errorf("acceptance.source: exceeds %d KiB (%d bytes)", ReferenceFileMaxBytes/1024, len(markdown))
 	}
 	if !hasReferenceMarker(markdown) {
 		return nil, nil
@@ -98,6 +105,9 @@ func ParseAcceptance(markdown, heading string) (*AcceptanceContract, error) {
 	}
 	if len(markers) != 1 {
 		return nil, fmt.Errorf("acceptance: expected exactly one Acceptance Contract marker, got %d", len(markers))
+	}
+	if len(markdown) > AcceptanceMaxBytes {
+		return nil, fmt.Errorf("acceptance.source: exceeds %d KiB (%d bytes)", AcceptanceMaxBytes/1024, len(markdown))
 	}
 	// The shared heading scanner accepts CRLF; normalize only the parser's
 	// input so its line-oriented source declarations accept the same carrier.

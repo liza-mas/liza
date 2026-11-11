@@ -167,7 +167,7 @@ func validatePlanningOutputAcceptance(root string, task *models.Task, commit str
 			}
 			continue // Match legacy admission when no committed source is adopted.
 		}
-		content, _, err := readAcceptanceBlob(root, commit, path)
+		content, _, err := readAllocationBlob(root, commit, path)
 		if err != nil {
 			return fail(err.Error())
 		}

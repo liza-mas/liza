@@ -150,6 +150,10 @@ unchanged HEAD. Failure leaves the prior review state intact.
 
 ## Limits
 
+- Allocation files: a carrier whose allocated section declares an Acceptance
+  Contract is a source declaration and holds the 256 KiB bound below; a legacy
+  allocation (no Acceptance Contract in that section) is read under the 4 MiB
+  file cap only, at claim and at planning submission alike.
 - Source declarations and manifests: 256 KiB; at most 256 obligations and 64
   canonical commands. Strict JSON rejects unknown/duplicate keys and unsupported
   versions. Paths must be clean repository-relative non-credential paths, with

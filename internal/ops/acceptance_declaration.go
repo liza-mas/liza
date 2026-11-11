@@ -96,7 +96,7 @@ func readDeclaredCarrier(root string, task *models.Task, integrationCommit strin
 	if entry.Mode != gitModeRegularFile && entry.Mode != gitModeExecutableFile {
 		return nil, acceptanceSourceRefusal(task, AcceptanceFaultContent, "source must be a regular committed file")
 	}
-	content, _, err := readAcceptanceEntry(g, path, entry, present, nil)
+	content, _, err := readAllocationEntry(g, path, entry, present, nil)
 	if err != nil {
 		return nil, acceptanceSourceRefusal(task, readRefusalClass(err), err.Error())
 	}

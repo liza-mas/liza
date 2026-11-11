@@ -143,6 +143,21 @@ func readAcceptanceBlob(root, commit, path string) (string, string, error) {
 	return readBoundedBlob(root, commit, path, referencecontract.AcceptanceMaxBytes)
 }
 
+// readAllocationBlob reads a file an allocation names before it is known to be
+// a strict acceptance carrier, under the reference file cap. ParseAcceptance
+// applies the strict 256 KiB bound once the selected section declares an
+// Acceptance Contract, so a legacy allocation in a large file is not refused by
+// a bound that only source declarations carry (#215).
+func readAllocationBlob(root, commit, path string) (string, string, error) {
+	return readBoundedBlob(root, commit, path, referencecontract.ReferenceFileMaxBytes)
+}
+
+// readAllocationEntry applies readAllocationBlob's bounds to a tree entry the
+// caller already looked up.
+func readAllocationEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error) (string, string, error) {
+	return readBoundedEntry(g, path, entry, present, err, referencecontract.ReferenceFileMaxBytes)
+}
+
 // readReferenceBlob reads a Direct Reference's file under the larger file cap;
 // referenceSection then bounds the section the reference actually cites.
 func readReferenceBlob(root, commit, path string) (string, string, error) {

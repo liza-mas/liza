@@ -275,3 +275,98 @@ func TestPlanningSubmissionRefusesReferencesClaimWouldRefuse(t *testing.T) {
 		})
 	}
 }
+
+// #215: the 256 KiB bound is a strict-carrier bound. An allocation whose cited
+// section declares no Acceptance Contract is legacy, so only the reference
+// file cap applies to the file carrying it — at claim and at planning
+// submission alike.
+const largeSpecSection = "C-4: repair the aggregate"
+
+// largeLegacySpec is a spec of exactly size bytes whose cited section declares
+// no Acceptance Contract. withMarker adds a Source References heading elsewhere,
+// which makes the file marker-bearing without making the section strict.
+func largeLegacySpec(size int, withMarker bool) string {
+	content := "# Large spec\n\n"
+	if withMarker {
+		content += "## Source References\nDeclared for another section.\n\n"
+	}
+	content += "## " + largeSpecSection + "\nRepair the aggregate.\n\n"
+	return padReferenceFile(content, size)
+}
+
+// commitLargeSpec commits content as specs/large-spec.md and returns the commit.
+func commitLargeSpec(t *testing.T, content string) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	testhelpers.SetupTestGitRepo(t, root)
+	writeDriftFile(t, root, "specs/large-spec.md", content)
+	testhelpers.MustGit(t, root, "add", "--all")
+	testhelpers.MustGit(t, root, "commit", "-m", "test: record a large spec")
+	return root, testhelpers.MustGit(t, root, "rev-parse", "HEAD")
+}
+
+func TestLegacyAllocationIsNotBoundByTheCarrierLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		spec   string
+		reason []string // empty = legacy, no acceptance input
+	}{
+		{name: "marker-free file over the carrier bound", spec: largeLegacySpec(300*1024, false)},
+		{name: "marker-bearing file whose cited section declares no contract", spec: largeLegacySpec(300*1024, true)},
+		{name: "file over the reference file cap", spec: largeLegacySpec(referenceFileBound+1, false),
+			reason: []string{fmt.Sprintf("exceeds %d KiB", referenceFileBound/1024), fmt.Sprintf("%d bytes", referenceFileBound+1)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// GIVEN an unstarted coding task allocated only by spec_ref to a small
+			// section of a file over 256 KiB, as an integration fix task is.
+			root, commit := commitLargeSpec(t, tc.spec)
+			task := models.Task{ID: "integration-global-1-fix-0", Type: models.TaskTypeCoding, SpecRef: "specs/large-spec.md#" + largeSpecSection}
+			state := &models.State{Tasks: []models.Task{task}}
+
+			// WHEN claim-time acceptance classifies the allocation.
+			input, err := loadAcceptanceInput(root, state, &state.Tasks[0], commit)
+
+			// THEN a legacy allocation yields no acceptance input; only the file cap refuses.
+			if len(tc.reason) == 0 {
+				if err != nil || input != nil {
+					t.Fatalf("loadAcceptanceInput() = %v, %v; want a legacy allocation (nil, nil)", input, err)
+				}
+				return
+			}
+			var refusal *AcceptanceEvidenceError
+			if !errors.As(err, &refusal) || refusal.Class != AcceptanceFaultContent {
+				t.Fatalf("loadAcceptanceInput() = %v, %v; want a content refusal", input, err)
+			}
+			for _, want := range tc.reason {
+				if !strings.Contains(refusal.Reason, want) {
+					t.Errorf("reason %q does not name %q", refusal.Reason, want)
+				}
+			}
+		})
+	}
+}
+
+func TestPlanningSubmissionAdmitsALegacyAllocationOverTheCarrierLimit(t *testing.T) {
+	t.Parallel()
+	for _, withMarker := range []bool{false, true} {
+		t.Run(fmt.Sprintf("marker=%v", withMarker), func(t *testing.T) {
+			t.Parallel()
+			// GIVEN a planner output allocated only by spec_ref to a small section
+			// of a file over 256 KiB that declares no Acceptance Contract there.
+			root, commit := commitLargeSpec(t, largeLegacySpec(300*1024, withMarker))
+			task := &models.Task{ID: "planner", Type: models.TaskTypePlanning, Output: []models.OutputEntry{{
+				Desc: "Repair the aggregate", SpecRef: "specs/large-spec.md#" + largeSpecSection, Validation: []string{"sh repair_test.sh"},
+			}}}
+
+			// WHEN the planning submission validates its output's acceptance.
+			err := validatePlanningOutputAcceptance(root, task, commit)
+
+			// THEN it admits what claim admits.
+			if err != nil {
+				t.Fatalf("validatePlanningOutputAcceptance() = %v; want the legacy allocation admitted", err)
+			}
+		})
+	}
+}
