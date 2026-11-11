@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/liza-mas/liza/internal/db"
 	lizaerrors "github.com/liza-mas/liza/internal/errors"
@@ -158,9 +158,11 @@ func integrationFailureDiagnostic(reason IntegrationReason, mergeCommit, testOut
 		diagnostic["merge_commit"] = mergeCommit
 	}
 	if testOutput != "" {
-		outputExcerpt, truncated := persistedOutputExcerpt(secretmask.New().MaskText(testOutput), maxIntegrationDiagnosticOutputExcerptBytes)
-		diagnostic["test_output_excerpt"] = outputExcerpt
-		diagnostic["output_truncated"] = truncated
+		// Normalized as headTailExcerpt does, so truncated reports exactly
+		// whether the excerpt was cut.
+		masked := strings.ToValidUTF8(secretmask.New().MaskText(testOutput), "�")
+		diagnostic["test_output_excerpt"] = headTailExcerpt(masked, maxIntegrationDiagnosticOutputExcerptBytes)
+		diagnostic["output_truncated"] = len(masked) > maxIntegrationDiagnosticOutputExcerptBytes
 		// Raw byte count is pre-redaction; it describes the transient command output size.
 		diagnostic["output_bytes"] = len([]byte(testOutput))
 		diagnostic["failing_command"] = integrationTestCommand
@@ -188,19 +190,6 @@ func integrationFailureDiagnosticWithDetail(reason IntegrationReason, detail, me
 		diagnostic["detail"] = detail
 	}
 	return diagnostic
-}
-
-func persistedOutputExcerpt(output string, maxBytes int) (string, bool) {
-	if maxBytes <= 0 || len([]byte(output)) <= maxBytes {
-		return output, false
-	}
-
-	excerpt := []byte(output)
-	excerpt = excerpt[:maxBytes]
-	for !utf8.Valid(excerpt) && len(excerpt) > 0 {
-		excerpt = excerpt[:len(excerpt)-1]
-	}
-	return string(excerpt), true
 }
 
 func integrationFailureRecoveryHint(reason IntegrationReason) string {

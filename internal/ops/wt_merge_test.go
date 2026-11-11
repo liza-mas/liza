@@ -2688,6 +2688,7 @@ func TestMergeWorktree_IntegrationFailurePersistsDiagnostic(t *testing.T) {
 	scriptBody := "#!/bin/sh\n" +
 		"echo \"FAIL: DiagnosticEvidence $LIZA_TEST_API_KEY $LIZA_TEST_TOKEN\"\n" +
 		"head -c 5000 /dev/zero | tr '\\000' 'x'\n" +
+		"echo \"FAIL: TailEvidence\"\n" +
 		"exit 1\n"
 	if err := os.WriteFile(script, []byte(scriptBody), 0755); err != nil {
 		t.Fatalf("Failed to write test script: %v", err)
@@ -2722,6 +2723,9 @@ func TestMergeWorktree_IntegrationFailurePersistsDiagnostic(t *testing.T) {
 	testOutputExcerpt, _ := diagnostic["test_output_excerpt"].(string)
 	if !strings.Contains(testOutputExcerpt, "FAIL: DiagnosticEvidence") {
 		t.Errorf("diagnostic test_output_excerpt = %q, want failing test evidence", testOutputExcerpt)
+	}
+	if !strings.Contains(testOutputExcerpt, "FAIL: TailEvidence") {
+		t.Errorf("diagnostic test_output_excerpt = %q, want the failure printed last", testOutputExcerpt)
 	}
 	if strings.Contains(testOutputExcerpt, secretValue) {
 		t.Error("diagnostic test_output_excerpt should redact environment-derived secrets")
