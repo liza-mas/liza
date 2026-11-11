@@ -108,3 +108,14 @@ cancellation after the ref moved, keeps the commit. Earlier corrections were
 reconciled by the applied review. It quarantines that ID and records history.
 Any other case refuses and must use `--replace-pending`. Human holds remain sticky. Fences over possibly drifted
 evidence are still never released.
+
+## Amendment (2026-11-11): drift check applies no size bound admission omits
+
+Issue #213: `--apply` read every cited `spec_ref`, `plan_ref`, `arch_ref` and
+`epic_ref` file under the 256 KiB acceptance-carrier cap. Submission admits
+those scalar refs at any size (ADR-0231), so a merged correction citing a small
+section of a larger spec could never apply: `--replace-pending` cites the same
+file and the other routes refuse while it is pending. The apply-time drift check now compares the cited section with no
+file-size bound. It still requires a committed regular file and refuses a
+drifted cited section. Acceptance carriers keep their 256 KiB bound, which
+admission also enforces.

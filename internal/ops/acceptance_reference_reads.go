@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/git"
@@ -164,6 +165,16 @@ func readBoundedBlob(root, commit, path string, limit int64) (string, string, er
 // not pay a second ls-tree for the same path.
 func readAcceptanceEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error) (string, string, error) {
 	return readBoundedEntry(g, path, entry, present, err, referencecontract.AcceptanceMaxBytes)
+}
+
+// readScalarArtifactEntry reads a scalar artifact ref (spec_ref, plan_ref,
+// arch_ref, epic_ref) that the amendment drift check compares by section. It
+// applies no size bound: admission resolves these refs uncapped
+// (ResolveRefFragmentAt), so a bound here would refuse after merge what every
+// earlier gate admitted (ADR-0231, issue #213). The committed regular-file and
+// blob checks still apply. Acceptance carriers keep readAcceptanceBlob's bound.
+func readScalarArtifactEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error) (string, string, error) {
+	return readBoundedEntry(g, path, entry, present, err, math.MaxInt64)
 }
 
 func readBoundedEntry(g *git.Git, path string, entry git.TreeEntry, present bool, err error, limit int64) (string, string, error) {

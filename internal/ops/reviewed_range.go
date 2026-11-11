@@ -140,6 +140,7 @@ func ValidatePlanReviewHistory(root string, state *models.State, parent *models.
 // ValidatePlanAmendmentArtifacts refuses adoption after a relevant reviewed
 // section drifted on integration. Unrelated sections of an anchored artifact
 // remain independent; approved-proof references retain the acceptance fence.
+// The drift read applies no file-size bound that admission does not apply.
 func ValidatePlanAmendmentArtifacts(root string, state *models.State, parent *models.Task, integrationCommit string) error {
 	latest, err := EffectivePlanReview(state, parent)
 	if err != nil {
@@ -159,7 +160,7 @@ func ValidatePlanAmendmentArtifacts(root string, state *models.State, parent *mo
 		var reviewedContent string
 		for _, commit := range []string{*latest.ReviewCommit, integrationCommit} {
 			entry, present, readErr := g.TreeEntryAt(commit, path)
-			content, _, readErr := readAcceptanceEntry(g, path, entry, present, readErr)
+			content, _, readErr := readScalarArtifactEntry(g, path, entry, present, readErr)
 			if readErr != nil {
 				return fmt.Errorf("amendment %s artifact %q: %w", label, ref, readErr)
 			}
