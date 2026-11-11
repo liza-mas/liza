@@ -713,10 +713,15 @@ independent review still establish whether the tests pass and cover the work.
 
 If submission fails at `acceptance.execution[N]`, inspect the error's masked
 command-output excerpt for the failing assertion or setup error. `N` is zero-based
-in the reviewed canonical command list. Excerpts are capped at 8 KiB and marked
-when truncated; timeouts and output-limit failures omit the excerpt. A failure does not create
-an acceptance receipt. Older engines discarded failed-command output entirely;
-it cannot be recovered afterward from task state. Preserve the candidate and
+in the reviewed canonical command list. Excerpts keep at most 8 KiB, head and
+tail, with the omitted middle marked; the failing step of a long command is
+usually in the tail. The error then names the command's full masked output,
+`liza tool-result read <hash>`; read it in slices with
+`--offset` and `--limit` (at most 64 KiB each). `full masked output not
+stored` means none was kept; the excerpt and the failure stand. Timeouts and output-limit failures omit the excerpt and
+store nothing. A failure does not create an acceptance receipt. Older engines
+kept only the first 8 KiB, or discarded failed-command output entirely; the
+rest cannot be recovered afterward from task state. Preserve the candidate and
 diagnose with an updated engine before another authorized submission. A later
 direct test pass does not explain the original gate failure or replace admission.
 

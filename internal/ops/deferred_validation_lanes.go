@@ -10,11 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/models"
-	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/statehygiene"
 	"github.com/liza-mas/liza/internal/toolresult"
 )
@@ -360,10 +358,6 @@ func (r *deferredValidationRunner) probe(ctx context.Context, config models.Conf
 	return result, false
 }
 
-// deferredStateTextMarker replaces the middle of runner text over the state
-// limit; the tail is kept because test runners summarize failures last.
-const deferredStateTextMarker = "\n[... %d bytes omitted ...]\n"
-
 // deferredStateTranscriptOmitted replaces runner text that state would refuse
 // as a provider transcript.
 const deferredStateTranscriptOmitted = "output omitted from state: it resembles a provider transcript"
@@ -373,31 +367,15 @@ const deferredStateTranscriptOmitted = "output omitted from state: it resembles 
 // not transcript-shaped. Call it on masked text, so no cut can split a
 // secret before masking sees it.
 func deferredStateText(text string) string {
-	text = strings.ToValidUTF8(text, "\uFFFD")
-	if limit := statehygiene.MaxStateTextBytes; len(text) > limit {
-		// The marker's count never has more digits than len(text).
-		keep := limit - len(fmt.Sprintf(deferredStateTextMarker, len(text)))
-		head, tail := keep/2, len(text)-(keep-keep/2)
-		for head > 0 && !utf8.RuneStart(text[head]) {
-			head--
-		}
-		for tail < len(text) && !utf8.RuneStart(text[tail]) {
-			tail++
-		}
-		text = text[:head] + fmt.Sprintf(deferredStateTextMarker, tail-head) + text[tail:]
-	}
+	text = headTailExcerpt(text, statehygiene.MaxStateTextBytes)
 	if statehygiene.IsTranscriptPayload(text) {
 		return deferredStateTranscriptOmitted
 	}
 	return text
 }
 
-func deferredValidationOutputsDir(projectRoot string) string {
-	return filepath.Join(projectRoot, paths.ProjectDirName(), "tool-results")
-}
-
 func openDeferredValidationOutputs(projectRoot string) *toolresult.Store {
-	store, err := toolresult.New(deferredValidationOutputsDir(projectRoot), toolresult.Config{}, nil)
+	store, err := toolresult.New(projectToolResultsDir(projectRoot), toolresult.Config{}, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "deferred-validation: failed command output will not be stored: %v\n", err)
 		return nil

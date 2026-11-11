@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liza-mas/liza/internal/brand"
 )
@@ -57,21 +58,51 @@ func TestAcceptanceExecutionFailureStopsBatch(t *testing.T) {
 	}
 }
 
+// A long failing command usually names its failing step last; the bounded
+// excerpt keeps the output's head and tail (issue #214).
+func TestAcceptanceExecutionFailureKeepsOutputTail(t *testing.T) {
+	t.Parallel()
+	requirePosixShell(t)
+	command := `printf 'first line\n'; head -c 20000 /dev/zero | tr '\000' x; printf '\nFAILING STEP: lint\n' >&2; exit 2`
+	results, err := executeAcceptanceCommands("task-failure-tail", t.TempDir(), []string{command}, 5)
+	if err == nil || results != nil {
+		t.Fatal("failed command must return an error without trusted results")
+	}
+	diagnostic := err.Error()
+	for _, want := range []string{"exit 2", "first line", "FAILING STEP: lint", "bytes omitted"} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("failure diagnostic is missing %q:\n%s", want, diagnosticTail(diagnostic))
+		}
+	}
+	if !utf8.ValidString(diagnostic) || len(diagnostic) > acceptanceFailureExcerptLimit+512 {
+		t.Fatalf("failure diagnostic is invalid UTF-8 or exceeds its bound: %d bytes", len(diagnostic))
+	}
+}
+
 func TestAcceptanceExecutionFailureOutputIsMaskedBeforeTruncation(t *testing.T) {
 	requirePosixShell(t)
-	t.Setenv("ACCEPTANCE_TEST_TOKEN", "synthetic-private-value")
-	// Put a credential across the diagnostic excerpt boundary. Truncating raw
-	// output before masking would disclose a partial credential.
-	command := `printf 'assertion failed\n'; head -c 8165 /dev/zero | tr '\000' x; printf '%s\n' "$ACCEPTANCE_TEST_TOKEN"; head -c 10000 /dev/zero | tr '\000' y; exit 7`
+	const token = "synthetic-private-value"
+	t.Setenv("ACCEPTANCE_TEST_TOKEN", token)
+	// Put a credential across each place the head+tail excerpt of the raw
+	// output would cut it. Bounding raw output before masking would disclose
+	// a partial credential at either cut.
+	const total, lead, straddle = 20000, len("assertion failed\n"), 10
+	keep := acceptanceFailureExcerptLimit - len(fmt.Sprintf(outputExcerptMarker, total))
+	headCut, tailCut := keep/2, total-(keep-keep/2)
+	line := len(token) + 1
+	first := headCut - straddle - lead
+	second := tailCut - straddle - (lead + first + line)
+	last := total - (lead + first + line + second + line)
+	command := fmt.Sprintf(`printf 'assertion failed\n'; head -c %d /dev/zero | tr '\000' x; printf '%%s\n' "$ACCEPTANCE_TEST_TOKEN"; head -c %d /dev/zero | tr '\000' y; printf '%%s\n' "$ACCEPTANCE_TEST_TOKEN"; head -c %d /dev/zero | tr '\000' z; exit 7`, first, second, last)
 	results, err := executeAcceptanceCommands("task-failure-output", t.TempDir(), []string{command}, 5)
 	if err == nil || results != nil {
 		t.Fatal("failed command must return an error without trusted results")
 	}
 	diagnostic := err.Error()
-	if !strings.Contains(diagnostic, "assertion failed") || !strings.Contains(diagnostic, "***") || !strings.Contains(diagnostic, "output truncated") {
-		t.Fatal("failure omitted the assertion, masked value or truncation disclosure")
+	if !strings.Contains(diagnostic, "assertion failed") || strings.Count(diagnostic, "***") != 2 || !strings.Contains(diagnostic, "bytes omitted") {
+		t.Fatal("failure omitted the assertion, a masked value or the omission disclosure")
 	}
-	if strings.Contains(diagnostic, "synthetic") || len(diagnostic) > 8500 {
+	if strings.Contains(diagnostic, "synthetic") || strings.Contains(diagnostic, "private-value") || len(diagnostic) > 8500 {
 		t.Fatal("failure output exposed a partial credential or exceeded the diagnostic bound")
 	}
 }

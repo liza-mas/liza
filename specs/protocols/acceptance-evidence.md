@@ -153,9 +153,12 @@ it queues and prepares nothing and returns `STATE_CHANGED`/`requery` at once
 ([ADR-0210](../architecture/ADR/0210-submit-progress-and-same-caller-hold.md)).
 
 Failed execution returns the failing command's combined stdout/stderr in the
-error, masked before an 8 KiB excerpt limit and explicitly marked if truncated.
-Timeout and output-limit errors return no excerpt, since incomplete capture may
-split a secret.
+error, masked before an 8 KiB excerpt limit that keeps its head and tail and
+marks the omitted middle. The complete masked output is kept in the project
+tool-result store without an event record, and the error names it for
+`tool-result read`; if it cannot be stored, the error says so and names none.
+Timeout and output-limit errors return no excerpt and store nothing, since
+incomplete capture may split a secret.
 Diagnostic excerpts are not successful receipts; admission still fails and no
 partial execution results are published as evidence.
 

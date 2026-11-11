@@ -19,6 +19,7 @@ import (
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/referencecontract"
 	"github.com/liza-mas/liza/internal/secretmask"
+	"github.com/liza-mas/liza/internal/toolresult"
 )
 
 const (
@@ -149,19 +150,42 @@ func executeAcceptanceCommandsWith(ctx context.Context, taskID, worktree string,
 			// Bound only after masking the complete captured output: a raw
 			// excerpt could split a credential and evade exact-value redaction.
 			reason := fmt.Sprintf("command failed (exit %d): %s", result.ExitCode, err)
-			excerpt, truncated := persistedOutputExcerpt(result.Output, acceptanceFailureExcerptLimit)
-			if truncated {
-				excerpt += "\n[output truncated]"
-			}
-			if excerpt != "" {
+			if excerpt := headTailExcerpt(result.Output, acceptanceFailureExcerptLimit); excerpt != "" {
 				reason += "\ncommand output (masked):\n" + excerpt
 			}
 			// Execution errors may contain paths or shell diagnostics; mask them
 			// and discard all results from the failed batch.
-			return nil, fail(i, reason)
+			return nil, &acceptanceCommandFailure{err: fail(i, reason), output: result.Output}
 		}
 	}
 	return results, nil
+}
+
+// acceptanceCommandFailure is a canonical command that exited non-zero. It
+// reads as err and carries the command's complete masked output, which the
+// caller can keep and reference (issue #214); Error never includes it.
+type acceptanceCommandFailure struct {
+	err    error
+	output string
+}
+
+func (e *acceptanceCommandFailure) Error() string { return e.err.Error() }
+
+func (e *acceptanceCommandFailure) Unwrap() error { return e.err }
+
+// acceptanceOutputReference keeps a failed command's masked output in the
+// project tool-result store, with no telemetry event, and returns the line
+// naming it for the refusal reason. When the output cannot be kept, the line
+// says so, so the refusal never claims a copy that does not exist.
+func acceptanceOutputReference(projectRoot, output string) string {
+	store, err := toolresult.New(projectToolResultsDir(projectRoot), toolresult.Config{}, nil)
+	if err == nil {
+		var hash string
+		if hash, err = store.Persist(output); err == nil {
+			return "\nfull masked output: " + brand.Command("tool-result", "read", hash)
+		}
+	}
+	return "\nfull masked output not stored: " + err.Error()
 }
 
 // acceptanceBatchTimeoutError is a batch that reached its own budget while

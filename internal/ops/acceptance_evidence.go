@@ -362,6 +362,10 @@ func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Tas
 		if errors.Is(err, errAcceptanceBatchTimedOut) && retry != nil && retry.invalid != nil {
 			reason += "; admission_timeout_retry is set but invalid (" + retry.invalid.Error() + "): no retry"
 		}
+		var failure *acceptanceCommandFailure
+		if errors.As(err, &failure) && failure.output != "" {
+			reason += acceptanceOutputReference(root, failure.output)
+		}
 		return nil, acceptanceError(task.ID, "acceptance.execution", reason)
 	}
 	if err := checkAcceptanceWorktree(root, task.ID, commit); err != nil {
