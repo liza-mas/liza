@@ -227,6 +227,7 @@ include both `~/.§BRAND_NAME_LOWER§` and `~/§BRAND_GLOBAL_DIRNAME§` when tho
 
 **Key elements:**
 - **`enableAllProjectMcpServers`** — enables any project MCP servers (for non-§BRAND_NAME_TITLE§ tools like filesystem, etc.)
+- **`idleCompaction: false`** — turns off Claude Code's idle-time context compaction, so a waiting agent's context stays as it is
 - **`Bash(§BRAND_BINARY_NAME§:*)`** — grants permission for agents to invoke §BRAND_NAME_TITLE§ CLI commands
 - **`Skill(...)`** — contract skills from `~/§BRAND_GLOBAL_DIRNAME§/skills/` (installed by `§BRAND_BINARY_NAME§ setup`)
 - **No `defaultMode`** — §BRAND_NAME_TITLE§ never writes one here, and removes any it finds when merging. Claude Code v2.1.142 and later deliberately ignore `auto` in `.claude/settings.json` and `.claude/settings.local.json` "so a repository cannot grant itself auto mode" ([permission modes](https://code.claude.com/docs/en/permission-modes)); a value that *is* honored here shadows the mode you set in your own `~/.claude/settings.json`. Set the mode you want for interactive sessions there. MAS agents do not read it: they are launched with `--permission-mode auto` from the provider catalog, so their mode is the same on every machine. Override it per project with an `agent_tools` entry that restates `run_args` and `logged_run_args` (see [Supported CLIs](#supported-clis)).

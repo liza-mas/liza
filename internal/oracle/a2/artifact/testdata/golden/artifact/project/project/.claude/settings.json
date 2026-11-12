@@ -95,6 +95,7 @@
       }
     ]
   },
+  "idleCompaction": false,
   "permissions": {
     "additionalDirectories": [
       "~/.liza",

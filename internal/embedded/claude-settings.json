@@ -95,6 +95,7 @@
     ]
   },
   "enableAllProjectMcpServers": true,
+  "idleCompaction": false,
   "permissions": {
     "additionalDirectories": ["~/__BRAND_GLOBAL_DIRNAME__", "/tmp"],
     "allow": [
