@@ -147,180 +147,146 @@ symlinks needed for pairing (no %[2]s/ workspace):
 
 // runInit runs init and records its outcome checks in report.
 func runInit(cmd *cobra.Command, args []string, report *jsonout.Report) error {
-	agents := collectAgentFlags(cmd)
-	autoResume, _ := cmd.Flags().GetBool("auto-resume")
-	noFollowUp, _ := cmd.Flags().GetBool("no-follow-up")
-	defaultCLI, _ := cmd.Flags().GetString("default-cli")
-	defaultDoerCLI, _ := cmd.Flags().GetString("default-doer-cli")
-	defaultReviewerCLI, _ := cmd.Flags().GetString("default-reviewer-cli")
-	scipSearch, _ := cmd.Flags().GetStringArray("scip-search")
-	scipSearchPlans, _ := cmd.Flags().GetStringArray("scip-search-plan")
-	copyWorktreeEnvFiles, _ := cmd.Flags().GetBool("copy-worktree-env-files")
-	agentEnvDeny, _ := cmd.Flags().GetStringArray("agent-env-deny")
-	maxInstances, _ := cmd.Flags().GetInt("max-instances")
-	maxAgents, _ := cmd.Flags().GetInt("max-agents")
-	yes, _ := cmd.Flags().GetBool("yes")
-	if maxInstances < 1 {
-		return fmt.Errorf("invalid --max-instances: %d (must be at least 1)", maxInstances)
-	}
-	if maxAgents < models.MinMaxAgents {
-		return fmt.Errorf("invalid --max-agents: %d (must be at least %d)", maxAgents, models.MinMaxAgents)
-	}
-	if err := validateDefaultCLIFlag("default-cli", defaultCLI); err != nil {
-		return err
-	}
-	if err := validateDefaultCLIFlag("default-doer-cli", defaultDoerCLI); err != nil {
-		return err
-	}
-	if err := validateDefaultCLIFlag("default-reviewer-cli", defaultReviewerCLI); err != nil {
+	p, err := initParamsFromFlags(cmd, report)
+	if err != nil {
 		return err
 	}
 
 	// Interactive wizard: no args, no agent flags, no explicit workspace flags, TTY
-	if len(args) == 0 && len(agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
-		if isJSON(cmd) {
-			return fmt.Errorf("--json requires a description argument or at least one provider flag: the interactive wizard has no JSON mode")
-		}
-		if !interactive.IsInteractive() {
-			return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot)\nSee: %s init --help", brand.BinaryName)
-		}
-
-		// Resolve project root for conflict detection
-		var projectRoot string
-		if lizaPaths, err := paths.LizaPathsFromGit(); err == nil {
-			projectRoot = lizaPaths.ProjectRoot()
-		}
-
-		result, err := interactive.RunInitWizard(projectRoot)
-		if err != nil {
-			return err
-		}
-		if result == nil {
-			return nil // user aborted
-		}
-
-		// Read cobra flag defaults so the wizard path achieves parity
-		// with the CLI path (which reads these at lines 168-171).
-		configPath, _ := cmd.Flags().GetString("config")
-		branch, _ := cmd.Flags().GetString("branch")
-		postWorktreeCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
-		validationExecution, _ := cmd.Flags().GetString("validation-execution")
-
-		if result.Mode == interactive.WizardModePairing {
-			if autoResume {
-				return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
-			}
-			if noFollowUp {
-				return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
-			}
-			if err := commands.InitPairingCommand(commands.InitPairingParams{
-				Agents:          result.Agents,
-				ScipSearch:      scipSearch,
-				ScipSearchPlans: scipSearchPlans,
-				Stdin:           os.Stdin,
-				ContractActions: result.ContractActions,
-				AutoConfirm:     yes,
-				Report:          report,
-			}); err != nil {
-				return err
-			}
-			interactive.PrintPostInitSummary(interactive.WizardModePairing, result.Agents)
-			return nil
-		}
-		if err := commands.InitCommandWithConfig(commands.InitParams{
-			Description:          result.Description,
-			SpecRef:              result.SpecRef,
-			ConfigPath:           configPath,
-			EntryPoint:           result.EntryPoint,
-			Branch:               branch,
-			PostWorktreeCmd:      postWorktreeCmd,
-			ValidationExecution:  validationExecution,
-			CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
-			AgentEnvDeny:         agentEnvDeny,
-			AutoResume:           autoResume,
-			NoFollowUp:           noFollowUp,
-			MaxInstances:         maxInstances,
-			MaxAgents:            maxAgents,
-			DefaultCLI:           defaultCLI,
-			DefaultDoerCLI:       defaultDoerCLI,
-			DefaultReviewerCLI:   defaultReviewerCLI,
-			ScipSearch:           scipSearch,
-			ScipSearchPlans:      scipSearchPlans,
-			Agents:               result.Agents,
-			Stdin:                os.Stdin,
-			ContractActions:      result.ContractActions,
-			AutoConfirm:          yes,
-			Report:               report,
-		}); err != nil {
-			return err
-		}
-		interactive.PrintPostInitSummary(interactive.WizardModeFull, result.Agents)
-		return nil
+	if len(args) == 0 && len(p.Agents) == 0 && !hasExplicitInitFlags(cmd) && !cmd.Flags().Changed("scip-search") && !cmd.Flags().Changed("scip-search-plan") {
+		return runInitWizard(cmd, p)
 	}
 
 	// Pairing mode: agent flags without description
 	if len(args) == 0 {
-		if len(agents) == 0 {
+		if len(p.Agents) == 0 {
 			return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot)\nSee: %s init --help", brand.BinaryName)
 		}
-		if autoResume {
-			return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
-		}
-		if noFollowUp {
-			return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
+		if err := checkPairingFlags(p); err != nil {
+			return err
 		}
 		if hasExplicitInitFlags(cmd) {
 			return fmt.Errorf("workspace flags (--branch, --config, --spec, --entry-point, --post-worktree-cmd, --validation-execution, --copy-worktree-env-files, --agent-env-deny, --max-instances, --max-agents, --default-cli, --default-doer-cli, --default-reviewer-cli) require a description argument for full workspace init")
 		}
-		if err := commands.InitPairingCommand(commands.InitPairingParams{
-			Agents:          agents,
-			ScipSearch:      scipSearch,
-			ScipSearchPlans: scipSearchPlans,
-			Stdin:           os.Stdin,
-			AutoConfirm:     yes,
-			Report:          report,
-		}); err != nil {
-			return err
-		}
-		interactive.PrintPostInitSummary(interactive.WizardModePairing, agents)
-		return nil
+		return runInitPairing(p)
 	}
 
 	// Full workspace init
-	description := args[0]
-	specRef, _ := cmd.Flags().GetString("spec")
-	configPath, _ := cmd.Flags().GetString("config")
-	entryPoint, _ := cmd.Flags().GetString("entry-point")
-	branch, _ := cmd.Flags().GetString("branch")
-	postCreateCmd, _ := cmd.Flags().GetString("post-worktree-cmd")
-	validationExecution, _ := cmd.Flags().GetString("validation-execution")
-	if err := commands.InitCommandWithConfig(commands.InitParams{
-		Description:          description,
-		SpecRef:              specRef,
-		ConfigPath:           configPath,
-		EntryPoint:           entryPoint,
-		Branch:               branch,
-		PostWorktreeCmd:      postCreateCmd,
-		ValidationExecution:  validationExecution,
-		CopyWorktreeEnvFiles: copyWorktreeEnvFiles,
-		AgentEnvDeny:         agentEnvDeny,
-		AutoResume:           autoResume,
-		NoFollowUp:           noFollowUp,
-		MaxInstances:         maxInstances,
-		MaxAgents:            maxAgents,
-		DefaultCLI:           defaultCLI,
-		DefaultDoerCLI:       defaultDoerCLI,
-		DefaultReviewerCLI:   defaultReviewerCLI,
-		ScipSearch:           scipSearch,
-		ScipSearchPlans:      scipSearchPlans,
-		Agents:               agents,
-		Stdin:                os.Stdin,
-		AutoConfirm:          yes,
-		Report:               report,
+	p.Description = args[0]
+	return runInitFull(p)
+}
+
+// initParamsFromFlags reads and validates init's flags into the params every
+// init path shares. The caller sets Description; the wizard path overrides the
+// fields its result carries.
+func initParamsFromFlags(cmd *cobra.Command, report *jsonout.Report) (commands.InitParams, error) {
+	flags := cmd.Flags()
+	p := commands.InitParams{Agents: collectAgentFlags(cmd), Stdin: os.Stdin, Report: report}
+	p.AutoResume, _ = flags.GetBool("auto-resume")
+	p.NoFollowUp, _ = flags.GetBool("no-follow-up")
+	p.DefaultCLI, _ = flags.GetString("default-cli")
+	p.DefaultDoerCLI, _ = flags.GetString("default-doer-cli")
+	p.DefaultReviewerCLI, _ = flags.GetString("default-reviewer-cli")
+	p.ScipSearch, _ = flags.GetStringArray("scip-search")
+	p.ScipSearchPlans, _ = flags.GetStringArray("scip-search-plan")
+	p.CopyWorktreeEnvFiles, _ = flags.GetBool("copy-worktree-env-files")
+	p.AgentEnvDeny, _ = flags.GetStringArray("agent-env-deny")
+	p.MaxInstances, _ = flags.GetInt("max-instances")
+	p.MaxAgents, _ = flags.GetInt("max-agents")
+	p.AutoConfirm, _ = flags.GetBool("yes")
+	p.SpecRef, _ = flags.GetString("spec")
+	p.ConfigPath, _ = flags.GetString("config")
+	p.EntryPoint, _ = flags.GetString("entry-point")
+	p.Branch, _ = flags.GetString("branch")
+	p.PostWorktreeCmd, _ = flags.GetString("post-worktree-cmd")
+	p.ValidationExecution, _ = flags.GetString("validation-execution")
+	if p.MaxInstances < 1 {
+		return p, fmt.Errorf("invalid --max-instances: %d (must be at least 1)", p.MaxInstances)
+	}
+	if p.MaxAgents < models.MinMaxAgents {
+		return p, fmt.Errorf("invalid --max-agents: %d (must be at least %d)", p.MaxAgents, models.MinMaxAgents)
+	}
+	if err := validateDefaultCLIFlag("default-cli", p.DefaultCLI); err != nil {
+		return p, err
+	}
+	if err := validateDefaultCLIFlag("default-doer-cli", p.DefaultDoerCLI); err != nil {
+		return p, err
+	}
+	if err := validateDefaultCLIFlag("default-reviewer-cli", p.DefaultReviewerCLI); err != nil {
+		return p, err
+	}
+	return p, nil
+}
+
+// runInitWizard runs the interactive wizard and the init it chooses, keeping
+// p's flag values for the fields the wizard does not ask for.
+func runInitWizard(cmd *cobra.Command, p commands.InitParams) error {
+	if isJSON(cmd) {
+		return fmt.Errorf("--json requires a description argument or at least one provider flag: the interactive wizard has no JSON mode")
+	}
+	if !interactive.IsInteractive() {
+		return fmt.Errorf("requires a description argument or at least one provider flag (--provider, --claude, --codex, --cursor, --opencode, --gemini, --mistral, --pi, --copilot)\nSee: %s init --help", brand.BinaryName)
+	}
+
+	// Resolve project root for conflict detection
+	var projectRoot string
+	if lizaPaths, err := paths.LizaPathsFromGit(); err == nil {
+		projectRoot = lizaPaths.ProjectRoot()
+	}
+
+	result, err := interactive.RunInitWizard(projectRoot)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return nil // user aborted
+	}
+
+	p.Agents, p.ContractActions = result.Agents, result.ContractActions
+	if result.Mode == interactive.WizardModePairing {
+		if err := checkPairingFlags(p); err != nil {
+			return err
+		}
+		return runInitPairing(p)
+	}
+	p.Description, p.SpecRef, p.EntryPoint = result.Description, result.SpecRef, result.EntryPoint
+	return runInitFull(p)
+}
+
+// checkPairingFlags rejects the full-init-only flags on a pairing init.
+func checkPairingFlags(p commands.InitParams) error {
+	if p.AutoResume {
+		return fmt.Errorf("--auto-resume requires full workspace init (provide a description)")
+	}
+	if p.NoFollowUp {
+		return fmt.Errorf("--no-follow-up requires full workspace init (provide a description)")
+	}
+	return nil
+}
+
+// runInitPairing runs a pairing init from p's shared fields and prints its summary.
+func runInitPairing(p commands.InitParams) error {
+	if err := commands.InitPairingCommand(commands.InitPairingParams{
+		Agents:          p.Agents,
+		ScipSearch:      p.ScipSearch,
+		ScipSearchPlans: p.ScipSearchPlans,
+		Stdin:           p.Stdin,
+		ContractActions: p.ContractActions,
+		AutoConfirm:     p.AutoConfirm,
+		Report:          p.Report,
 	}); err != nil {
 		return err
 	}
-	interactive.PrintPostInitSummary(interactive.WizardModeFull, agents)
+	interactive.PrintPostInitSummary(interactive.WizardModePairing, p.Agents)
+	return nil
+}
+
+// runInitFull runs a full workspace init and prints its summary.
+func runInitFull(p commands.InitParams) error {
+	if err := commands.InitCommandWithConfig(p); err != nil {
+		return err
+	}
+	interactive.PrintPostInitSummary(interactive.WizardModeFull, p.Agents)
 	return nil
 }
 
