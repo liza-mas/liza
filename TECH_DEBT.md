@@ -1547,7 +1547,7 @@ a real fence gap if submit can return while the command still runs.
 
 ## Doctor checks presence, not content or every installed asset
 
-**What:** `doctor` (ADR-0247) checks that files and links exist and
+**What:** `doctor` (ADR-0248) checks that files and links exist and
 point where setup and init put them. It does not report: global files or
 index hooks that are present but stale (it runs `pairingindex.CheckInstalled`,
 not `CheckActivation`'s drift comparison); a prompt the user declined, which

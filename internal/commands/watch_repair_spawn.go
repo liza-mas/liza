@@ -47,7 +47,7 @@ func executeAutoRepairStarts(config WatchConfig, plan autoRepairPlan, outcome *A
 
 // recordAutoRepairStarts stamps every role that started or failed to start a
 // process, to avoid hammering a broken spawn path on every watch tick. A role
-// the run budget gave no start (ADR-0245) is not stamped, so it starts on the
+// the run budget gave no start (ADR-0246) is not stamped, so it starts on the
 // tick its slot frees; without a result every attempted role is stamped. This
 // cache is process-local; agent registration and the per-role and run-wide
 // caps remain the cross-process safety net. Each started process stays

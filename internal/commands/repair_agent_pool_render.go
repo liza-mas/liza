@@ -38,7 +38,7 @@ func printRepairAgentPoolResult(result *RepairAgentPoolResult) {
 }
 
 // printRunCapHeld explains work the run-wide max_agents budget left without
-// a start (ADR-0245), so a full run does not read as no demand.
+// a start (ADR-0246), so a full run does not read as no demand.
 func printRunCapHeld(result *RepairAgentPoolResult) {
 	budget := result.RunBudget
 	if len(budget.HeldRoles) == 0 {

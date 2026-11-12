@@ -11,7 +11,7 @@ import (
 )
 
 // RunBudgetReport is the run-wide agent budget repair allocated against
-// (ADR-0245): max_agents, the slots non-orchestrator roles share, those
+// (ADR-0246): max_agents, the slots non-orchestrator roles share, those
 // occupied, the pending starts, the roles holding a reservation, and the
 // slots free for starts outside reservations before this run allocated any.
 // HeldRoles had demand the run budget left without a start.

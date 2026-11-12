@@ -27,7 +27,7 @@
 | `spec_changes` | Spec modification history | Append-only |
 | `sprint` | Current sprint state | Atomic update |
 | `circuit_breaker` | CB status and history | Atomic update |
-| `pool_reservations` | Run-wide slots held for roles with work and no agent (ADR-0245) | Replaced whole by pool auto-repair only |
+| `pool_reservations` | Run-wide slots held for roles with work and no agent (ADR-0246) | Replaced whole by pool auto-repair only |
 
 ---
 
@@ -1420,7 +1420,7 @@ pending_checkpoint_summary:
   since: 2025-01-18T15:10:00Z  # previous checkpoint; absent for the sprint's first (summary covers merges in (since, at])
 
 # Run-wide slots held for roles that have actionable work and no occupied
-# registration while max_agents is full (ADR-0245), in reservation order. Pool
+# registration while max_agents is full (ADR-0246), in reservation order. Pool
 # auto-repair is the only writer: it keeps a reservation while its role has no
 # agent and still has demand or a pending start, refreshes it at half-life, and
 # drops it on registration, suppression or vanished demand. Registration and

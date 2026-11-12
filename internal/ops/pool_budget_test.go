@@ -9,7 +9,7 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// ADR-0245: the run-wide cap at registration and at task boundaries.
+// ADR-0246: the run-wide cap at registration and at task boundaries.
 
 func reserve(role string, now time.Time) models.PoolReservation {
 	return models.PoolReservation{Role: role, SelectedAt: now, Until: now.Add(5 * time.Minute)}

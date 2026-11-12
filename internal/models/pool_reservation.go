@@ -3,7 +3,7 @@ package models
 import "time"
 
 // PoolReservation holds one run-wide slot for a role that has actionable work
-// and no occupied registration (ADR-0245). Pool auto-repair writes it; an
+// and no occupied registration (ADR-0246). Pool auto-repair writes it; an
 // entry whose Until has passed is ignored by every reader, so a watcher that
 // stopped refreshing cannot keep a slot held.
 type PoolReservation struct {

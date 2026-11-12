@@ -3,7 +3,7 @@
 `init` and `setup` report an outcome that is complete but not what was asked
 for (a *degraded* outcome) as structured checks with a dedicated exit code.
 Human warnings on stderr are unchanged. Decision record:
-[ADR-0246](../architecture/ADR/0246-degraded-outcomes-as-checks.md).
+[ADR-0247](../architecture/ADR/0247-degraded-outcomes-as-checks.md).
 
 ## Format
 
@@ -90,7 +90,7 @@ No active location at all stays a hard failure.
 ## Doctor
 
 `doctor` checks the end state `setup` and `init` leave, and changes nothing
-([ADR-0247](../architecture/ADR/0247-doctor-verifies-setup-and-init.md)).
+([ADR-0248](../architecture/ADR/0248-doctor-verifies-setup-and-init.md)).
 Neither `setup` nor `init` runs it: the user, an agent or a script does. It
 reads the provider catalog cache without loading it, and it never calls
 placement, repair or the Semble model query (which writes a temporary fixture).

@@ -1,9 +1,9 @@
-# ADR-0246: Doctor Verifies What Setup and Init Produced
+# ADR-0248: Doctor Verifies What Setup and Init Produced
 
 ## Status
 
 ACCEPTED — 2026-11-12. Ported from the execution-engine fork (its ADR-0248).
-Builds on [ADR-0246](0246-degraded-outcomes-as-checks.md); specified in
+Builds on [ADR-0247](0247-degraded-outcomes-as-checks.md); specified in
 [Outcome Checks](../../protocols/outcome-checks.md#doctor).
 
 ## Context
@@ -17,11 +17,11 @@ change the machine it inspects.
 ## Decision
 
 1. **A separate, read-only command.** `doctor` reports the end state as
-   ADR-0246 checks and writes, repairs and fetches nothing: it reads the
+   ADR-0247 checks and writes, repairs and fetches nothing: it reads the
    provider catalog cache instead of loading it (loading refreshes it), and it
    skips Semble's offline model query, which writes a temporary fixture.
 2. **No automatic runs.** Neither `setup` nor `init` runs `doctor`. Each
-   command reports only what it was asked to apply (ADR-0246); the user, an
+   command reports only what it was asked to apply (ADR-0247); the user, an
    agent or a script runs `doctor`. With doctor inside `init`, an incomplete
    setup would make every `init` exit 4, and callers that read a non-zero exit
    as failure would stop.
@@ -34,7 +34,7 @@ change the machine it inspects.
    checked only when named with `--provider`; repository checks only with
    `--repo`; toolchain checks only for the tools a configured profile
    selected, manual-only tools excluded.
-5. **Severity and exit as ADR-0246.** Every doctor check is `warn`.
+5. **Severity and exit as ADR-0247.** Every doctor check is `warn`.
    Exit 0, 4 or 1, like `init` and `setup`: unlike `toolchain doctor`, the
    checks are of things that should be in place on a configured machine.
 

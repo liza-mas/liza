@@ -106,7 +106,7 @@ const (
 	// neither the role's max-instances nor config.max_instances is set.
 	DefaultMaxInstances = 3
 	// DefaultMaxAgents caps live agents across all roles, orchestrator
-	// included, when config.max_agents is unset (ADR-0245).
+	// included, when config.max_agents is unset (ADR-0246).
 	DefaultMaxAgents = 9
 	// MinMaxAgents is the smallest accepted run-wide cap: the orchestrator's
 	// held-back slot, a doer and a reviewer. A review loop keeps both alive at
@@ -183,7 +183,7 @@ func EffectiveMaxInstances(roleMax, configured int) int {
 
 // EffectiveMaxAgents returns the run-wide live-agent cap: the configured
 // value when positive, else DefaultMaxAgents. One slot is always held back for
-// the orchestrator, so other roles share EffectiveMaxAgents - 1 (ADR-0245).
+// the orchestrator, so other roles share EffectiveMaxAgents - 1 (ADR-0246).
 func EffectiveMaxAgents(configured int) int {
 	if configured > 0 {
 		return configured
@@ -213,7 +213,7 @@ type Config struct {
 	// their own max-instances. Non-positive means DefaultMaxInstances.
 	MaxInstances int `yaml:"max_instances,omitempty"`
 	// MaxAgents caps live agents across all roles, orchestrator included.
-	// Non-positive means DefaultMaxAgents (ADR-0245).
+	// Non-positive means DefaultMaxAgents (ADR-0246).
 	MaxAgents         int `yaml:"max_agents,omitempty"`
 	HeartbeatInterval int `yaml:"heartbeat_interval"`
 	LeaseDuration     int `yaml:"lease_duration"`

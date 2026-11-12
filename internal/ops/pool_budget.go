@@ -13,7 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/roles"
 )
 
-// RunPoolBudget is the run-wide agent budget observed on one state (ADR-0245).
+// RunPoolBudget is the run-wide agent budget observed on one state (ADR-0246).
 // Non-orchestrator roles share Budget slots: max_agents minus the slot always
 // held for the orchestrator. Occupancy is lease-first, as for the per-role cap.
 type RunPoolBudget struct {
@@ -149,7 +149,7 @@ func actedSinceRegistration(state *models.State, agentID string, registeredAt ti
 	return false
 }
 
-// SetPoolReservations replaces the run's pool reservations (ADR-0245). Pool
+// SetPoolReservations replaces the run's pool reservations (ADR-0246). Pool
 // auto-repair is the only caller: it decides on a snapshot and writes only
 // when the ordered list or an expiry changed, so the write itself does not
 // compare.
@@ -163,7 +163,7 @@ func SetPoolReservations(projectRoot string, reservations []models.PoolReservati
 
 // RunCapYieldDue reports whether agentID, blocked in await-verdict or
 // await-resubmission, should end its wait so its slot goes to the run-wide
-// budget (ADR-0245): the run is over max_agents, or a reserved role waits and
+// budget (ADR-0246): the run is over max_agents, or a reserved role waits and
 // this agent, of a role with the most agents, has acted since it registered.
 // Those waits hold the task (CurrentTask) or the review claim, which pins the
 // agent at its task boundary; without this a run full of waiting doers or

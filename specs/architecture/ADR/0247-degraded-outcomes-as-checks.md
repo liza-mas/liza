@@ -1,4 +1,4 @@
-# ADR-0246: Degraded Outcomes as Checks with a Dedicated Exit Code
+# ADR-0247: Degraded Outcomes as Checks with a Dedicated Exit Code
 
 ## Status
 

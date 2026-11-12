@@ -1,4 +1,4 @@
-# ADR-0245: Run-Wide Agent Cap with Slot Reservations
+# ADR-0246: Run-Wide Agent Cap with Slot Reservations
 
 ## Status
 

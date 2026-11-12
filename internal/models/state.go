@@ -37,7 +37,7 @@ type State struct {
 	PendingCheckpointSummary *PendingCheckpointSummary `yaml:"pending_checkpoint_summary,omitempty"`
 	// PoolReservations hold run-wide slots for roles with actionable work and
 	// no agent, in reservation order. Pool auto-repair is the only writer;
-	// registration and surplus retirement read them (ADR-0245).
+	// registration and surplus retirement read them (ADR-0246).
 	PoolReservations []PoolReservation `yaml:"pool_reservations,omitempty"`
 	Config           Config            `yaml:"config"`
 	Extra            map[string]any    `yaml:",inline"`

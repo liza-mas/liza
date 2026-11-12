@@ -13,12 +13,12 @@ import (
 
 // PoolReservationTTL is how long a reservation holds its slot without a
 // refresh; the watcher refreshes it at half-life, so it lapses only when the
-// watcher stops ticking (ADR-0245).
+// watcher stops ticking (ADR-0246).
 const PoolReservationTTL = 5 * time.Minute
 
 const autoRepairRunCapPrefix = "auto-repair-run-cap:"
 
-// reconcilePoolReservations is pool repair's reservation step (ADR-0245). It
+// reconcilePoolReservations is pool repair's reservation step (ADR-0246). It
 // keeps each reservation whose role still has no occupied registration and
 // either demand or a pending start, and is not suppressed; it then reserves,
 // in wait-age order, further roles with demand and no occupied registration,

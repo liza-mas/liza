@@ -17,7 +17,7 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// ADR-0245 composition: watcher ticks, the real state file, and the real
+// ADR-0246 composition: watcher ticks, the real state file, and the real
 // registration and retirement transactions, with process starts faked.
 
 type runCapHarness struct {

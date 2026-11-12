@@ -13,7 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
 
-// ADR-0245: an agent blocked in await-verdict or await-resubmission holds its
+// ADR-0246: an agent blocked in await-verdict or await-resubmission holds its
 // task or review claim, so it never reaches a task boundary while it waits. The
 // wait itself gives the slot up when the run-wide budget needs it.
 

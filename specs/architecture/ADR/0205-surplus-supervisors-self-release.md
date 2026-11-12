@@ -3,7 +3,7 @@
 ## Status
 
 ACCEPTED — 2026-10-13. Amends [ADR-0163](0163-demand-based-agent-pool.md)
-(Scale-down). Amended by [ADR-0245](0245-run-wide-agent-cap.md): an agent of a
+(Scale-down). Amended by [ADR-0246](0246-run-wide-agent-cap.md): an agent of a
 role with the most agents is also surplus when the run is over
 `config.max_agents`, or when a reserved role is waiting for a slot and the
 agent has acted since it registered.

@@ -193,7 +193,7 @@ func PoolSurplus(state *models.State, resolver *pipeline.Resolver, agentID strin
 		return false
 	}
 	// Count peers first: it is the cheap test, and waiting agents evaluate
-	// this on every state read. The run-wide test (ADR-0245) counts every
+	// this on every state read. The run-wide test (ADR-0246) counts every
 	// registration, then reads history only when a handoff is due.
 	peers := occupiedRolePeers(state, resolver, agent.Role, string(roleType), agentID, now, models.AgentLivenessWindow(state.Config))
 	if len(peers) < models.EffectiveMaxInstances(roleMax, state.Config.MaxInstances) && !runSurplus(state, resolver, agentID, agent, now) {
