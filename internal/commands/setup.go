@@ -615,20 +615,18 @@ func removeRetiredSkills(lizaDir, homeDir string, agents []providers.Provider) e
 // skipped is non-empty, and says why, when the link was not created for a
 // reason other than the user declining: the caller reports it as a check.
 func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, promptRegularFiles bool, autoConfirm bool) (skipped string, err error) {
-	fi, err := os.Lstat(linkPath)
-	if err == nil {
+	state, err := inspectLink(linkPath, target)
+	if err != nil {
+		return "", err
+	}
+	if state.Status == linkLinked {
+		return "", nil // already correct
+	}
+	if state.Status != linkAbsent {
 		// Something exists at linkPath
-		if fi.Mode()&os.ModeSymlink != 0 {
-			// It's a symlink — check where it points
-			existing, err := os.Readlink(linkPath)
-			if err != nil {
-				return "", fmt.Errorf("failed to read symlink %s: %w", linkPath, err)
-			}
-			if existing == target {
-				return "", nil // already correct
-			}
+		if state.Status == linkElsewhere {
 			// Wrong target — ask before replacing
-			fmt.Fprintf(os.Stderr, "%s → %s (expected %s)\n", linkPath, existing, target)
+			fmt.Fprintf(os.Stderr, "%s → %s (expected %s)\n", linkPath, state.Target, target)
 			fmt.Fprintf(os.Stderr, "Replace symlink? (y/n): ")
 		} else if promptRegularFiles {
 			// Regular file/dir — prompt to overwrite

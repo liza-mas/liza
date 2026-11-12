@@ -126,17 +126,55 @@ const (
 	ActivationDrifted ActivationStatus = "drifted"
 )
 
+// CheckInstalled returns the path of the first activation file that is absent
+// (the index script, the hook dispatcher or a managed lifecycle hook), or ""
+// when all are installed. It reads only presence, never content, so it cannot
+// report drift; CheckActivation runs it before its drift comparison.
+func CheckInstalled(opts InstallActivationOptions) (string, error) {
+	_, _, missing, err := checkInstalled(opts)
+	return missing, err
+}
+
+func checkInstalled(opts InstallActivationOptions) (hooksDir string, hooks []string, missing string, err error) {
+	hooks = opts.Hooks
+	if len(hooks) == 0 {
+		hooks = DefaultLifecycleHooks()
+	}
+	hooksDir, err = ResolveEffectiveHooksDir(opts.RepoRoot)
+	if err != nil {
+		return "", nil, "", err
+	}
+	for _, name := range []string{scriptName(), hookDispatcherName()} {
+		path := filepath.Join(hooksDir, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return hooksDir, hooks, path, nil
+		} else if err != nil {
+			return "", nil, "", fmt.Errorf("read %s: %w", name, err)
+		}
+	}
+	for _, hook := range hooks {
+		path := filepath.Join(hooksDir, hook)
+		managed, err := managedLifecycleHookExists(path)
+		if os.IsNotExist(err) || (err == nil && !managed) {
+			return hooksDir, hooks, path, nil
+		}
+		if err != nil {
+			return "", nil, "", fmt.Errorf("inspect %s hook: %w", hook, err)
+		}
+	}
+	return hooksDir, hooks, "", nil
+}
+
 // CheckActivation compares the installed activation with opts without
 // changing anything. A drifted script means the hooks refresh a different set
 // of indexes than the current configuration and repository layout call for.
 func CheckActivation(opts InstallActivationOptions) (ActivationStatus, error) {
-	hooks := opts.Hooks
-	if len(hooks) == 0 {
-		hooks = DefaultLifecycleHooks()
-	}
-	hooksDir, err := ResolveEffectiveHooksDir(opts.RepoRoot)
+	hooksDir, hooks, missing, err := checkInstalled(opts)
 	if err != nil {
 		return "", err
+	}
+	if missing != "" {
+		return ActivationMissing, nil
 	}
 
 	script, err := os.ReadFile(filepath.Join(hooksDir, scriptName()))
@@ -152,15 +190,6 @@ func CheckActivation(opts InstallActivationOptions) (ActivationStatus, error) {
 	}
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", hookDispatcherName(), err)
-	}
-	for _, hook := range hooks {
-		managed, err := managedLifecycleHookExists(filepath.Join(hooksDir, hook))
-		if os.IsNotExist(err) || (err == nil && !managed) {
-			return ActivationMissing, nil
-		}
-		if err != nil {
-			return "", fmt.Errorf("inspect %s hook: %w", hook, err)
-		}
 	}
 
 	want, err := renderIndexScript(opts.renderOptions())

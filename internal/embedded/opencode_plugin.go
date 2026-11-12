@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/liza-mas/liza/internal/brand"
 )
 
 //go:embed opencode-plugins/tool-result-budget.ts
@@ -37,7 +35,7 @@ func WriteOpenCodeResultPlugin(projectRoot string) error {
 			return err
 		}
 	}
-	name := filepath.Join(".opencode", "plugins", brand.BinaryName+"-tool-result-budget.ts")
+	name := openCodeResultPluginRel()
 	content := OpenCodeResultPluginContent()
 	header := bytes.SplitN(content, []byte("\n"), 2)[0]
 	if info, err := root.Lstat(name); err == nil {

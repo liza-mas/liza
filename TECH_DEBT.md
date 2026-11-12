@@ -1544,3 +1544,22 @@ a real fence gap if submit can return while the command still runs.
 - Capture whether the group's processes are zombies or running at the probe,
   then fix production (wait for the group) or the probe (bounded wait for
   teardown), whichever is the racing side.
+
+## Doctor checks presence, not content or every installed asset
+
+**What:** `doctor` (ADR-0247) checks that files and links exist and
+point where setup and init put them. It does not report: global files or
+index hooks that are present but stale (it runs `pairingindex.CheckInstalled`,
+not `CheckActivation`'s drift comparison); a prompt the user declined, which
+looks like a missing asset; bash-policy hooks; the Mistral prompt link and
+`config.toml` setting; the `.claudeignore` and `GUARDRAILS.md` templates.
+
+**Why deferred:** Drift needs the configuration each init used, which doctor
+does not hold for every repository, so a false "drifted" is likely; the
+orchestrator already repairs index-hook drift for MAS. Bash-policy hooks are
+owned by the external tool and opt-in. Mistral has no repo contract file. The templates are not functional.
+
+**Payback trigger:**
+- A report of stale indexes from present-but-drifted hooks in a pairing repository.
+- A support case where a stale global file after an upgrade went unreported.
+- A support case where missing Mistral or bash-policy activation went unreported.

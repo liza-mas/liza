@@ -151,6 +151,15 @@ func Load(ctx context.Context, opts LoadOptions) (Catalog, error) {
 	return EmbeddedCatalog(), nil
 }
 
+// ReadCachedCatalog reads the cached provider catalog without fetching or
+// writing anything, unlike Load, which refreshes the cache. It returns the
+// cache path with the error so a caller can name the file it could not read.
+func ReadCachedCatalog(homeDir string) (Catalog, string, error) {
+	cachePath, _ := CachePaths(homeDir)
+	cat, err := readCatalogFile(cachePath)
+	return cat, cachePath, err
+}
+
 func CachePaths(homeDir string) (catalogPath, metaPath string) {
 	cacheDir := filepath.Join(homeDir, paths.GlobalDirName(), "cache")
 	return filepath.Join(cacheDir, "provider-catalog.yaml"), filepath.Join(cacheDir, "provider-catalog.meta.json")

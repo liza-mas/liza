@@ -156,6 +156,8 @@ Key command groups:
 
 **Toolchain setup:** `liza toolchain list`, `liza toolchain doctor`, `liza toolchain install`, `liza toolchain configure`
 
+**Installation check:** `§BRAND_BINARY_NAME§ doctor` (read-only check of what `setup` and `init` produced)
+
 **Metrics:** `liza update-sprint-metrics`
 
 **Terminal storage:** `§BRAND_BINARY_NAME§ archive-terminal-tasks` enables

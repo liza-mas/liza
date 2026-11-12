@@ -53,12 +53,35 @@ func Doctor(opts DoctorOptions) (DoctorResult, error) {
 	}
 	result := DoctorResult{Profile: selection.Profile}
 	for _, tool := range selection.Tools {
-		result.Checks = append(result.Checks, doctorOne(tool, runner))
+		result.Checks = append(result.Checks, doctorOne(tool, runner, false))
 	}
 	return result, nil
 }
 
-func doctorOne(tool Tool, runner Runner) DoctorCheck {
+// DoctorTools checks the tools named by id, for a caller that already holds
+// the selection, such as the configured profile. Manual-only tools are left
+// out: they are never ok by design. An id the catalog does not know is a
+// failed check. Semble's offline model query is skipped: it writes a temporary
+// fixture, and this is the read-only path.
+func DoctorTools(ids []string, runner Runner) []DoctorCheck {
+	runner = runnerOrDefault(runner)
+	catalog := Catalog()
+	checks := make([]DoctorCheck, 0, len(ids))
+	for _, id := range ids {
+		index := slices.IndexFunc(catalog, func(tool Tool) bool { return tool.ID == id })
+		if index < 0 {
+			checks = append(checks, DoctorCheck{ToolID: id, Status: DoctorFailed, Message: "unknown tool in the configured profile"})
+			continue
+		}
+		if catalog[index].InstallKind == InstallManualOnly {
+			continue
+		}
+		checks = append(checks, doctorOne(catalog[index], runner, true))
+	}
+	return checks
+}
+
+func doctorOne(tool Tool, runner Runner, skipModelProbe bool) DoctorCheck {
 	if tool.InstallKind == InstallManualOnly {
 		return DoctorCheck{ToolID: tool.ID, Status: DoctorManual, Message: tool.ManualNote}
 	}
@@ -85,6 +108,10 @@ func doctorOne(tool Tool, runner Runner) DoctorCheck {
 			Message: fmt.Sprintf("%s lacks required command %s; upgrade with %s toolchain install %s",
 				tool.Binary, strings.Join(missing, ", "), brand.RuntimeValues().BinaryName, tool.ID),
 		}
+	}
+	if tool.ID == sembleToolID && skipModelProbe {
+		return DoctorCheck{ToolID: tool.ID, Status: DoctorOK, Path: path, Output: output,
+			Message: "offline model not checked; run " + brand.Command("toolchain", "doctor", "--tool", sembleToolID)}
 	}
 	if tool.ID == sembleToolID {
 		// Whether or not Semble is activated: an installed Semble whose model is

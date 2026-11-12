@@ -47,6 +47,33 @@ func PlanGlobalFiles(targetDir string) []string {
 	return paths
 }
 
+// PlannedSkillDirs returns the absolute skill directories under
+// targetDir/skills that the embedded release ships, one per top-level skill.
+func PlannedSkillDirs(targetDir string) (map[string]bool, error) {
+	dirs := make(map[string]bool)
+	skillsDir := filepath.Join(targetDir, "skills")
+	err := fs.WalkDir(skillsFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() || path == "." {
+			return nil
+		}
+		// embed.FS always uses forward slashes, even on Windows. Top-level
+		// skill directories have exactly two components: "skills/<name>".
+		parts := strings.Split(path, "/")
+		if len(parts) != 2 {
+			return nil
+		}
+		dirs[filepath.Join(skillsDir, parts[1])] = true
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk embedded skills FS: %w", err)
+	}
+	return dirs, nil
+}
+
 // WriteGlobalFiles writes contracts, skills, and support docs to the global
 // runtime directory. Contracts are written flat into targetDir/,
 // skills into targetDir/skills/, and support docs into

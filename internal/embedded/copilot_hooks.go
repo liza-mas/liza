@@ -28,7 +28,7 @@ func CopilotHooksFileName() string {
 // project root. Always overwrites — hooks are Liza infrastructure, not
 // user-customizable.
 func WriteCopilotHooks(projectRoot string) error {
-	hooksDir := filepath.Join(projectRoot, ".copilot", "hooks")
+	hooksDir := copilotHooksDir(projectRoot)
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .copilot/hooks directory: %w", err)
 	}
@@ -58,11 +58,10 @@ func WriteCopilotProjectHooksWithOptions(projectRoot string, reader *bufio.Reade
 	if err := WriteCopilotHooks(projectRoot); err != nil {
 		return err
 	}
-	hooksDir := filepath.Join(projectRoot, ".github", "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+	configPath := copilotHooksConfigPath(projectRoot)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return fmt.Errorf("failed to create .github/hooks directory: %w", err)
 	}
-	configPath := filepath.Join(hooksDir, CopilotHooksFileName())
 	rendered := renderEmbeddedAsset(copilotHooksContent)
 	if existing, err := os.ReadFile(configPath); err == nil && !bytes.Equal(existing, rendered) {
 		ok, err := confirmMergeWithOptions(fmt.Sprintf("%s exists and differs from the managed %s Copilot hooks. Overwrite? (y/n): ", configPath, brand.NameTitle), reader, opts)

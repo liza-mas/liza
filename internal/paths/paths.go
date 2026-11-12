@@ -96,6 +96,12 @@ func (p LizaPaths) ModelsPath() string {
 	return p.get(ModelsFileName)
 }
 
+// FrozenPipelinePath returns the pipeline configuration MAS init freezes into
+// the runtime directory.
+func (p LizaPaths) FrozenPipelinePath() string {
+	return filepath.Join(p.LizaDir(), "pipeline.yaml")
+}
+
 // LockPath returns the path to the lock file.
 func (p LizaPaths) LockPath() string {
 	return p.get(StateFileName) + LockSuffix

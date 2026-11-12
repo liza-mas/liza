@@ -80,6 +80,10 @@ Semble is activated, and reports an uncached model with the repair command above
 those in the active agent provider or MCP host; §BRAND_NAME_TITLE§ will not write credentials
 or provider-specific secrets.
 
+`§BRAND_BINARY_NAME§ doctor` checks the tools of the configured profile too, among the
+other setup and init checks, without the Semble model query and without
+manual-only tools.
+
 ## Configure Activation
 
 ```bash

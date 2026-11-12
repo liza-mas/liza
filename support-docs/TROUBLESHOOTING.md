@@ -2,6 +2,11 @@
 
 Common issues and solutions when running §BRAND_NAME_TITLE§.
 
+Start with `§BRAND_BINARY_NAME§ doctor --provider <id> --repo` from the repository: it
+checks, without changing anything, that the files and links `setup` and `init`
+produce are in place, and names the fix for each one that is not. Add `--json`
+for the machine-readable report (specs/protocols/outcome-checks.md).
+
 ---
 
 ## Agent Issues

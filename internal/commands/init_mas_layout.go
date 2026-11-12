@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/paths"
@@ -69,7 +68,7 @@ func (m *masInit) writeRuntimeFiles() error {
 	}
 
 	// Freeze pipeline config into the project runtime directory.
-	frozenPath := filepath.Join(m.lizaPaths.LizaDir(), "pipeline.yaml")
+	frozenPath := m.lizaPaths.FrozenPipelinePath()
 	if err := os.WriteFile(frozenPath, m.pipelineData, initFileMode); err != nil {
 		m.cleanupInit()
 		return fmt.Errorf("failed to freeze pipeline config: %w", err)

@@ -71,6 +71,26 @@ type profileFile struct {
 	InstallDir    string   `json:"install_dir"`
 }
 
+// ConfiguredProfilePath is the profile Configure writes under globalDir.
+func ConfiguredProfilePath(globalDir string) string {
+	return filepath.Join(globalDir, "toolchain", "profile.json")
+}
+
+// ReadConfiguredTools returns the tool ids the last Configure selected, read
+// from its profile without changing anything. The error wraps os.ErrNotExist
+// when the toolchain was never configured.
+func ReadConfiguredTools(globalDir string) ([]string, error) {
+	data, err := os.ReadFile(ConfiguredProfilePath(globalDir))
+	if err != nil {
+		return nil, err
+	}
+	var profile profileFile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", ConfiguredProfilePath(globalDir), err)
+	}
+	return profile.SelectedTools, nil
+}
+
 func Configure(opts ConfigureOptions) (ConfigureResult, error) {
 	selection, err := ResolveSelection(opts.Profile, opts.Include, opts.Exclude)
 	if err != nil {
@@ -95,7 +115,7 @@ func Configure(opts ConfigureOptions) (ConfigureResult, error) {
 
 	selectedIDs := selectedToolIDs(selection.Tools)
 	activation := activationEnv(selection.Tools)
-	profilePath := filepath.Join(toolchainDir, "profile.json")
+	profilePath := ConfiguredProfilePath(globalDir)
 	envPath := filepath.Join(toolchainDir, "env.sh")
 
 	profilePayload, err := json.MarshalIndent(profileFile{

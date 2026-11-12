@@ -60,15 +60,32 @@ var contractPlacementCheck = jsonout.CheckDefinition{ID: "contract.placement", S
 
 // isLizaSymlink returns true if path exists, is a symlink, and points to contractTarget.
 func isLizaSymlink(path, contractTarget string) bool {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		return false
+	state, err := inspectLink(path, contractTarget)
+	return err == nil && state.Status == linkLinked
+}
+
+// globalContractTarget is the contract file every provider contract link
+// points at: CORE.md in the user's branded global directory.
+func globalContractTarget(homeDir string) string {
+	return filepath.Join(homeDir, paths.GlobalDirName(), globalContractFileName)
+}
+
+// activeProjectContract returns the provider's repo or local contract path in
+// projectRoot when it links the contract, else "". It reads the normalized
+// catalog policy, so a legacy global fallback never counts as a project link.
+func activeProjectContract(projectRoot, contractTarget string, contract providers.ContractLinks) string {
+	if projectRoot == "" {
+		return ""
 	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		return false
+	for _, rel := range []string{contract.RepoFile, contract.LocalFallback} {
+		if rel == "" {
+			continue
+		}
+		if path := filepath.Join(projectRoot, rel); isLizaSymlink(path, contractTarget) {
+			return path
+		}
 	}
-	target, err := os.Readlink(path)
-	return err == nil && target == contractTarget
+	return ""
 }
 
 // CheckContractConfigured checks whether a Liza contract symlink exists for the
@@ -97,7 +114,7 @@ func CheckContractConfigured(projectRoot, cliName string) string {
 	if err != nil {
 		return ""
 	}
-	contractTarget := filepath.Join(homeDir, paths.GlobalDirName(), globalContractFileName)
+	contractTarget := globalContractTarget(homeDir)
 
 	// Check repo root
 	if contract.RepoFile != "" {
@@ -280,15 +297,8 @@ func (p *contractPlacer) placementCheck(agent providers.Provider) jsonout.Check 
 	}
 	reason := "it could not be linked; see the warning above"
 	fix := fmt.Sprintf("resolve the warning above, then re-run %s", brand.Command("init"))
-	if info, err := os.Lstat(requested); err == nil && !isLizaSymlink(requested, p.contractTarget) {
-		kind := "file"
-		switch {
-		case info.Mode()&os.ModeSymlink != 0:
-			kind = "symlink"
-		case info.IsDir():
-			kind = "directory"
-		}
-		reason = fmt.Sprintf("it is occupied by a non-%s %s", brand.NameTitle, kind)
+	if state, err := inspectLink(requested, p.contractTarget); err == nil && (state.Status == linkElsewhere || state.Status == linkOccupied) {
+		reason = fmt.Sprintf("it is occupied by a non-%s %s", brand.NameTitle, state.Kind)
 		fix = fmt.Sprintf("move %s aside, then re-run %s", requested, brand.Command("init"))
 	}
 	return contractPlacementCheck.Check(jsonout.CheckFailed, agent.ID, requested,
@@ -497,11 +507,12 @@ func placeLocalContract(projectRoot, contractTarget, name string) error {
 		return err
 	}
 	localPath := filepath.Join(projectRoot, cleaned)
-	if !isLizaSymlink(localPath, contractTarget) {
-		if _, err := os.Lstat(localPath); !os.IsNotExist(err) {
-			if err != nil {
-				return fmt.Errorf("cannot stat %s: %w", localPath, err)
-			}
+	state, err := inspectLink(localPath, contractTarget)
+	if err != nil {
+		return err
+	}
+	if state.Status != linkLinked {
+		if state.Status != linkAbsent {
 			return fmt.Errorf("%s already exists and is not a %s symlink", localPath, brand.NameTitle)
 		}
 		if err := os.MkdirAll(filepath.Dir(localPath), initDirMode); err != nil {

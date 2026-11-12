@@ -162,7 +162,6 @@ func activatePairingProjectRoot(params InitPairingParams, selection pairingSelec
 	var projectRoot string
 	stacklitEnabled := stacklit.RuntimeEnabled()
 	scipEnabled := pairingScipEnabled()
-	functionalClustersEnabled := functionalclusters.RuntimeEnabled()
 	sembleEnabled := semble.RuntimeEnabled()
 	if len(selection.repoRootAgents) > 0 || selection.hasClaude {
 		lizaPaths, err := paths.LizaPathsFromGit()
@@ -182,15 +181,7 @@ func activatePairingProjectRoot(params InitPairingParams, selection pairingSelec
 	}
 
 	if projectRoot != "" && (stacklitEnabled || scipEnabled || sembleEnabled) {
-		if err := activateProjectRootIndexing(pairingindex.ActivationPlanOptions{
-			RepoRoot:                 projectRoot,
-			EnableStacklit:           stacklitEnabled,
-			EnableScip:               scipEnabled,
-			EnableSemble:             sembleEnabled,
-			EnableFunctionalClusters: functionalClustersEnabled,
-			ScipLanguages:            params.ScipSearch,
-			ScipPlanOverrides:        params.ScipSearchPlans,
-		}); err != nil {
+		if err := activateProjectRootIndexing(pairingIndexActivationOptions(projectRoot, params.ScipSearch, params.ScipSearchPlans)); err != nil {
 			return "", err
 		}
 	}
@@ -259,6 +250,21 @@ func (s pairingSelection) installAssets(projectRoot string, rawStdin io.Reader, 
 		if err := embedded.WriteClaudeIgnoreWithOptions(projectRoot, stdin, confirmOptions); err != nil {
 			warnAssetFailure(report, initAssetCheck, "init", ".claudeignore", err)
 		}
+	}
+}
+
+// pairingIndexActivationOptions resolves the process env gates into the
+// repo-root index plan options of a pairing repository. Pairing init installs
+// the hooks with them and doctor checks the hooks against them.
+func pairingIndexActivationOptions(repoRoot string, scipLanguages, scipPlans []string) pairingindex.ActivationPlanOptions {
+	return pairingindex.ActivationPlanOptions{
+		RepoRoot:                 repoRoot,
+		EnableStacklit:           stacklit.RuntimeEnabled(),
+		EnableScip:               pairingScipEnabled(),
+		EnableSemble:             semble.RuntimeEnabled(),
+		EnableFunctionalClusters: functionalclusters.RuntimeEnabled(),
+		ScipLanguages:            scipLanguages,
+		ScipPlanOverrides:        scipPlans,
 	}
 }
 

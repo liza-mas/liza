@@ -32,6 +32,7 @@ config Read and update supported runtime configuration
 defer-provider-dependency Move an unstarted plan's writer-order wait to the outputs it generates
 deferred-validation Operate the deferred-validation batch and its operator rulings
 delete Delete agents or tasks from the state database
+doctor Check what Liza setup and init produced
 get Query and get state data
 get-tasks Query tasks with optional field projection
 handoff Initiate context-exhaustion handoff for a claimed task

@@ -29,7 +29,7 @@ func WriteCodexProjectHooksWithOptions(projectRoot string, reader *bufio.Reader,
 	if reader == nil {
 		reader = bufio.NewReader(os.Stdin)
 	}
-	codexDir := filepath.Join(projectRoot, ".codex")
+	codexDir := codexDir(projectRoot)
 	if err := ensureCodexDir(codexDir); err != nil {
 		return fmt.Errorf("failed to create .codex directory: %w", err)
 	}
@@ -237,7 +237,7 @@ func reconcileCodexHookRegistrations(current, existing map[string]any) {
 // WriteCodexHooks writes embedded hook scripts to .codex/hooks/ in the project
 // root. Always overwrites — hooks are Liza infrastructure, not user-customizable.
 func WriteCodexHooks(projectRoot string) error {
-	hooksDir := filepath.Join(projectRoot, ".codex", "hooks")
+	hooksDir := codexHooksDir(projectRoot)
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .codex/hooks directory: %w", err)
 	}

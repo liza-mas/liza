@@ -207,11 +207,7 @@ type doctorJSONCheck struct {
 func doctorJSON(result toolchain.DoctorResult) doctorJSONResult {
 	out := doctorJSONResult{Profile: result.Profile, Checks: make([]doctorJSONCheck, 0, len(result.Checks))}
 	for _, check := range result.Checks {
-		definition := jsonout.CheckDefinition{ID: "toolchain." + check.ToolID, Severity: jsonout.SeverityWarn}
-		out.Checks = append(out.Checks, doctorJSONCheck{
-			Check:  definition.Check(jsonout.CheckStatus(check.Status), "", check.Path, check.Message, ""),
-			Output: check.Output,
-		})
+		out.Checks = append(out.Checks, doctorJSONCheck{Check: commands.ToolchainOutcomeCheck(check), Output: check.Output})
 	}
 	return out
 }

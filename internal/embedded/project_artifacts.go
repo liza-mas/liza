@@ -58,8 +58,14 @@ func WritePipelineConfig(targetDir string, stdin *bufio.Reader) error {
 	return WritePipelineConfigWithOptions(targetDir, stdin, ConfirmOptions{})
 }
 
+// PipelineConfigPath is where setup writes the pipeline configuration in the
+// global directory targetDir.
+func PipelineConfigPath(targetDir string) string {
+	return filepath.Join(targetDir, "pipeline.yaml")
+}
+
 func WritePipelineConfigWithOptions(targetDir string, stdin *bufio.Reader, opts ConfirmOptions) error {
-	pipelinePath := filepath.Join(targetDir, "pipeline.yaml")
+	pipelinePath := PipelineConfigPath(targetDir)
 	if _, err := os.Stat(pipelinePath); err == nil {
 		if stdin == nil {
 			return nil
@@ -181,18 +187,12 @@ func RenderWorktreePreCommitHook(lizaBin, taskID string) []byte {
 // WriteHooks writes embedded hook scripts to .claude/hooks/ in the project root.
 // Always overwrites — hooks are Liza infrastructure, not user-customizable.
 func WriteHooks(projectRoot string) error {
-	hooksDir := filepath.Join(projectRoot, ".claude", "hooks")
+	hooksDir := claudeHooksDir(projectRoot)
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .claude/hooks directory: %w", err)
 	}
 
-	for name, content := range map[string][]byte{
-		"enforce-init.sh":        enforceInitHookContent,
-		"session-context.sh":     sessionContextHookContent,
-		"git-guard.sh":           gitGuardHookContent,
-		"rtk-guard.sh":           rtkGuardHookContent,
-		"worktree-path-guard.sh": worktreePathGuardHookContent,
-	} {
+	for name, content := range claudeHookContents {
 		hookPath := filepath.Join(hooksDir, name)
 		if err := os.WriteFile(hookPath, renderEmbeddedAsset(content), 0755); err != nil {
 			return fmt.Errorf("failed to write %s: %w", name, err)
@@ -209,7 +209,7 @@ func WriteOpenCodeExecTool(projectRoot string) error {
 	if err := WriteOpenCodeResultPlugin(projectRoot); err != nil {
 		return err
 	}
-	toolPath := filepath.Join(projectRoot, ".opencode", "tools", "exec.ts")
+	toolPath := filepath.Join(projectRoot, openCodeExecToolRel())
 	existing, err := os.ReadFile(toolPath)
 	if err == nil {
 		if !bytes.HasPrefix(existing, []byte(OpenCodeExecToolManagedHeader())) {
