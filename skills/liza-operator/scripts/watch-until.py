@@ -12,8 +12,8 @@ Exits on the first event worth an operator turn and prints one header line
 
 Relaunch it after handling each exit, so the watch lives for the run instead of
 a timer. Every header carries `offset=N`; pass it back as `--from-offset N` so the
-next leg first replays alerts written while the previous exit was handled. Alerts are matched by severity marker rather than by an allow-list of
-alert types, so a new alert type cannot slip through unnoticed.
+next leg first replays alerts written while the previous exit was handled. Alerts are matched by severity marker rather
+than by an allow-list of alert types, so a new alert type cannot slip through unnoticed.
 """
 
 from __future__ import annotations
@@ -108,7 +108,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--poll", type=int, default=20, help="seconds between alerts.log polls")
     parser.add_argument("--probe-every", type=int, default=3, help="CLI state probe every N polls (heavy CLI)")
     parser.add_argument("--noise", action="append", help="substring of alert lines to ignore (repeatable)")
-    parser.add_argument("--from-offset", type=int, help="alerts.log byte offset to start from (a previous exit's offset=N)")
+    parser.add_argument(
+        "--from-offset", type=int, help="alerts.log byte offset to start from (a previous exit's offset=N)"
+    )
     args = parser.parse_args(argv)
     noise = tuple(args.noise) if args.noise else DEFAULT_NOISE
     for line in watch(

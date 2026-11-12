@@ -68,7 +68,16 @@ def run(root: Path, fake: FakeRun, on_sleep: Any = None, tick: int = 1000, from_
             on_sleep()
 
     return wu.watch(
-        root, "cli", tick, 20, 3, wu.DEFAULT_NOISE, run_cli=fake, sleep=sleep, now=lambda: clock["t"], from_offset=from_offset
+        root,
+        "cli",
+        tick,
+        20,
+        3,
+        wu.DEFAULT_NOISE,
+        run_cli=fake,
+        sleep=sleep,
+        now=lambda: clock["t"],
+        from_offset=from_offset,
     )
 
 
