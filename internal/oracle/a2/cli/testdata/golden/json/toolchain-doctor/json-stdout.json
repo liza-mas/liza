@@ -3,117 +3,132 @@
   "result": {
     "checks": [
       {
+        "id": "toolchain.ast-grep",
         "message": "ast-grep not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "ast-grep"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.gh",
         "message": "gh not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "gh"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.jq",
         "message": "jq not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "jq"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.mdq",
         "message": "mdq not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "mdq"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.mdtoc",
         "message": "mdtoc not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "mdtoc"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.pre-commit",
         "message": "pre-commit not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "pre-commit"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.rg",
         "message": "rg not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "rg"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.rtk",
+        "message": "",
         "output": {
           "exit_code": 0,
           "stdout": "oracle fixture 1.0"
         },
         "path": "<BIN>/rtk",
-        "status": "ok",
-        "tool_id": "rtk"
+        "severity": "info",
+        "status": "ok"
       },
       {
+        "id": "toolchain.scip-go",
         "message": "scip-go not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "scip-go"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.scip-python",
         "message": "scip-python not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "scip-python"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.scip-search",
         "message": "scip-search not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "scip-search"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.scip-typescript",
         "message": "scip-typescript not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "scip-typescript"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.stacklit",
         "message": "stacklit not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "stacklit"
+        "severity": "warn",
+        "status": "missing"
       },
       {
+        "id": "toolchain.yq",
         "message": "yq not found on PATH",
         "output": {
           "exit_code": 0
         },
-        "status": "missing",
-        "tool_id": "yq"
+        "severity": "warn",
+        "status": "missing"
       }
     ],
     "profile": "lean"

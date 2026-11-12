@@ -14,6 +14,7 @@ import (
 	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/envgate"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/pipeline"
 	"github.com/liza-mas/liza/internal/projectdetect"
@@ -69,6 +70,7 @@ type InitParams struct {
 	ForceInteractive                bool                      // bypass TTY check (for testing)
 	ContractActions                 map[string]ContractAction // provider-scoped wizard actions keyed by canonical provider ID
 	AutoConfirm                     bool                      // auto-confirm interactive approval prompts
+	Report                          *jsonout.Report           // receives the run's outcome checks (nil = not collected)
 }
 
 // InitCommand initializes a new workspace.
@@ -214,15 +216,18 @@ func bashPolicySubprocessStdin(rawStdin io.Reader, bufferedStdin *bufio.Reader) 
 	return file
 }
 
-func runBashPolicyInits(projectRoot string, providers []string, stdin io.Reader, autoConfirm bool) {
+// runBashPolicyInits initializes the requested bash-policy hooks. A missing
+// tool or a failed hook activation is a warning and an init.asset check: the
+// hooks were requested (bash-policy is opt-in) and are not active.
+func runBashPolicyInits(projectRoot string, providers []string, stdin io.Reader, autoConfirm bool, report *jsonout.Report) {
 	for _, provider := range providers {
-		if runBashPolicyInit(projectRoot, provider, stdin, autoConfirm) == bashpolicycli.StatusMissing {
+		if runBashPolicyInit(projectRoot, provider, stdin, autoConfirm, report) == bashpolicycli.StatusMissing {
 			return
 		}
 	}
 }
 
-func runBashPolicyInit(projectRoot, provider string, stdin io.Reader, autoConfirm bool) bashpolicycli.Status {
+func runBashPolicyInit(projectRoot, provider string, stdin io.Reader, autoConfirm bool, report *jsonout.Report) bashpolicycli.Status {
 	result := bashpolicycli.InitHooks(bashpolicycli.InitHooksOptions{
 		ProjectRoot: projectRoot,
 		Provider:    provider,
@@ -236,8 +241,15 @@ func runBashPolicyInit(projectRoot, provider string, stdin io.Reader, autoConfir
 	switch result.Status {
 	case bashpolicycli.StatusMissing:
 		fmt.Fprintf(os.Stderr, "Warning: bash-policy requested by %s but bash-policy was not found on PATH; run '%s toolchain install --profile full --yes' and source ~/%s/toolchain/env.sh before re-running %s init.\n", bashpolicycli.EnvEnableBashPolicy, brand.BinaryName, brand.GlobalDirName, brand.BinaryName)
+		report.Add(initAssetCheck.Check(jsonout.CheckMissing, provider, "",
+			fmt.Sprintf("bash-policy hooks requested by %s are not active: bash-policy was not found on PATH", bashpolicycli.EnvEnableBashPolicy),
+			fmt.Sprintf("run '%s toolchain install --profile full --yes', source ~/%s/toolchain/env.sh, then re-run %s", brand.BinaryName, brand.GlobalDirName, brand.Command("init"))))
 	case bashpolicycli.StatusFailed:
 		fmt.Fprintf(os.Stderr, "Warning: failed to initialize or activate bash-policy hooks: %s\n", result.Diagnostic())
+		report.Add(initAssetCheck.Check(jsonout.CheckFailed, provider, "",
+			// Not result.Diagnostic(): it embeds the tool's output, which stays on stderr.
+			"failed to initialize or activate bash-policy hooks; see the warning on stderr",
+			fmt.Sprintf("resolve the error, then re-run %s", brand.Command("init"))))
 	}
 	return result.Status
 }

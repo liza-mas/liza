@@ -11,6 +11,7 @@ const (
 	ExitError    = 1  // General error
 	ExitLock     = 2  // Lock timeout
 	ExitNotFound = 3  // Entity or field not found
+	ExitDegraded = 4  // init/setup completed with a check that is not ok (specs/protocols/outcome-checks.md)
 	ExitRestart  = 42 // Agent restart request
 )
 

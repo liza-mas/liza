@@ -51,6 +51,7 @@ Flags:
 --entry-point string entry-point name: "general-objective", "functional-spec", "technical-spec", or legacy "detailed-spec" in default pipeline (default: auto-classified by orchestrator)
 --gemini activate the global Gemini contract from ~/.liza/CORE.md
 -h, --help help for init
+--json output result as structured JSON
 --max-agents int max live agents across all roles, orchestrator included; one slot is held for the orchestrator (default 9)
 --max-instances int default max live agents per non-orchestrator role without its own max-instances; auto-repair scales each role up to it (default 3)
 --mistral set up ~/.vibe/ for Liza contract

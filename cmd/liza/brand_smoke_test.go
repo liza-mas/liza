@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	bashpolicycli "github.com/liza-mas/liza/internal/bash-policy-cli"
 	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/testhelpers"
 )
@@ -30,6 +31,10 @@ func TestMain(m *testing.M) {
 	// every worktree removal here launches the host's real semble binary.
 	// Tests that exercise index activation opt in with t.Setenv.
 	testhelpers.DisableIndexEnvGates()
+	// The same holds for the opt-in bash-policy gate: with it on, init runs the
+	// host's bash-policy, whose prompts fail on test stdin, and init reports a
+	// degraded outcome. Tests that exercise bash-policy opt in with t.Setenv.
+	_ = os.Setenv(bashpolicycli.EnvEnableBashPolicy, "")
 	code := m.Run()
 	restorePreCommit()
 	if nonDefaultBrandBuild.tempDir != "" {

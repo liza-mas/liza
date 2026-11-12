@@ -20,6 +20,7 @@ Flags:
 --force overwrite existing global config
 --gemini create skill symlinks in ~/.gemini/
 -h, --help help for setup
+--json output result as structured JSON
 --mistral create skill symlinks in ~/.vibe/
 --opencode create skill symlinks in ~/.config/opencode/
 --pi create skill symlinks in ~/.pi/agent/ and install the pi init-gate extension

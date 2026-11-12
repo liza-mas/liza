@@ -63,6 +63,7 @@
 | [Circuit Breaker](protocols/circuit-breaker.md) | Systemic failure detection, severity classification |
 | [Worktree Management](protocols/worktree-management.md) | Isolated workspaces, merge protocol |
 | [Agent Initialization](protocols/agent-initialization.md) | Agent bootstrap sequence from prompt to productive work |
+| [Outcome Checks](protocols/outcome-checks.md) | Degraded outcomes of init/setup as checks, severity rule, exit 4 |
 
 ### Implementation
 

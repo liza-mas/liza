@@ -40,6 +40,32 @@ with `--yes` to accept overwrite prompts non-interactively. `--yes` also
 accepts provider symlink replacement prompts. Use `--agent-tools <path>` to
 install a custom `AGENT_TOOLS.md` instead of the embedded default.
 
+When setup cannot create a provider link because a regular file or directory
+holds the path, it warns, goes on, and exits **4** instead of 0. The same
+applies to `init`; see [Outcome checks](#outcome-checks-and-exit-codes).
+
+## Outcome Checks and Exit Codes
+
+`§BRAND_BINARY_NAME§ init` and `§BRAND_BINARY_NAME§ setup` exit 0 when everything requested was
+applied, **4** when they completed but left something not applied (a contract
+active elsewhere than requested, an asset or provider link they could not
+write), and 1 on a hard failure. Warnings stay on stderr.
+
+With `--json`, stdout carries a single JSON envelope whose `result.checks`
+lists one check per item, with `id`, `status` (`ok`, `missing`, `failed`,
+`manual`), `severity`, and, when relevant, `provider`, `path`, `message` and
+`fix`. The human output of the run goes to stderr. `--json` needs a description
+or a provider flag: the interactive wizard has no JSON mode.
+
+```bash
+§BRAND_BINARY_NAME§ init --claude --yes --json
+§BRAND_BINARY_NAME§ setup --yes --claude --json
+```
+
+`toolchain configure --project --agents` reports its activation the same way.
+`toolchain doctor --json` emits the same check shape (`toolchain.<tool-id>`)
+but always exits 0.
+
 ## Update Preferences
 
 Interactive update preferences live in `~/§BRAND_GLOBAL_DIRNAME§/update.json`. Explicit
@@ -81,7 +107,10 @@ fall back to the catalog's local file when supported (for Claude,
 Git status; existing user files are preserved. If any selected provider remains
 inactive, init exits nonzero before deploying new provider hooks/settings and
 leaves existing activation metadata unchanged. Skipping placement succeeds only
-when a supported contract link is already active. Session startup notes that
+when a supported contract link is already active. A contract that ends up active
+somewhere other than the requested location (for example in the repository
+because your own file holds the provider's global path) is a degraded outcome:
+init warns and exits **4**. Session startup notes that
 `~/§BRAND_GLOBAL_DIRNAME§/CORE.md` is already loaded, and the init gate requires
 the other mandatory documents, except for lane sessions whose launcher put the
 contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236).

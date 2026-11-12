@@ -379,6 +379,10 @@ func main() {
 		if errors.As(err, &toolExit) {
 			os.Exit(toolExit.code)
 		}
+		var degraded degradedOutcomeExit
+		if errors.As(err, &degraded) {
+			os.Exit(lizaerrors.ExitDegraded)
+		}
 		if !errors.Is(err, jsonout.ErrAlreadyWritten) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}

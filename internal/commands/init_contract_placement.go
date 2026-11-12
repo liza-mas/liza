@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/worktreeexclude"
@@ -43,12 +44,19 @@ const (
 
 // contractSymlinkOptions carries the conflict resolution for a placement run:
 // DefaultAction applies to every provider that has no ProviderActions entry.
+// Report, when set, receives one contract.placement check per provider.
 type contractSymlinkOptions struct {
 	DefaultAction           ContractAction
 	ProviderActions         map[string]ContractAction
 	PreserveRepoPaths       map[string]bool
 	SilentPreserveRepoPaths map[string]bool
+	Report                  *jsonout.Report
 }
+
+// contractPlacementCheck reports where a provider's contract ended up. A
+// contract active somewhere other than the requested location is a warning:
+// the provider works, but not with the placement the user asked for.
+var contractPlacementCheck = jsonout.CheckDefinition{ID: "contract.placement", Severity: jsonout.SeverityWarn}
 
 // isLizaSymlink returns true if path exists, is a symlink, and points to contractTarget.
 func isLizaSymlink(path, contractTarget string) bool {
@@ -199,7 +207,92 @@ func createContractSymlinksForProviders(projectRoot, contractTarget string, agen
 	if err := p.verifyPlacement(agents); err != nil {
 		return p.repoActivations, err
 	}
+	p.reportPlacement(agents)
 	return p.repoActivations, nil
+}
+
+// reportPlacement adds one contract.placement check per provider, derived
+// from the final placement rather than from the steps that produced it: a
+// step can fail and a later one recover, as when verifyPlacement falls back
+// to the local contract. Every placement path therefore ends in a check.
+func (p *contractPlacer) reportPlacement(agents []providers.Provider) {
+	if p.options.Report == nil {
+		return
+	}
+	for _, agent := range agents {
+		if agent.Setup.Contract.RepoFile == "" {
+			continue
+		}
+		p.options.Report.Add(p.placementCheck(agent))
+	}
+}
+
+// placementCheck compares where the provider's contract is active with the
+// locations its action accepts.
+func (p *contractPlacer) placementCheck(agent providers.Provider) jsonout.Check {
+	contract := agent.Setup.Contract
+	globalPath, globalErr := contract.GlobalPath(p.homeDir)
+	if globalErr != nil {
+		globalPath = ""
+	}
+	actual := ""
+	if rel, ok := p.repoActivations[agent.ID]; ok {
+		actual = filepath.Join(p.projectRoot, rel)
+	} else if globalPath != "" && isLizaSymlink(globalPath, p.contractTarget) {
+		actual = globalPath
+	}
+
+	repoPath := filepath.Join(p.projectRoot, contract.RepoFile)
+	localPath := ""
+	if contract.LocalFallback != "" {
+		localPath = filepath.Join(p.projectRoot, contract.LocalFallback)
+	}
+	requestsGlobal := false
+	var accepted []string
+	switch action := p.actionFor(agent.ID); {
+	case action == ContractActionSkip:
+		accepted = []string{actual}
+	case action == ContractActionRename:
+		accepted = []string{repoPath}
+	case action == ContractActionLocal && localPath != "":
+		accepted = []string{localPath}
+	case action == ContractActionGlobal && !contract.PrefersGlobal():
+		// A conflict resolution: the repo root when free, else the global location.
+		accepted = []string{repoPath, globalPath}
+	case contract.PrefersGlobal() || action == ContractActionGlobal:
+		requestsGlobal = true
+		accepted = []string{globalPath}
+	default:
+		accepted = []string{repoPath}
+	}
+	for _, path := range accepted {
+		if path != "" && path == actual {
+			return contractPlacementCheck.Check(jsonout.CheckOK, agent.ID, actual,
+				fmt.Sprintf("%s contract is active at %s", brand.NameTitle, actual), "")
+		}
+	}
+
+	requested := accepted[0]
+	if requestsGlobal && globalErr != nil {
+		return contractPlacementCheck.Check(jsonout.CheckFailed, agent.ID, "",
+			fmt.Sprintf("%s contract is active at %s; its global location cannot be resolved: %v", brand.NameTitle, actual, globalErr),
+			fmt.Sprintf("fix the provider's global configuration directory, then re-run %s", brand.Command("init")))
+	}
+	reason := "it could not be linked; see the warning above"
+	fix := fmt.Sprintf("resolve the warning above, then re-run %s", brand.Command("init"))
+	if info, err := os.Lstat(requested); err == nil && !isLizaSymlink(requested, p.contractTarget) {
+		kind := "file"
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			kind = "symlink"
+		case info.IsDir():
+			kind = "directory"
+		}
+		reason = fmt.Sprintf("it is occupied by a non-%s %s", brand.NameTitle, kind)
+		fix = fmt.Sprintf("move %s aside, then re-run %s", requested, brand.Command("init"))
+	}
+	return contractPlacementCheck.Check(jsonout.CheckFailed, agent.ID, requested,
+		fmt.Sprintf("%s contract is active at %s, not at %s: %s", brand.NameTitle, actual, requested, reason), fix)
 }
 
 // placeProvider decides where one provider's contract goes: an existing product

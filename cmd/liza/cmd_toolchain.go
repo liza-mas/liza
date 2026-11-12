@@ -58,7 +58,7 @@ var toolchainDoctorCmd = &cobra.Command{
 			ToolID:  toolID,
 		})
 		if isJSON(cmd) {
-			return jsonout.WriteResult(os.Stdout, result, nil, err)
+			return jsonout.WriteResult(os.Stdout, doctorJSON(result), nil, err)
 		}
 		if err != nil {
 			return err
@@ -157,37 +157,89 @@ var toolchainConfigureCmd = &cobra.Command{
 			return err
 		}
 
-		if projectRoot != "" && agentsRaw != "" {
-			applyToolchainEnv(result)
-			if err := runProjectActivation(projectRoot, agents); err != nil {
-				if isJSON(cmd) {
-					return jsonout.WriteResult(os.Stdout, result, nil, err)
-				}
-				return err
+		if projectRoot == "" || agentsRaw == "" {
+			if isJSON(cmd) {
+				return jsonout.WriteResult(os.Stdout, result, nil, nil)
 			}
+			printConfigureResult(cmd, result, projectRoot, agentsRaw)
+			return nil
 		}
 
+		applyToolchainEnv(result)
+		activation := jsonout.NewReport()
 		if isJSON(cmd) {
-			return jsonout.WriteResult(os.Stdout, result, nil, nil)
+			// Pairing init prints human lines to stdout; keep stdout for the envelope.
+			stdout, err := withStdoutToStderr(func() error { return runProjectActivation(projectRoot, agents, activation) })
+			if err != nil {
+				return jsonout.WriteResult(stdout, result, nil, err)
+			}
+			if err := jsonout.WriteResult(stdout, configureActivationResult{ConfigureResult: result, Checks: activation.Checks}, nil, nil); err != nil {
+				return err
+			}
+			if activation.Degraded() {
+				return degradedOutcomeExit{}
+			}
+			return nil
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.ProfilePath)
-		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.EnvPath)
-		fmt.Fprintf(cmd.OutOrStdout(), "Run: source %s\n", shellQuote(result.EnvPath))
-		if result.PowerShellEnvPath != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.PowerShellEnvPath)
-			fmt.Fprintf(cmd.OutOrStdout(), "From PowerShell, run: . \"%s\"\n", result.PowerShellEnvPath)
+		if err := runProjectActivation(projectRoot, agents, activation); err != nil {
+			return err
 		}
-		for _, path := range result.ShellProfilePaths {
-			fmt.Fprintf(cmd.OutOrStdout(), "Updated %s\n", path)
-		}
-		if result.AgentToolsPath != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Checked %s\n", result.AgentToolsPath)
-		}
-		if projectRoot != "" && agentsRaw != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Activated project tools in %s for %s\n", projectRoot, agentsRaw)
-		}
-		return nil
+		printConfigureResult(cmd, result, projectRoot, agentsRaw)
+		return degradedResult(cmd.ErrOrStderr(), "toolchain configure", activation)
 	},
+}
+
+// doctorJSONResult is toolchain doctor's JSON result: each tool as a shared
+// outcome check, id "toolchain.<tool-id>", plus its probe output
+// (specs/protocols/outcome-checks.md). Toolchain tools are optional, so a tool
+// that is not ok is a warning; doctor stays report-only (exit 0) because
+// manual-only tools are never ok by design.
+type doctorJSONResult struct {
+	Profile toolchain.Profile `json:"profile"`
+	Checks  []doctorJSONCheck `json:"checks"`
+}
+
+type doctorJSONCheck struct {
+	jsonout.Check
+	Output toolchain.CommandOutput `json:"output,omitempty"`
+}
+
+func doctorJSON(result toolchain.DoctorResult) doctorJSONResult {
+	out := doctorJSONResult{Profile: result.Profile, Checks: make([]doctorJSONCheck, 0, len(result.Checks))}
+	for _, check := range result.Checks {
+		definition := jsonout.CheckDefinition{ID: "toolchain." + check.ToolID, Severity: jsonout.SeverityWarn}
+		out.Checks = append(out.Checks, doctorJSONCheck{
+			Check:  definition.Check(jsonout.CheckStatus(check.Status), "", check.Path, check.Message, ""),
+			Output: check.Output,
+		})
+	}
+	return out
+}
+
+// configureActivationResult is the configure JSON result when it activated
+// a project: the configuration plus the activation's outcome checks.
+type configureActivationResult struct {
+	toolchain.ConfigureResult
+	Checks []jsonout.Check `json:"checks"`
+}
+
+func printConfigureResult(cmd *cobra.Command, result toolchain.ConfigureResult, projectRoot, agentsRaw string) {
+	fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.ProfilePath)
+	fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.EnvPath)
+	fmt.Fprintf(cmd.OutOrStdout(), "Run: source %s\n", shellQuote(result.EnvPath))
+	if result.PowerShellEnvPath != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", result.PowerShellEnvPath)
+		fmt.Fprintf(cmd.OutOrStdout(), "From PowerShell, run: . \"%s\"\n", result.PowerShellEnvPath)
+	}
+	for _, path := range result.ShellProfilePaths {
+		fmt.Fprintf(cmd.OutOrStdout(), "Updated %s\n", path)
+	}
+	if result.AgentToolsPath != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Checked %s\n", result.AgentToolsPath)
+	}
+	if projectRoot != "" && agentsRaw != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Activated project tools in %s for %s\n", projectRoot, agentsRaw)
+	}
 }
 
 func init() {
@@ -299,7 +351,7 @@ func printInstallResultAndReturn(w io.Writer, result toolchain.InstallResult, er
 	return err
 }
 
-func runProjectActivation(projectRoot string, agents []string) error {
+func runProjectActivation(projectRoot string, agents []string, report *jsonout.Report) error {
 	if len(agents) == 0 {
 		return nil
 	}
@@ -315,6 +367,7 @@ func runProjectActivation(projectRoot string, agents []string) error {
 		Agents:         agents,
 		Stdin:          os.Stdin,
 		ContractAction: commands.ContractActionGlobal,
+		Report:         report,
 	})
 }
 

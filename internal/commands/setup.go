@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
 	"github.com/liza-mas/liza/internal/termutil"
@@ -36,14 +37,15 @@ var retiredSkillNames = []string{
 
 // SetupParams holds all parameters for the setup command.
 type SetupParams struct {
-	TargetDir      string    // target directory (typically the branded global directory)
-	Force          bool      // overwrite existing files
-	AutoConfirm    bool      // auto-confirm interactive approval prompts
-	AgentToolsPath string    // path to custom AGENT_TOOLS.md (empty = use embedded)
-	ProviderIDs    []string  // explicit catalog provider IDs from --provider
-	Agents         []string  // shortcut agent flags to create skill symlinks for (e.g. "claude", "codex", "opencode")
-	HomeDir        string    // home directory override (empty = os.UserHomeDir())
-	Stdin          io.Reader // input for interactive prompts (nil = os.Stdin)
+	TargetDir      string          // target directory (typically the branded global directory)
+	Force          bool            // overwrite existing files
+	AutoConfirm    bool            // auto-confirm interactive approval prompts
+	AgentToolsPath string          // path to custom AGENT_TOOLS.md (empty = use embedded)
+	ProviderIDs    []string        // explicit catalog provider IDs from --provider
+	Agents         []string        // shortcut agent flags to create skill symlinks for (e.g. "claude", "codex", "opencode")
+	HomeDir        string          // home directory override (empty = os.UserHomeDir())
+	Stdin          io.Reader       // input for interactive prompts (nil = os.Stdin)
+	Report         *jsonout.Report // receives the run's outcome checks (nil = not collected)
 }
 
 // setupPreflight holds what setup resolves before it changes anything on disk.
@@ -78,7 +80,7 @@ func SetupCommand(params SetupParams) error {
 	if err != nil {
 		return err
 	}
-	skipFiles, err := confirmOverwrites(preflight.existing, preflight.fresh, params.Force, params.AutoConfirm, params.TargetDir, stdin, preflight.autoSkip)
+	skipFiles, err := confirmOverwrites(preflight.existing, preflight.fresh, params.Force, params.AutoConfirm, params.TargetDir, stdin, preflight.autoSkip, params.Report)
 	if err != nil {
 		return err
 	}
@@ -200,14 +202,14 @@ func writeCustomAgentTools(targetDir string, content []byte) (string, error) {
 // the sources exist) and deploys the pi init-gate extension its run_args reference.
 func installSetupProviders(params SetupParams, homeDir string, selected []providers.Provider, stdin *bufio.Reader) error {
 	if len(selected) > 0 {
-		if err := setupAgentSymlinks(homeDir, params.TargetDir, selected, stdin, params.AutoConfirm); err != nil {
+		if err := setupAgentSymlinks(homeDir, params.TargetDir, selected, stdin, params.AutoConfirm, params.Report); err != nil {
 			return fmt.Errorf("agent symlink setup failed: %w", err)
 		}
 	}
 
 	if providerHasAsset(selected, func(a providers.ActivationAssets) bool { return a.PiExtension }) {
 		if err := embedded.WritePiInitGate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
+			warnAssetFailure(params.Report, setupAssetCheck, "setup", "pi init gate", err)
 		}
 	}
 	return nil
@@ -289,7 +291,7 @@ func partitionByExistence(paths []string) (existing, fresh []string) {
 // Returns the set of files to skip (user-customizable files the user declined to overwrite,
 // plus any auto-skipped files from the autoSkip set).
 // Files in autoSkip are added to skipFiles without prompting (e.g., when replaced by --agent-tools).
-func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, targetDir string, reader *bufio.Reader, autoSkip map[string]bool) (map[string]bool, error) {
+func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, targetDir string, reader *bufio.Reader, autoSkip map[string]bool, report *jsonout.Report) (map[string]bool, error) {
 	skipFiles := make(map[string]bool)
 
 	// Seed with auto-skipped files (no prompt needed).
@@ -348,6 +350,7 @@ func confirmOverwrites(existing, fresh []string, force bool, autoConfirm bool, t
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to read input for %s: %v\n", base, err)
 			skipFiles[p] = true
+			reportGlobalFileKept(report, p)
 			continue
 		}
 		if response != confirmAnswerY {
@@ -426,7 +429,7 @@ func backupFile(src string) error {
 // setupAgentSymlinks creates skill symlinks in each agent's config directory.
 // For each agent, it symlinks every entry in the global skills directory into the agent's
 // skills directory, plus any extra links defined in the agent config.
-func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, reader *bufio.Reader, autoConfirm bool) error {
+func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, reader *bufio.Reader, autoConfirm bool, report *jsonout.Report) error {
 
 	for _, provider := range agents {
 		cfg := provider.Setup
@@ -459,9 +462,11 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, re
 			target := filepath.Join(sourceSkillsDir, entry.Name())
 			linkPath := filepath.Join(skillsDir, entry.Name())
 
-			if err := createSymlinkIdempotent(target, linkPath, reader, false, autoConfirm); err != nil {
+			skipped, err := createSymlinkIdempotent(target, linkPath, reader, false, autoConfirm)
+			if err != nil {
 				return err
 			}
+			reportProviderLinkSkip(report, provider.ID, linkPath, skipped)
 		}
 
 		// Create extra links
@@ -473,9 +478,11 @@ func setupAgentSymlinks(homeDir, lizaDir string, agents []providers.Provider, re
 				return fmt.Errorf("failed to create parent dir for %s: %w", linkPath, err)
 			}
 
-			if err := createSymlinkIdempotent(target, linkPath, reader, false, autoConfirm); err != nil {
+			skipped, err := createSymlinkIdempotent(target, linkPath, reader, false, autoConfirm)
+			if err != nil {
 				return err
 			}
+			reportProviderLinkSkip(report, provider.ID, linkPath, skipped)
 		}
 
 		if err := repairExistingProviderContractSymlink(homeDir, lizaDir, provider); err != nil {
@@ -604,7 +611,10 @@ func removeRetiredSkills(lizaDir, homeDir string, agents []providers.Provider) e
 // If a symlink exists pointing elsewhere, prompts user before replacing.
 // If a regular file/dir exists: when promptRegularFiles is true, prompts to
 // overwrite; when false, warns and skips.
-func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, promptRegularFiles bool, autoConfirm bool) error {
+//
+// skipped is non-empty, and says why, when the link was not created for a
+// reason other than the user declining: the caller reports it as a check.
+func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, promptRegularFiles bool, autoConfirm bool) (skipped string, err error) {
 	fi, err := os.Lstat(linkPath)
 	if err == nil {
 		// Something exists at linkPath
@@ -612,10 +622,10 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 			// It's a symlink — check where it points
 			existing, err := os.Readlink(linkPath)
 			if err != nil {
-				return fmt.Errorf("failed to read symlink %s: %w", linkPath, err)
+				return "", fmt.Errorf("failed to read symlink %s: %w", linkPath, err)
 			}
 			if existing == target {
-				return nil // already correct
+				return "", nil // already correct
 			}
 			// Wrong target — ask before replacing
 			fmt.Fprintf(os.Stderr, "%s → %s (expected %s)\n", linkPath, existing, target)
@@ -627,7 +637,7 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 		} else {
 			// Regular file or directory — warn and skip
 			fmt.Fprintf(os.Stderr, "Warning: %s exists as regular file/dir, skipping symlink\n", linkPath)
-			return nil
+			return "it is occupied by a regular file or directory", nil
 		}
 
 		if autoConfirm {
@@ -636,21 +646,21 @@ func createSymlinkIdempotent(target, linkPath string, reader *bufio.Reader, prom
 			response, err := termutil.ReadSingleKey(reader)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to read input, skipping %s\n", linkPath)
-				return nil
+				return "the replace answer could not be read", nil
 			}
 			if response != confirmAnswerY {
-				return nil
+				return "", nil
 			}
 		}
 		if err := os.Remove(linkPath); err != nil {
-			return fmt.Errorf("failed to remove %s: %w", linkPath, err)
+			return "", fmt.Errorf("failed to remove %s: %w", linkPath, err)
 		}
 	}
 
 	if err := os.Symlink(target, linkPath); err != nil {
-		return fmt.Errorf("failed to create symlink %s → %s: %w\n  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry", linkPath, target, err)
+		return "", fmt.Errorf("failed to create symlink %s → %s: %w\n  On Windows: enable Developer Mode (Settings > System > For developers) or run the shell as Administrator, then retry", linkPath, target, err)
 	}
-	return nil
+	return "", nil
 }
 
 // relDisplay returns a display path using the targetDir as prefix.

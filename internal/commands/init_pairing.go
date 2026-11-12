@@ -13,6 +13,7 @@ import (
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/envgate"
 	"github.com/liza-mas/liza/internal/functionalclusters"
+	"github.com/liza-mas/liza/internal/jsonout"
 	"github.com/liza-mas/liza/internal/pairingindex"
 	"github.com/liza-mas/liza/internal/paths"
 	"github.com/liza-mas/liza/internal/providers"
@@ -30,6 +31,7 @@ type InitPairingParams struct {
 	ContractAction  ContractAction            // default action: "global", "rename", "skip", or ""
 	ContractActions map[string]ContractAction // provider-scoped wizard actions keyed by canonical provider ID
 	AutoConfirm     bool                      // auto-confirm interactive approval prompts
+	Report          *jsonout.Report           // receives the run's outcome checks (nil = not collected)
 }
 
 // pairingSelection is what the selected providers need from a pairing init:
@@ -80,15 +82,16 @@ func InitPairingCommand(params InitPairingParams) error {
 		if err := activateProviderContracts(projectRoot, coreFile, selection.repoRootAgents, catalog, contractSymlinkOptions{
 			DefaultAction:   params.ContractAction,
 			ProviderActions: params.ContractActions,
+			Report:          params.Report,
 		}); err != nil {
 			return fmt.Errorf("activate provider contracts: %w", err)
 		}
 	}
 
-	selection.installAssets(projectRoot, rawStdin, stdin, params.AutoConfirm)
+	selection.installAssets(projectRoot, rawStdin, stdin, params.AutoConfirm, params.Report)
 
 	if selection.hasMistral {
-		if err := setupMistralContract(coreFile, stdin, params.AutoConfirm); err != nil {
+		if err := setupMistralContract(coreFile, stdin, params.AutoConfirm, params.Report); err != nil {
 			return fmt.Errorf("mistral setup failed: %w", err)
 		}
 	}
@@ -195,52 +198,52 @@ func activatePairingProjectRoot(params InitPairingParams, selection pairingSelec
 }
 
 // installAssets writes the settings, hooks and policy files the selected
-// providers activate. Every failure is a warning: the contract links are
-// already placed.
-func (s pairingSelection) installAssets(projectRoot string, rawStdin io.Reader, stdin *bufio.Reader, autoConfirm bool) {
+// providers activate. Every failure is a warning and an init.asset check: the
+// contract links are already placed.
+func (s pairingSelection) installAssets(projectRoot string, rawStdin io.Reader, stdin *bufio.Reader, autoConfirm bool, report *jsonout.Report) {
 	confirmOptions := embedded.ConfirmOptions{AutoConfirm: autoConfirm}
 
 	// Write/merge .claude/settings.json and deploy hooks
 	if s.hasClaude {
 		if err := embedded.WriteClaudeSettingsWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write claude-settings.json: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "claude-settings.json", err)
 		}
 	}
 
 	if s.hasCodex {
 		if err := embedded.WriteCodexProjectPermissionsWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write codex config: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "codex config", err)
 		}
 		if err := embedded.WriteCodexProjectHooksWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write codex hooks: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "codex hooks", err)
 		}
 	}
 
 	bashPolicyProviderNames := bashPolicyProviders(s.hasBashPolicyClaude, s.hasBashPolicyCodex, s.hasCursor)
 	if projectRoot != "" && len(bashPolicyProviderNames) > 0 && bashpolicycli.RuntimeEnabled() {
 		if err := embedded.WriteBashPolicyConfigWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write .bash-policy.yaml: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", ".bash-policy.yaml", err)
 		}
 	}
 
 	bashPolicyStdin := bashPolicySubprocessStdin(rawStdin, stdin)
-	runBashPolicyInits(projectRoot, bashPolicyProviderNames, bashPolicyStdin, autoConfirm)
+	runBashPolicyInits(projectRoot, bashPolicyProviderNames, bashPolicyStdin, autoConfirm, report)
 
 	if s.hasOpenCode {
 		if err := embedded.WriteOpenCodeExecTool(projectRoot); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write opencode exec tool: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "opencode exec tool", err)
 		}
 	}
 
 	if s.hasCopilot && projectRoot != "" {
 		if err := embedded.WriteCopilotProjectHooksWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write copilot hooks: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "copilot hooks", err)
 		}
 	}
 
 	if s.hasPi {
 		if err := embedded.WritePiInitGate(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write pi init gate: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", "pi init gate", err)
 		}
 	}
 
@@ -254,7 +257,7 @@ func (s pairingSelection) installAssets(projectRoot string, rawStdin io.Reader, 
 	// Write .claudeignore template (Claude-specific, non-fatal, prompts if exists)
 	if s.hasClaude {
 		if err := embedded.WriteClaudeIgnoreWithOptions(projectRoot, stdin, confirmOptions); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write .claudeignore: %v\n", err)
+			warnAssetFailure(report, initAssetCheck, "init", ".claudeignore", err)
 		}
 	}
 }
