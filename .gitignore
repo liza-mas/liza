@@ -1,6 +1,6 @@
 # IDE and editor directories
 .idea/
-.claude/
+/.claude/
 .codex/
 .cursor/
 *.iml
