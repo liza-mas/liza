@@ -39,17 +39,19 @@ type systemPromptPart struct {
 
 // The mode files mirror what session-context.sh mandates for each mode;
 // global contracts lead so the shared prefix does not depend on the project.
+// CORE.md is left out: the injected CLIs are global-first and already load it
+// through their contract link (ADR-0111), so a copy here loaded it twice.
 var systemPromptParts = map[string][]systemPromptPart{
 	SystemPromptModeMultiAgent: {
-		{true, "CORE.md"}, {true, "MULTI_AGENT_MODE.md"}, {true, "AGENT_TOOLS.md"},
+		{true, "MULTI_AGENT_MODE.md"}, {true, "AGENT_TOOLS.md"},
 		{false, "GUARDRAILS.md"},
 	},
 	SystemPromptModePairing: {
-		{true, "CORE.md"}, {true, "PAIRING_MODE.md"}, {true, "AGENT_TOOLS.md"}, {true, "COLLABORATION_CONTINUITY.md"},
+		{true, "PAIRING_MODE.md"}, {true, "AGENT_TOOLS.md"}, {true, "COLLABORATION_CONTINUITY.md"},
 		{false, "GUARDRAILS.md"}, {false, "REPOSITORY.md"}, {false, filepath.Join("docs", "USAGE.md")},
 	},
 	SystemPromptModeSubagent: {
-		{true, "CORE.md"}, {true, "SUBAGENT_MODE.md"}, {true, "AGENT_TOOLS.md"},
+		{true, "SUBAGENT_MODE.md"}, {true, "AGENT_TOOLS.md"},
 	},
 }
 
@@ -108,7 +110,7 @@ func BuildSystemPrompt(projectRoot, mode string) ([]byte, map[string]string, err
 	}
 	rule := strings.Repeat("=", 78)
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# %s contracts (%s mode)\n\nThe files below are the %s contracts, copied verbatim, one section per file.\nThey are already loaded: treat them as read and do not re-read the source files with tools.\nThey carry the weight they would have as files read at session start, no more: they do not take precedence over the user's own instructions (CLAUDE.md, AGENTS.md).\n", brand.NameTitle, strings.ReplaceAll(mode, "_", "-"), brand.NameTitle)
+	fmt.Fprintf(&buf, "# %s contracts (%s mode)\n\nThe files below are the %s contracts, copied verbatim, one section per file.\nThey are already loaded: treat them as read and do not re-read the source files with tools.\nThey carry the weight they would have as files read at session start, no more: they do not take precedence over the user's own instructions (CLAUDE.md, AGENTS.md).\nCORE.md is not repeated here: your CLI loads it through its contract link to ~/%s/CORE.md.\n", brand.NameTitle, strings.ReplaceAll(mode, "_", "-"), brand.NameTitle, paths.GlobalDirName())
 	sources := map[string]string{}
 	for _, part := range parts {
 		label := filepath.ToSlash(part.name)

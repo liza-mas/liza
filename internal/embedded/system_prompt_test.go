@@ -54,7 +54,7 @@ func TestBuildSystemPromptIsVerbatimAndDeterministic(t *testing.T) {
 	if string(first) != string(second) {
 		t.Fatal("system prompt bytes differ between builds")
 	}
-	for _, name := range []string{"CORE.md", "MULTI_AGENT_MODE.md", "AGENT_TOOLS.md"} {
+	for _, name := range []string{"MULTI_AGENT_MODE.md", "AGENT_TOOLS.md"} {
 		source, err := contractsFS.ReadFile("contracts/" + name)
 		if err != nil {
 			t.Fatal(err)
@@ -66,10 +66,14 @@ func TestBuildSystemPromptIsVerbatimAndDeterministic(t *testing.T) {
 	if !strings.Contains(string(first), "do not take precedence over the user's own instructions") {
 		t.Error("header lost the contract-weight sentence")
 	}
-	if !strings.Contains(string(first), "project rule") || len(sources) != 4 {
+	// The provider's contract link already loads CORE.md (ADR-0111); a copy here loads it twice.
+	if !strings.Contains(string(first), "CORE.md is not repeated here") {
+		t.Error("header does not say where CORE.md comes from")
+	}
+	if !strings.Contains(string(first), "project rule") || len(sources) != 3 {
 		t.Errorf("GUARDRAILS.md missing or wrong source count %d", len(sources))
 	}
-	for _, unwanted := range []string{brand.MetadataKey("build_date"), root, os.Getenv("HOME"), "Source: ~/" + paths.GlobalDirName() + "/PAIRING_MODE.md"} {
+	for _, unwanted := range []string{brand.MetadataKey("build_date"), root, os.Getenv("HOME"), "Source: ~/" + paths.GlobalDirName() + "/PAIRING_MODE.md", "Source: ~/" + paths.GlobalDirName() + "/CORE.md"} {
 		if strings.Contains(string(first), unwanted) {
 			t.Errorf("multi_agent prompt contains variable or foreign content %q", unwanted)
 		}
@@ -78,7 +82,7 @@ func TestBuildSystemPromptIsVerbatimAndDeterministic(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "GUARDRAILS.md")); err != nil {
 		t.Fatal(err)
 	}
-	if _, sources, err = BuildSystemPrompt(root, SystemPromptModeMultiAgent); err != nil || len(sources) != 3 {
+	if _, sources, err = BuildSystemPrompt(root, SystemPromptModeMultiAgent); err != nil || len(sources) != 2 {
 		t.Fatalf("absent GUARDRAILS.md must be skipped: sources=%d err=%v", len(sources), err)
 	}
 }
@@ -86,7 +90,7 @@ func TestBuildSystemPromptIsVerbatimAndDeterministic(t *testing.T) {
 func TestBuildSystemPromptFailsWithoutInstalledContracts(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	if _, _, err := BuildSystemPrompt(t.TempDir(), SystemPromptModeMultiAgent); err == nil {
-		t.Fatal("expected an error when CORE.md is not installed")
+		t.Fatal("expected an error when the contracts are not installed")
 	}
 }
 

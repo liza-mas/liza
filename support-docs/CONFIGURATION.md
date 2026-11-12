@@ -110,10 +110,13 @@ leaves existing activation metadata unchanged. Skipping placement succeeds only
 when a supported contract link is already active. A contract that ends up active
 somewhere other than the requested location (for example in the repository
 because your own file holds the provider's global path) is a degraded outcome:
-init warns and exits **4**. Session startup notes that
-`~/§BRAND_GLOBAL_DIRNAME§/CORE.md` is already loaded, and the init gate requires
+init warns and exits **4**. Session startup checks that the CLI's contract
+file links to `~/§BRAND_GLOBAL_DIRNAME§/CORE.md`. When it does, startup notes
+that CORE.md is already loaded; when it does not, or the check cannot run, the
+agent is told to read it and the init gate requires that read. The gate requires
 the other mandatory documents, except for lane sessions whose launcher put the
-contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236).
+contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236),
+which need only the CORE.md read.
 
 Depending on selected providers and options, `§BRAND_BINARY_NAME§ init` writes or updates:
 

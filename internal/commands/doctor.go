@@ -367,12 +367,7 @@ func readWorkspaceState(projectRoot string) workspaceState {
 
 func (d doctorRun) repoContractCheck(projectRoot, contractTarget string, provider providers.Provider) jsonout.Check {
 	contract := provider.Setup.Contract
-	active := activeProjectContract(projectRoot, contractTarget, contract)
-	if active == "" && contract.GlobalFallback != "" {
-		if globalPath, err := contract.GlobalPath(d.homeDir); err == nil && isLizaSymlink(globalPath, contractTarget) {
-			active = globalPath
-		}
-	}
+	active := activeContract(d.homeDir, projectRoot, contractTarget, contract)
 	if active != "" {
 		return doctorRepoContractCheck.Check(jsonout.CheckOK, provider.ID, active,
 			fmt.Sprintf("%s contract is active at %s", brand.NameTitle, active), "")

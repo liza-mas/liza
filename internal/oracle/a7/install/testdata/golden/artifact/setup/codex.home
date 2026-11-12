@@ -165,7 +165,7 @@
 + .liza/skills/white-box-red-testing/scripts/discover_targets.py file 0644 4ccfb3e121d97ba6c2e81fd24c165b7936e0fd1f310af4efe6593da07f3a875c
 + .liza/support-docs directory 0755 -
 + .liza/support-docs/ADVERSARIAL_PAIRING.md file 0644 6fc80354a339102286398b0feeb2b5b0f790bb103b122ee5e75482cf2b9f7770
-+ .liza/support-docs/CONFIGURATION.md file 0644 7ac7f2bb726763a5029c7a9a5ce377a2f0fa2a4ad5779b1427a156acf3953c86
++ .liza/support-docs/CONFIGURATION.md file 0644 b5c175774144def896a5116e7b97857c698a6ca6bb71b98980fba675efec5848
 + .liza/support-docs/CUSTOMIZING_AGENT_TOOLS.md file 0644 94ce9753f1cc06de37f3beee23bfd2535e6c2319e20eb12aac395d8cd824389d
 + .liza/support-docs/SUPPORT.md file 0644 0b2991c234cc91551b2d1e4633374651f3f0caf9a53c8476a88666b89645698b
 + .liza/support-docs/TOOLCHAIN.md file 0644 8a813563149821ecb9bf827c99ac881d60ea093f9db0064ca2b74e5f78edf161

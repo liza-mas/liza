@@ -8,7 +8,8 @@
 #   - GUARDRAILS.md (or verified absent)
 #   - One mode contract from the Mode Selection Gate
 #   - Pairing only: existing REPOSITORY.md/docs/USAGE.md, ~/__BRAND_GLOBAL_DIRNAME__/COLLABORATION_CONTINUITY.md
-# CORE.md is accepted but not required: providers load it as system prompt.
+# CORE.md is required only when the CLI running this hook does not load it
+# through its contract link (DEV-954); otherwise it is accepted, not required.
 #
 # No external dependencies (no jq, no sed -i). Portable across Linux, macOS,
 # and Windows under Git Bash.
@@ -16,11 +17,9 @@
 input=$(cat)
 
 # The launcher sets this only when it put the contracts in the system prompt
-# (`__BRAND_BINARY_NAME__ use-system-prompt`): the reads this gate forces are done.
+# (`__BRAND_BINARY_NAME__ use-system-prompt`): the reads this gate forces are done,
+# except CORE.md, which the built files leave to the CLI's contract link.
 brand_system_prompt_contracts_var="__BRAND_ENV_PREFIX__""_SYSTEM_PROMPT_CONTRACTS"
-if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
-  exit 0
-fi
 
 # Extract a top-level JSON string value without jq, preserving escaped quotes.
 json_val() {
@@ -157,6 +156,53 @@ if [[ -f "$STATE_DIR/CLEARED" ]]; then
   exit 0
 fi
 
+# The hooks are installed once per CLI; the directory names the one running.
+hook_provider() {
+  case "$(basename "$(dirname "$(dirname "$0")")")" in
+    .claude) printf 'claude' ;;
+    .codex) printf 'codex' ;;
+    .copilot) printf 'copilot' ;;
+  esac
+}
+
+# Succeeds when the CLI running this hook loads CORE.md through its contract
+# link. A hook outside a CLI's hook directory was not installed for one and
+# checks nothing. An installed one that cannot confirm the link (no binary, an
+# error, unexpected output) counts it as not loaded: a duplicate read costs
+# less than a session without CORE.
+core_link_loaded() {
+  local provider probe
+  provider=$(hook_provider)
+  [[ -z "$provider" ]] && return 0
+  probe=$(__BRAND_BINARY_NAME__ contract-active --provider "$provider" --project-root "$probe_root" 2>/dev/null) || return 1
+  [[ "$probe" == "active "* ]]
+}
+
+# The probe resolves the checkout as session-context.sh does: a MAS session
+# runs in its task worktree while CLAUDE_PROJECT_DIR may still name the parent.
+probe_root="$project_dir"
+brand_agent_id_var="__BRAND_ENV_PREFIX__""_AGENT_ID"
+if [[ -n "${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}" ]]; then
+  if [[ -n "$cwd" ]]; then
+    probe_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$cwd")
+  else
+    probe_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  fi
+fi
+
+# One probe per session, whatever its outcome.
+if [[ ! -f "$STATE_DIR/CORE.checked" ]]; then
+  core_link_loaded || touch "$STATE_DIR/CORE.required"
+  touch "$STATE_DIR/CORE.checked"
+fi
+
+if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
+  [[ -f "$STATE_DIR/CORE.required" ]] || exit 0
+  # Everything but CORE.md is in the system prompt: only its read remains.
+  touch "$STATE_DIR/AGENT_TOOLS.done" "$STATE_DIR/MODE.done" "$STATE_DIR/GUARDRAILS.done" \
+    "$STATE_DIR/REPOSITORY.done" "$STATE_DIR/USAGE.done" "$STATE_DIR/COLLABORATION_CONTINUITY.done"
+fi
+
 mark_absent_project_docs_if_needed() {
   if [[ ! -f "$STATE_DIR/GUARDRAILS.done" ]] && \
      [[ ! -f "$project_dir/GUARDRAILS.md" ]]; then
@@ -190,6 +236,10 @@ requires_pairing_companion_docs() {
 
 clear_if_ready() {
   mark_absent_project_docs_if_needed
+
+  if [[ -f "$STATE_DIR/CORE.required" ]] && [[ ! -f "$STATE_DIR/CORE.done" ]]; then
+    return 0
+  fi
 
   if [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] || \
      [[ ! -f "$STATE_DIR/MODE.done" ]] || \
@@ -232,7 +282,7 @@ mark_session_init_doc_path() {
   is_session_init_doc_path "$file_path" || return 1
   base=$(basename "$file_path")
   case "$base" in
-    CORE.md)          ;;
+    CORE.md)          touch "$STATE_DIR/CORE.done" ;;
     AGENT_TOOLS.md)   touch "$STATE_DIR/AGENT_TOOLS.done" ;;
     PAIRING_MODE.md)  touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_PAIRING.done" ;;
     MULTI_AGENT_MODE.md)
@@ -399,6 +449,8 @@ is_safe_guardrails_probe_wrapper() {
 collect_missing_init_docs() {
   mark_absent_project_docs_if_needed
   missing=""
+  [[ -f "$STATE_DIR/CORE.required" ]] && [[ ! -f "$STATE_DIR/CORE.done" ]] && missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/CORE.md (your CLI does not load it through its contract link)"
   [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
   - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
   [[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing

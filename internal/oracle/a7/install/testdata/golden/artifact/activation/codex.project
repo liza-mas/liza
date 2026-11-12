@@ -2,7 +2,7 @@
 + .codex/config.toml file 0644 d37497c3278121598a663564ab38b53f658969717f78decb661ddd11c66551ea
 + .codex/hooks directory 0755 -
 + .codex/hooks.json file 0644 373e28dfa636ed8277eca5cef8b80845533e31e82f1efdcdb6b7ff0ffda4872a
-+ .codex/hooks/enforce-init.sh file 0755 091d1646d1916505e2c0be2015a95a2ef9dd56cdbcbccb9ec5fd8d95ef561d6b
++ .codex/hooks/enforce-init.sh file 0755 72772bbb39f4c50ed69c346fa5de70f6c97ed00364e3b36fae8c179dd8f1b377
 + .codex/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
-+ .codex/hooks/session-context.sh file 0755 1ab908249b62f30bdd826e5eedcb6b08110a77ae12236659e899034e9dcd5537
++ .codex/hooks/session-context.sh file 0755 fb9c83473ff3189214ca6d2fff955ce602681381c47ef8b95f5d252af5cd832a
 + .codex/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393

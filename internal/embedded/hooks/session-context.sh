@@ -199,6 +199,33 @@ if is_windows_shell; then
   project_dir="${project_dir//\\//}"
 fi
 
+# The hooks are installed once per CLI; the directory names the one running.
+hook_provider() {
+  case "$(basename "$(dirname "$(dirname "$0")")")" in
+    .claude) printf 'claude' ;;
+    .codex) printf 'codex' ;;
+    .copilot) printf 'copilot' ;;
+  esac
+}
+
+# Succeeds when the CLI running this hook loads CORE.md through its contract
+# link (DEV-954). A hook outside a CLI's hook directory was not installed for
+# one and checks nothing. An installed one that cannot confirm the link (no
+# binary, an error, unexpected output) counts it as not loaded, as the init
+# gate does.
+core_link_loaded() {
+  local provider probe
+  provider=$(hook_provider)
+  [[ -z "$provider" ]] && return 0
+  probe=$(__BRAND_BINARY_NAME__ contract-active --provider "$provider" --project-root "$project_dir" 2>/dev/null) || return 1
+  [[ "$probe" == "active "* ]]
+}
+
+core_read_instruction=""
+if ! core_link_loaded; then
+  core_read_instruction="~/__BRAND_GLOBAL_DIRNAME__/CORE.md is NOT loaded: your CLI's contract file does not link to it. MANDATORY: Read ~/__BRAND_GLOBAL_DIRNAME__/CORE.md fully before anything else. "
+fi
+
 brand_system_prompt_contracts_var="__BRAND_ENV_PREFIX__""_SYSTEM_PROMPT_CONTRACTS"
 # Set by the launcher (or a pairing user) only when the contracts were injected
 # into the system prompt (`__BRAND_BINARY_NAME__ use-system-prompt`); reading them again would waste the cache.
@@ -208,8 +235,18 @@ if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
   else
     context="The __BRAND_NAME_TITLE__ contracts (CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md, REPOSITORY.md, docs/USAGE.md) are in your system prompt. Treat them as read; do not re-read those files."
   fi
+  if [[ -n "$core_read_instruction" ]]; then
+    # The built files leave CORE.md to the contract link, which is not there.
+    context="${core_read_instruction}The other __BRAND_NAME_TITLE__ contracts are in your system prompt. Treat them as read; do not re-read those files."
+  fi
 else
-context="~/__BRAND_GLOBAL_DIRNAME__/CORE.md is already in your system prompt; do not re-read it at session start. MANDATORY: Read the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
+if [[ -n "$core_read_instruction" ]]; then
+  context="$core_read_instruction"
+else
+  context="~/__BRAND_GLOBAL_DIRNAME__/CORE.md is already in your system prompt; do not re-read it at session start. "
+fi
+context+="MANDATORY: Read the documents listed as required. DO NOT fake reads. DO read them FULLY, one tool call at a time in the required order. DO NOT batch or parallelize reads. Complete the initialization sequence before doing ANYTHING else. User prompt is not a replacement and should be considered only after the init sequence is complete. "
+[[ -n "$core_read_instruction" ]] && context+="~/__BRAND_GLOBAL_DIRNAME__/CORE.md, "
 if [[ -n "$agent_id_value" ]]; then
   context+="~/__BRAND_GLOBAL_DIRNAME__/MULTI_AGENT_MODE.md"
 else

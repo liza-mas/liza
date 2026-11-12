@@ -263,7 +263,8 @@ fails with a clear error past the 128 KiB Linux argument limit (keep
 `developer_instructions` from your Codex config for those sessions.
 
 **What the command writes.** `.liza/system-prompts/{multi_agent,pairing,subagent}.md`,
-built verbatim from the installed contracts and the project `GUARDRAILS.md`
+built verbatim from the installed contracts (except `CORE.md`, which your CLI
+already loads through its contract link) and the project `GUARDRAILS.md`
 (plus `REPOSITORY.md`/`docs/USAGE.md` for pairing), and the marker
 `.liza/system-prompt-mode.json`. It does not edit `.claude/settings.json` or
 `.codex/hooks.json`; it refreshes installed `enforce-init.sh`/`session-context.sh`

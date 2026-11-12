@@ -109,7 +109,7 @@ func TestResolveLaunchPlanSkipsSystemPromptContracts(t *testing.T) {
 func TestResolveLaunchPlanFailsWhenContractsMissing(t *testing.T) {
 	root := systemPromptModeProject(t, true)
 	globalDir, _ := paths.GlobalLizaDir()
-	if err := os.Remove(filepath.Join(globalDir, "CORE.md")); err != nil {
+	if err := os.Remove(filepath.Join(globalDir, "MULTI_AGENT_MODE.md")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "claude", ProjectRoot: root, AgentID: "coder-1"}); err == nil {

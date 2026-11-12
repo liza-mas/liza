@@ -158,3 +158,26 @@ read stays an accepted initialization read for post-compaction recovery.
 Accepted risk: a link removed or retargeted after init lets a session clear the
 gate without the contract. The gate observes reads, not the system prompt, so it
 could not detect this reliably either way.
+
+## Amendment (2026-11-13): the session hooks check the CORE link (DEV-954)
+
+The 2026-10-30 amendment let a session clear the gate without CORE when its link
+was removed or retargeted after init. Since ADR-0236's built files leave CORE.md
+out, an injected session had no other copy either. At session start
+`session-context.sh` and `enforce-init.sh` now ask the hidden, read-only command
+`contract-active --provider <cli> --project-root <repo>` whether the CLI running
+them loads CORE.md: its repo or local link, else its global link, resolved as
+doctor resolves it from the cached or embedded catalog, and pointing at a CORE.md
+that exists as a regular file. The hook directory names the CLI (`.claude`,
+`.codex`, `.copilot`); a hook found anywhere else checks nothing.
+
+When the CLI does not load CORE.md, the agent is told to read it and the gate
+requires that read, in injected sessions too, which need only that read. An
+installed hook that cannot confirm the link (no engine, an error, unexpected
+output) treats it as not loaded: a duplicate read costs less than a session
+without CORE. The gate probes once per session and caches the outcome.
+
+Still accepted: a session with no Liza hooks (plain `claude` outside an
+initialized repository, a CLI without hook support) is checked only by a manual
+`liza doctor`. Doctor's own `doctor.global-contract` check still counts a link
+to a missing CORE.md as active.

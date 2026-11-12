@@ -1563,3 +1563,19 @@ owned by the external tool and opt-in. Mistral has no repo contract file. The te
 - A report of stale indexes from present-but-drifted hooks in a pairing repository.
 - A support case where a stale global file after an upgrade went unreported.
 - A support case where missing Mistral or bash-policy activation went unreported.
+
+## Doctor counts a contract link to a missing CORE.md as active
+
+**What:** `doctor.global-contract` and `doctor.repo-contract` compare a link's
+text with the CORE.md path (`inspectLink`). A link whose target is missing, or
+is a directory, reports ok although the CLI loads nothing. The session-start
+probe `contract-active` (DEV-954) checks the target; doctor does not.
+
+**Why deferred:** DEV-954 item 2 fixes the session-start check, which runs in
+every hooked session; changing doctor's report is a separate behavior change
+for `liza doctor --json` consumers. Doctor's file check `doctor.global-file`
+already reports a missing CORE.md, so the gap shows up there.
+
+**Payback trigger:**
+- A report where doctor passed the contract checks while CORE.md was missing.
+- The next change to `checkGlobalContract` or `repoContractCheck`.

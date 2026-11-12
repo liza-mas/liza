@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/liza-mas/liza/internal/agent"
+	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/functionalclusters"
 	"github.com/liza-mas/liza/internal/models"
@@ -86,13 +87,23 @@ func runSessionStartContextHook(t *testing.T, projectDir string) string {
 	cmd := exec.Command("bash", hookPath)
 	cmd.Dir = projectDir
 	cmd.Stdin = strings.NewReader(string(payload))
-	cmd.Env = sessionStartEnv(projectDir)
+	cmd.Env = append(sessionStartEnv(projectDir), "PATH="+activeContractProbeDir(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("session-context.sh failed: %v\n%s", err, string(out))
 	}
 	return string(out)
+}
+
+// activeContractProbeDir holds a stub engine whose contract-active answers
+// "active", as the real one does after InitPairingCommand links the contract:
+// the hook must not depend on whichever engine the host has installed (DEV-954).
+func activeContractProbeDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	testhelpers.WriteShellStub(t, filepath.Join(dir, brand.BinaryName), "#!/bin/sh\n[ \"$1\" = contract-active ] && { echo 'active stub'; exit 0; }\nexit 1\n")
+	return dir
 }
 
 func renderedSessionContextHookPath(t *testing.T) string {

@@ -65,3 +65,18 @@ form a prefix that is the same for every agent.
   (ADR-0111), CORE.md is in context twice, as it already was with the forced
   reads. Dropping it from the built file in that case has not been measured.
 - Rollback: `use-system-prompt --revert`.
+
+## Amendment (2026-11-13): CORE.md left out of the built files (DEV-954)
+
+The built files no longer include CORE.md, and their header says the CLI
+loads it through its contract link. Both injected CLIs are global-first
+(ADR-0111), so the copy put CORE in context twice, about 39 KB. It could also
+disagree with the link: a `pairing.md` that was not rebuilt kept an older CORE
+than `~/.liza/CORE.md`, so two versions of the rules were in force at once.
+
+Accepted risk: a link removed or retargeted after init now leaves an injected
+session without CORE, the risk ADR-0111's 2026-10-30 amendment already accepts
+for forced-read sessions. The session hooks now check the link, injected sessions
+included (ADR-0111, 2026-11-13 amendment). Not measured: CORE now reaches
+injected sessions through the provider's instruction file, as it does for
+forced-read sessions, rather than through the system prompt measured above.
