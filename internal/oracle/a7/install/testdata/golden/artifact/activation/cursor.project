@@ -3,7 +3,7 @@
 + .claude/hooks/enforce-init.sh file 0755 8f1d568597f5bd0c915535fdc12fc49bcc768ea744e84db8c016852140fe84ab
 + .claude/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
 + .claude/hooks/rtk-guard.sh file 0755 602000939876fb901511e44636c0320d20540eb1e5a69a7c5f4309f8a42bbcd4
-+ .claude/hooks/session-context.sh file 0755 84c8922b5ea481aa3ce7c090250a9ff94de1f385390107efff8ce1df4bc2acac
++ .claude/hooks/session-context.sh file 0755 b753ba74bf700b3d8ef52e73c0e9b09248fd709d7d8375c75106e9f48dd21be2
 + .claude/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393
 + .claude/settings.json file 0644 1f6c14f7cdc8b3181160ff46ea267856e4c8700eaa7c58e55fbe3ad8d98a88f6
 + .claudeignore file 0644 b092f9f9b1817e1d963094f4807d14c1e1eaf4e5d0e507f2fdf50ecb095ac8a2
@@ -13,6 +13,6 @@
 + .codex/hooks.json file 0644 373e28dfa636ed8277eca5cef8b80845533e31e82f1efdcdb6b7ff0ffda4872a
 + .codex/hooks/enforce-init.sh file 0755 8f1d568597f5bd0c915535fdc12fc49bcc768ea744e84db8c016852140fe84ab
 + .codex/hooks/git-guard.sh file 0755 75c191c972e3305b300f4d23571499127b29cb7ce9f807102953f3b80525bf6a
-+ .codex/hooks/session-context.sh file 0755 84c8922b5ea481aa3ce7c090250a9ff94de1f385390107efff8ce1df4bc2acac
++ .codex/hooks/session-context.sh file 0755 b753ba74bf700b3d8ef52e73c0e9b09248fd709d7d8375c75106e9f48dd21be2
 + .codex/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393
 + AGENTS.md symlink 0777 <HOME>/.liza/CORE.md

@@ -254,6 +254,52 @@ func TestSessionContextHookSystemPromptContracts(t *testing.T) {
 	}
 }
 
+// The built files skip absent project documents, so the injected-contracts
+// note must name only those present (DEV-951).
+func TestSessionContextHookInjectedClaimNamesExistingDocs(t *testing.T) {
+	hook := writeSessionContextHook(t)
+	agent := brand.EnvName("AGENT_ID") + "=coder-1"
+	injected := brand.EnvName("SYSTEM_PROMPT_CONTRACTS") + "=1"
+	for _, tc := range []struct {
+		name    string
+		env     []string
+		docs    bool
+		present []string
+		absent  []string
+	}{
+		{"pairing without project docs", []string{injected}, false,
+			[]string{"CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md)"},
+			[]string{"GUARDRAILS.md", "REPOSITORY.md", "docs/USAGE.md"}},
+		{"pairing with project docs", []string{injected}, true,
+			[]string{"CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md, REPOSITORY.md, docs/USAGE.md)"},
+			nil},
+		{"multi-agent without project docs", []string{agent, injected}, false,
+			[]string{"CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md)"},
+			[]string{"GUARDRAILS.md"}},
+		{"multi-agent with project docs", []string{agent, injected}, true,
+			[]string{"CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md, GUARDRAILS.md)"},
+			[]string{"REPOSITORY.md", "docs/USAGE.md"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tc.docs {
+				writePairingProjectDocs(t, root)
+			}
+			context := sessionStartAdditionalContext(t, runSessionContextHook(t, hook, sessionStartPayload(t, root), tc.env, 0))
+			for _, want := range tc.present {
+				if !strings.Contains(context, want) {
+					t.Errorf("context lacks %q:\n%s", want, context)
+				}
+			}
+			for _, unwanted := range tc.absent {
+				if strings.Contains(context, unwanted) {
+					t.Errorf("context names %q, which the project lacks or the mode does not carry:\n%s", unwanted, context)
+				}
+			}
+		})
+	}
+}
+
 // A subagent does not inherit the lane's system prompt, so its own file must
 // carry the project rules (DEV-954).
 func TestSubagentSystemPromptCarriesGuardrails(t *testing.T) {

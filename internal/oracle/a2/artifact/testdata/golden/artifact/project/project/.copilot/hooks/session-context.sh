@@ -250,10 +250,17 @@ brand_system_prompt_contracts_var="LIZA""_SYSTEM_PROMPT_CONTRACTS"
 # into the system prompt (`liza use-system-prompt`); reading them again would waste the cache.
 if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
   if [[ -n "$agent_id_value" ]]; then
-    context="The Liza contracts (CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md, GUARDRAILS.md) are in your system prompt. Treat them as read; do not re-read those files."
+    injected_docs="CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md"
   else
-    context="The Liza contracts (CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md, REPOSITORY.md, docs/USAGE.md) are in your system prompt. Treat them as read; do not re-read those files."
+    injected_docs="CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md"
   fi
+  # The built files skip absent project documents: name only those present.
+  [[ -f "$project_dir/GUARDRAILS.md" ]] && injected_docs+=", GUARDRAILS.md"
+  if [[ -z "$agent_id_value" ]]; then
+    [[ -f "$project_dir/REPOSITORY.md" ]] && injected_docs+=", REPOSITORY.md"
+    [[ -f "$project_dir/docs/USAGE.md" ]] && injected_docs+=", docs/USAGE.md"
+  fi
+  context="The Liza contracts ($injected_docs) are in your system prompt. Treat them as read; do not re-read those files."
   if [[ -n "$core_read_instruction" ]]; then
     # The built files leave CORE.md to the contract link, which is not there.
     context="${core_read_instruction}The other Liza contracts are in your system prompt. Treat them as read; do not re-read those files."
