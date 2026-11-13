@@ -47,10 +47,13 @@ func SystemPromptContractsApply(projectRoot, agentID, cliName string, config mod
 //
 // claude appends to its default system prompt (keeping its tool instructions)
 // and moves cwd/env/git status out of it so the prefix is identical across agents.
+// Its subagents do not inherit that prompt, so a -p run gives them subagent.md
+// through their own flag (DEV-954); forks reuse the parent prompt instead.
 // codex gets an additive developer message; a -c before the subcommand is a
 // root-level override, the same place model flags go.
 // write is false for an explanation: the file is built in memory, not refreshed.
-func injectSystemPromptArgs(args []string, provider, projectRoot string, write bool) ([]string, error) {
+// subagents adds claude's subagent file.
+func injectSystemPromptArgs(args []string, provider, projectRoot string, write, subagents bool) ([]string, error) {
 	mode := embedded.SystemPromptModeMultiAgent
 	path, content, err := embedded.SystemPromptFilePath(projectRoot, mode), []byte(nil), error(nil)
 	if write {
@@ -62,7 +65,19 @@ func injectSystemPromptArgs(args []string, provider, projectRoot string, write b
 		return nil, err
 	}
 	if provider == "claude" {
-		return append(args, "--append-system-prompt-file", path, "--exclude-dynamic-system-prompt-sections"), nil
+		args = append(args, "--append-system-prompt-file", path, "--exclude-dynamic-system-prompt-sections")
+		if !subagents {
+			return args, nil
+		}
+		subagentPath := embedded.SystemPromptFilePath(projectRoot, embedded.SystemPromptModeSubagent)
+		if write {
+			if subagentPath, _, err = embedded.EnsureSystemPromptFile(projectRoot, embedded.SystemPromptModeSubagent); err != nil {
+				return nil, err
+			}
+		} else if _, _, err = embedded.BuildSystemPrompt(projectRoot, embedded.SystemPromptModeSubagent); err != nil {
+			return nil, err
+		}
+		return append(args, "--append-subagent-system-prompt-file", subagentPath), nil
 	}
 	// Codex has no file key that adds instructions (model_instructions_file
 	// replaces its own), so the contracts travel as one argv string.

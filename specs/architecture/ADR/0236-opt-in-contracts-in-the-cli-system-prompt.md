@@ -80,3 +80,15 @@ for forced-read sessions. The session hooks now check the link, injected session
 included (ADR-0111, 2026-11-13 amendment). Not measured: CORE now reaches
 injected sessions through the provider's instruction file, as it does for
 forced-read sessions, rather than through the system prompt measured above.
+
+## Amendment (2026-11-13): subagent.md reaches Claude lane subagents (DEV-954)
+
+`subagent.md` was built but no launch used it. It now also carries the project
+GUARDRAILS.md, which a subagent does not get from its lane's prompt. A headless
+(`-p`) Claude lane with injected contracts passes
+`--append-subagent-system-prompt-file` with `subagent.md`, refreshed at launch
+like `multi_agent.md`, and sets `LIZA_SUBAGENT_SYSTEM_PROMPT_CONTRACTS=1`,
+which every other launch, interactive ones included, removes.
+The flag is hidden from `claude --help`; a release that drops it fails the
+launch visibly. Forks reuse the parent's prompt and keep the reads (ADR-0015,
+2026-11-13 amendment).

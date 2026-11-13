@@ -92,6 +92,9 @@ type LaunchPlan struct {
 	ACPXEventMode        string
 	// SystemPromptContracts: Args inject the contracts (use-system-prompt mode).
 	SystemPromptContracts bool
+	// SubagentSystemPromptContracts: Args also give the CLI's subagents the
+	// subagent contracts (claude only).
+	SubagentSystemPromptContracts bool
 }
 
 type LaunchPlanRequest struct {
@@ -238,9 +241,11 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 	if err != nil {
 		return LaunchPlan{}, err
 	}
-	systemPromptContracts := false
+	systemPromptContracts, subagentSystemPromptContracts := false, false
 	if provider := systemPromptProvider(req.ProjectRoot, req.AgentID, toolName, tool); provider != "" {
-		args, err = injectSystemPromptArgs(args, provider, req.ProjectRoot, !req.Explain)
+		// Claude documents --append-subagent-system-prompt-file for -p runs only.
+		subagentSystemPromptContracts = provider == "claude" && !req.Interactive
+		args, err = injectSystemPromptArgs(args, provider, req.ProjectRoot, !req.Explain, subagentSystemPromptContracts)
 		if err != nil {
 			return LaunchPlan{}, fmt.Errorf("%s system prompt contracts: %w", toolName, err)
 		}
@@ -278,6 +283,8 @@ func ResolveLaunchPlan(req LaunchPlanRequest) (LaunchPlan, error) {
 		ACPXPromptArgs:        acpx.prompt,
 		ACPXEventMode:         strings.TrimSpace(tool.ACPXEventMode),
 		SystemPromptContracts: systemPromptContracts,
+
+		SubagentSystemPromptContracts: subagentSystemPromptContracts,
 	}, nil
 }
 

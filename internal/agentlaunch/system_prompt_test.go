@@ -37,19 +37,31 @@ func systemPromptModeProject(t *testing.T, enable bool) string {
 func TestResolveLaunchPlanInjectsSystemPromptContracts(t *testing.T) {
 	root := systemPromptModeProject(t, true)
 	promptFile := embedded.SystemPromptFilePath(root, embedded.SystemPromptModeMultiAgent)
+	subagentFile := embedded.SystemPromptFilePath(root, embedded.SystemPromptModeSubagent)
+	// A missing subagent file is rebuilt at launch, as the multi-agent one is.
+	if err := os.Remove(subagentFile); err != nil {
+		t.Fatal(err)
+	}
 
 	claude, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "claude", ProjectRoot: root, AgentID: "coder-1", OutputsDir: "/logs"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-p", "--permission-mode", "auto", "--verbose", "--output-format", "stream-json", "--append-system-prompt-file", promptFile, "--exclude-dynamic-system-prompt-sections"}
-	if !slices.Equal(claude.Args, want) || !claude.SystemPromptContracts {
+	want := []string{"-p", "--permission-mode", "auto", "--verbose", "--output-format", "stream-json", "--append-system-prompt-file", promptFile, "--exclude-dynamic-system-prompt-sections",
+		"--append-subagent-system-prompt-file", subagentFile}
+	if !slices.Equal(claude.Args, want) || !claude.SystemPromptContracts || !claude.SubagentSystemPromptContracts {
 		t.Fatalf("claude args = %v, want %v", claude.Args, want)
+	}
+	if _, err := os.Stat(subagentFile); err != nil {
+		t.Fatalf("subagent file not rebuilt at launch: %v", err)
 	}
 
 	codex, err := ResolveLaunchPlan(LaunchPlanRequest{ToolName: "codex", ProjectRoot: root, AgentID: "coder-2", Model: "gpt-x"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if codex.SubagentSystemPromptContracts {
+		t.Fatal("codex has no subagent file to inject")
 	}
 	if runtime.GOOS == "windows" {
 		if codex.SystemPromptContracts || strings.Contains(strings.Join(codex.Args, " "), "developer_instructions") {

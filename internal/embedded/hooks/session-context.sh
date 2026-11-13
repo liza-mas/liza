@@ -199,6 +199,25 @@ if is_windows_shell; then
   project_dir="${project_dir//\\//}"
 fi
 
+# Claude runs this hook as SubagentStart too (DEV-954): a subagent gets no
+# SessionStart and does not inherit the parent's system prompt, so it is told
+# here how to initialize. The text stays short: Claude saves a large context to
+# a file and shows the subagent only a preview.
+if [[ "$(json_val hook_event_name)" == "SubagentStart" ]]; then
+  brand_subagent_contracts_var="__BRAND_ENV_PREFIX__""_SUBAGENT_SYSTEM_PROMPT_CONTRACTS"
+  core_rule="Before any state-changing tool, read ~/__BRAND_GLOBAL_DIRNAME__/CORE.md, even if it is already in your context."
+  # A fork reuses the parent's prompt, so it never received subagent.md.
+  if [[ "${!brand_subagent_contracts_var:-}" == "1" && "$(json_val agent_type)" != "fork" ]]; then
+    subagent_context="You are a __BRAND_NAME_TITLE__ subagent: follow SUBAGENT_MODE.md, which is in your system prompt with AGENT_TOOLS.md and GUARDRAILS.md. $core_rule"
+  else
+    subagent_docs="~/__BRAND_GLOBAL_DIRNAME__/SUBAGENT_MODE.md, ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
+    [[ -f "$project_dir/GUARDRAILS.md" ]] && subagent_docs+=", $project_dir/GUARDRAILS.md"
+    subagent_context="You are a __BRAND_NAME_TITLE__ subagent (Mode Selection Gate: Subagent). $core_rule Also read, before any state-changing tool: $subagent_docs. Read-only tools work before that."
+  fi
+  printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' "$(json_escape "$subagent_context")"
+  exit 0
+fi
+
 # The hooks are installed once per CLI; the directory names the one running.
 hook_provider() {
   case "$(basename "$(dirname "$(dirname "$0")")")" in

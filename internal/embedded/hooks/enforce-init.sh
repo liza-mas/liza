@@ -94,6 +94,16 @@ tool_name=$(json_val tool_name)
 session_id=$(json_val session_id)
 cwd=$(json_val cwd)
 command=$(json_val command)
+# Claude names the subagent that made a call (DEV-954). Its calls share the
+# parent's session_id, so it gets a gate of its own: it does not inherit the
+# parent's clearance or the parent's system prompt.
+agent_id=$(json_val agent_id)
+agent_id="${agent_id//[^A-Za-z0-9_-]/}"
+agent_type=$(json_val agent_type)
+
+is_subagent() {
+  [[ -n "$agent_id" ]]
+}
 
 # Canonicalise Windows filesystem values before any validation.
 #
@@ -146,6 +156,9 @@ fi
 state_root="${TMPDIR:-/tmp}"
 state_root="${state_root%/}"
 STATE_DIR="${state_root}/__BRAND_BINARY_NAME__-init-gate-${session_id:-ppid-$PPID}"
+if is_subagent; then
+  STATE_DIR="$STATE_DIR-agent-$agent_id"
+fi
 if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
   echo "enforce-init: cannot create state dir $STATE_DIR, failing open" >&2
   exit 0
@@ -190,13 +203,24 @@ if [[ -n "${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}" ]]; then
   fi
 fi
 
-# One probe per session, whatever its outcome.
-if [[ ! -f "$STATE_DIR/CORE.checked" ]]; then
+# One probe per session, whatever its outcome. A subagent always reads CORE.md:
+# Explore, Plan and custom agents with omitClaudeMd load no CLAUDE.md, and a
+# hook cannot tell which ones did.
+if is_subagent; then
+  touch "$STATE_DIR/CORE.required"
+elif [[ ! -f "$STATE_DIR/CORE.checked" ]]; then
   core_link_loaded || touch "$STATE_DIR/CORE.required"
   touch "$STATE_DIR/CORE.checked"
 fi
 
-if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
+# The launcher sets this only when it also gave the subagents subagent.md. A
+# fork reuses the parent's prompt instead, so it keeps the reads.
+brand_subagent_contracts_var="__BRAND_ENV_PREFIX__""_SUBAGENT_SYSTEM_PROMPT_CONTRACTS"
+if is_subagent && [[ "${!brand_subagent_contracts_var:-}" == "1" && "$agent_type" != "fork" ]]; then
+  touch "$STATE_DIR/AGENT_TOOLS.done" "$STATE_DIR/MODE.done" "$STATE_DIR/GUARDRAILS.done"
+fi
+
+if ! is_subagent && [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
   [[ -f "$STATE_DIR/CORE.required" ]] || exit 0
   # Everything but CORE.md is in the system prompt: only its read remains.
   touch "$STATE_DIR/AGENT_TOOLS.done" "$STATE_DIR/MODE.done" "$STATE_DIR/GUARDRAILS.done" \
@@ -228,6 +252,15 @@ reset_invalid_bash_read_marker() {
 # Read-only discovery tools: allow before gate clears.
 if [[ "$tool_name" == "ToolSearch" || "$tool_name" == "Glob" ]]; then
   exit 0
+fi
+
+# A subagent may research and hand back before it initializes: some have no
+# read tool, and every one ends with SubagentHandback. Only state-changing
+# tools wait for its reads.
+if is_subagent; then
+  case "$tool_name" in
+    Grep|WebFetch|WebSearch|SubagentHandback) exit 0 ;;
+  esac
 fi
 
 requires_pairing_companion_docs() {
@@ -284,9 +317,14 @@ mark_session_init_doc_path() {
   case "$base" in
     CORE.md)          touch "$STATE_DIR/CORE.done" ;;
     AGENT_TOOLS.md)   touch "$STATE_DIR/AGENT_TOOLS.done" ;;
-    PAIRING_MODE.md)  touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_PAIRING.done" ;;
-    MULTI_AGENT_MODE.md)
-                      touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_MULTI_AGENT.done" ;;
+    PAIRING_MODE.md|MULTI_AGENT_MODE.md)
+                      # A subagent's mode is Subagent: another mode file does not count.
+                      is_subagent && return 0
+                      if [[ "$base" == PAIRING_MODE.md ]]; then
+                        touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_PAIRING.done"
+                      else
+                        touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_MULTI_AGENT.done"
+                      fi ;;
     SUBAGENT_MODE.md) touch "$STATE_DIR/MODE.done" "$STATE_DIR/MODE_SUBAGENT.done" ;;
     GUARDRAILS.md)    touch "$STATE_DIR/GUARDRAILS.done" ;;
     REPOSITORY.md)    touch "$STATE_DIR/REPOSITORY.done" ;;
@@ -449,12 +487,26 @@ is_safe_guardrails_probe_wrapper() {
 collect_missing_init_docs() {
   mark_absent_project_docs_if_needed
   missing=""
-  [[ -f "$STATE_DIR/CORE.required" ]] && [[ ! -f "$STATE_DIR/CORE.done" ]] && missing="$missing
+  if [[ -f "$STATE_DIR/CORE.required" ]] && [[ ! -f "$STATE_DIR/CORE.done" ]]; then
+    if is_subagent; then
+      missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/CORE.md (read it even if it is already in your context)"
+    else
+      missing="$missing
   - ~/__BRAND_GLOBAL_DIRNAME__/CORE.md (your CLI does not load it through its contract link)"
+    fi
+  fi
   [[ ! -f "$STATE_DIR/AGENT_TOOLS.done" ]] && missing="$missing
   - ~/__BRAND_GLOBAL_DIRNAME__/AGENT_TOOLS.md"
-  [[ ! -f "$STATE_DIR/MODE.done" ]] && missing="$missing
+  if [[ ! -f "$STATE_DIR/MODE.done" ]]; then
+    if is_subagent; then
+      missing="$missing
+  - ~/__BRAND_GLOBAL_DIRNAME__/SUBAGENT_MODE.md"
+    else
+      missing="$missing
   - The applicable mode contract from the Mode Selection Gate"
+    fi
+  fi
   if requires_pairing_companion_docs; then
     [[ -f "$project_dir/REPOSITORY.md" ]] && [[ ! -f "$STATE_DIR/REPOSITORY.done" ]] && missing="$missing
   - $project_dir/REPOSITORY.md"
@@ -553,6 +605,8 @@ BLOCKED — session initialization incomplete.
 
 You must Read these files before using any other tool:
 $missing
+${agent_id:+
+As a subagent you may use Read, Grep, Glob, WebFetch and WebSearch before that.}
 
 Use Read, an MCP filesystem read tool, or a simple Bash read command
 (cat, sed) on each path above, then retry your action.

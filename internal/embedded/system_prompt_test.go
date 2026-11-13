@@ -253,3 +253,22 @@ func TestSessionContextHookSystemPromptContracts(t *testing.T) {
 		})
 	}
 }
+
+// A subagent does not inherit the lane's system prompt, so its own file must
+// carry the project rules (DEV-954).
+func TestSubagentSystemPromptCarriesGuardrails(t *testing.T) {
+	root := setupSystemPromptProject(t)
+	content, sources, err := BuildSystemPrompt(root, SystemPromptModeSubagent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "project rule") || len(sources) != 3 {
+		t.Fatalf("subagent prompt lacks GUARDRAILS.md: %d sources", len(sources))
+	}
+	if err := os.Remove(filepath.Join(root, "GUARDRAILS.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, sources, err = BuildSystemPrompt(root, SystemPromptModeSubagent); err != nil || len(sources) != 2 {
+		t.Fatalf("absent GUARDRAILS.md must be skipped: sources=%d err=%v", len(sources), err)
+	}
+}

@@ -64,3 +64,36 @@ The generic-subagent skill already defined subagent behavioral expectations. Ext
 
 ---
 *Reconstructed from commits c7c4554, 7c24e33, b8f7faf (2026-02-15)*
+
+## Amendment (2026-11-13): Claude subagents initialize under their own gate (DEV-954)
+
+Observed on Claude Code 2.1.322: a subagent gets no SessionStart, does not
+inherit `--append-system-prompt-file`, and makes its tool calls under the
+parent's `session_id`, so it inherited the parent's cleared init gate (and, in an
+injected session, the variable that waives it) without reading SUBAGENT_MODE.md.
+Explore, Plan and custom agents with `omitClaudeMd` also load no CLAUDE.md, so
+they lack CORE. A fork reuses its parent's prompt.
+
+- `SubagentStart` runs `session-context.sh`, which tells the subagent to
+  initialize as a subagent. The text stays under 1 KB: Claude shows a subagent
+  only a preview of a larger context.
+- `enforce-init.sh` gives each subagent (a call carrying `agent_id`) its own
+  state. Before any state-changing tool it requires CORE.md (a hook cannot tell
+  whether CLAUDE.md loaded), SUBAGENT_MODE.md (no other mode file counts),
+  AGENT_TOOLS.md and GUARDRAILS.md. Read, Grep, Glob, WebFetch, WebSearch,
+  ToolSearch and `SubagentHandback` work before that, and Bash only for the
+  recognized document reads. Accepted: a read-only subagent may research and
+  return without initializing; a read-only agent without CLAUDE.md, such as
+  Explore, then works without CORE.
+- A headless (`-p`) Claude lane launched with injected contracts (ADR-0236)
+  also gets `--append-subagent-system-prompt-file subagent.md` (SUBAGENT_MODE.md,
+  AGENT_TOOLS.md and the project GUARDRAILS.md) and
+  `LIZA_SUBAGENT_SYSTEM_PROMPT_CONTRACTS=1`; its subagents then need only the
+  CORE.md read. Claude documents that flag for `-p` runs only, so an interactive
+  launch keeps the reads. A fork ignores the variable, since it never receives
+  the file. Every other launch removes an inherited value.
+- A top-level session keeps accepting any mode file: CORE picks the mode from
+  the first prompt, which a hook cannot see, and a CLI session started with a
+  `MODE: SUBAGENT` brief runs in Subagent mode.
+
+Codex and Copilot subagents are unchanged: their behavior was not observed.

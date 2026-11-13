@@ -96,7 +96,7 @@ func (d *CLIAgent) RunInteractive(ctx context.Context, req LLMAgentInteractiveRe
 	if err != nil {
 		return 0, err
 	}
-	cmdEnv = systemPromptContractsEnv(agentTaskEnv(cmdEnv, req.TaskID), plan.SystemPromptContracts)
+	cmdEnv = systemPromptContractsEnv(agentTaskEnv(cmdEnv, req.TaskID), plan.SystemPromptContracts, plan.SubagentSystemPromptContracts)
 	cmd, err := snapshotCommand(ctx, plan.Executable, projectRoot, cmdEnv, plan.Args...)
 	if err != nil {
 		return 0, err

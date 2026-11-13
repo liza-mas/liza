@@ -39,11 +39,15 @@ func systemPromptModeProject(t *testing.T, enable bool) string {
 
 func TestSystemPromptContractsEnvFollowsInjection(t *testing.T) {
 	name := brand.EnvName("SYSTEM_PROMPT_CONTRACTS")
-	base := []string{"PATH=/bin", name + "=1"} // inherited from an injected parent session
-	if got := systemPromptContractsEnv(base, false); !slices.Equal(got, []string{"PATH=/bin"}) {
-		t.Fatalf("non-injected env = %v, want the inherited bypass removed", got)
+	subagent := brand.EnvName("SUBAGENT_SYSTEM_PROMPT_CONTRACTS")
+	base := []string{"PATH=/bin", name + "=1", subagent + "=1"} // inherited from an injected parent session
+	if got := systemPromptContractsEnv(base, false, false); !slices.Equal(got, []string{"PATH=/bin"}) {
+		t.Fatalf("non-injected env = %v, want both inherited bypasses removed", got)
 	}
-	if got := systemPromptContractsEnv(base[:1], true); !slices.Equal(got, []string{"PATH=/bin", name + "=1"}) {
+	if got := systemPromptContractsEnv(base, true, false); !slices.Equal(got, []string{"PATH=/bin", name + "=1"}) {
+		t.Fatalf("injected without subagent file: env = %v, want the subagent bypass removed", got)
+	}
+	if got := systemPromptContractsEnv(base[:1], true, true); !slices.Equal(got, []string{"PATH=/bin", name + "=1", subagent + "=1"}) {
 		t.Fatalf("injected env = %v", got)
 	}
 }
@@ -57,12 +61,14 @@ func TestCLIAgentInteractiveSetsSystemPromptContractsEnv(t *testing.T) {
 			root := systemPromptModeProject(t, enabled)
 			binDir := t.TempDir()
 			name := brand.EnvName("SYSTEM_PROMPT_CONTRACTS")
-			script := fmt.Sprintf("#!/bin/sh\nprintf '%%s|%%s' \"$%s\" \"$*\" > env.txt\n", name)
+			subagent := brand.EnvName("SUBAGENT_SYSTEM_PROMPT_CONTRACTS")
+			script := fmt.Sprintf("#!/bin/sh\nprintf '%%s%%s|%%s' \"$%s\" \"$%s\" \"$*\" > env.txt\n", name, subagent)
 			if err := os.WriteFile(filepath.Join(binDir, "claude"), []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("PATH", binDir)
 			t.Setenv(name, "1") // the parent is itself an injected session
+			t.Setenv(subagent, "1")
 			code, err := NewCLIAgent("").RunInteractive(context.Background(), LLMAgentInteractiveRequest{
 				BackendName: "claude", AgentID: "coder-1", ProjectRoot: root, LaunchGate: immediateLaunchGate,
 			})
@@ -71,8 +77,15 @@ func TestCLIAgentInteractiveSetsSystemPromptContractsEnv(t *testing.T) {
 			}
 			got, err := os.ReadFile(filepath.Join(root, "env.txt"))
 			injected := strings.Contains(string(got), "--append-system-prompt-file")
-			if err != nil || injected != enabled || strings.HasPrefix(string(got), "1|") != enabled {
-				t.Fatalf("interactive launch env|args = %q err=%v; want bypass and injection both %v", got, err, enabled)
+			// Claude documents the subagent file for -p runs only: an
+			// interactive launch never passes it, and drops the inherited
+			// subagent bypass ("1|" injected, "|" not).
+			wantEnv := "|"
+			if enabled {
+				wantEnv = "1|"
+			}
+			if err != nil || injected != enabled || !strings.HasPrefix(string(got), wantEnv) || strings.Contains(string(got), "--append-subagent-system-prompt-file") {
+				t.Fatalf("interactive launch env|args = %q err=%v; want bypass and injection both %v, no subagent file", got, err, enabled)
 			}
 		})
 	}

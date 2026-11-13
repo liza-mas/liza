@@ -237,7 +237,7 @@ What changes depends on the session:
 
 | Session | After enabling |
 |---------|----------------|
-| Multi-agent on `claude` | `liza` injects the contracts; nothing to do |
+| Multi-agent on `claude` | `liza` injects the contracts, and `subagent.md` into a headless lane's subagents; nothing to do |
 | Multi-agent on `codex` (Linux, macOS) | `liza` injects the contracts; nothing to do (see Codex limits) |
 | Multi-agent on `codex` (Windows), ACPX, other providers | Unchanged: forced reads |
 | Pairing on `claude` | Unchanged unless you start the session as shown below |
@@ -270,7 +270,10 @@ already loads through its contract link) and the project `GUARDRAILS.md`
 `.codex/hooks.json`; it refreshes installed `enforce-init.sh`/`session-context.sh`
 scripts that predate the bypass. Each file's header gives the contracts the
 weight of files read at session start: they do not outrank your own
-`CLAUDE.md`/`AGENTS.md`.
+`CLAUDE.md`/`AGENTS.md`. `subagent.md` reaches Claude lane subagents through
+`--append-subagent-system-prompt-file` in headless (`-p`) lanes; a fork, which
+reuses its parent's prompt, and subagents of interactive or pairing sessions
+read the subagent contracts instead.
 
 ## Manual Provider Notes
 

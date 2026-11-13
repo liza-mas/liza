@@ -52,6 +52,7 @@ var systemPromptParts = map[string][]systemPromptPart{
 	},
 	SystemPromptModeSubagent: {
 		{true, "SUBAGENT_MODE.md"}, {true, "AGENT_TOOLS.md"},
+		{false, "GUARDRAILS.md"},
 	},
 }
 

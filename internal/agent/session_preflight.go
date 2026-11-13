@@ -25,7 +25,7 @@ import (
 func resolveLaunchEnvironment(plan agentlaunch.LaunchPlan, root, agentID, generation string, frozen []string) ([]string, error) {
 	if frozen != nil {
 		env, err := scrubRuntimeInputNames(root, append([]string{}, frozen...))
-		return systemPromptContractsEnv(env, false), err
+		return systemPromptContractsEnv(env, false, false), err
 	}
 	env, err := sessionvalidation.ResolveEnvironment(os.Environ(), root, plan.EnvFiles, plan.OptionalEnvFiles)
 	if err != nil {
@@ -53,7 +53,7 @@ func resolveLaunchEnvironment(plan agentlaunch.LaunchPlan, root, agentID, genera
 		}
 	}
 	env = withClaudeCommandCeiling(plan, env)
-	return systemPromptContractsEnv(scrubDeniedNames(agentProcessEnv(env, agentID, generation), deny), false), nil
+	return systemPromptContractsEnv(scrubDeniedNames(agentProcessEnv(env, agentID, generation), deny), false, false), nil
 }
 
 // claudeCommandCeilingName caps the timeout a Claude Bash call may request,

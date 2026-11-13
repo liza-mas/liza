@@ -43,7 +43,13 @@ func newCoreLinkSession(t *testing.T, cliDir string, probe coreLinkProbe) coreLi
 		t.Skip("the stub engine is a shell script, which Windows does not run by name")
 	}
 	s := coreLinkSession{root: t.TempDir(), sessionID: fmt.Sprintf("core-link-%d", time.Now().UnixNano())}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+s.sessionID)) })
+	t.Cleanup(func() {
+		// The session's gate state, and each subagent's beside it.
+		dirs, _ := filepath.Glob(filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+s.sessionID+"*"))
+		for _, dir := range dirs {
+			os.RemoveAll(dir)
+		}
+	})
 	hooksDir := filepath.Join(s.root, cliDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatal(err)
