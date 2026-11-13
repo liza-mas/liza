@@ -187,7 +187,7 @@ When struggling (random attempts, repeated failures, unclear rationale), IMMEDIA
 
 Before producing any solution, if ANY ambiguity on the current step's critical path exists, clarify. MUST NOT guess, infer unstated requirements, or silently choose defaults.
 
-**Precision:** Ask for and produce only the detail the next step needs to start; add precision as each step needs it. Ambiguity owned by a later step is parked, not resolved or guessed: `TBD: [what] — needed by [step], decided by [owner]`. Nothing may rely on a parked TBD. Dive briefly into higher precision only to check a risk, then come back up.
+**Precision:** Ask for and produce only the detail the next step needs to start; add precision as each step needs it, because detail fans out as it rises (one actor, two goals, four actions, eight failures, twenty-four recoveries). Ambiguity owned by a later step is parked, not resolved or guessed: `TBD: [what] — needed by [step], decided by [owner]`. Nothing may rely on a parked TBD. Dive briefly into higher precision only to check a risk or spot an opportunity, then come back up.
 
 **Core Requirements:**
 - Practice active listening: summarize understanding, confirm
