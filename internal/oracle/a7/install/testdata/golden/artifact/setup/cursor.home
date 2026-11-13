@@ -93,7 +93,7 @@
 + .liza/skills/black-box-red-testing directory 0755 -
 + .liza/skills/black-box-red-testing/SKILL.md file 0644 18e751d7937eb458276b5b7e5895bc9d86a490f01645f3f02ed3edaf8a5ad180
 + .liza/skills/check-liza-input-readiness directory 0755 -
-+ .liza/skills/check-liza-input-readiness/SKILL.md file 0644 17f3281c86939f095e8ab87788096491909653c676ac4d1391b728c48287fef3
++ .liza/skills/check-liza-input-readiness/SKILL.md file 0644 62bdba842d6902aa599130cd6074d66ae3696a5dbd45aa5dee9afcab5384a63e
 + .liza/skills/checkpoint-summary directory 0755 -
 + .liza/skills/checkpoint-summary/SKILL.md file 0644 8fa23cd601f26324e960daa8cfe038abd5f6524632e6066a86baf378cf9f41e1
 + .liza/skills/clean-code directory 0755 -

@@ -1,6 +1,6 @@
 ---
 name: check-§BRAND_NAME_LOWER§-input-readiness
-description: Assess whether an input document is ready for a specific §BRAND_NAME_TITLE§ MAS entry point. Use when a user asks whether a goal, functional spec, detailed spec, technical spec, PRD, story bundle, architecture plan, or other source document is solid enough to run through §BRAND_BINARY_NAME§ with `--entry-point general-objective`, `functional-spec`, `detailed-spec`, or `technical-spec`; when deciding which entry point fits a document; or before `§BRAND_BINARY_NAME§ init --spec`.
+description: Assess whether an input document is ready for a specific §BRAND_NAME_TITLE§ MAS entry point. Use when a user asks whether a goal, functional spec, detailed spec, technical spec, PRD, story bundle, architecture plan, or other source document is solid enough to run through §BRAND_BINARY_NAME§ with `--entry-point general-objective`, `functional-spec`, `detailed-spec`, or `technical-spec`; when deciding which entry point fits a document; before `§BRAND_BINARY_NAME§ init --spec`; or to estimate what the material gathered so far still misses for an entry point.
 ---
 
 # Objective
@@ -13,13 +13,15 @@ Output a readiness report, not a rewrite. The report answers:
 - Is another entry point a better fit?
 - What exact questions or edits would make it ready?
 
+Two modes. **Rigorous** (the default) judges one document and gives a verdict. **Estimate** reads whatever material exists and reports what it still misses for the entry point; it gives no verdict (see Estimate Mode).
+
 # Inputs
 
-Require both:
+Rigorous mode requires both:
 - **Document path**: the source document to assess.
 - **Target entry point**: one of `general-objective`, `functional-spec`, `detailed-spec`, or `technical-spec`.
 
-If either is missing, ask for it before assessing.
+If either is missing, ask for it before assessing. Estimate mode takes the material available instead of one document (a draft, a decision record, notes, a map export), plus the target entry point.
 
 Treat `detailed-spec` as a legacy alias of `functional-spec`.
 
@@ -191,6 +193,17 @@ Rules:
 - Cite evidence from the input document; do not rely on memory or intent.
 - If no blockers exist, still name the most plausible way the run could fail.
 
+## Estimate Mode
+
+Use it before a document exists, or to see how far the material is from an entry point. Apply steps 2 to 4 to the material as a whole, then report:
+
+- Open with: "Estimate, not the readiness gate."
+- One row per criterion and rubric item: **Have it**, **Partly** or **Gap**, with where the material says it and what is missing.
+- A route forward: what to settle next, and in which skill.
+- Measure against this run's scope (its in items). When that scope is not settled yet, say so as the first gap.
+
+An estimate is never a verdict: it never passes a gate and is never recorded as readiness. The session that wrote the material may run it; independence binds the rigorous mode only. It never modifies the material.
+
 ## 6. Re-Check
 
 A document routed to `goal-writing` and returned arrives here again. A re-check is not a fresh assessment:
@@ -216,7 +229,7 @@ If blockers are not falling while the document grows, say so and stop: that is a
 
 | Skill | Relationship |
 |-------|--------------|
-| `goal-writing` | Upstream producer for every entry point. Receives `Not ready`, and `Wrong entry point` only when the human chooses to revise rather than switch altitude; `Ready` and `Ready with notes` go to initialization, not back. Independence runs both ways: it must not run this skill on its own output, and this skill must not fix what it flags. |
+| `goal-writing` | Upstream producer for every entry point. Receives `Not ready`, and `Wrong entry point` only when the human chooses to revise rather than switch altitude; `Ready` and `Ready with notes` go to initialization, not back. Independence runs both ways: it must not run this skill's rigorous mode on its own output, and this skill must not fix what it flags. It may run an estimate at any time. |
 | `spec-review` | Deeper corpus quality review. Use after or instead of this skill when the user wants a full consistency audit. |
 | `checkpoint-summary` | Downstream checkpoint digest after agents have already produced artifacts. |
 | `epic-writing` | Downstream producer for `general-objective` inputs. |
