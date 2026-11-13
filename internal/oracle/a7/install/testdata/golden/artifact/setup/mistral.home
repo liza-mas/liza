@@ -64,7 +64,7 @@
 + .liza/skills/generic-subagent directory 0755 -
 + .liza/skills/generic-subagent/SKILL.md file 0644 1c099bec596b802545ad5033f2230c9a44ef02ba329e8625f0a3418aebc1ab85
 + .liza/skills/goal-writing directory 0755 -
-+ .liza/skills/goal-writing/SKILL.md file 0644 ecf7a7404b7f552b828ec28fd49498ebef6aac8db17a197e7e5fab99e384f40e
++ .liza/skills/goal-writing/SKILL.md file 0644 b62286485948cc97dc04b3516ba3944d62d8117ad8e3aa54f854745840cb4038
 + .liza/skills/goal-writing/references directory 0755 -
 + .liza/skills/goal-writing/references/rubrics.md file 0644 c089e09678bf632c6aa36efab1a06245d56a9df69646f90d1dea56038933ba81
 + .liza/skills/have-you-considered directory 0755 -
@@ -100,7 +100,7 @@
 + .liza/skills/shared directory 0755 -
 + .liza/skills/shared/references directory 0755 -
 + .liza/skills/shared/references/acceptance-evidence.md file 0644 18f10512768041eca1cbd59a53d161ddd98bbf9dd83b0669382124bde91dea52
-+ .liza/skills/shared/references/reference-first-authoring.md file 0644 25583d127ae60a43bbe69c983bbf3930b42109b91ddd2202d5ef821382c52366
++ .liza/skills/shared/references/reference-first-authoring.md file 0644 8e030d8fbccb720dd3c3f788695781f49521ba9d5a479e9680b3c18cedab347b
 + .liza/skills/software-architecture-review directory 0755 -
 + .liza/skills/software-architecture-review/SKILL.md file 0644 88d5cfc8551e05b48babd84aa9c2d5903679f0739d5a6a210ac00e1f19d0c695
 + .liza/skills/spec-backfill directory 0755 -
@@ -114,7 +114,7 @@
 + .liza/skills/spec-backfill/scripts/detect-stale.sh file 0644 3e846bf099309e35b9d93e90ef87fdacdb1fa8405817d7fbfe13710dcc357f18
 + .liza/skills/spec-backfill/scripts/update-mapping.sh file 0644 4e96cb22a56acb032c50ebb19342a7646c478bccce252587ffe51e3ae53196f6
 + .liza/skills/spec-review directory 0755 -
-+ .liza/skills/spec-review/SKILL.md file 0644 a168bffe8e1adf5edc9084f1c5d43936272af8689370a8ac403ea3b187814716
++ .liza/skills/spec-review/SKILL.md file 0644 e1c485c90fb2d1aca15f65f01fd62bdbd2b83e89709bde4f0ccb78a3fb5c6ccb
 + .liza/skills/systemic-thinking directory 0755 -
 + .liza/skills/systemic-thinking/SKILL.md file 0644 c01caa54628514abca8d5f3a2f8f9926823eab337939171d24b446faf191bd45
 + .liza/skills/testing directory 0755 -

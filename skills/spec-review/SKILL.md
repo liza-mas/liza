@@ -151,6 +151,7 @@ Apply these checks to the specification corpus at the precision its next consume
 - [ ] What happens on resource exhaustion?
 - [ ] What happens when humans don't respond?
 - [ ] What happens when external dependencies fail?
+- [ ] Each condition the system cannot detect, directly or through its consequences, has an owner or a costed detection requirement, not a specified response
 
 #### 5. Undefined or Ambiguous Terms
 - [ ] All field/property names documented

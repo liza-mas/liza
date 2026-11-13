@@ -72,6 +72,14 @@ it protects and its build and proof cost. Only a recorded human decision puts
 it in scope. Once the required outcome is demonstrated, more assurance is
 optional unless a concrete defect or binding obligation requires it.
 
+**Specify only what the system can detect.** For each failure or edge
+condition, ask whether the system can detect it, directly or through its
+consequences (a lost message shows as the next one arriving out of order). If
+it can, specify the response. If it cannot, either the human adds detection as
+a requirement with its cost, or the condition is out of the software's scope
+with its owner named: a person, another system, or an accepted risk. An
+undetectable condition is never silently dropped.
+
 Priority, readiness, and proof stage are separate properties:
 
 | Proof kind | Treatment |

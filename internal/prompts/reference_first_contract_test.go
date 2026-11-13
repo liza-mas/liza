@@ -84,6 +84,23 @@ func TestReferenceFirstPromptsRemoveSupersededParityMandates(t *testing.T) {
 	}
 }
 
+// TestReferenceFirstSpecifiesOnlyDetectableConditions pins the detectability
+// rule in the shared contract and the two places that apply it outside it.
+func TestReferenceFirstSpecifiesOnlyDetectableConditions(t *testing.T) {
+	t.Parallel()
+
+	for path, fragment := range map[string]string{
+		"../../skills/shared/references/reference-first-authoring.md": "An undetectable condition is never silently dropped.",
+		"../../skills/spec-review/SKILL.md":                           "has an owner or a costed detection requirement, not a specified response",
+		"../../skills/goal-writing/SKILL.md":                          "ask whether the system can detect it, directly or through its consequences, before settling its response",
+	} {
+		content := strings.Join(strings.Fields(readContractFixture(t, path)), " ")
+		if !strings.Contains(content, fragment) {
+			t.Errorf("%s missing detectability rule %q", path, fragment)
+		}
+	}
+}
+
 func readContractFixture(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Clean(path))
