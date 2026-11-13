@@ -191,6 +191,8 @@ Before producing any solution, if ANY ambiguity on the current step's critical p
 
 **Core Requirements:**
 - Practice active listening: summarize understanding, confirm
+- Before asking, check whether the conversation, project docs or decision record already answer the question; if they
+  do, state the answer instead. Re-ask only on new evidence, and name it.
 - If multiple interpretations possible, clarify (in and out scope)
 - Evaluate 2-3 options for non-trivial problems
 - Default to architectural awareness over local cleverness

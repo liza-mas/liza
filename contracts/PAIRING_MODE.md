@@ -42,7 +42,6 @@ The Execution State Machine is defined in CORE.md. In Pairing mode:
 **Pairing-Specific Rules:**
 
 - Approval Request is invalid if DoR check reveals gaps. State gaps explicitly, do not proceed to APPROVAL_PENDING.
-- If gaps are resolvable by reading context, read it first. If not, ask the user.
 - If DoD check at VALIDATION → DONE reveals gaps, transition to PARTIAL_DONE, not DONE.
 - PARTIAL_DONE → DONE requires user explicitly accepts: "Ship as-is"
 
