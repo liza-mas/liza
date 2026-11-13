@@ -116,7 +116,10 @@ that CORE.md is already loaded; when it does not, or the check cannot run, the
 agent is told to read it and the init gate requires that read. The gate requires
 the other mandatory documents, except for lane sessions whose launcher put the
 contracts in their system prompt (`§BRAND_BINARY_NAME§ use-system-prompt`, ADR-0236),
-which need only the CORE.md read. A Claude subagent has a gate of its own
+which need only the CORE.md read. A pairing session launched with `pairing.md`
+is also told which of that file's sources changed since it was built, and to read
+them, and which project documents in it were deleted since, to disregard them;
+the gate does not enforce those reads. A Claude subagent has a gate of its own
 (ADR-0015): it may use read-only tools at once, but before any state-changing
 tool it reads CORE.md, SUBAGENT_MODE.md, AGENT_TOOLS.md and GUARDRAILS.md, or
 only CORE.md when its lane launcher gave it the subagent contracts.

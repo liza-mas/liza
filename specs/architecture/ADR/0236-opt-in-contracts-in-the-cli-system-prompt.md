@@ -92,3 +92,29 @@ which every other launch, interactive ones included, removes.
 The flag is hidden from `claude --help`; a release that drops it fails the
 launch visibly. Forks reuse the parent's prompt and keep the reads (ADR-0015,
 2026-11-13 amendment).
+
+## Amendment (2026-11-13): stale `pairing.md` is named at session start (DEV-951)
+
+Decision 2 rebuilds only the lane files at launch. `pairing.md` is loaded by the
+user's own `claude` command, so no engine code runs before it is read, and
+nothing rebuilt it after `use-system-prompt`: its copies of the contracts, the
+collaboration letter and the project documents went stale silently.
+
+`session-context.sh` now asks a hidden read-only command,
+`system-prompt-stale --project-root <repo>`, which pairing sources differ from
+the hashes the marker recorded when `pairing.md` was built, and which project
+documents built into it have been deleted since. The marker is
+written in the same call as `pairing.md` and lane launches never touch either,
+so it describes that file exactly. The command compares the content as built,
+frontmatter stripped. An injected pairing session is then told that the
+changed sources are outdated in its system prompt and must be read, and they
+leave the "in your system prompt" list. A deleted document is named as still
+in the system prompt, to be disregarded, with no read ordered. Either case
+says to rebuild with `use-system-prompt`. When the command cannot answer (an
+older binary, an unreadable source), the session gets the forced-read
+instruction for the whole mode, as for an unconfirmed CORE link.
+
+The order is advisory: `enforce-init.sh` still lets an injected session through
+without those reads (TECH_DEBT.md). Rebuilding the file stays manual
+(`use-system-prompt`); edits made between launches (the collaboration letter, a
+GUARDRAILS lesson) reach a session only through this warning.

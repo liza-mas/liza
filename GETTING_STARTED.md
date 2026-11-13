@@ -253,9 +253,12 @@ LIZA_SYSTEM_PROMPT_CONTRACTS=1 claude --append-system-prompt-file .liza/system-p
 The variable tells the hooks the contracts are already loaded; `liza` sets it
 for the agents it launches. Set it on that command line only, never export it:
 a session that has it without `pairing.md` skips the reads and runs without the
-pairing contract. Re-run `liza use-system-prompt` after editing `GUARDRAILS.md`,
-`REPOSITORY.md` or `docs/USAGE.md`: unlike the multi-agent file, `pairing.md` is
-not rebuilt at launch.
+pairing contract. Unlike the multi-agent file, `pairing.md` is not rebuilt at
+launch: when one of its sources changed since it was built (an installed contract,
+your collaboration letter, `GUARDRAILS.md`, `REPOSITORY.md` or `docs/USAGE.md`),
+session start names those files and tells the agent to read them; a project
+document deleted since is named for the agent to disregard. Re-run
+`liza use-system-prompt` to rebuild it.
 
 **Codex limits.** The contracts travel as one command-line argument. A launch
 fails with a clear error past the 128 KiB Linux argument limit (keep

@@ -248,22 +248,72 @@ fi
 brand_system_prompt_contracts_var="LIZA""_SYSTEM_PROMPT_CONTRACTS"
 # Set by the launcher (or a pairing user) only when the contracts were injected
 # into the system prompt (`liza use-system-prompt`); reading them again would waste the cache.
-if [[ "${!brand_system_prompt_contracts_var:-}" == "1" ]]; then
-  if [[ -n "$agent_id_value" ]]; then
-    injected_docs="CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md"
+contracts_injected=0
+[[ "${!brand_system_prompt_contracts_var:-}" == "1" ]] && contracts_injected=1
+# Nothing rebuilds pairing.md at launch (DEV-951): ask the binary which of its
+# sources changed or were removed since it was built. A bundle it cannot
+# confirm gets the forced reads, as an unconfirmed CORE link does.
+stale_names=()
+stale_paths=()
+removed_docs=()
+if [[ "$contracts_injected" == "1" && -z "$agent_id_value" && -f "$project_dir/.liza/system-prompt-mode.json" ]]; then
+  if stale_lines=$(liza system-prompt-stale --project-root "$project_dir" 2>/dev/null); then
+    while IFS= read -r stale_line; do
+      label="${stale_line#* }"
+      case "$stale_line" in
+        "removed "*) removed_docs+=("$label") ;;
+        "changed ~/"*)
+          stale_names+=("${label#\~/*/}")
+          stale_paths+=("$label")
+          ;;
+        "changed "*)
+          stale_names+=("$label")
+          stale_paths+=("$project_dir/$label")
+          ;;
+      esac
+    done <<< "$stale_lines"
   else
-    injected_docs="CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md"
+    contracts_injected=0
+  fi
+fi
+if [[ "$contracts_injected" == "1" ]]; then
+  if [[ -n "$agent_id_value" ]]; then
+    injected_docs=(CORE.md MULTI_AGENT_MODE.md AGENT_TOOLS.md)
+  else
+    injected_docs=(CORE.md PAIRING_MODE.md AGENT_TOOLS.md COLLABORATION_CONTINUITY.md)
   fi
   # The built files skip absent project documents: name only those present.
-  [[ -f "$project_dir/GUARDRAILS.md" ]] && injected_docs+=", GUARDRAILS.md"
+  [[ -f "$project_dir/GUARDRAILS.md" ]] && injected_docs+=(GUARDRAILS.md)
   if [[ -z "$agent_id_value" ]]; then
-    [[ -f "$project_dir/REPOSITORY.md" ]] && injected_docs+=", REPOSITORY.md"
-    [[ -f "$project_dir/docs/USAGE.md" ]] && injected_docs+=", docs/USAGE.md"
+    [[ -f "$project_dir/REPOSITORY.md" ]] && injected_docs+=(REPOSITORY.md)
+    [[ -f "$project_dir/docs/USAGE.md" ]] && injected_docs+=(docs/USAGE.md)
   fi
-  context="The Liza contracts ($injected_docs) are in your system prompt. Treat them as read; do not re-read those files."
+  claimed_docs=""
+  for doc in "${injected_docs[@]}"; do
+    [[ " ${stale_names[*]} " == *" $doc "* ]] && continue
+    claimed_docs+="${claimed_docs:+, }$doc"
+  done
+  context="The Liza contracts ($claimed_docs) are in your system prompt. Treat them as read; do not re-read those files."
   if [[ -n "$core_read_instruction" ]]; then
     # The built files leave CORE.md to the contract link, which is not there.
     context="${core_read_instruction}The other Liza contracts are in your system prompt. Treat them as read; do not re-read those files."
+  fi
+  if (( ${#stale_paths[@]} > 0 )); then
+    stale_list=""
+    for doc_path in "${stale_paths[@]}"; do
+      stale_list+="${stale_list:+, }$doc_path"
+    done
+    context+=" These changed since .liza/system-prompts/pairing.md was built, so its copy in your system prompt is outdated: $stale_list. MANDATORY: read them fully, one tool call at a time, before anything else."
+  fi
+  if (( ${#removed_docs[@]} > 0 )); then
+    removed_list=""
+    for doc in "${removed_docs[@]}"; do
+      removed_list+="${removed_list:+, }$doc"
+    done
+    context+=" These were removed from the project since .liza/system-prompts/pairing.md was built, yet your system prompt still holds them: $removed_list. Disregard those sections."
+  fi
+  if (( ${#stale_paths[@]} + ${#removed_docs[@]} > 0 )); then
+    context+=" To rebuild the file for the next session, run \`liza use-system-prompt\`."
   fi
 else
 if [[ -n "$core_read_instruction" ]]; then

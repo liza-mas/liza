@@ -37,6 +37,14 @@ type systemPromptPart struct {
 	name   string
 }
 
+// label names the part in the marker and in the built file's section headers.
+func (p systemPromptPart) label() string {
+	if p.global {
+		return "~/" + paths.GlobalDirName() + "/" + filepath.ToSlash(p.name)
+	}
+	return filepath.ToSlash(p.name)
+}
+
 // The mode files mirror what session-context.sh mandates for each mode;
 // global contracts lead so the shared prefix does not depend on the project.
 // CORE.md is left out: the injected CLIs are global-first and already load it
@@ -114,10 +122,9 @@ func BuildSystemPrompt(projectRoot, mode string) ([]byte, map[string]string, err
 	fmt.Fprintf(&buf, "# %s contracts (%s mode)\n\nThe files below are the %s contracts, copied verbatim, one section per file.\nThey are already loaded: treat them as read and do not re-read the source files with tools.\nThey carry the weight they would have as files read at session start, no more: they do not take precedence over the user's own instructions (CLAUDE.md, AGENTS.md).\nCORE.md is not repeated here: your CLI loads it through its contract link to ~/%s/CORE.md.\n", brand.NameTitle, strings.ReplaceAll(mode, "_", "-"), brand.NameTitle, paths.GlobalDirName())
 	sources := map[string]string{}
 	for _, part := range parts {
-		label := filepath.ToSlash(part.name)
+		label := part.label()
 		path := filepath.Join(projectRoot, part.name)
 		if part.global {
-			label = "~/" + paths.GlobalDirName() + "/" + label
 			path = filepath.Join(globalDir, part.name)
 		}
 		content, err := os.ReadFile(path)
@@ -154,6 +161,36 @@ func EnsureSystemPromptFile(projectRoot, mode string) (string, []byte, error) {
 		return "", nil, err
 	}
 	return path, content, nil
+}
+
+// StalePairingSources compares the pairing sources with the marker, which
+// records them as pairing.md was built. It returns, in build order, the sources
+// whose content changed or that were added since (changed), and the project
+// documents built into the file that no longer exist (removed). Nothing
+// rebuilds pairing.md at launch, so the session hook names both (DEV-951).
+// It returns nil slices without a marker.
+func StalePairingSources(projectRoot string) (changed, removed []string, err error) {
+	marker, err := readSystemPromptMarker(projectRoot)
+	if err != nil || marker == nil {
+		return nil, nil, err
+	}
+	_, sources, err := BuildSystemPrompt(projectRoot, SystemPromptModePairing)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed, removed = []string{}, []string{}
+	for _, part := range systemPromptParts[SystemPromptModePairing] {
+		label := part.label()
+		sum, present := sources[label]
+		_, built := marker.Sources[label]
+		switch {
+		case present && marker.Sources[label] != sum:
+			changed = append(changed, label)
+		case !present && built:
+			removed = append(removed, label)
+		}
+	}
+	return changed, removed, nil
 }
 
 // EnableSystemPromptMode builds the mode files and writes the marker. Hook

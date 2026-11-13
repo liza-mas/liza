@@ -1579,3 +1579,18 @@ already reports a missing CORE.md, so the gap shows up there.
 **Payback trigger:**
 - A report where doctor passed the contract checks while CORE.md was missing.
 - The next change to `checkGlobalContract` or `repoContractCheck`.
+
+## Stale pairing.md reads are ordered but not gated
+
+**What:** When `pairing.md` is older than one of its sources, `session-context.sh`
+tells an injected pairing session to read the changed files (ADR-0236,
+2026-11-13 amendment), and, when the staleness check cannot run, to do the full
+forced reads. `enforce-init.sh` still lets every injected session through, so
+neither order is enforced.
+
+**Why deferred:** The gate would need the same probe and a per-session record
+of the required files; the forced-read text of non-injected sessions has the
+same advisory standing before the gate, and DEV-951 asked for the warning.
+
+**Payback trigger:** An observed injected pairing session that skips an ordered
+read, or the gate gaining a per-session list of required documents.

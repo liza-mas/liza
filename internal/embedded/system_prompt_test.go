@@ -2,8 +2,10 @@ package embedded
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -316,5 +318,168 @@ func TestSubagentSystemPromptCarriesGuardrails(t *testing.T) {
 	}
 	if _, sources, err = BuildSystemPrompt(root, SystemPromptModeSubagent); err != nil || len(sources) != 2 {
 		t.Fatalf("absent GUARDRAILS.md must be skipped: sources=%d err=%v", len(sources), err)
+	}
+}
+
+// pairing.md is rebuilt only by use-system-prompt, so a session must learn
+// which of its sources changed since (DEV-951).
+func TestStalePairingSources(t *testing.T) {
+	root := setupSystemPromptProject(t)
+	globalDir, err := paths.GlobalLizaDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed, removed, err := StalePairingSources(root); err != nil || changed != nil || removed != nil {
+		t.Fatalf("without a marker: changed=%v removed=%v err=%v, want nil", changed, removed, err)
+	}
+	if _, err := EnableSystemPromptMode(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if changed, removed, err := StalePairingSources(root); err != nil || len(changed)+len(removed) != 0 {
+		t.Fatalf("fresh build: changed=%v removed=%v err=%v, want none", changed, removed, err)
+	}
+
+	letter := filepath.Join(globalDir, "COLLABORATION_CONTINUITY.md")
+	original := readFile(t, letter)
+	if !strings.HasPrefix(original, "---\n") {
+		t.Fatalf("installed letter has no frontmatter; the frontmatter case below tests nothing")
+	}
+	// Only the frontmatter differs: the build strips it, so nothing is stale.
+	if err := os.WriteFile(letter, []byte(strings.Replace(original, "---\n", "---\nextra: true\n", 1)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if changed, removed, err := StalePairingSources(root); err != nil || len(changed)+len(removed) != 0 {
+		t.Fatalf("frontmatter-only change: changed=%v removed=%v err=%v, want none", changed, removed, err)
+	}
+
+	if err := os.WriteFile(letter, []byte(original+"\nnew pattern\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "GUARDRAILS.md"), []byte("# guardrails\n\nnew lesson\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "REPOSITORY.md"), []byte("# repo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"~/" + paths.GlobalDirName() + "/COLLABORATION_CONTINUITY.md", "GUARDRAILS.md", "REPOSITORY.md"}
+	if changed, removed, err := StalePairingSources(root); err != nil || !slices.Equal(changed, want) || len(removed) != 0 {
+		t.Fatalf("changed=%v removed=%v err=%v, want %v in build order and none removed", changed, removed, err, want)
+	}
+
+	// A project document built into the file and deleted since is reported as
+	// removed, not as a source to read.
+	if _, err := EnableSystemPromptMode(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "REPOSITORY.md")); err != nil {
+		t.Fatal(err)
+	}
+	if changed, removed, err := StalePairingSources(root); err != nil || len(changed) != 0 || !slices.Equal(removed, []string{"REPOSITORY.md"}) {
+		t.Fatalf("after deleting REPOSITORY.md: changed=%v removed=%v err=%v, want only REPOSITORY.md removed", changed, removed, err)
+	}
+}
+
+// writeStaleProbeStub puts an engine stub first on PATH that answers
+// system-prompt-stale with output and exit code, and logs its calls.
+func writeStaleProbeStub(t *testing.T, output string, code int) (string, string) {
+	t.Helper()
+	binDir := t.TempDir()
+	logPath := filepath.Join(binDir, "calls.log")
+	outputPath := filepath.Join(binDir, "output.txt")
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		t.Fatal(err)
+	}
+	stub := fmt.Sprintf("#!/bin/sh\necho \"$*\" >> %q\ncat %q\nexit %d\n", logPath, outputPath, code)
+	if err := os.WriteFile(filepath.Join(binDir, brand.BinaryName), []byte(stub), 0755); err != nil {
+		t.Fatal(err)
+	}
+	return "PATH=" + binDir + string(os.PathListSeparator) + os.Getenv("PATH"), logPath
+}
+
+func TestSessionContextHookNamesStalePairingSources(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub engine is a shell script, which Windows does not run by name")
+	}
+	hook := writeSessionContextHook(t)
+	injected := brand.EnvName("SYSTEM_PROMPT_CONTRACTS") + "=1"
+	agent := brand.EnvName("AGENT_ID") + "=coder-1"
+	letter := "~/" + paths.GlobalDirName() + "/COLLABORATION_CONTINUITY.md"
+	for _, tc := range []struct {
+		name      string
+		marker    bool
+		env       []string
+		output    string
+		code      int
+		probed    bool
+		mandatory bool
+		claim     string
+		reads     []string
+		removed   string
+	}{
+		{name: "no marker", env: []string{injected}, claim: "COLLABORATION_CONTINUITY.md, GUARDRAILS.md)"},
+		{name: "current bundle", marker: true, env: []string{injected}, probed: true,
+			claim: "CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md, COLLABORATION_CONTINUITY.md, GUARDRAILS.md)"},
+		{name: "stale bundle", marker: true, env: []string{injected}, output: "changed " + letter + "\nchanged GUARDRAILS.md\n", probed: true,
+			claim: "(CORE.md, PAIRING_MODE.md, AGENT_TOOLS.md)", reads: []string{letter, "/GUARDRAILS.md"}},
+		{name: "removed document", marker: true, env: []string{injected}, output: "removed REPOSITORY.md\n", probed: true,
+			claim: "COLLABORATION_CONTINUITY.md, GUARDRAILS.md)", removed: "REPOSITORY.md"},
+		{name: "probe failure", marker: true, env: []string{injected}, code: 1, probed: true, mandatory: true},
+		{name: "multi-agent", marker: true, env: []string{agent, injected}, output: "changed GUARDRAILS.md\n",
+			claim: "CORE.md, MULTI_AGENT_MODE.md, AGENT_TOOLS.md, GUARDRAILS.md)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "GUARDRAILS.md"), []byte("# guardrails\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.marker {
+				if err := os.MkdirAll(filepath.Join(root, brand.RuntimeValues().ProjectDirName), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, brand.RuntimeValues().ProjectDirName, "system-prompt-mode.json"), []byte("{}\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pathEnv, logPath := writeStaleProbeStub(t, tc.output, tc.code)
+			env := append([]string{pathEnv}, tc.env...)
+			context := sessionStartAdditionalContext(t, runSessionContextHook(t, hook, sessionStartPayload(t, root), env, 0))
+
+			calls, _ := os.ReadFile(logPath)
+			if got := strings.Contains(string(calls), "system-prompt-stale --project-root "+emitted(root)); got != tc.probed {
+				t.Fatalf("probed = %v, want %v (calls: %q)", got, tc.probed, calls)
+			}
+			if got := strings.Contains(context, "MANDATORY: Read the documents listed as required"); got != tc.mandatory {
+				t.Fatalf("forced reads = %v, want %v:\n%s", got, tc.mandatory, context)
+			}
+			if tc.mandatory {
+				return
+			}
+			if !strings.Contains(context, tc.claim) {
+				t.Fatalf("context lacks claim %q:\n%s", tc.claim, context)
+			}
+			changed := strings.Contains(context, "changed since")
+			if changed != (len(tc.reads) > 0) {
+				t.Fatalf("stale note present = %v, want %v:\n%s", changed, len(tc.reads) > 0, context)
+			}
+			if changed {
+				_, note, _ := strings.Cut(context, "changed since")
+				for _, want := range tc.reads {
+					if !strings.Contains(note, want) {
+						t.Fatalf("stale note lacks %q:\n%s", want, context)
+					}
+				}
+				if !strings.Contains(note, "MANDATORY") || !strings.Contains(note, brand.BinaryName+" use-system-prompt") {
+					t.Fatalf("stale note must order the reads and name the rebuild:\n%s", context)
+				}
+			}
+			_, removedNote, hasRemoved := strings.Cut(context, "removed from the project")
+			if hasRemoved != (tc.removed != "") {
+				t.Fatalf("removed note present = %v, want %v:\n%s", hasRemoved, tc.removed != "", context)
+			}
+			if hasRemoved && (!strings.Contains(removedNote, tc.removed) || !strings.Contains(removedNote, "Disregard") ||
+				!strings.Contains(removedNote, brand.BinaryName+" use-system-prompt")) {
+				t.Fatalf("removed note must name %q, say to disregard it and name the rebuild:\n%s", tc.removed, context)
+			}
+		})
 	}
 }
