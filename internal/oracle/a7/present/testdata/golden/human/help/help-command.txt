@@ -55,6 +55,7 @@ record-rejection-rca Record a classified rejection RCA on a task held by the rej
 recover-agent Recover a crashed agent (release claims, remove worktree, delete agent)
 recover-integration Retire a premature empty-cohort integration analysis with preserved evidence
 recover-task Recover a task while preserving recoverable work by default
+refresh-project Refresh release-owned Liza files installed in this project
 release-blocked-chain Permit one more replacement of a BLOCKED task at the blocked-recovery cap, without pausing the run
 release-claim Manually release claims on a task
 repair-acceptance-commits Restore acceptance evidence orphaned by an integration-branch rewrite

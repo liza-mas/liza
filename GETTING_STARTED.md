@@ -111,6 +111,17 @@ maintain your own tool contract:
 liza setup --agent-tools ~/my-agent-tools.md
 ```
 
+Then, in each repository you initialized, refresh the files `init` installed
+there: the hook scripts of each agent whose hook config registers the Liza gate,
+and the `system-prompts/` files when the project uses system-prompt mode. It
+lists every file it writes, leaves a hook script that is a symlink alone, never
+edits settings or hook configs, and writes nothing in a repository `init` never
+prepared:
+
+```bash
+liza refresh-project
+```
+
 ## Customize Agent Tools
 
 **️️️⚠ Do not skip `AGENT_TOOLS.md` customization before a serious run.**
@@ -258,7 +269,7 @@ launch: when one of its sources changed since it was built (an installed contrac
 your collaboration letter, `GUARDRAILS.md`, `REPOSITORY.md` or `docs/USAGE.md`),
 session start names those files and tells the agent to read them; a project
 document deleted since is named for the agent to disregard. Re-run
-`liza use-system-prompt` to rebuild it.
+`liza use-system-prompt` or `liza refresh-project` to rebuild it.
 
 **Codex limits.** The contracts travel as one command-line argument. A launch
 fails with a clear error past the 128 KiB Linux argument limit (keep

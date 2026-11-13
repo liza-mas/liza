@@ -154,6 +154,14 @@ func TestNonDefaultBrandAdmissionLimitHelp(t *testing.T) {
 	assertNoDefaultBrandLeaks(t, "admission-limit set help", help)
 }
 
+func TestNonDefaultBrandRefreshProjectHelp(t *testing.T) {
+	bin := buildNonDefaultBrandBinary(t)
+	help := runBrandSmokeCommand(t, bin, "refresh-project", "--help")
+	assertContains(t, help, "registers the Acme Agent gate hook")
+	assertContains(t, help, ".github/hooks/acme-agent.json")
+	assertNoDefaultBrandLeaks(t, "refresh-project help", help)
+}
+
 func TestNonDefaultBrandReserveProviderHelp(t *testing.T) {
 	bin := buildNonDefaultBrandBinary(t)
 	help := runBrandSmokeCommand(t, bin, "reserve-provider", "--help")

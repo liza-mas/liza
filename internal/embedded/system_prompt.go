@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -205,18 +206,12 @@ func EnableSystemPromptMode(projectRoot string, dryRun bool) (SystemPromptModeRe
 		return report, err
 	}
 	report.WasEnabled = marker != nil
-	marker = &systemPromptMarker{Version: 1, Sources: map[string]string{}, Files: map[string]string{}}
+	report.FileContents, marker, err = buildSystemPromptBundles(projectRoot)
+	if err != nil {
+		return report, err
+	}
 	for _, mode := range SystemPromptModes {
-		content, sources, err := BuildSystemPrompt(projectRoot, mode)
-		if err != nil {
-			return report, err
-		}
-		report.FileContents[mode] = content
 		report.Files = append(report.Files, SystemPromptFilePath(projectRoot, mode))
-		marker.Files[mode] = sha256Hex(content)
-		for label, sum := range sources {
-			marker.Sources[label] = sum
-		}
 	}
 	staleHooks := map[string][]byte{}
 	for _, dir := range []string{filepath.Join(".claude", "hooks"), filepath.Join(".codex", "hooks")} {
@@ -246,6 +241,63 @@ func EnableSystemPromptMode(projectRoot string, dryRun bool) (SystemPromptModeRe
 		}
 	}
 	return report, writeSystemPromptMarker(projectRoot, marker)
+}
+
+// buildSystemPromptBundles builds every mode file from the current sources and
+// the marker that records them.
+func buildSystemPromptBundles(projectRoot string) (map[string][]byte, *systemPromptMarker, error) {
+	contents := map[string][]byte{}
+	marker := &systemPromptMarker{Version: 1, Sources: map[string]string{}, Files: map[string]string{}}
+	for _, mode := range SystemPromptModes {
+		content, sources, err := BuildSystemPrompt(projectRoot, mode)
+		if err != nil {
+			return nil, nil, err
+		}
+		contents[mode] = content
+		marker.Files[mode] = sha256Hex(content)
+		maps.Copy(marker.Sources, sources)
+	}
+	return contents, marker, nil
+}
+
+// RebuildSystemPromptBundles rebuilds the mode files and the marker of a
+// project opted into system-prompt mode, as EnableSystemPromptMode writes them,
+// and returns the paths whose bytes changed. Unlike EnableSystemPromptMode it
+// never writes hooks, so callers that apply their own hook policy keep it
+// (DEV-960). Without the marker it does nothing.
+func RebuildSystemPromptBundles(projectRoot string) ([]string, error) {
+	if marker, err := readSystemPromptMarker(projectRoot); err != nil || marker == nil {
+		return nil, err
+	}
+	contents, marker, err := buildSystemPromptBundles(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	markerContent, err := marshalSystemPromptMarker(marker)
+	if err != nil {
+		return nil, err
+	}
+	type target struct {
+		path    string
+		content []byte
+	}
+	// Mode files first, marker last: the marker records what the files hold.
+	var targets []target
+	for _, mode := range SystemPromptModes {
+		targets = append(targets, target{SystemPromptFilePath(projectRoot, mode), contents[mode]})
+	}
+	targets = append(targets, target{SystemPromptMarkerPath(projectRoot), markerContent})
+	var changed []string
+	for _, t := range targets {
+		if current, err := os.ReadFile(t.path); err == nil && bytes.Equal(current, t.content) {
+			continue
+		}
+		if err := writeFileAtomic(t.path, t.content); err != nil {
+			return changed, err
+		}
+		changed = append(changed, t.path)
+	}
+	return changed, nil
 }
 
 // DisableSystemPromptMode removes the mode files and the marker.
@@ -290,16 +342,29 @@ func readSystemPromptMarker(projectRoot string) (*systemPromptMarker, error) {
 }
 
 func writeSystemPromptMarker(projectRoot string, marker *systemPromptMarker) error {
-	output, err := json.MarshalIndent(marker, "", "  ")
+	output, err := marshalSystemPromptMarker(marker)
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(SystemPromptMarkerPath(projectRoot), append(output, '\n'))
+	return writeFileAtomic(SystemPromptMarkerPath(projectRoot), output)
+}
+
+func marshalSystemPromptMarker(marker *systemPromptMarker) ([]byte, error) {
+	output, err := json.MarshalIndent(marker, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(output, '\n'), nil
 }
 
 // writeFileAtomic renames a sibling temp file into place so concurrent agent
 // launches never read a half-written prompt.
 func writeFileAtomic(path string, content []byte) error {
+	return writeFileAtomicMode(path, content, 0644)
+}
+
+// writeFileAtomicMode is writeFileAtomic with the file mode perm.
+func writeFileAtomicMode(path string, content []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -316,7 +381,7 @@ func writeFileAtomic(path string, content []byte) error {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
-	if err := os.Chmod(tmp.Name(), 0644); err != nil {
+	if err := os.Chmod(tmp.Name(), perm); err != nil {
 		_ = os.Remove(tmp.Name())
 		return err
 	}

@@ -64,6 +64,7 @@ check, never a `warnings` string. Exit codes 2, 3 and 42 keep their meanings
 | `toolchain configure --project --agents` | The activation's `init` checks, under `result.checks` beside the configuration; exit 4 when degraded |
 | `toolchain doctor` | `toolchain.<tool-id>` per tool, all `warn`. Report-only: it keeps exit 0, because manual-only tools are never `ok` by design |
 | `doctor` | `doctor.*` and `toolchain.<tool-id>` checks of the end state `setup` and `init` leave ([Doctor](#doctor)); exit 0, 4 or 1 like `init` |
+| `refresh-project` | `refresh.asset` per release-owned project file: `ok` per file written, `failed` per hook script left alone (not a regular file) or hook config it cannot parse. In a repository `init` never prepared, no checks and exit 0. A hard failure's `error.message` names the path and the filesystem error |
 
 In-process callers read the same report through the optional `Report` field
 of the init and setup params.

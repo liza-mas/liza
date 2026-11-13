@@ -483,3 +483,73 @@ func TestSessionContextHookNamesStalePairingSources(t *testing.T) {
 		})
 	}
 }
+
+func TestRebuildSystemPromptBundlesWithoutMarkerWritesNothing(t *testing.T) {
+	root := setupSystemPromptProject(t)
+
+	changed, err := RebuildSystemPromptBundles(root)
+
+	if err != nil || len(changed) != 0 {
+		t.Fatalf("changed %v err=%v, want nothing", changed, err)
+	}
+	if _, err := os.Stat(paths.New(root).LizaDir()); !os.IsNotExist(err) {
+		t.Fatalf("project directory created without the marker: %v", err)
+	}
+}
+
+func TestRebuildSystemPromptBundlesMatchesEnableWithoutTouchingHooks(t *testing.T) {
+	// GIVEN an opted-in project whose sources changed since the build, and a
+	// pre-bypass gate script EnableSystemPromptMode would rewrite
+	root := setupSystemPromptProject(t)
+	if _, err := EnableSystemPromptMode(root, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "GUARDRAILS.md"), []byte("# guardrails\n\nnew rule\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gate := filepath.Join(root, ".claude", "hooks", "enforce-init.sh")
+	if err := os.MkdirAll(filepath.Dir(gate), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gate, []byte("#!/bin/bash\nexit 2\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// WHEN rebuilding
+	changed, err := RebuildSystemPromptBundles(root)
+
+	// THEN every file holding GUARDRAILS.md and the marker are rewritten, the gate is not
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{}
+	for _, mode := range SystemPromptModes {
+		want = append(want, SystemPromptFilePath(root, mode))
+	}
+	want = append(want, SystemPromptMarkerPath(root))
+	if !slices.Equal(changed, want) {
+		t.Fatalf("changed = %v, want %v", changed, want)
+	}
+	if readFile(t, gate) != "#!/bin/bash\nexit 2\n" {
+		t.Fatal("rebuild wrote a hook script")
+	}
+	rebuilt := map[string]string{}
+	for _, path := range want {
+		rebuilt[path] = readFile(t, path)
+	}
+
+	// AND the files equal what EnableSystemPromptMode writes from the same sources
+	if _, err := EnableSystemPromptMode(root, false); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range rebuilt {
+		if readFile(t, path) != content {
+			t.Errorf("%s differs from EnableSystemPromptMode's", path)
+		}
+	}
+
+	// AND a second rebuild changes nothing
+	if again, err := RebuildSystemPromptBundles(root); err != nil || len(again) != 0 {
+		t.Fatalf("second rebuild changed %v err=%v", again, err)
+	}
+}

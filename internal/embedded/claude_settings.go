@@ -14,6 +14,12 @@ import (
 	"github.com/liza-mas/liza/internal/paths"
 )
 
+// RenderedClaudeSettings returns the embedded claude-settings.json with the
+// brand values filled in.
+func RenderedClaudeSettings() []byte {
+	return renderEmbeddedAsset(claudeSettingsContent)
+}
+
 // WriteClaudeSettings writes the embedded claude-settings.json to .claude/settings.json
 // and deploys hooks referenced by the settings.
 // If the file already exists, prompts the user to merge settings.
@@ -48,7 +54,7 @@ func WriteClaudeSettingsWithOptions(projectRoot string, reader *bufio.Reader, op
 	}
 
 	var lizaSettings map[string]any
-	if err := json.Unmarshal(renderEmbeddedAsset(claudeSettingsContent), &lizaSettings); err != nil {
+	if err := json.Unmarshal(RenderedClaudeSettings(), &lizaSettings); err != nil {
 		return fmt.Errorf("failed to parse embedded claude-settings.json: %w", err)
 	}
 

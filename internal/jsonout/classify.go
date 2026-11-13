@@ -51,8 +51,27 @@ func ClassifyError(err error) (code string, message string) {
 	if lockCode, lockMessage, ok := classifyFileLock(err); ok {
 		return string(lockCode), lockMessage
 	}
+	if safeCode, safeMsg, ok := classifySafe(err); ok {
+		return string(safeCode), safeMsg
+	}
 	untypedCode, untypedMessage := classifyUntyped(err)
 	return string(untypedCode), untypedMessage
+}
+
+type safeClassification interface {
+	SafeClassification() (code string, message string)
+}
+
+func classifySafe(err error) (code errorCode, message string, ok bool) {
+	var classified safeClassification
+	if !errors.As(err, &classified) {
+		return "", "", false
+	}
+	safeCode, safeMessage := classified.SafeClassification()
+	if safeCode == "" || safeMessage == "" {
+		return "", "", false
+	}
+	return errorCode(safeCode), safeMessage, true
 }
 
 func classifyFileLock(err error) (code errorCode, message string, ok bool) {
