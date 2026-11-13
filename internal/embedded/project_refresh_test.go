@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -205,6 +206,7 @@ func TestRefreshInstalledHooksConvergesRealInstallationsToFreshInit(t *testing.T
 			for _, path := range provider.configs(root) {
 				configs[path] = readFile(t, path)
 			}
+			userScriptBefore := dirFiles(t, dir)["my-hook.sh"]
 
 			// WHEN refreshing
 			report, err := RefreshInstalledHooks(root)
@@ -213,14 +215,19 @@ func TestRefreshInstalledHooksConvergesRealInstallationsToFreshInit(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantRefreshed := []string{stale, missing, notExecutable}
+			posixModes := runtime.GOOS != "windows"
+			wantRefreshed := []string{stale, missing}
+			if posixModes {
+				// Windows has no executable bit: the chmod leaves nothing to refresh.
+				wantRefreshed = append(wantRefreshed, notExecutable)
+			}
 			slices.Sort(wantRefreshed)
 			if !report.Installed || !slices.Equal(report.Refreshed, wantRefreshed) {
 				t.Fatalf("report = %+v, want installed with refreshed %v", report, wantRefreshed)
 			}
 			got := dirFiles(t, dir)
 			for _, name := range names {
-				if name == names[3] {
+				if name == names[3] && posixModes {
 					// Current bytes and executable: left as the checkout made it.
 					if wantContent := strings.SplitN(want[name], ":", 2)[1]; got[name] != "-rwxrwxr-x:"+wantContent {
 						t.Errorf("%s was rewritten or changed: %q", name, got[name])
@@ -231,7 +238,7 @@ func TestRefreshInstalledHooksConvergesRealInstallationsToFreshInit(t *testing.T
 					t.Errorf("%s differs from a fresh init", name)
 				}
 			}
-			if got["my-hook.sh"] != "-rwx------:#!/bin/bash\n# mine\n" {
+			if got["my-hook.sh"] != userScriptBefore {
 				t.Errorf("user script changed: %q", got["my-hook.sh"])
 			}
 			for path, content := range configs {

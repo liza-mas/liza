@@ -105,7 +105,13 @@ var stubRelay struct {
 func stubRelayBinary(t *testing.T) string {
 	t.Helper()
 
-	repoRoot := FindRepoRoot(t)
+	// From this file, not the cwd: callers may already have chdir'd into a
+	// temp project, where FindRepoRoot finds no go.mod.
+	_, source, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate testhelpers source")
+	}
+	repoRoot := filepath.Join(filepath.Dir(source), "..", "..")
 
 	stubRelay.once.Do(func() {
 		var dir string

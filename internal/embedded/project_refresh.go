@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -18,7 +19,7 @@ type HookRefreshReport struct {
 	// Installed reports whether any hook set was found installed by init.
 	Installed bool
 	// Refreshed lists the hook scripts written: added, or rewritten because
-	// their content or mode differed from this binary's.
+	// their content or mode (not on Windows) differed from this binary's.
 	Refreshed []string
 	// Skipped lists managed script paths left alone because they are not
 	// regular files (a symlink to a user script, for instance).
@@ -171,7 +172,8 @@ func RefreshInstalledHooks(projectRoot string) (HookRefreshReport, error) {
 				}
 				// Executable, not exactly 0755: a git checkout applies the umask
 				// (0775 under umask 002), and the hook commands need only -x.
-				if bytes.Equal(current, want) && info.Mode().Perm()&0o100 != 0 {
+				// Windows has no executable bit to compare.
+				if bytes.Equal(current, want) && (runtime.GOOS == "windows" || info.Mode().Perm()&0o100 != 0) {
 					continue
 				}
 			}

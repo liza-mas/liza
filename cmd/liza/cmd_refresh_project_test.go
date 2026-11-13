@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -19,6 +20,13 @@ import (
 func initRefreshFixture(t *testing.T) *degradedFixture {
 	t.Helper()
 	f := newDegradedFixture(t)
+	// The command reports paths under git's resolved toplevel: /private/var on
+	// macOS, long names for Windows 8.3 temp paths (RUNNER~1).
+	repo, err := filepath.EvalSymlinks(f.repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.repo = repo
 	if _, stderr, code := f.run(t, "setup", "--yes", "--claude", "--codex"); code != 0 {
 		t.Fatalf("setup precondition: exit %d\n%s", code, stderr)
 	}
@@ -292,6 +300,9 @@ func TestRefreshProjectJSONReportsMalformedHookConfig(t *testing.T) {
 }
 
 func TestRefreshProjectJSONFailsNamingTheUnwritableScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block writes on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}
