@@ -69,6 +69,28 @@ checks that get skipped:
 - [ ] Tests validate intent, not implementation; would fail on regression
 - [ ] Mock-heavy implementation-testing flagged
 
+Each item below that applies must be answered by the change, its commit message
+or the author's reply; an unanswered one is a finding, tagged per Feedback Format.
+
+- [ ] Fix: each new state, path, file, flag or representation (a second form of
+  an existing value) it introduces is named with its other readers and writers
+  and how each handles it
+- [ ] Merge, rebase, cherry-pick or conflict resolution: each side's changes
+  appear exactly once in the result, none lost or duplicated; compare each
+  side's diff with it (`git range-diff` for a rebase, patch identity for a
+  cherry-pick); resolves nothing, Git Protocol stays the rule
+- [ ] Fix commit with a prevention record ([format](../shared/references/prevention-record.md),
+  form checked by the gate): cause stated at system level, not the defect
+  restated; a *removed* disposition names the boundary refusing the shape, a
+  negative test failing without it, and the sibling paths searched, each with
+  its disposition; else supply evidence or change it to *scheduled*. A
+  defect repaired under a type other than `fix` is a finding
+- [ ] New writer or kind of content in a shared concept (directory, file, flag,
+  state, record): a written definition exists no later than this change — what
+  it holds and does not, who writes it, how long its content lives; its name
+  states the property writers must respect (for storage, the lifespan, not only
+  the owner); a name that no longer matches what it holds is a finding
+
 # Feedback Format
 
 **Severity tags:**
