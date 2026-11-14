@@ -65,9 +65,13 @@ func newRecordScenario(t *testing.T, fixtureDir string, opts recordScenarioOptio
 	testhelpers.MustGit(t, root, "checkout", "integration")
 
 	g := git.New(root)
-	taskID := "task-" + strings.ReplaceAll(strings.ToLower(t.Name()), "/", "-")
-	if len(taskID) > 60 {
-		taskID = taskID[:60]
+	// The task ID names the worktree directory under a temp dir that already
+	// carries the test name; git rebase stats an 83-char range relative to it,
+	// so a long ID exceeds Windows MAX_PATH. Each scenario has its own repo.
+	name := t.Name()
+	taskID := "task-" + strings.ToLower(name[strings.LastIndex(name, "/")+1:])
+	if len(taskID) > 32 {
+		taskID = taskID[:32]
 	}
 	base, err := g.CreateWorktree(taskID, "integration")
 	if err != nil {

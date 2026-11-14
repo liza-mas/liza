@@ -93,7 +93,7 @@ func TestCheckSubmissionParityPass(t *testing.T) {
 		// GIVEN two passing commands with spaces and quotes, a reusable input
 		// that is available, and a deferred command
 		log := func(name string) string { return filepath.Join(t.TempDir(), name) }
-		probe := log("runs.log")
+		probe := filepath.ToSlash(log("runs.log"))
 		first := `sh -c 'printf "%s\n" "first: $0 and $1" >> ` + probe + `; test "$REUSABLE_FIXTURE" = shared-value' 'two words' "a \"quoted\" arg"`
 		second := `sh -c 'echo "second" >> ` + probe + `'`
 		deferred := `sh -c 'echo "deferred ran" >> ` + probe + `'`
@@ -386,7 +386,7 @@ func TestCheckSubmissionParityCanonicalValidation(t *testing.T) {
 
 	t.Run(rowPREARuntimeInputUnavailable, func(t *testing.T) {
 		marker := filepath.Join(t.TempDir(), "ran")
-		command := fmt.Sprintf("sh -c 'touch %s'", marker)
+		command := fmt.Sprintf("sh -c 'touch %s'", filepath.ToSlash(marker))
 		f := newStrictFixture(t, strictSpec{
 			commands: []string{command},
 			inputs: []models.RuntimeInput{{ID: "absent", Commands: []string{command}, Recipe: "project.absent",
@@ -462,7 +462,7 @@ func TestCheckSubmissionDisclosures(t *testing.T) {
 	t.Run(rowREBPreRebaseHook+"/home_relative_hooks_path", func(t *testing.T) {
 		// A canonical command that would leave a marker proves none ran.
 		marker := filepath.Join(t.TempDir(), "ran")
-		f := newStrictFixture(t, strictSpec{commands: []string{fmt.Sprintf("sh -c 'touch %s'", marker)}})
+		f := newStrictFixture(t, strictSpec{commands: []string{fmt.Sprintf("sh -c 'touch %s'", filepath.ToSlash(marker))}})
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 		hooks := filepath.Join(home, "hooks")
@@ -513,7 +513,7 @@ func TestCheckSubmissionDisclosures(t *testing.T) {
 	})
 	t.Run(rowDISSingleUseFirstPasses, func(t *testing.T) {
 		probe := filepath.Join(t.TempDir(), "runs.log")
-		first, second := fmt.Sprintf("sh -c 'echo first >> %s'", probe), fmt.Sprintf("sh -c 'echo second >> %s'", probe)
+		first, second := fmt.Sprintf("sh -c 'echo first >> %s'", filepath.ToSlash(probe)), fmt.Sprintf("sh -c 'echo second >> %s'", filepath.ToSlash(probe))
 		f := newStrictFixture(t, strictSpec{
 			commands: []string{first, second},
 			inputs: []models.RuntimeInput{{ID: "w03", Commands: []string{second}, Recipe: "project.w03",
@@ -534,7 +534,7 @@ func TestCheckSubmissionDisclosures(t *testing.T) {
 	})
 	t.Run(rowDISAdmissionFull, func(t *testing.T) {
 		marker := t.TempDir()
-		command := fmt.Sprintf(slotCommand, marker)
+		command := fmt.Sprintf(slotCommand, filepath.ToSlash(marker))
 		limits := []models.AdmissionLimit{{Class: "heavy", MaxConcurrent: 1, Match: []string{"heavy-marker"}}}
 		f := newStrictFixture(t, strictSpec{commands: []string{command}, limits: limits})
 		held := newAdmissionSlots(60)
@@ -624,7 +624,7 @@ func TestCheckSubmissionPostMarkerRefusalReportsTheLocalLifecycle(t *testing.T) 
 // reports its own lifecycle, with the fence's reason.
 func TestCheckSubmissionOwnershipLossDuringValidationReportsTheLocalLifecycle(t *testing.T) {
 	started := filepath.Join(t.TempDir(), "started")
-	f := newStrictFixture(t, strictSpec{commands: []string{fmt.Sprintf("sh -c 'touch %s; sleep 30'", started)}})
+	f := newStrictFixture(t, strictSpec{commands: []string{fmt.Sprintf("sh -c 'touch %s; sleep 30'", filepath.ToSlash(started))}})
 	previous := acceptanceOwnershipPollInterval
 	acceptanceOwnershipPollInterval = 50 * time.Millisecond
 	t.Cleanup(func() { acceptanceOwnershipPollInterval = previous })

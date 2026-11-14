@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -396,14 +397,15 @@ func (s *submissionRun) operationInProgress() (bool, error) {
 
 // preRebaseHookPresent reports an executable pre-rebase hook in the effective
 // hooks directory. Git resolves core.hooksPath itself (relative, home-relative
-// or absolute), so its answer is used as is.
+// or absolute), so its answer is used as is. Git for Windows runs a hook file
+// whatever its mode, and Go reports no execute bit there, so existence counts.
 func (s *submissionRun) preRebaseHookPresent() (bool, error) {
 	dir, err := s.gitPath("hooks")
 	if err != nil {
 		return false, err
 	}
 	info, err := os.Stat(filepath.Join(dir, "pre-rebase"))
-	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0, nil
+	return err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0), nil
 }
 
 // rebaseProbeFailure reports a git failure of the read-only rebase proof; git's

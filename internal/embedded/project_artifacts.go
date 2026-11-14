@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
@@ -123,7 +124,8 @@ const invariantRuleHeading = "### Invariant compliance"
 func CreateInvariants(projectRoot string) (bool, error) {
 	path := filepath.Join(projectRoot, InvariantsFileName)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
-	if errors.Is(err, fs.ErrExist) {
+	// Windows reports an existing directory as EISDIR rather than ErrExist.
+	if errors.Is(err, fs.ErrExist) || errors.Is(err, syscall.EISDIR) {
 		return false, nil
 	}
 	if err != nil {
