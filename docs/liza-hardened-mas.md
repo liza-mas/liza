@@ -445,6 +445,7 @@ Skills encode methodology — not instructions, but structured protocols agents 
 | **have-you-considered** | Surface alternatives and different approaches |
 | **feynman** | Explain complex ideas clearly (knowledge transfer) |
 | **generic-subagent** | Context-efficient delegation to subagents |
+| **fix-history-analysis** | Read-only analysis of fix history: structural weaknesses (full) or a period's prevention-record review (light) |
 
 Skills are composable — agents aren't locked to their role's skills.
 A coder hitting a bug loads the debugging skill. A reviewer with structural concerns

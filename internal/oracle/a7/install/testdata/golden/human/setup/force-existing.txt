@@ -1,7 +1,7 @@
 --- invocation prerequisite-setup
 exit 0
 --- stdout
-Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
+Liza global config written to <HOME>/.liza (91 files + pipeline.yaml):
 <HOME>/.liza/AGENT_TOOLS.md
 <HOME>/.liza/COLLABORATION_CONTINUITY.md
 <HOME>/.liza/CORE.md
@@ -38,6 +38,9 @@ Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
 <HOME>/.liza/skills/epic-writing/SKILL.md
 <HOME>/.liza/skills/epic-writing/references/epic-format.md
 <HOME>/.liza/skills/feynman/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/references/full-mode.md
+<HOME>/.liza/skills/fix-history-analysis/references/light-mode.md
 <HOME>/.liza/skills/generic-subagent/SKILL.md
 <HOME>/.liza/skills/goal-writing/SKILL.md
 <HOME>/.liza/skills/goal-writing/references/rubrics.md
@@ -106,7 +109,7 @@ Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
 --- invocation setup
 exit 0
 --- stdout
-88 existing files will be overwritten:
+91 existing files will be overwritten:
 <HOME>/.liza/AGENT_TOOLS.md
 <HOME>/.liza/COLLABORATION_CONTINUITY.md
 <HOME>/.liza/CORE.md
@@ -143,6 +146,9 @@ exit 0
 <HOME>/.liza/skills/epic-writing/SKILL.md
 <HOME>/.liza/skills/epic-writing/references/epic-format.md
 <HOME>/.liza/skills/feynman/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/references/full-mode.md
+<HOME>/.liza/skills/fix-history-analysis/references/light-mode.md
 <HOME>/.liza/skills/generic-subagent/SKILL.md
 <HOME>/.liza/skills/goal-writing/SKILL.md
 <HOME>/.liza/skills/goal-writing/references/rubrics.md
@@ -197,7 +203,7 @@ exit 0
 <HOME>/.liza/support-docs/how-to-produce-a-goal.md
 Overwrite? (y/n): yes
 pipeline.yaml already exists. Overwrite with embedded version? (y/n): yes
-Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
+Liza global config written to <HOME>/.liza (91 files + pipeline.yaml):
 <HOME>/.liza/AGENT_TOOLS.md
 <HOME>/.liza/COLLABORATION_CONTINUITY.md
 <HOME>/.liza/CORE.md
@@ -234,6 +240,9 @@ Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
 <HOME>/.liza/skills/epic-writing/SKILL.md
 <HOME>/.liza/skills/epic-writing/references/epic-format.md
 <HOME>/.liza/skills/feynman/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/references/full-mode.md
+<HOME>/.liza/skills/fix-history-analysis/references/light-mode.md
 <HOME>/.liza/skills/generic-subagent/SKILL.md
 <HOME>/.liza/skills/goal-writing/SKILL.md
 <HOME>/.liza/skills/goal-writing/references/rubrics.md

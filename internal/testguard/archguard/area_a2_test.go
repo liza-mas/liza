@@ -14,6 +14,8 @@ var areaA2 = Area{
 		{Package: "internal/git", Layer: layerInfrastructure},
 		{Package: "internal/gitbash", Layer: layerInfrastructure},
 		{Package: "internal/gitenv", Layer: layerInfrastructure},
+		{Package: "internal/historyfixture", Layer: layerInfrastructure},
+		{Package: "internal/historyfixture/cmd/materialize", Layer: layerPresentation},
 		{Package: "internal/initcheck", Layer: layerInfrastructure},
 		{Package: "internal/pairingindex", Layer: layerInfrastructure},
 		{Package: "internal/precommit", Layer: layerInfrastructure},

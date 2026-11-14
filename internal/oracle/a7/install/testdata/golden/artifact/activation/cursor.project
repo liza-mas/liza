@@ -5,7 +5,7 @@
 + .claude/hooks/rtk-guard.sh file 0755 602000939876fb901511e44636c0320d20540eb1e5a69a7c5f4309f8a42bbcd4
 + .claude/hooks/session-context.sh file 0755 cc6bcebe4d5b39f7964c4b73d7ce5c2a03763efa6651fa0f517c981cdb3e81bb
 + .claude/hooks/worktree-path-guard.sh file 0755 81fa9c681afdcf2b95b20f7924eb2fd3d9f36cc2a1d7425ada967179e4736393
-+ .claude/settings.json file 0644 1f6c14f7cdc8b3181160ff46ea267856e4c8700eaa7c58e55fbe3ad8d98a88f6
++ .claude/settings.json file 0644 aca1fca30558c8146235c9e25231d9a0fe252b918d25e6833bd40a71cbb6a1e4
 + .claudeignore file 0644 b092f9f9b1817e1d963094f4807d14c1e1eaf4e5d0e507f2fdf50ecb095ac8a2
 + .codex directory 0755 -
 + .codex/config.toml file 0644 d37497c3278121598a663564ab38b53f658969717f78decb661ddd11c66551ea

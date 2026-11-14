@@ -227,6 +227,8 @@ If process felt disproportionate, propose Relief Valve adjustment for similar fu
 
 **Heavy (mandatory on violations, regressions, repeated failures):** Root cause vs symptom? Optimal path? Golden Rule violations? Domain insights? Process improvements? Tool reliability issues?
 
+**Recurring review (on request):** for the period the human names, run the `fix-history-analysis` skill in light mode (it gathers with the prevention record's Period query); present its report; the human decides each item — Widened triggers (widen), Gaps (principle-level invariant or guardrail), Unenforced invariants and Open dispositions (done with proof, scheduled or accepted), Fixed-twice intervals (recalibrate the window), Uncited invariants (retain, merge or retire), Lesson candidates (capture); the Shares (none-needed, young-code) are reported, not gated. Decisions that edit files go through the normal approval.
+
 ---
 
 ## Contract Maintenance

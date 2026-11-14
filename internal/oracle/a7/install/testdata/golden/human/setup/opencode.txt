@@ -2,7 +2,7 @@
 exit 0
 --- stdout
 Agent opencode: skill symlinks created in <HOME>/.config/opencode
-Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
+Liza global config written to <HOME>/.liza (91 files + pipeline.yaml):
 <HOME>/.liza/AGENT_TOOLS.md
 <HOME>/.liza/COLLABORATION_CONTINUITY.md
 <HOME>/.liza/CORE.md
@@ -39,6 +39,9 @@ Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
 <HOME>/.liza/skills/epic-writing/SKILL.md
 <HOME>/.liza/skills/epic-writing/references/epic-format.md
 <HOME>/.liza/skills/feynman/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/SKILL.md
+<HOME>/.liza/skills/fix-history-analysis/references/full-mode.md
+<HOME>/.liza/skills/fix-history-analysis/references/light-mode.md
 <HOME>/.liza/skills/generic-subagent/SKILL.md
 <HOME>/.liza/skills/goal-writing/SKILL.md
 <HOME>/.liza/skills/goal-writing/references/rubrics.md

@@ -279,6 +279,9 @@ task ID (order-preserving dedupe). Terminal downstream tasks trigger a warning.
 - [ ] Specs still accurate
 - [ ] OR: Spec gaps found → update needed: ___
 
+### Prevention Review
+- [ ] Light mode of fix-history-analysis run over the sprint window → decisions recorded: ___
+
 ### Decision
 - [ ] CONTINUE as-is
 - [ ] CONTINUE with adjustments: ___
@@ -292,7 +295,7 @@ task ID (order-preserving dedupe). Terminal downstream tasks trigger a warning.
 
 Retrospectives are **data-driven**, not feeling-based. The blackboard provides the data.
 
-**Owner:** Human produces the retrospective, using data from blackboard (log.yaml, anomalies, metrics). Agents provide raw data; human synthesizes patterns and actions.
+**Owner:** Human produces the retrospective, using data from blackboard (log.yaml, anomalies, metrics). Agents provide raw data; human synthesizes patterns and actions. At checkpoint review the human runs, or asks any agent session to run, the `fix-history-analysis` skill in light mode over the sprint window (`timeline.started` to the checkpoint time, widened at the human's discretion); agents supply, the human decides, and no run is held for it.
 
 **Write Mechanism:** Human edits `.liza/state.yaml` directly to populate the `sprint.retrospective` field. Use any text editor to paste the retrospective YAML structure into the sprint section.
 
@@ -313,6 +316,7 @@ Retrospectives are **data-driven**, not feeling-based. The blackboard provides t
 | `anomalies` section | Retries, trade-offs, blocked reasons |
 | `sprint.metrics` | Counts, durations |
 | `discovered` section | Adjacent problems found |
+| `fix-history-analysis` light mode | The period's records via the [Period query](../../skills/shared/references/prevention-record.md#period-query) (the one data-gathering command) and the repository reads its light mode lists |
 
 ### Retrospective Output
 
@@ -353,6 +357,15 @@ retrospective:
     5 tasks in 2 days is sustainable.
     API flakiness higher than expected.
 ```
+
+The human's decisions on the `fix-history-analysis` light-mode report are recorded as text inside the string `sprint.retrospective` field, as a YAML block scalar with one line per decision naming its report section, the item and the decision:
+
+```yaml
+retrospective: |
+  Widened triggers: internal/cache/ -> G1.2 trigger widened
+```
+
+The decisions: Widened triggers (widen), Gaps (principle-level invariant or guardrail), Unenforced invariants and Open dispositions (done with proof, scheduled or accepted), Fixed-twice intervals (recalibrate the window), Uncited invariants (retain, merge or retire), Lesson candidates (capture). The Shares (none-needed, young-code) are reported, not gated; a high none-needed share is itself a pattern.
 
 ---
 
