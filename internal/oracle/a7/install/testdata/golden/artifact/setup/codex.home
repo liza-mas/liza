@@ -133,6 +133,7 @@
 + .liza/skills/shared directory 0755 -
 + .liza/skills/shared/references directory 0755 -
 + .liza/skills/shared/references/acceptance-evidence.md file 0644 18f10512768041eca1cbd59a53d161ddd98bbf9dd83b0669382124bde91dea52
++ .liza/skills/shared/references/prevention-record.md file 0644 aa86b2fd7627244e32376e4e2f61a467a1cdea8c08dc3de841ab43f0416271a5
 + .liza/skills/shared/references/reference-first-authoring.md file 0644 8e030d8fbccb720dd3c3f788695781f49521ba9d5a479e9680b3c18cedab347b
 + .liza/skills/software-architecture-review directory 0755 -
 + .liza/skills/software-architecture-review/SKILL.md file 0644 88d5cfc8551e05b48babd84aa9c2d5903679f0739d5a6a210ac00e1f19d0c695

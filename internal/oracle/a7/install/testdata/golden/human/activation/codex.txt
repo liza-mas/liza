@@ -1,7 +1,7 @@
 --- invocation prerequisite-setup
 exit 0
 --- stdout
-Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
+Liza global config written to <HOME>/.liza (88 files + pipeline.yaml):
 <HOME>/.liza/AGENT_TOOLS.md
 <HOME>/.liza/COLLABORATION_CONTINUITY.md
 <HOME>/.liza/CORE.md
@@ -62,6 +62,7 @@ Liza global config written to <HOME>/.liza (87 files + pipeline.yaml):
 <HOME>/.liza/skills/liza-operator/scripts/test_watch_until.py
 <HOME>/.liza/skills/liza-operator/scripts/watch-until.py
 <HOME>/.liza/skills/shared/references/acceptance-evidence.md
+<HOME>/.liza/skills/shared/references/prevention-record.md
 <HOME>/.liza/skills/shared/references/reference-first-authoring.md
 <HOME>/.liza/skills/software-architecture-review/SKILL.md
 <HOME>/.liza/skills/spec-backfill/SKILL.md
