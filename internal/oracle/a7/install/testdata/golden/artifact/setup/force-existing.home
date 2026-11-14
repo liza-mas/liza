@@ -6,7 +6,7 @@
 + .liza/SUBAGENT_MODE.md.bak file 0644 e27a266cefa291807e1a298d2fa87dd3fc98c3e9e3c57941c7c0f18f7e65938f
 + .liza/pipeline.yaml.bak file 0644 4fe3c7c5b49dc6815d885cfb3efeba57179f0599ded9388e4e87078b8aa328a9
 + .liza/skills/adr-backfill/SKILL.md.bak file 0644 1530a4540a5db5a81eae2fcc7b270b87cd240a5fd4e0073b64876de20f541219
-+ .liza/skills/adversarial-pairing/SKILL.md.bak file 0644 354a8540662469ea7f7901239bc5a4b6562e6259345c8f8a5bf910e01bab93cb
++ .liza/skills/adversarial-pairing/SKILL.md.bak file 0644 7da317436093774145bcaeccf20694a01ea475bffc51978793a41264c68b955b
 + .liza/skills/adversarial-pairing/scripts/blackboard_op.py.bak file 0644 975d50dd0415afda5684f2cfb88b79b58d9f42cd753e2e9c60dbfeadb0e248e4
 + .liza/skills/adversarial-pairing/scripts/blackboard_state.py.bak file 0644 a0ea62bf88ba199076321bfb734e9dd0f775f83261dd0f29a992cba5d7a909d0
 + .liza/skills/adversarial-pairing/scripts/blackboard_write.py.bak file 0644 89a1bf86c6d2c18a7cc8d164974974e554d0278060a55c59b721516ebbc4692b

@@ -43,7 +43,7 @@
 + .liza/skills/adr-backfill directory 0755 -
 + .liza/skills/adr-backfill/SKILL.md file 0644 1530a4540a5db5a81eae2fcc7b270b87cd240a5fd4e0073b64876de20f541219
 + .liza/skills/adversarial-pairing directory 0755 -
-+ .liza/skills/adversarial-pairing/SKILL.md file 0644 354a8540662469ea7f7901239bc5a4b6562e6259345c8f8a5bf910e01bab93cb
++ .liza/skills/adversarial-pairing/SKILL.md file 0644 7da317436093774145bcaeccf20694a01ea475bffc51978793a41264c68b955b
 + .liza/skills/adversarial-pairing/scripts directory 0755 -
 + .liza/skills/adversarial-pairing/scripts/blackboard_op.py file 0644 975d50dd0415afda5684f2cfb88b79b58d9f42cd753e2e9c60dbfeadb0e248e4
 + .liza/skills/adversarial-pairing/scripts/blackboard_state.py file 0644 a0ea62bf88ba199076321bfb734e9dd0f775f83261dd0f29a992cba5d7a909d0

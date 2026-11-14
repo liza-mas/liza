@@ -210,7 +210,7 @@ Human gates when `yolo` is false/missing:
 2. Before submitting RCA, show RCA and ask approval to submit for adversarial review.
 3. Before submitting plan, show plan and ask approval to submit for adversarial review.
 4. After `PLAN_APPROVED`, ask before coding unless prior approval explicitly included permission to proceed after reviewer approval.
-5. Before each post-review git state change: commit, rebase, merge, worktree deletion, topic-branch deletion.
+5. Before each post-review git state change: commit, rebase, merge, worktree deletion, topic-branch deletion. A planned commit split is one commit approval.
 
 Workflow:
 
@@ -225,6 +225,14 @@ Workflow:
 - `APPROVED` means no blocking findings. Before commit, implement low-risk, in-scope, validation-covered suggestions or record deferral rationale. Implemented suggestions require `FOLLOWUP_REVIEW` and all required reviewers approving the new round.
 - After final code approval, commit on topic branch, rebase onto base, merge into base, then delete dedicated worktree and merged topic branch.
 - If cleanup fails after `MERGED`, move to `BLOCKED` with a note that merge succeeded and cleanup failed.
+
+Commit split:
+
+- Default is one commit. When the work spans several concerns, the plan declares an ordered commit split: per commit, its Conventional Commit summary and the files it owns; for a file shared by commits, which hunks go where. Reviewers approve the split with the plan; changing it requires a plan revision.
+- Code review covers the full diff once. Only the final tree is validated by the test suite; intermediate commits are not, so bisecting inside the split is not guaranteed.
+- After `READY_TO_COMMIT`, stage every approved change and record `git write-tree` as the approved tree. Run `git restore --staged .`, then per planned commit stage its paths, or `git apply --cached` a partial patch for shared files (no interactive staging), and commit.
+- Before `mark-committed`, verify `git rev-parse HEAD^{tree}` equals the approved tree and `git status --porcelain` is empty. On mismatch, stop: the split changed reviewed content.
+- Pass the last commit's SHA as `--commit-sha` and list every commit SHA with its summary in the `mark-committed` note.
 
 Merge/validation details:
 
@@ -246,7 +254,7 @@ Review:
 - Append notes chronologically to the relevant body section and update own frontmatter fields in one helper write. Do not insert newest notes before older entries.
 - Reviewer claim transitions, notes, and verdict/status updates authorized here need no human approval.
 - For `ANALYSIS_SUBMITTED`/`REVIEWING_ANALYSIS`, review RCA quality: evidence, contradictions, falsifiability, root cause, and whether fixing the cause would make the failure impossible.
-- For `PLANNING_SUBMITTED`/`REVIEWING_PLAN`, review the latest plan revision.
+- For `PLANNING_SUBMITTED`/`REVIEWING_PLAN`, review the latest plan revision, including any commit split: one intent per commit, coherent file/hunk ownership.
 - For `RED_TEST_SUBMITTED`/`REVIEWING_RED_TEST`, verify the test/reproduction fails for the expected reason, would pass if fixed, tests behavior, and does not corrupt expectations.
 - For `CODE_SUBMITTED`/`REVIEWING_CODE`, review staged changes:
 
