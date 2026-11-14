@@ -106,7 +106,7 @@ func TestReservationOnlyWriterFencedUntilArchitectureCorrectionAdopted(t *testin
 	}
 	writeAmendmentFile(t, wt, carrier, "# Architecture\n\n## Scope One\nOwned boundary.\n\n### CONTRACT\nCallers use the clarified reviewed interface.\n")
 	testhelpers.MustGit(t, wt, "add", carrier)
-	testhelpers.MustGit(t, wt, "commit", "-m", "fix: clarify existing interface contract")
+	testhelpers.MustGit(t, wt, "commit", "-m", "fix: clarify existing interface contract", "-m", "Prevention-Cause: the handler had no error path\nPrevention-Concept: internal/handler/handler.go#Handle\nPrevention-Disposition: removed\nPrevention-Class: gap")
 	manifest, err := json.Marshal(readState(t, statePath).FindTask("original").Output)
 	if err != nil {
 		t.Fatal(err)

@@ -5,11 +5,11 @@
     {
       "role": "architect",
       "variant": "architecture-main-pair",
-      "before_bytes": 297211,
-      "after_bytes": 292435,
+      "before_bytes": 297453,
+      "after_bytes": 292677,
       "delta_bytes": -4776,
-      "reference_before_bytes": 283754,
-      "reference_after_bytes": 278978
+      "reference_before_bytes": 283996,
+      "reference_after_bytes": 279220
     },
     {
       "role": "architecture-reviewer",
@@ -23,11 +23,11 @@
     {
       "role": "architect",
       "variant": "architecture-pair",
-      "before_bytes": 293999,
-      "after_bytes": 289223,
+      "before_bytes": 294241,
+      "after_bytes": 289465,
       "delta_bytes": -4776,
-      "reference_before_bytes": 283754,
-      "reference_after_bytes": 278978
+      "reference_before_bytes": 283996,
+      "reference_after_bytes": 279220
     },
     {
       "role": "architecture-reviewer",
@@ -59,8 +59,8 @@
     {
       "role": "code-planner",
       "variant": "code-planning-pair",
-      "before_bytes": 300291,
-      "after_bytes": 295515,
+      "before_bytes": 300533,
+      "after_bytes": 295757,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -77,8 +77,8 @@
     {
       "role": "coder",
       "variant": "coding-pair",
-      "before_bytes": 291365,
-      "after_bytes": 286589,
+      "before_bytes": 291607,
+      "after_bytes": 286831,
       "delta_bytes": -4776,
       "reference_before_bytes": 266437,
       "reference_after_bytes": 261661
@@ -95,8 +95,8 @@
     {
       "role": "epic-planner",
       "variant": "epic-planning-main-pair",
-      "before_bytes": 292545,
-      "after_bytes": 287769,
+      "before_bytes": 292787,
+      "after_bytes": 288011,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -113,8 +113,8 @@
     {
       "role": "epic-planner",
       "variant": "epic-planning-pair",
-      "before_bytes": 290001,
-      "after_bytes": 285225,
+      "before_bytes": 290243,
+      "after_bytes": 285467,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -131,8 +131,8 @@
     {
       "role": "integration-analyst",
       "variant": "integration-pair",
-      "before_bytes": 291110,
-      "after_bytes": 286334,
+      "before_bytes": 291352,
+      "after_bytes": 286576,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -149,8 +149,8 @@
     {
       "role": "integration-analyst",
       "variant": "slice-integration-pair",
-      "before_bytes": 291110,
-      "after_bytes": 286334,
+      "before_bytes": 291352,
+      "after_bytes": 286576,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452
@@ -167,8 +167,8 @@
     {
       "role": "us-writer",
       "variant": "us-writing-pair",
-      "before_bytes": 284985,
-      "after_bytes": 280209,
+      "before_bytes": 285227,
+      "after_bytes": 280451,
       "delta_bytes": -4776,
       "reference_before_bytes": 266228,
       "reference_after_bytes": 261452

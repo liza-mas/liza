@@ -193,7 +193,7 @@ b. and c. apply to the observed symptom path; e. names what the repair leaves op
    i. {{template "reality-probes"}}
    j. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    k. Submission proof: `{{binaryName}} submit-for-review` is not optional bookkeeping. It must actually run successfully after step j; do not treat plan/output artifacts alone as submission.
-7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using the captured full SHA.
+7. Submit using {{binaryName}} submit-for-review --json only after all checks in step 6 pass, using the captured full SHA. {{template "check-submission-pointer" .}}
 {{- else if eq .Role "epic-planner"}}
 
 IMPLEMENTATION PHASE:
@@ -246,7 +246,7 @@ consumer requirements, not invented provider designs or executable dependency ed
       Any validation[] command is satisfiable for the capability scope and agent-executable under the validation command-shape rule.
    d. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    e. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9d; do not stop at "ready for review".
-10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA. {{template "check-submission-pointer" .}}
 {{- else if eq .Role "us-writer"}}
 
 IMPLEMENTATION PHASE:
@@ -275,7 +275,7 @@ Won't scope (contract: Priority, Commitments and Proof Stage).
    a. The required story files exist under {{.Worktree}}/specs/stories/{{.GoalSlug}}/{{.EpicSlug}}/ and match the assigned capability scope.
    b. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    c. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 7b; do not stop at "ready for review".
-8. Submit using {{binaryName}} submit-for-review --json only after all checks in step 7 pass, using the captured full SHA.
+8. Submit using {{binaryName}} submit-for-review --json only after all checks in step 7 pass, using the captured full SHA. {{template "check-submission-pointer" .}}
 {{- else if eq .Role "architect"}}
 
 IMPLEMENTATION PHASE:
@@ -383,7 +383,7 @@ EMIT RULES (when both flags are false and the project lacks a pre-commit config)
    h. {{template "reality-probes"}}
    i. Git readiness: stage the intended files, create the submission commit, verify `git -C {{.Worktree}} status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    j. Submission proof: `{{binaryName}} submit-for-review` must actually run successfully after step 9i; do not treat the arch doc plus `{{binaryName}} set-task-output` as sufficient.
-10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
+10. Submit using {{binaryName}} submit-for-review --json only after all checks in step 9 pass, using the captured full SHA. {{template "check-submission-pointer" .}}
 {{- end}}
 {{- end -}}
 

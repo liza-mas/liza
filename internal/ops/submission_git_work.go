@@ -14,6 +14,7 @@ import (
 	gitpkg "github.com/liza-mas/liza/internal/git"
 	"github.com/liza-mas/liza/internal/models"
 	"github.com/liza-mas/liza/internal/paths"
+	"github.com/liza-mas/liza/internal/preventionrecord"
 	"github.com/liza-mas/liza/internal/roles"
 )
 
@@ -60,13 +61,15 @@ func (s *submissionRun) openWorktree() error {
 	return nil
 }
 
-// resolveCandidate reads the worktree HEAD and requires the submitted ref to
-// be it. A legacy call that named HEAD persists the immutable input and may
-// then replay a retained receipt: the returned submission is final.
-func (s *submissionRun) resolveCandidate() (*preparedSubmission, error) {
+// checkWorktreeBranch is entry worktree_branch: the task worktree exists and is
+// on the task branch, and its HEAD, the candidate, can be read.
+func (s *submissionRun) checkWorktreeBranch() error {
+	if err := s.openWorktree(); err != nil {
+		return err
+	}
 	preRebaseCommit, err := s.git.GetWorktreeHEAD(s.taskID)
 	if err != nil {
-		return nil, &OperationalError{
+		return &OperationalError{
 			Code:    operationalCodeGitOperation,
 			Phase:   "pre-rebase-head",
 			Message: "failed to read worktree HEAD",
@@ -79,12 +82,19 @@ func (s *submissionRun) resolveCandidate() (*preparedSubmission, error) {
 		}
 	}
 	s.preRebaseCommit = preRebaseCommit
+	return nil
+}
+
+// resolveCommitRef requires the submitted ref to be the candidate. A legacy
+// call that named HEAD persists the immutable input and may then replay a
+// retained receipt: the returned submission is final. Gate only.
+func (s *submissionRun) resolveCommitRef() (*preparedSubmission, error) {
 	resolvedCommit, err := s.git.ResolveWorktreeCommit(s.taskID, s.commitRef)
 	if err != nil {
 		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q could not be resolved in worktree", s.commitRef)}
 	}
-	if resolvedCommit != preRebaseCommit {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q resolved to %s, which does not match worktree HEAD %s", s.commitRef, resolvedCommit, preRebaseCommit)}
+	if resolvedCommit != s.preRebaseCommit {
+		return nil, &PreconditionError{Reason: fmt.Sprintf("provided commit ref %q resolved to %s, which does not match worktree HEAD %s", s.commitRef, resolvedCommit, s.preRebaseCommit)}
 	}
 	if s.opts.RequestID == "" {
 		// Persist the immutable input even when the first legacy call used HEAD.
@@ -100,19 +110,21 @@ func (s *submissionRun) resolveCandidate() (*preparedSubmission, error) {
 	return nil, nil
 }
 
-// checkCandidate refuses a candidate whose planning output, runtime inputs or
-// output refs do not hold, or that carries no test file under TDD.
-func (s *submissionRun) checkCandidate() error {
-	if err := validatePlanningOutputAcceptance(s.projectRoot, s.task, s.preRebaseCommit); err != nil {
-		return err
-	}
-	if err := validatePlanningOutputRuntimeInputs(s.projectRoot, s.state, s.task); err != nil {
-		return err
-	}
-	if err := validateOutputRefFragments(s.projectRoot, s.task, s.preRebaseCommit); err != nil {
-		return err
-	}
-	return s.enforceTDD()
+// checkPlanningOutputAcceptance is entry planning_output_acceptance: the
+// candidate's planning output declares parseable child Acceptance Contracts.
+func (s *submissionRun) checkPlanningOutputAcceptance() error {
+	return validatePlanningOutputAcceptance(s.projectRoot, s.task, s.preRebaseCommit)
+}
+
+// checkPlanningOutputRuntimeInputs is entry planning_output_runtime_inputs.
+func (s *submissionRun) checkPlanningOutputRuntimeInputs() error {
+	return validatePlanningOutputRuntimeInputs(s.projectRoot, s.state, s.task)
+}
+
+// checkOutputRefFragments is entry output_ref_fragments: every output ref
+// fragment resolves in the candidate.
+func (s *submissionRun) checkOutputRefFragments() error {
+	return validateOutputRefFragments(s.projectRoot, s.task, s.preRebaseCommit)
 }
 
 // enforceTDD requires test files in the candidate range of a doer's code task.
@@ -157,11 +169,131 @@ func (s *submissionRun) enforceTDD() error {
 	return nil
 }
 
+// Bounds of the prevention record refusal: commits listed in its reason, in
+// its details, and characters of a subject in its reason.
+const (
+	preventionReasonCommitLimit  = 10
+	preventionDetailsCommitLimit = 50
+	preventionSubjectLimit       = 100
+	preventionSHAPrefix          = 12
+)
+
+// checkPreventionRecords refuses, as a correctable input error, a doer's
+// candidate whose published range holds a fix commit without a well-formed
+// prevention record, or with an agent's accepted disposition. It runs before
+// any effect, so a refusal leaves the task as it was.
+func (s *submissionRun) checkPreventionRecords() error {
+	roleType, _ := s.resolver.RoleType(s.runtimeRole)
+	if roleType != roles.RoleTypeDoer || s.task.BaseCommit == nil {
+		return nil
+	}
+	integrationHead, err := s.integrationHead(s.state.Config.IntegrationBranch)
+	if err != nil {
+		return s.preventionRecordFailure(err, "failed to resolve integration branch HEAD",
+			"Ensure the configured integration branch exists and is fetchable, then retry submit-for-review.")
+	}
+	result, err := preventionrecord.Check(s.worktreePath, integrationHead, s.preRebaseCommit, *s.task.BaseCommit)
+	if err != nil {
+		return s.preventionRecordFailure(err, "failed to check prevention records",
+			"Ensure the configured integration branch exists and the task worktree history can be read, then retry submit-for-review.")
+	}
+	if len(result.Offenders) == 0 {
+		return nil
+	}
+	return preventionRecordRefusal(result, s.taskID, s.worktreePath, s.expectedBranch)
+}
+
+// preventionRecordFailure reports a git failure of the record check. The
+// message and recovery hint name the failing step: resolving the integration
+// branch or reading the range. As with the test-file check, git's text goes to
+// stderr only; the envelope carries its exit status and a closed failure class.
+func (s *submissionRun) preventionRecordFailure(err error, message, recoveryHint string) error {
+	fmt.Fprintf(os.Stderr, "WARNING: task %s: prevention record check failed: %v\n", s.taskID, err)
+	exitCode, failure := gitpkg.ClassifyFailure(err)
+	return &OperationalError{
+		Code:    operationalCodeGitOperation,
+		Phase:   "check-prevention-records",
+		Message: message,
+		Details: map[string]any{
+			"operation":     integrationOperationSubmitForReview,
+			"task_id":       s.taskID,
+			"git_exit_code": exitCode,
+			"git_failure":   string(failure),
+			"recovery_hint": recoveryHint,
+		},
+		Err: err,
+	}
+}
+
+// preventionRecordRefusal words the refusal: self-sufficient text naming the
+// offending commits, the installed record document and an executable repair,
+// and details holding names only, never a record value.
+func preventionRecordRefusal(result preventionrecord.Result, taskID, worktreePath, branch string) *PreconditionError {
+	document := "~/" + paths.GlobalDirName() + "/skills/shared/references/prevention-record.md"
+
+	var listed []string
+	accepted := false
+	for i, offender := range result.Offenders {
+		var names []string
+		for _, finding := range offender.Findings {
+			name := string(finding.Problem)
+			if finding.Key != "" {
+				name += " (" + finding.Key + ")"
+			}
+			names = append(names, name)
+			accepted = accepted || finding.Problem == preventionrecord.DispositionAccepted
+		}
+		if i < preventionReasonCommitLimit {
+			listed = append(listed, fmt.Sprintf("%s %q: %s", truncateRunes(offender.SHA, preventionSHAPrefix), truncateRunes(offender.Subject, preventionSubjectLimit), strings.Join(names, ", ")))
+		}
+	}
+	if more := len(result.Offenders) - preventionReasonCommitLimit; more > 0 {
+		listed = append(listed, fmt.Sprintf("and %d more", more))
+	}
+
+	var reason strings.Builder
+	fmt.Fprintf(&reason, "task %s: %d fix commit(s) in the submitted range lack a well-formed prevention record in their final trailer block: %s. The record format is in %s.",
+		taskID, len(result.Offenders), strings.Join(listed, "; "), document)
+	if accepted {
+		reason.WriteString(" An agent never records Prevention-Disposition: accepted; record scheduled with Prevention-Owner: human.")
+	}
+	fmt.Fprintf(&reason, " Repair, per commit <sha>, without an interactive rebase: `git -C %[1]s log -1 --format=%%B <sha> > <file>`; edit <file> so the record is the message's last paragraph, in the same paragraph as any other trailer (no blank line before Co-Authored-By); then for HEAD run `git -C %[1]s commit --amend -F <file>`, for an earlier commit run `git -C %[1]s checkout --detach <sha>`, `git -C %[1]s commit --amend -F <file>`, `git -C %[1]s rebase --onto HEAD <sha> %[2]s`. Later commits get new SHAs; resubmit with the new HEAD SHA.",
+		worktreePath, branch)
+
+	var commits []map[string]any
+	for i, offender := range result.Offenders {
+		if i == preventionDetailsCommitLimit {
+			break
+		}
+		problems := make([]map[string]string, 0, len(offender.Findings))
+		for _, finding := range offender.Findings {
+			problems = append(problems, map[string]string{"problem": string(finding.Problem), "key": finding.Key})
+		}
+		commits = append(commits, map[string]any{"sha": offender.SHA, "subject": offender.Subject, "problems": problems})
+	}
+	return &PreconditionError{
+		Reason: reason.String(),
+		Details: map[string]any{
+			"prevention_record_document": document,
+			"fix_commits_checked":        result.Checked,
+			"offending_commit_count":     len(result.Offenders),
+			"offending_commits":          commits,
+		},
+	}
+}
+
+func truncateRunes(s string, limit int) string {
+	if r := []rune(s); len(r) > limit {
+		return string(r[:limit])
+	}
+	return s
+}
+
 // resolveRebaseBase pins the integration HEAD the rebase targets and checks the
 // candidate's carriers against it.
 func (s *submissionRun) resolveRebaseBase() error {
 	s.integrationBranch = s.state.Config.IntegrationBranch
-	rebaseBase, err := s.git.GetCommitSHA(s.integrationBranch)
+	rebaseBase, err := s.integrationHead(s.integrationBranch)
 	if err != nil {
 		return &OperationalError{
 			Code:    operationalCodeGitOperation,
@@ -299,9 +431,16 @@ func (s *submissionRun) rebase() error {
 	return &IntegrationFailedError{Reason: IntegrationReasonMergeConflict}
 }
 
-// checkRebased reads the rebased HEAD and validates it against the boundary
-// that the final transaction will write.
-func (s *submissionRun) checkRebased() error {
+// rebaseCandidate is entry rebase at the gate: the rebase, its conflict route,
+// the rebased HEAD and the boundary the final transaction will write. The local
+// runner substitutes read-only eligibility proofs (check_submission.go).
+func (s *submissionRun) rebaseCandidate() error {
+	if s.local != nil {
+		return s.proveNoopRebase()
+	}
+	if err := s.rebase(); err != nil {
+		return err
+	}
 	postRebaseCommit, err := s.git.GetWorktreeHEAD(s.taskID)
 	if err != nil {
 		return &OperationalError{
@@ -317,26 +456,49 @@ func (s *submissionRun) checkRebased() error {
 		}
 	}
 	s.postRebaseCommit = postRebaseCommit
-	if err := validatePlanningOutputAcceptance(s.projectRoot, s.task, postRebaseCommit); err != nil {
-		return err
-	}
-	if err := validateOutputRefFragments(s.projectRoot, s.task, postRebaseCommit); err != nil {
-		return err
-	}
-	if err := validateReviewCarriers(s.git, s.projectRoot, s.taskID, s.rebaseBase, postRebaseCommit, s.rebaseBase); err != nil {
-		return err
-	}
-	// Validate against the boundary that will be written by the final
-	// transaction; the state copy still contains the pre-submit claim base.
+	s.fixBoundary()
+	return nil
+}
+
+// fixBoundary records the boundary the final transaction will write; the state
+// copy still contains the pre-submit claim base.
+func (s *submissionRun) fixBoundary() {
 	s.boundaryTask = *s.task
 	s.boundaryTask.BaseCommit = &s.rebaseBase
+}
+
+// checkPublishedPlanningOutput is entry published_planning_output.
+func (s *submissionRun) checkPublishedPlanningOutput() error {
+	return validatePlanningOutputAcceptance(s.projectRoot, s.task, s.postRebaseCommit)
+}
+
+// checkPublishedOutputRefFragments is entry published_output_ref_fragments.
+func (s *submissionRun) checkPublishedOutputRefFragments() error {
+	return validateOutputRefFragments(s.projectRoot, s.task, s.postRebaseCommit)
+}
+
+// checkPublishedCarriers is entry published_carriers: the reviewer's carrier
+// context over the range the submission publishes.
+func (s *submissionRun) checkPublishedCarriers() error {
+	return validateReviewCarriers(s.git, s.projectRoot, s.taskID, s.rebaseBase, s.postRebaseCommit, s.rebaseBase)
+}
+
+// checkPlanAmendment is entry plan_amendment.
+func (s *submissionRun) checkPlanAmendment() error {
 	if original := models.PendingPlanAmendment(s.state, s.task); original != "" {
 		return &PreconditionError{Reason: "reviewed plan amendment pending for " + original}
 	}
-	if err := validateBoundedContractCorrection(s.projectRoot, s.state, s.state.FindTask(s.task.AmendsPlan), &s.boundaryTask, postRebaseCommit); err != nil {
-		return err
-	}
-	return validateReviewBoundaryCommit(s.projectRoot, &s.boundaryTask, postRebaseCommit, s.rebaseBase)
+	return nil
+}
+
+// checkBoundedContractCorrection is entry bounded_contract_correction.
+func (s *submissionRun) checkBoundedContractCorrection() error {
+	return validateBoundedContractCorrection(s.projectRoot, s.state, s.state.FindTask(s.task.AmendsPlan), &s.boundaryTask, s.postRebaseCommit)
+}
+
+// checkReviewBoundary is entry review_boundary.
+func (s *submissionRun) checkReviewBoundary() error {
+	return validateReviewBoundaryCommit(s.projectRoot, &s.boundaryTask, s.postRebaseCommit, s.rebaseBase)
 }
 
 func taskRequiresTDD(task *models.Task, resolver models.PipelineResolver) (bool, error) {

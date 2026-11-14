@@ -65,15 +65,7 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 			// Finalization may lose a race after Git or indexing. Report a fresh
 			// authorized observation, never a callback's uncommitted candidate.
 			invocation.task = readLifecycleTask(projectRoot, taskID, authority, opts)
-			outcome, action, effects := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
-			var invalid *PreconditionError
-			if !invocation.effects && errors.As(err, &invalid) {
-				outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
-			}
-			if invocation.effects {
-				effects = LifecycleEffectsUnknown
-			}
-			err = WrapLifecycleError(integrationOperationSubmitForReview, invocation.task, err, outcome, action, effects)
+			err = classifySubmissionError(invocation.task, err, invocation.effects)
 		}
 		var outcome models.LifecycleOutcome
 		var warnings *[]string
@@ -149,6 +141,23 @@ func submitForReviewLifecycle(projectRoot, taskID, commitRef, agentID string, au
 	blockRuntimeInputRefusal(projectRoot, taskID, agentID, authority, err)
 	blockBatchTimeoutRefusal(projectRoot, taskID, agentID, authority, err)
 	return result, err
+}
+
+// classifySubmissionError gives a refusal the recovery policy submit-for-review
+// states for it: a correctable precondition before any effect is INVALID_INPUT,
+// anything else asks the caller to requery, and effects are unknown once the
+// preparation marker was written. The local run applies the same policy with
+// effects false (ADR-0252).
+func classifySubmissionError(task *models.Task, err error, effects bool) error {
+	outcome, action, observed := models.LifecycleStateChanged, LifecycleSafeActionRequery, LifecycleEffectsNone
+	var invalid *PreconditionError
+	if !effects && errors.As(err, &invalid) {
+		outcome, action = models.LifecycleInvalidInput, LifecycleSafeActionCorrectInput
+	}
+	if effects {
+		observed = LifecycleEffectsUnknown
+	}
+	return WrapLifecycleError(integrationOperationSubmitForReview, task, err, outcome, action, observed)
 }
 
 // submitBatchTimeoutBlockTestHook runs after a batch-timeout submit released

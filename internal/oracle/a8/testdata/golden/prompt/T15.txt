@@ -347,6 +347,7 @@ COMMIT WORKFLOW:
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
 After implementation and tests pass, you MUST submit for review:
+Preview the gate: `liza check-submission task` runs the checks submission applies, on your committed HEAD, changing no state (exit 0 pass, 5 refused, 6 incomplete: never a pass). It runs the canonical commands too, so weigh its cost.
 1. Stage the intended files for this task: git -C <ROOT>/project add <files>
 2. Create the submission commit for this task using the required git commit workflow for this environment.
 3. Verify the worktree is clean: git -C <ROOT>/project status --short

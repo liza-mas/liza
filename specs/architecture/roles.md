@@ -227,6 +227,20 @@ rejected commit as a reading start; complete rejection obligations remain author
 - Waiver: code tasks with no behavior change (cosmetic fixes, comment edits) can declare `tdd_not_required` with justification in the checkpoint; Code Reviewer verifies
 - Rationale: Coder can't validate their work without tests; separate test tasks break TDD flow
 
+**Prevention record (every doer submission):**
+- `submit-for-review` reads the commits the submission will publish: those on the task branch not on the integration branch and not already applied there, merges excluded. Every one is treated as the agent's.
+- A commit whose subject has Conventional Commit type `fix` must carry a prevention record in its final trailer block, in the format of the installed `prevention-record.md` reference (Scope 0, ADR-0250). The check reads the block's raw lines; git alone decides where the block is.
+- Refusal is a correctable precondition (`invalid_input`, `correct_input`): no state change, the doer keeps the task. It names each offending commit, the problem (`record_missing`, `outside_final_block`, `key_unknown`, `key_missing`, `key_repeated`, `value_invalid`, `owner_unexpected`, `disposition_accepted`) and the key concerned, the document, and an executable repair without interactive rebase.
+- An agent never records `accepted`: it records `scheduled` with owner `human`.
+- Runs after the TDD check and before the rebase, for every doer role and task type with a `base_commit`.
+- The reviewer judges the record's substance (refusing boundary, negative test, sibling search); the check only gates its form.
+
+**Local submission check (every doer, read-only):**
+- `check-submission <task-id>` evaluates the checks `submit-for-review` applies, one shared list in gate order (`agent_authority` … `canonical_validation`), on the task worktree's HEAD with the gate's configuration and runtime inputs, and returns the gate's verdict: `pass` (exit 0), `refused` (5: the first refusing check, in the gate's own error and reason), `incomplete` (6). Later checks are `not_run` with reason `after_refusal`.
+- It changes no state, receipt, anomaly, runtime input, branch or HEAD; its one write is the gate's own: a failing command's masked output kept in the tool-result store ([ADR-0232](ADR/0232-provider-native-tool-result-budgets.md)). It never rebases: the published-stage checks and the canonical commands run only when the rebase is proven a no-op (integration HEAD an ancestor of HEAD with no merge commit in between, no tracked change, no operation in progress, no executable `pre-rebase` hook), else `rebase_pending` or `rebase_unverified:<condition>`.
+- A check it cannot run exactly is `not_run` and the verdict `incomplete`, never `pass`: `rebase_pending`, `rebase_unverified`, `single_use_input:<index>` (a `single_use` runtime input is spent only by the gate; earlier commands ran) and `admission_full` (a class stayed full for `--max-wait`, at the local tier). `submit_hold`, `lifecycle_request`, `preparation`, `index_refresh` and `publication_guards` are `not_applicable`: no candidate verdict.
+- An agent session must be a doer; an operator names the agent with `--agent-id`. A refusal by entries 13-19, after the gate's preparation marker, reads INVALID_INPUT / `correct_input` / effects `none` here where `submit-for-review` reports STATE_CHANGED / `requery` / `unknown`; the reason, error type and every other detail are the same. A refusal by entries 1-11 is exactly the gate's envelope ([ADR-0252](ADR/0252-shared-submission-check-list-and-local-gate.md)).
+
 **`done_when` vs Tests:**
 - `done_when` is the **acceptance criterion** — what the Code Reviewer validates
 - Tests should **exercise the `done_when` scenarios** — but tests passing doesn't automatically satisfy `done_when`

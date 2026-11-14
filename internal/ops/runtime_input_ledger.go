@@ -199,6 +199,9 @@ type runtimeInputGate struct {
 	operation   string
 	// onRefusal runs inside the refusing transaction, on the live task.
 	onRefusal func(state *models.State, task *models.Task) error
+	// inspect resolves the inputs read-only: nothing is spent, invalidated or
+	// recorded, and single_use values are never delivered (ADR-0252).
+	inspect bool
 }
 
 // acquire is the pre-launch step of the strict gate (ADR-0169). It runs
@@ -209,6 +212,9 @@ type runtimeInputGate struct {
 // instance. Consumption is durable before any command launches; nothing
 // returns it.
 func (gate runtimeInputGate) acquire(task *models.Task) (*runtimeInputGrant, error) {
+	if gate.inspect {
+		return gate.inspectInputs(task)
+	}
 	snapshot, err := gate.bb.Read()
 	if err != nil {
 		return nil, err
@@ -275,16 +281,53 @@ func (gate runtimeInputGate) acquire(task *models.Task) (*runtimeInputGrant, err
 	if len(refusals) > 0 {
 		return nil, runtimeInputRefusalError(task.ID, refusals, nil)
 	}
+	grant.deliver(resolutions, false)
+	return grant, nil
+}
+
+// inspectInputs is acquire without effect: it refuses with the gate's codes and
+// text the inputs the gate would refuse, but records no anomaly, invalidates
+// nothing, consumes nothing and delivers reusable values only.
+func (gate runtimeInputGate) inspectInputs(task *models.Task) (*runtimeInputGrant, error) {
+	snapshot, err := gate.bb.ReadSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	grant := &runtimeInputGrant{deny: models.ReservedEnvNames(snapshot), overlays: map[string][]string{}}
+	if len(task.RuntimeInputs) == 0 {
+		return grant, nil
+	}
+	key, keyErr := loadRuntimeInputKey(snapshot, false)
+	resolutions := resolveRuntimeInputs(gate.projectRoot, snapshot, task.ID, task.RuntimeInputs, key, keyErr)
+	var refusals []runtimeInputResolution
 	for _, resolution := range resolutions {
-		entries := resolution.materialization.Environment()
-		for _, command := range resolution.declaration.Commands {
-			grant.overlays[command] = append(grant.overlays[command], entries...)
-		}
-		if resolution.declaration.Secret {
-			grant.secrets = append(grant.secrets, resolution.materialization.SecretValues()...)
+		if resolution.code != "" {
+			refusals = append(refusals, resolution)
 		}
 	}
+	if len(refusals) > 0 {
+		return nil, runtimeInputRefusalError(task.ID, refusals, nil)
+	}
+	grant.deliver(resolutions, true)
 	return grant, nil
+}
+
+// deliver adds the environment each resolved input grants to the commands that
+// use it, and its secret values to the masked set; reusableOnly leaves out
+// single_use inputs.
+func (g *runtimeInputGrant) deliver(resolutions []runtimeInputResolution, reusableOnly bool) {
+	for _, resolution := range resolutions {
+		if reusableOnly && resolution.declaration.Consumption == models.RuntimeInputSingleUse {
+			continue
+		}
+		entries := resolution.materialization.Environment()
+		for _, command := range resolution.declaration.Commands {
+			g.overlays[command] = append(g.overlays[command], entries...)
+		}
+		if resolution.declaration.Secret {
+			g.secrets = append(g.secrets, resolution.materialization.SecretValues()...)
+		}
+	}
 }
 
 // runtimeInputRunIDBytes is the random part of a gate run's identifier.

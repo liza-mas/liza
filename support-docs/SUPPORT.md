@@ -127,6 +127,7 @@ a stale authoritative reference.
 §BRAND_BINARY_NAME§ deferred-validation status [--json] # Deferred commands, rulings, live runner, last batches
 §BRAND_BINARY_NAME§ admission-limit set <class> --max-concurrent <n> --match=<substring> # Cap how many matching canonical commands run at once
 §BRAND_BINARY_NAME§ admit -- <command>                         # Run a local command inside the slots of the classes it matches
+§BRAND_BINARY_NAME§ check-submission <task-id> [--agent-id <id>] [--max-wait <s>] [--json] # Run the submit gate's checks locally without submitting; exit 0 pass, 5 refused, 6 incomplete
 §BRAND_BINARY_NAME§ delete agent <id>             # Remove agent from state
 §BRAND_BINARY_NAME§ delete task <id>              # Remove task from state
 ```
@@ -711,6 +712,26 @@ reviewed mandatory file, or waive behavioral work to bypass recognition.
 Filename recognition proves presence only; canonical acceptance execution and
 independent review still establish whether the tests pass and cover the work.
 
+If submission says `fix commit(s) in the submitted range lack a well-formed
+prevention record`, the task is unchanged and still yours. Each listed commit
+(SHA prefix, subject) has problems, with the key concerned:
+`record_missing` (no `Prevention-` line), `outside_final_block` (a record line
+sits above the message's last paragraph, as after a squash, or the record is not
+in the same paragraph as the other trailers), `key_unknown` (not one of the five
+keys, spelled exactly; case counts), `key_missing`, `key_repeated`,
+`value_invalid` (empty, spanning lines or not an allowed value) and
+`owner_unexpected` (an owner without `scheduled`). `disposition_accepted`: an
+agent never records `accepted`; use `scheduled` with owner `human`. The format is
+in `~/§BRAND_GLOBAL_DIRNAME§/skills/shared/references/prevention-record.md`. Repair per
+commit, without an interactive rebase: write its message with
+`git -C <worktree> log -1 --format=%B <sha> > <file>`, edit `<file>` so the record
+is the last paragraph, then amend HEAD with `git -C <worktree> commit --amend -F
+<file>`; for an earlier commit run `git -C <worktree> checkout --detach <sha>`,
+the same `commit --amend -F <file>`, then `git -C <worktree> rebase --onto HEAD
+<sha> <task-branch>`. Later commits get new SHAs; resubmit with the new HEAD SHA.
+A git failure of the check reports phase `check-prevention-records` with
+`git_failure`; fix the integration branch or worktree history and retry.
+
 If submission fails at `acceptance.execution[N]`, inspect the error's masked
 command-output excerpt for the failing assertion or setup error. `N` is zero-based
 in the reviewed canonical command list. Excerpts keep at most 8 KiB, head and
@@ -724,6 +745,31 @@ kept only the first 8 KiB, or discarded failed-command output entirely; the
 rest cannot be recovered afterward from task state. Preserve the candidate and
 diagnose with an updated engine before another authorized submission. A later
 direct test pass does not explain the original gate failure or replace admission.
+
+To learn what the gate would say before submitting, run
+`§BRAND_BINARY_NAME§ check-submission <task-id>` from any directory of the
+project: it evaluates the checks submission applies, in the gate's order, on
+the task worktree's HEAD, and changes no state. Exit 0 is `pass`, 5 is
+`refused` (the first refusing check, worded as the gate words it: fix it and
+rerun; a refusal after the gate's preparation marker reads
+`INVALID_INPUT` / `correct_input` / effects `none` here, where
+`submit-for-review` reports `STATE_CHANGED` / `requery` / `unknown`, with the
+same reason), 6 is `incomplete`, 1 is a failure, 2 a lock timeout, 3 an unknown
+task. Incomplete is never a pass; each check not run says why:
+`rebase_pending` (the branch is behind integration or holds a merge commit:
+rebase it, then rerun), `rebase_unverified:tracked_changes` (commit or clean
+the tracked changes), `rebase_unverified:operation_in_progress` (finish or abort
+the merge, cherry-pick, revert, rebase or am), `rebase_unverified:pre_rebase_hook`
+(an executable `pre-rebase` hook exists, so only the gate can prove the rebase),
+`single_use_input:<n>` (canonical command `n` uses a `single_use` runtime input
+only the gate spends; the commands before it ran) and `admission_full` (an
+admission class stayed full for `--max-wait`; no command ran). Not applicable,
+having no candidate verdict: `submit_hold`, `lifecycle_request`, `preparation`,
+`index_refresh`, `publication_guards`. The canonical commands run in the
+worktree as at the gate, behind the same admission limits at the local tier, and
+a failing command's masked output is kept as the gate keeps it
+(`§BRAND_BINARY_NAME§ tool-result read <hash>`). Agent sessions must be doers;
+an operator names the agent with `--agent-id`.
 
 ```
 §BRAND_BINARY_NAME§ submit-for-review → §BRAND_BINARY_NAME§ await-verdict → handle result

@@ -274,7 +274,7 @@ consumer requirements, not invented provider designs or executable dependency ed
       Any validation[] command is satisfiable for the capability scope and agent-executable under the validation command-shape rule.
    d. Git readiness: stage the intended files, create the submission commit, verify `git -C <ROOT>/project status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    e. Submission proof: `liza submit-for-review` must actually run successfully after step 9d; do not stop at "ready for review".
-10. Submit using liza submit-for-review --json only after all checks in step 9 pass, using the captured full SHA.
+10. Submit using liza submit-for-review --json only after all checks in step 9 pass, using the captured full SHA. Preview the gate: `liza check-submission task` runs the checks submission applies, on your committed HEAD, changing no state (exit 0 pass, 5 refused, 6 incomplete: never a pass). It runs the canonical commands too, so weigh its cost.
 
 === SKILLS AFFINITY ===
 - epic-writing

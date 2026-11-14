@@ -4,7 +4,7 @@
     {
       "variant": "architect",
       "role": "architect",
-      "rendered_bytes": 28609,
+      "rendered_bytes": 28851,
       "base_prompt_bytes": 9104,
       "mandatory_read_bytes": 27012,
       "reads": [
@@ -15,7 +15,7 @@
     {
       "variant": "architect (decomposition root)",
       "role": "architect",
-      "rendered_bytes": 31821,
+      "rendered_bytes": 32063,
       "base_prompt_bytes": 9104,
       "mandatory_read_bytes": 27012,
       "reads": [
@@ -76,7 +76,7 @@
     {
       "variant": "code-planner",
       "role": "code-planner",
-      "rendered_bytes": 34800,
+      "rendered_bytes": 35042,
       "base_prompt_bytes": 9113,
       "mandatory_read_bytes": 31308,
       "reads": [
@@ -109,7 +109,7 @@
     {
       "variant": "coder",
       "role": "coder",
-      "rendered_bytes": 25686,
+      "rendered_bytes": 25928,
       "base_prompt_bytes": 9092,
       "mandatory_read_bytes": 28570,
       "reads": [
@@ -145,7 +145,7 @@
     {
       "variant": "epic-planner",
       "role": "epic-planner",
-      "rendered_bytes": 24506,
+      "rendered_bytes": 24748,
       "base_prompt_bytes": 9113,
       "mandatory_read_bytes": 42114,
       "reads": [
@@ -157,7 +157,7 @@
     {
       "variant": "epic-planner (decomposition root)",
       "role": "epic-planner",
-      "rendered_bytes": 27050,
+      "rendered_bytes": 27292,
       "base_prompt_bytes": 9113,
       "mandatory_read_bytes": 42114,
       "reads": [
@@ -169,7 +169,7 @@
     {
       "variant": "integration-analyst",
       "role": "integration-analyst",
-      "rendered_bytes": 25717,
+      "rendered_bytes": 25959,
       "base_prompt_bytes": 9134,
       "mandatory_read_bytes": 49610,
       "reads": [
@@ -293,7 +293,7 @@
     {
       "variant": "us-writer",
       "role": "us-writer",
-      "rendered_bytes": 19546,
+      "rendered_bytes": 19788,
       "base_prompt_bytes": 9104,
       "mandatory_read_bytes": 28374,
       "reads": [

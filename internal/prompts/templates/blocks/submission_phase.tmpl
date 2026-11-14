@@ -1,3 +1,7 @@
+{{- define "check-submission-pointer" -}}
+Preview the gate: `{{binaryName}} check-submission {{.TaskID}}` runs the checks submission applies, on your committed HEAD, changing no state (exit 0 pass, 5 refused, 6 incomplete: never a pass). It runs the canonical commands too, so weigh its cost.
+{{- end -}}
+
 {{- define "submission-phase" -}}
 
 --- SUBMISSION (MANDATORY - DO NOT SKIP) ---
@@ -12,6 +16,7 @@ that one, so fix and resubmit.
 Submission may queue for admission slots before its batch budget starts, so it can run far past
 timeout_seconds; its stderr reports what it waits for. Never interrupt it or start another submit for this task.
 {{- end}}
+{{template "check-submission-pointer" .}}
 1. Stage the intended files for this task: git -C {{.Worktree}} add <files>
 2. Create the submission commit for this task using the required git commit workflow for this environment.
 3. Verify the worktree is clean: git -C {{.Worktree}} status --short

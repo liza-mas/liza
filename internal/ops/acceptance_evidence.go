@@ -327,6 +327,15 @@ func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Tas
 	if err != nil {
 		return nil, err
 	}
+	// An inspecting gate spends nothing, so it cannot run a command that uses a
+	// single_use input: it stops before the first one.
+	var stop *acceptanceInspectStop
+	if gate.inspect {
+		if at := firstSingleUseCommand(task.RuntimeInputs, commands); at >= 0 {
+			stop = &acceptanceInspectStop{Index: indices[at]}
+			commands, indices = commands[:at], indices[:at]
+		}
+	}
 	budget := acceptanceBatchTimeout(input.batchTimeoutSeconds)
 	held.progress.set(fmt.Sprintf("running canonical validation, batch budget %s", budget), time.Now().Add(budget))
 	worktree := git.New(root).GetWorktreePath(task.ID)
@@ -371,7 +380,32 @@ func executeAcceptanceReceipt(ctx context.Context, root string, task *models.Tas
 	if err := checkAcceptanceWorktree(root, task.ID, commit); err != nil {
 		return nil, err
 	}
+	if stop != nil {
+		return nil, stop
+	}
 	return receipt, nil
+}
+
+// acceptanceInspectStop is an inspecting gate's stop before the canonical
+// command Index, the first to use a single_use runtime input: every command
+// before it passed, and none after it ran.
+type acceptanceInspectStop struct{ Index int }
+
+func (e *acceptanceInspectStop) Error() string {
+	return fmt.Sprintf("canonical validation stopped before command %d, which uses a single_use runtime input only the submission gate spends", e.Index)
+}
+
+// firstSingleUseCommand is the position in commands of the first one a
+// single_use runtime input lists, or -1.
+func firstSingleUseCommand(inputs []models.RuntimeInput, commands []string) int {
+	for i, command := range commands {
+		for _, input := range inputs {
+			if input.Consumption == models.RuntimeInputSingleUse && slices.Contains(input.Commands, command) {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 // Recheck the source, task allocation and candidate identity in the final

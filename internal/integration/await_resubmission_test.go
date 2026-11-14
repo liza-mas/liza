@@ -128,7 +128,7 @@ func TestAwaitResubmission_RejectResubmitFlow(t *testing.T) {
 	if err := exec.Command("git", "-C", worktreePath, "add", "feature.go").Run(); err != nil {
 		t.Fatalf("git add (fix) failed: %v", err)
 	}
-	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "fix: add error handling").Run(); err != nil {
+	if err := exec.Command("git", "-C", worktreePath, "commit", "-m", "fix: add error handling", "-m", "Prevention-Cause: the handler had no error path\nPrevention-Concept: internal/handler/handler.go#Handle\nPrevention-Disposition: removed\nPrevention-Class: gap").Run(); err != nil {
 		t.Fatalf("git commit (fix) failed: %v", err)
 	}
 

@@ -53,6 +53,14 @@ type submissionRun struct {
 	// published under (the state copy still holds the pre-submit claim base).
 	postRebaseCommit string
 	boundaryTask     models.Task
+
+	// receipt is canonical_validation's result, published by the gate.
+	receipt *models.AcceptanceReceipt
+	// readState reads the one state snapshot: the locked read at the gate, the
+	// lock-free one in the local run.
+	readState func() (*models.State, error)
+	// local is set by the local runner (check-submission) and nil at the gate.
+	local *localSubmission
 }
 
 // readSnapshot validates the payload structurally before the boundary reads
@@ -65,34 +73,46 @@ func (s *submissionRun) readSnapshot() (*preparedSubmission, error) {
 
 	lp := paths.New(s.projectRoot)
 	s.bb = RequestBlackboard(lp.StatePath(), s.authority, s.opts)
+	s.readState = s.bb.Read
 
-	runtimeRole, err := identity.ExtractRole(s.agentID)
-	if err != nil {
-		return nil, &PreconditionError{Reason: fmt.Sprintf("invalid agent ID format: %s (%v)", s.agentID, err)}
-	}
-	s.runtimeRole = runtimeRole
-
-	// Phase 1: Read state to get config and validate preconditions
-	state, task, err := readTaskState(s.bb, s.taskID)
-	if err != nil {
+	if err := s.runEntries(checkAgentAuthority, checkAgentAuthority); err != nil {
 		return nil, err
 	}
-	if s.authority != nil {
-		if err := RequireAgentAuthority(state, *s.authority); err != nil {
-			return nil, err
-		}
-	}
-	s.state, s.task = state, task
-	s.invocation.task = task
-	request, receipt, err := submissionRequest(task, s.commitRef, s.agentID, s.authority, s.opts, state.Agents)
+	request, receipt, err := submissionRequest(s.task, s.commitRef, s.agentID, s.authority, s.opts, s.state.Agents)
 	if err != nil {
 		return nil, err
 	}
 	s.request = request
 	if receipt != nil {
-		return replaySubmission(task, receipt, s.agentID), nil
+		return replaySubmission(s.task, receipt, s.agentID), nil
 	}
 	return nil, nil
+}
+
+// checkAgentAuthority extracts the runtime role from the agent ID, reads one
+// state snapshot, finds the task and requires the caller's authority, when it
+// has one, to be current.
+func (s *submissionRun) checkAgentAuthority() error {
+	runtimeRole, err := identity.ExtractRole(s.agentID)
+	if err != nil {
+		return &PreconditionError{Reason: fmt.Sprintf("invalid agent ID format: %s (%v)", s.agentID, err)}
+	}
+	s.runtimeRole = runtimeRole
+
+	// Phase 1: Read state to get config and validate preconditions
+	state, err := s.readState()
+	state, task, err := findReadTask(state, err, s.taskID)
+	if err != nil {
+		return err
+	}
+	if s.authority != nil {
+		if err := RequireAgentAuthority(state, *s.authority); err != nil {
+			return err
+		}
+	}
+	s.state, s.task = state, task
+	s.invocation.task = task
+	return nil
 }
 
 // resolvePipeline resolves the executing and submitted statuses of the task's

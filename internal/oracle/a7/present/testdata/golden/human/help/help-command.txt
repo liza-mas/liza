@@ -23,6 +23,7 @@ await-resubmission Block until a doer resubmits after a rejection
 await-verdict Block until a review verdict arrives for a submitted task
 cancel-task Cancel a task (transition to ABANDONED)
 check-commit-allowed Decide whether a commit is allowed in a task worktree (pre-commit hook backend)
+check-submission Run the submit gate's checks locally, changing no state
 claim-task Claim a task for a doer agent
 cleanup Remove Liza runtime state and task worktrees
 clear-agent-degraded Clear degraded health for an agent

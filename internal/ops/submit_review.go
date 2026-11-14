@@ -87,25 +87,28 @@ func SubmitForReviewWithAuthority(projectRoot, taskID, commitRef string, authori
 func prepareSubmitForReview(projectRoot, taskID, commitRef, agentID string, authority *models.AgentAuthority, opts LifecycleRequestOptions, invocation *submissionInvocation) (*preparedSubmission, error) {
 	s := &submissionRun{projectRoot: projectRoot, taskID: taskID, commitRef: commitRef, agentID: agentID, authority: authority, opts: opts, invocation: invocation}
 
-	// Preconditions from one state snapshot.
+	// The gate evaluates the shared check list in order (submission_checks.go);
+	// what it does between entries is its own: the commit ref, the batch
+	// admission plan, the preparation marker.
 	if replay, err := s.readSnapshot(); replay != nil || err != nil {
 		return replay, err
 	}
-	if err := s.resolvePipeline(); err != nil {
-		return nil, err
-	}
-	if err := s.checkOwnership(); err != nil {
+	if err := s.runEntries(checkPipeline, checkOwnership); err != nil {
 		return nil, err
 	}
 
 	// Git and command work under the task lock, never the blackboard lock.
-	if err := s.openWorktree(); err != nil {
+	if err := s.runEntries(checkWorktreeBranchName, checkWorktreeBranchName); err != nil {
 		return nil, err
 	}
-	if replay, err := s.resolveCandidate(); replay != nil || err != nil {
+	if replay, err := s.resolveCommitRef(); replay != nil || err != nil {
 		return replay, err
 	}
-	for _, phase := range []func() error{s.checkCandidate, s.resolveRebaseBase, s.loadAcceptance, s.planAdmission, s.recordPreparation, s.rebase, s.checkRebased} {
+	for _, phase := range []func() error{
+		func() error { return s.runEntries(checkPlanningOutputAcceptanceName, checkAcceptanceContract) },
+		s.planAdmission, s.recordPreparation,
+		func() error { return s.runEntries(checkRebase, checkReviewBoundaryName) },
+	} {
 		if err := phase(); err != nil {
 			return nil, err
 		}

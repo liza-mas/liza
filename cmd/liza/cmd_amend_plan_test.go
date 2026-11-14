@@ -141,7 +141,7 @@ func approveAmendmentCLI(t *testing.T, root, statePath, correction string, outpu
 	carrier := strings.Replace(string(data), "## Task 1", "## Handoff guidance "+correction+"\nUse the reviewed scheduling metadata.\n\n## Task 1", 1)
 	writeAmendmentFile(t, wt, "specs/acceptance-plan.md", carrier)
 	testhelpers.MustGit(t, wt, "add", "specs/acceptance-plan.md")
-	testhelpers.MustGit(t, wt, "commit", "-m", "fix: correct handoff guidance")
+	testhelpers.MustGit(t, wt, "commit", "-m", "fix: correct handoff guidance", "-m", "Prevention-Cause: the handler had no error path\nPrevention-Concept: internal/handler/handler.go#Handle\nPrevention-Disposition: removed\nPrevention-Class: gap")
 	manifest, err := json.Marshal(output)
 	if err != nil {
 		t.Fatal(err)

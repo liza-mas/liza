@@ -220,7 +220,7 @@ Won't scope (contract: Priority, Commitments and Proof Stage).
    a. The required story files exist under <ROOT>/project/specs/stories/goal/epic/ and match the assigned capability scope.
    b. Git readiness: stage the intended files, create the submission commit, verify `git -C <ROOT>/project status --short` is clean, then capture the full submission SHA as directed in TOOLS.
    c. Submission proof: `liza submit-for-review` must actually run successfully after step 7b; do not stop at "ready for review".
-8. Submit using liza submit-for-review --json only after all checks in step 7 pass, using the captured full SHA.
+8. Submit using liza submit-for-review --json only after all checks in step 7 pass, using the captured full SHA. Preview the gate: `liza check-submission task` runs the checks submission applies, on your committed HEAD, changing no state (exit 0 pass, 5 refused, 6 incomplete: never a pass). It runs the canonical commands too, so weigh its cost.
 
 === SKILLS AFFINITY ===
 - user-story-writing

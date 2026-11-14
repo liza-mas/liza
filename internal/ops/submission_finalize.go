@@ -19,10 +19,10 @@ func (s *submissionRun) finalize() (*SubmitForReviewResult, error) {
 	if err := s.recheckPreparation(); err != nil {
 		return nil, err
 	}
-	receipt, err := s.executeAcceptance()
-	if err != nil {
+	if err := s.runEntries(checkCanonicalValidation, checkCanonicalValidation); err != nil {
 		return nil, err
 	}
+	receipt := s.receipt
 	outcome, err := s.publish(receipt)
 	if err != nil {
 		return nil, err
@@ -73,11 +73,14 @@ func (s *submissionRun) recheckPreparation() error {
 
 // executeAcceptance runs the acceptance batch, if the task declares one, on the
 // rebased candidate under the ownership fence, with the slots pre-admission
-// held or its own.
+// held or its own. The local run takes the same path in inspect mode, with a
+// local-tier slot wait (ADR-0252).
 func (s *submissionRun) executeAcceptance() (*models.AcceptanceReceipt, error) {
-	gate := runtimeInputGate{projectRoot: s.projectRoot, bb: s.bb, authority: s.authority, actor: s.agentID, operation: integrationOperationSubmitForReview}
+	gate := runtimeInputGate{projectRoot: s.projectRoot, bb: s.bb, authority: s.authority, actor: s.agentID, operation: integrationOperationSubmitForReview, inspect: s.local != nil}
 	slots, ownSlots := s.held, s.held == nil && s.acceptance != nil
-	if ownSlots {
+	if ownSlots && s.local != nil {
+		slots = newLocalAdmissionSlots(s.local.maxWait)
+	} else if ownSlots {
 		// Execution would take its slots itself; taken here so they
 		// report to this submit's progress.
 		slots = newSubmitAdmissionSlots(s.acceptance.batchTimeoutSeconds)
