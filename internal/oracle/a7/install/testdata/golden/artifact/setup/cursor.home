@@ -67,10 +67,10 @@
 + .liza directory 0755 -
 + .liza/AGENT_TOOLS.md file 0644 f764254dec2a16d13af201e368bd7438307651388c98d0b8f28f170196fb46a0
 + .liza/COLLABORATION_CONTINUITY.md file 0644 b0e072990ea3a6ab47e62480132acc31a8d65f9e8759c471da2f1d55c01584d0
-+ .liza/CORE.md file 0644 49b6ec46edd2184cae21080afc7d50638ac7cf497c5ff1a854e5a74879545a29
-+ .liza/MULTI_AGENT_MODE.md file 0644 21b938b72641142c1dcc5329af678c99fb5b905ddf6072956fc4591a31593306
-+ .liza/PAIRING_MODE.md file 0644 e5627d6d6ad9e9096979a923c60d71df424a58962a9d89ba955bcd3090aa889a
-+ .liza/SUBAGENT_MODE.md file 0644 e27a266cefa291807e1a298d2fa87dd3fc98c3e9e3c57941c7c0f18f7e65938f
++ .liza/CORE.md file 0644 7840068a71a94d99d5b49b3f629fe8dc1aa7784fbc9eadb8378f8bd1135be38b
++ .liza/MULTI_AGENT_MODE.md file 0644 3c31cf8ecf170f2a3d442e1065cde03f7b88eb2bdc56b2b77d0115e4a4110a26
++ .liza/PAIRING_MODE.md file 0644 809bcfb7dfd47c4c3177858037b2c404ba634c9827eed559004a282f23a808dc
++ .liza/SUBAGENT_MODE.md file 0644 bbeb573e0c18d3ea6f9753cd4664e2a337bc479dccd844d7a0c107b183fbdf00
 + .liza/pipeline.yaml file 0644 4fe3c7c5b49dc6815d885cfb3efeba57179f0599ded9388e4e87078b8aa328a9
 + .liza/skills directory 0755 -
 + .liza/skills/adr-backfill directory 0755 -
@@ -116,7 +116,7 @@
 + .liza/skills/context-engineering/scripts directory 0755 -
 + .liza/skills/context-engineering/scripts/context-corpus-index.py file 0644 e353464154dd945a0bd1d937158e15606ae18d97f5826b92ed02e81dcedfa7a1
 + .liza/skills/debugging directory 0755 -
-+ .liza/skills/debugging/SKILL.md file 0644 bf910cea95bb1847f099351030a33916b553b42cdfec26e3232c0c63abe44f1c
++ .liza/skills/debugging/SKILL.md file 0644 911afab778c27f18b4bc42b91e31fcc3507e1595867cd4389de696124d7c3ba0
 + .liza/skills/detailed-spec-writing directory 0755 -
 + .liza/skills/detailed-spec-writing/SKILL.md file 0644 c2172db9267aec879f9e34bee0c1901b2d7a499b0fae8c13b4b114d57be2ae63
 + .liza/skills/detailed-spec-writing/references directory 0755 -
@@ -205,5 +205,5 @@
 + .liza/support-docs/TOOLCHAIN.md file 0644 8a813563149821ecb9bf827c99ac881d60ea093f9db0064ca2b74e5f78edf161
 + .liza/support-docs/TROUBLESHOOTING.md file 0644 18dde8f9c93cfd31cba1cc111a1321088b5a25a7dfa33f6835b86813494218aa
 + .liza/support-docs/USAGE_MULTI_AGENTS.md file 0644 04df52f4c36e6f743c4b2a03f3b2eb0dcae91b8710c20bbeda2b7a6b5b1773d4
-+ .liza/support-docs/USAGE_PAIRING.md file 0644 9612aa8dd120da09e959c782fcd76232ed0b00c10f3406507375f42039f00673
++ .liza/support-docs/USAGE_PAIRING.md file 0644 059a84e0fa8fa3bf250f91b04c95016695067a0e9348cb5f394ab3c5bdccddc6
 + .liza/support-docs/how-to-produce-a-goal.md file 0644 cbf7af9df2c899d32aae195048d6ad38dade38d07cc104550f9c9a101a7c0645

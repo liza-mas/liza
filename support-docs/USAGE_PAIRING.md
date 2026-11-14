@@ -125,6 +125,7 @@ Task completion requires evidence, not claims:
 - Docs updated if behavior changed
 - Validation commands executed with output captured
 - The validation must exercise the *changed behavior* — running unrelated green tests doesn't count
+- A bug fix also says what made the bug possible, with a disposition you approve ([prevention record](../skills/shared/references/prevention-record.md))
 
 ### How to tell the contract is working
 
@@ -162,6 +163,7 @@ Hard Stop Triggers force the agent to halt and reassess when it detects:
 - Evidence contradicting its hypothesis
 - Execution diverging from the approved plan
 - Consecutive tool failures
+- A change on a concept fixed twice within 14 days goes through design first, unless you waive it
 
 These are binary, observable conditions — the agent doesn't need to know it's wrong, just that it's repeating itself or operating on shaky ground.
 

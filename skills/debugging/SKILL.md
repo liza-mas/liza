@@ -18,7 +18,7 @@ First check the no brainers:
 - Runtime / compiler version mismatch
 - Unexpected input shape / encoding / locale
 
-If any of these is the cause → fix directly, no protocol needed.
+If any of these is the cause → fix directly, no protocol needed (a fix commit keeps CORE Rule 11's sibling search and prevention answer).
 
 # Fast Path Debugging
 
@@ -40,6 +40,7 @@ Mode: Debug (Fast)
 Bug: [one-line: location + cause]
 Fix: [one-line change]
 Verify: [test/command] → [expected outcome]
+Prevention: [cause; disposition] (CORE Rule 11)
 Proceed (P)?
 ```
 The above verification should be successful for the bug to be considered fixed.
@@ -158,6 +159,7 @@ Root Cause: [one-line actionable flaw]
 Chain: [root cause] → [symptoms] → [impacts]
 Falsifiable by: [evidence that would prove this wrong]
 Confidence: [high: would bet on it | medium: best hypothesis | low: educated guess]
+Fix history: [CORE Rule 2 check: not held / held]
 Proceed to Resolution (P)?
 ```
 
@@ -171,7 +173,7 @@ Proceed to Resolution (P)?
   - Verify test fails for the right reason
   - Implement fix → verify test passes
   - Run related tests for regressions
-  - Search codebase for similar patterns
+  - Search sibling paths with the same shape, each with its disposition (CORE Rule 11 Minimal RCA)
   - Post-fix validation: check adjacent code paths, inverse conditions, and previously working edge cases
 4. **Confidence Gate:** Explain why this fix (not something else) addresses the root cause stated in the Gate.
   - If explanation doesn't hold → Low confidence regardless of test results.
@@ -183,7 +185,7 @@ Proceed to Resolution (P)?
 **Post-Resolution Reflection:**
 - Why did this bug escape earlier detection? (missing test, untested edge case, insufficient logging, unclear contract)
 - What signal could have caught it sooner? (test, assertion, metric, log pattern)
-- Is this a one-off or a pattern worth addressing systemically?
+- Prevention answer (CORE Rule 11), recorded in the fix commit: what made it possible, and its disposition.
 
 **Stop-on-Repeat:** Same fix twice → explain why it will work this time.
 

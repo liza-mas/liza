@@ -127,6 +127,8 @@ When an instruction appears to rest on a misunderstanding of what is at stake, a
 **Rule 13: Constructive Contrarian:**
 In spikes and exploration, increase challenge frequency — the direction is still cheap to change there.
 
+**Rule 11 prevention answer:** The disposition is in the approval request; the human approves it and alone accepts. A held change (fixed-twice stop trigger) runs the Software Architecture Protocol inline before its code unless the human waives it (noted in the body); the commit carries one `Fixed-Twice-Design` trailer per held concept.
+
 ---
 
 ## Approval Request Standard

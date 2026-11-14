@@ -121,6 +121,8 @@
 | REC-4 | Fixing symptom instead of root cause | Rule 11 (Root Cause Before Symptoms) | 463-473 |
 | REC-5 | Circular fixes (A breaks B, B breaks A) | Rule 11 (broken spec, not broken code) | 473 |
 | REC-6 | Silent scope creep during execution | Execution Fidelity Rule | 559 |
+| REC-7 | Fix stays at the instance | Rule 3 (bug-fix item), Rule 11 (prevention answer) | 248, 470-473 |
+| REC-8 | Concept fixed repeatedly without design | Rule 2 (fixed-twice check), Stop Triggers (fixed-twice stop trigger), Rule 6 (Refactoring Discipline) | 230, 157, 369 |
 
 ---
 
@@ -149,9 +151,9 @@
 | Hallucination | 4 | 4 | 0 | 0 |
 | Code Generation | 9 | 9 | 0 | 0 |
 | Instruction Following | 5 | 5 | 0 | 0 |
-| Process & Recovery | 6 | 6 | 0 | 0 |
+| Process & Recovery | 8 | 8 | 0 | 0 |
 | Gaming & Exploitation | 6 | 6 | 0 | 0 |
-| **Total** | **55** | **55** | **0** | **0** |
+| **Total** | **57** | **57** | **0** | **0** |
 
 ---
 

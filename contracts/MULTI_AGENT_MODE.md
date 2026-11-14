@@ -76,6 +76,8 @@ The following CORE.md rules have modified behavior in Multi-Agent Mode:
 | **Rule 4 FAST PATH** | Reduced checkpoint: intent + files only |
 | **Debugging Protocol** | Do NOT debug autonomously beyond quick hypothesis. Log anomaly → BLOCKED. Rationale: autonomous debugging risks cascading errors across agents. |
 | **Context degradation** | Auto-checkpoint to blackboard, self-terminate |
+| **Rule 11 prevention answer** | Never `accepted` (only the human accepts); where only the human could decide, record `scheduled` with owner `human`. `removed` and task-owned `scheduled` stand |
+| **Fixed-twice stop trigger** | The Rule 2 check rides `write-checkpoint`; a held change marks BLOCKED before code, `blocked_reason` starting `fixed-twice:` with one `<concept> <older SHA> <newer SHA>` entry per held concept. The orchestrator routes it to architect designs covering each; resumed, it follows them |
 
 ---
 

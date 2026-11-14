@@ -32,6 +32,7 @@ When brief contains `MODE: SUBAGENT READ-WRITE`:
 - **Intent Gate is mandatory** before each logical action (not each file) — state what changes and how to validate
 - All other behavioral adjustments still apply (no user interaction, scope boundary, compressed output)
 - Pre-commit on touched files before returning results
+- Bug fix: return the prevention answer to the caller, which records it; held change (fixed-twice stop trigger): stop before code and return it
 
 ---
 

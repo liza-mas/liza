@@ -154,6 +154,7 @@ These rules have no exceptions. Violation triggers mandatory halt — enter RESE
 | Tool fails 3× consecutively | STOP — Tool Failure Protocol |
 | Git state-modifying command without gate | BLOCKED |
 | Same rule violated twice in session | STOP — mandatory halt |
+| Rule 2 check holds a concept the change touches (fixed-twice stop trigger) | STOP — design before code unless the change comes from that design (mode annex) |
 
 ---
 
@@ -226,6 +227,8 @@ Test Impact: [none — existing tests cover | list of tests to write/update]
 ```
 "None" requires confidence that existing tests exercise the changed behavior. New behavior without tests requires justification.
 
+**Fixed-twice check** (every change, before its code): in the same shell call as its first pre-code command, run the concept query of `~/§BRAND_GLOBAL_DIRNAME§/skills/shared/references/prevention-record.md` (`SINCE=1970-01-01 UNTIL=now`) for every concept the change touches (files, `path#symbol`, earlier tokens, invariant IDs), then `git log --format='%H%x09%(trailers:key=Fixed-Twice-Design,valueonly,separator=%x2C)' | awk -F '\t' '$2 != ""'`. Per concept, its two newest fixes A, B: held when B is within 14 days after A, B is not marked `<concept> A`, and no commit is marked `<concept> B`. A held change goes through design before code unless it comes from a design covering it, and lands with one `Fixed-Twice-Design: <concept> <B full SHA>` trailer per held concept.
+
 **Spec & TODO Trigger:** When clarification reveals scope ambiguity:
 - Propose adding/updating spec in `specs/` before implementation
 - Await approval before proceeding (spec first, code second, doc third)
@@ -242,6 +245,7 @@ Task complete when ALL approved deliverables are implemented:
 - [ ] Validation must exercise the changed behavior. Running unrelated green tests does not count.
 - [ ] Validation commands executed with output captured
 - [ ] Understanding externalized (comprehension → docs/specs/comments)
+- [ ] Bug fix: the Rule 11 prevention answer is recorded
 
 **Self-Review Gate:** Before presenting work, re-read the diff as if seeing it for the first time. Run P0-P2 mentally (security, correctness, data integrity). Ask: "Would I approve this if someone else wrote it?" and "What will confuse the reader in 6 months?" If anything fails, fix before presenting.
 Every changed line must trace to the gate artifact, validation, doc impact, or cleanup caused by the current change.
@@ -362,7 +366,7 @@ Never simplify away trust-boundary validation, data-loss prevention, security co
 
 **File Creation:** Before creating new files or directories, check existing structure for naming and organization conventions. Match what's there.
 
-**Refactoring Discipline:** Opportunities may be raised but MUST be proposed as distinct tasks, never mixed with functional changes.
+**Refactoring Discipline:** Opportunities may be raised but MUST be proposed as distinct tasks, never mixed with functional changes; under the fixed-twice stop trigger, removing the shape is the design-routed change's own intent.
 Clean up only your own mess: remove imports, variables, functions, and files made unused by the current change; mention pre-existing dead code or unrelated cleanup instead of deleting it.
 One intent per commit.
 Prerequisite claims ('X requires Y first') must specify what fails without Y, not just what's cleaner with it.
@@ -463,8 +467,10 @@ When encountering problems, resist fixing visible issues first.
 - Symptom: manual cleanup, workarounds, fixing one occurrence
 - Root cause: system/code/process creating the problem
 
-**Protocol:** Set symptom aside → investigate root cause → fix root cause → clean up symptoms → propose countermeasures.
-**Minimal RCA:** For code bugs, inspect relevant callers and sibling paths before patching the reported path. Prefer one fix at the shared boundary over repeated guards in callers.
+**Protocol:** Set symptom aside → investigate root cause → fix root cause → clean up symptoms → prevention answer.
+**Minimal RCA:** For code bugs, inspect relevant callers and sibling paths (one shell search carrying the Rule 2 check) before patching the reported path. Prefer one fix at the shared boundary over repeated guards in callers.
+
+**Prevention answer** (every bug fix; recorded as `~/§BRAND_GLOBAL_DIRNAME§/skills/shared/references/prevention-record.md` defines): what made the bug possible at system level (missing owner, duplicate source of truth, unchecked assumption, unsafe default — not the defect restated), and one disposition.
 
 If fixing A breaks B and fixing B breaks A → broken spec, not broken code. Stop and surface the conflict.
 
