@@ -236,33 +236,53 @@ func TestRangeReadsRawLinesNotGitsParsedForm(t *testing.T) {
 }
 
 func TestRangeLeavesCommitsTheRebaseSkipsAndMergesOut(t *testing.T) {
-	r := newTempRepo(t)
-	git(t, r.dir, "", "checkout", "--quiet", "-b", "task")
-	// A record-less fix the integration branch also carries as the same change.
-	if err := os.WriteFile(filepath.Join(r.dir, "shared.txt"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	git(t, r.dir, "", "add", "shared.txt")
-	git(t, r.dir, "fix: shared change\n", "commit", "--quiet", "-F", "-")
-	git(t, r.dir, "", "checkout", "--quiet", "main")
-	git(t, r.dir, "", "cherry-pick", "task")
-	// A record-less fix only integration holds, merged into the task branch.
-	if err := os.WriteFile(filepath.Join(r.dir, "human.txt"), []byte("x\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	git(t, r.dir, "", "add", "human.txt")
-	git(t, r.dir, "fix: a human's change\n", "commit", "--quiet", "-F", "-")
-	integration := git(t, r.dir, "", "rev-parse", "HEAD")
-	git(t, r.dir, "", "checkout", "--quiet", "task")
-	git(t, r.dir, "", "merge", "--quiet", "--no-ff", "-m", "Merge main", "main")
-	head := git(t, r.dir, "", "rev-parse", "HEAD")
+	for _, merged := range []bool{true, false} {
+		t.Run(fmt.Sprintf("integration_merged=%t", merged), func(t *testing.T) {
+			r := newTempRepo(t)
+			git(t, r.dir, "", "checkout", "--quiet", "-b", "task")
+			// A record-less fix the integration branch also carries as the same change.
+			if err := os.WriteFile(filepath.Join(r.dir, "shared.txt"), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			git(t, r.dir, "", "add", "shared.txt")
+			// Distinct committer dates give the cherry-pick its own SHA: in the
+			// same second git rebuilds the identical commit, which integration
+			// then holds by reachability and the patch identity goes untested.
+			t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+			git(t, r.dir, "fix: shared change\n", "commit", "--quiet", "-F", "-")
+			git(t, r.dir, "", "checkout", "--quiet", "main")
+			t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:01Z")
+			git(t, r.dir, "", "cherry-pick", "task")
+			if git(t, r.dir, "", "rev-parse", "HEAD") == git(t, r.dir, "", "rev-parse", "task") {
+				t.Fatal("the cherry-pick rebuilt the task commit; the fixture proves nothing")
+			}
+			// A record-less fix only integration holds, merged into the task branch.
+			if err := os.WriteFile(filepath.Join(r.dir, "human.txt"), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			git(t, r.dir, "", "add", "human.txt")
+			git(t, r.dir, "fix: a human's change\n", "commit", "--quiet", "-F", "-")
+			integration := git(t, r.dir, "", "rev-parse", "HEAD")
+			git(t, r.dir, "", "checkout", "--quiet", "task")
+			// A record-less fix only the task holds stays checked.
+			if err := os.WriteFile(filepath.Join(r.dir, "task.txt"), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			git(t, r.dir, "", "add", "task.txt")
+			git(t, r.dir, "fix: task only\n", "commit", "--quiet", "-F", "-")
+			if merged {
+				git(t, r.dir, "", "merge", "--quiet", "--no-ff", "-m", "Merge main", "main")
+			}
+			head := git(t, r.dir, "", "rev-parse", "HEAD")
 
-	result, err := Check(r.dir, integration, head, r.base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Checked != 0 || len(result.Offenders) != 0 {
-		t.Errorf("result = %+v, want nothing published to check", result)
+			result, err := Check(r.dir, integration, head, r.base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Checked != 1 || len(result.Offenders) != 1 || result.Offenders[0].Subject != "fix: task only" {
+				t.Errorf("result = %+v, want only the task's own fix checked", result)
+			}
+		})
 	}
 }
 
