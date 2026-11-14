@@ -13,4 +13,5 @@
 + .liza/models.yaml file 0644 440117877a7136edd1e9c2ebeeecdc6298f622942fb04e042c9c0f3d51a1b409
 + .liza/pipeline.yaml file 0644 4fe3c7c5b49dc6815d885cfb3efeba57179f0599ded9388e4e87078b8aa328a9
 + .liza/state.yaml file 0644 state-golden
-+ GUARDRAILS.md file 0644 787372ed0dce7217f159ba84b16c3ff7d499145fc90a5893d715fa6ae6b1c9e0
++ GUARDRAILS.md file 0644 7d42ccb04411dfdbec6f0362d25145f365197e0e2a822dcf780826489d789957
++ INVARIANTS.md file 0644 97e6ed4bd8d4815e0d21343f9d52ef5aa8d3941dcf90daa92f88dba171b9f205

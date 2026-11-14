@@ -3,7 +3,14 @@
 Properties that must always hold true in the Liza system.
 Organized by domain. Each invariant notes what it protects against and where it's enforced.
 
-**Enforcement legend:** `contract` = behavioral contracts (`contracts/`), `spec` = specifications (`specs/`), `code` = Go source (`internal/`)
+**Enforcement legend:** `contract` = behavioral contracts (`contracts/`), `spec` = specifications (`specs/`), `code` = Go source (`internal/`), `unenforced` = no enforcement yet
+
+## Altitude rule
+
+An invariant states a property of the system and what it protects against, at the level of a
+principle. The bug-specific detail (the case, the input, the file) lives in its enforcement: a
+type, a lint, a test or a guard. Every invariant records how it is enforced; one with no
+enforcement yet says `unenforced` in its Enforced cell and stays listed, so the gap stays visible.
 
 ---
 

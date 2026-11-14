@@ -69,6 +69,17 @@ func (m *masInit) installProviderAssets() {
 		warnAssetFailure(m.params.Report, initAssetCheck, "init", "GUARDRAILS.md", err)
 	}
 
+	// Create the INVARIANTS.md skeleton when missing, then report a GUARDRAILS.md
+	// (user-owned, never edited) that does not point to it.
+	if _, err := embedded.CreateInvariants(root); err != nil {
+		warnAssetFailure(m.params.Report, initAssetCheck, "init", embedded.InvariantsFileName, err)
+	}
+	if pointer, err := embedded.CheckGuardrailsPointer(root); err != nil {
+		warnAssetFailure(m.params.Report, initAssetCheck, "init", "GUARDRAILS.md", err)
+	} else {
+		ReportGuardrailsPointer(m.params.Report, os.Stderr, pointer)
+	}
+
 	// Write .claudeignore template (non-fatal, prompts if exists)
 	if err := embedded.WriteClaudeIgnoreWithOptions(root, m.stdin, m.confirmOptions); err != nil {
 		warnAssetFailure(m.params.Report, initAssetCheck, "init", ".claudeignore", err)

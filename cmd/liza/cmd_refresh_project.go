@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/commands"
 	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/gitenv"
 	"github.com/liza-mas/liza/internal/jsonout"
@@ -34,14 +36,19 @@ When the project uses system-prompt mode, the files under
 %[3]s/system-prompts/ and the marker are rebuilt as use-system-prompt builds
 them.
 
+A prepared repository without an INVARIANTS.md gets the skeleton init writes;
+an existing INVARIANTS.md is never rewritten. A GUARDRAILS.md with no rule
+pointing to INVARIANTS.md is reported with the rule to add, never edited.
+
 Hook configs, settings, contract links and every other file are never written,
 so a hook script new in this release is installed but not registered until
 init runs again. In a directory init never prepared nothing is written. It is
 safe to run non-interactively after a release update.
 
 With --json, stdout carries one outcome envelope: an ok refresh.asset check per
-file written and a failed one per file left alone. Exit 4 when a file was left
-alone, 1 on a failure.`, brand.NameTitle, embedded.CopilotHooksFileName(), brand.RuntimeValues().ProjectDirName),
+file written, a failed one per file left alone and a manual
+guardrails.invariant-pointer check per GUARDRAILS.md lacking the pointer. Exit
+4 when a file was left alone or the pointer is missing, 1 on a failure.`, brand.NameTitle, embedded.CopilotHooksFileName(), brand.RuntimeValues().ProjectDirName),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runWithOutcome(cmd, "refresh-project", func(report *jsonout.Report) error {
@@ -85,8 +92,22 @@ func runRefreshProject(cmd *cobra.Command, report *jsonout.Report) error {
 		return nil
 	}
 
+	// INVARIANTS.md is created when missing and never rewritten; GUARDRAILS.md
+	// is never written, only checked for the pointer to it.
+	var pointer embedded.GuardrailsPointer
+	var created []string
+	if err == nil {
+		var made bool
+		if made, err = embedded.CreateInvariants(projectRoot); made {
+			created = append(created, filepath.Join(projectRoot, embedded.InvariantsFileName))
+		}
+	}
+	if err == nil {
+		pointer, err = embedded.CheckGuardrailsPointer(projectRoot)
+	}
+
 	// Listed on failure too: files written before it are not silently replaced.
-	refreshed := slices.Concat(hooks.Refreshed, bundles)
+	refreshed := slices.Concat(hooks.Refreshed, bundles, created)
 	if err == nil || len(refreshed) > 0 {
 		fmt.Fprintf(out, "refreshed %d release-owned project assets in %s\n", len(refreshed), projectRoot)
 		for _, path := range refreshed {
@@ -97,6 +118,7 @@ func runRefreshProject(cmd *cobra.Command, report *jsonout.Report) error {
 	if err != nil {
 		return refreshProjectError{err}
 	}
+	commands.ReportGuardrailsPointer(report, errOut, pointer)
 	return nil
 }
 

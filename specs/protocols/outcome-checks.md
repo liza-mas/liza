@@ -59,12 +59,12 @@ check, never a `warnings` string. Exit codes 2, 3 and 42 keep their meanings
 
 | Command | Checks |
 |---------|--------|
-| `init` (pairing and workspace) | `contract.placement` per contract provider; `init.asset` per asset it could not install (settings, hooks, policy, templates, bash-policy hooks) |
+| `init` (pairing and workspace) | `contract.placement` per contract provider; `init.asset` per asset it could not install (settings, hooks, policy, templates, bash-policy hooks); workspace init also `guardrails.invariant-pointer` (`manual`) when an existing `GUARDRAILS.md` has no rule naming `INVARIANTS.md`, its fix carrying the template's rule section |
 | `setup` | `setup.provider-link` per skill or extra link it could not create; `setup.global-file` per customizable file kept because the answer could not be read; `setup.asset` (pi init gate) |
 | `toolchain configure --project --agents` | The activation's `init` checks, under `result.checks` beside the configuration; exit 4 when degraded |
 | `toolchain doctor` | `toolchain.<tool-id>` per tool, all `warn`. Report-only: it keeps exit 0, because manual-only tools are never `ok` by design |
 | `doctor` | `doctor.*` and `toolchain.<tool-id>` checks of the end state `setup` and `init` leave ([Doctor](#doctor)); exit 0, 4 or 1 like `init` |
-| `refresh-project` | `refresh.asset` per release-owned project file: `ok` per file written, `failed` per hook script left alone (not a regular file) or hook config it cannot parse. In a repository `init` never prepared, no checks and exit 0. A hard failure's `error.message` names the path and the filesystem error |
+| `refresh-project` | `refresh.asset` per release-owned project file: `ok` per file written (a missing `INVARIANTS.md` is created, an existing one never written), `failed` per hook script left alone (not a regular file) or hook config it cannot parse; `guardrails.invariant-pointer` (`manual`) as for `init`. In a repository `init` never prepared, no checks and exit 0. A hard failure's `error.message` names the path and the filesystem error, `INVARIANTS.md` included |
 
 In-process callers read the same report through the optional `Report` field
 of the init and setup params.
@@ -115,7 +115,9 @@ set, and a prompt the user declined, both look installed or missing as they
 are. Doctor writes no file itself; the toolchain probes run the user's
 installed tools with `--version` and `--help`. A new `setup` or `init` step
 that installs something adds its check here in the same change, reading its
-path through the function the writer uses.
+path through the function the writer uses. User-owned templates `init` creates
+only when missing (`GUARDRAILS.md`, `INVARIANTS.md`) are not checked: the user
+may delete or move them.
 
 ## Changing the format
 

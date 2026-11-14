@@ -2,10 +2,12 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/liza-mas/liza/internal/brand"
+	"github.com/liza-mas/liza/internal/embedded"
 	"github.com/liza-mas/liza/internal/jsonout"
 )
 
@@ -17,7 +19,24 @@ var (
 	setupAssetCheck        = jsonout.CheckDefinition{ID: "setup.asset", Severity: jsonout.SeverityWarn}
 	setupProviderLinkCheck = jsonout.CheckDefinition{ID: "setup.provider-link", Severity: jsonout.SeverityWarn}
 	setupGlobalFileCheck   = jsonout.CheckDefinition{ID: "setup.global-file", Severity: jsonout.SeverityWarn}
+
+	// GuardrailsPointerCheck covers a user-owned GUARDRAILS.md that has no rule
+	// pointing to INVARIANTS.md; init and refresh-project report it, never fix it.
+	GuardrailsPointerCheck = jsonout.CheckDefinition{ID: "guardrails.invariant-pointer", Severity: jsonout.SeverityWarn}
 )
+
+// ReportGuardrailsPointer records the manual check for a GUARDRAILS.md that
+// lacks the invariant pointer, with the rule to add as its fix, and prints the
+// same message and text as a warning on warn. It does nothing otherwise.
+func ReportGuardrailsPointer(report *jsonout.Report, warn io.Writer, pointer embedded.GuardrailsPointer) {
+	if !pointer.Lacking {
+		return
+	}
+	message := fmt.Sprintf("%s has no rule pointing to %s", filepath.Base(pointer.Path), embedded.InvariantsFileName)
+	fix := fmt.Sprintf("add this rule to the Tier 1 section of %s:\n\n%s", filepath.Base(pointer.Path), pointer.Rule)
+	fmt.Fprintf(warn, "Warning: %s\n%s\n", message, fix)
+	report.Add(GuardrailsPointerCheck.Check(jsonout.CheckManual, "", pointer.Path, message, fix))
+}
 
 // reportProviderLinkSkip records a provider link setup could not create;
 // reason is empty when the link was created or the user declined.

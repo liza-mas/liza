@@ -33,7 +33,7 @@
 | [0029 — Agent Log Analysis Tools](0029-agent-log-analysis-tools.md) | Default-on agent output logging (`--no-log` to disable) with Python/HTML analysis tools for token waste and struggle detection. |
 | [0030 — Code-Enforced Agent Guardrails](0030-code-enforced-agent-guardrails.md) | Move role boundary, TDD, and checkpoint enforcement from prompts to Go code validation. |
 | [0031 — Configurable Post-Worktree Command](0031-configurable-post-worktree-command.md) | Replace hardcoded build setup with configurable `PostWorktreeCmd` for any stack. Failure handling superseded by ADR-0117. |
-| [0032 — Project-Specific Guardrails](0032-project-specific-guardrails.md) | GUARDRAILS.md at project root with Tier 0-3 constraints reusing CORE.md enforcement. |
+| [0032 — Project-Specific Guardrails](0032-project-specific-guardrails.md) | GUARDRAILS.md at project root with Tier 0-3 constraints reusing CORE.md enforcement. Amended 2026-11-14: default invariant home (INVARIANTS.md skeleton, guardrails pointer check). |
 | [0033 — Orchestrator Role Rename](0033-orchestrator-role-rename.md) | Rename "Planner" to "Orchestrator" to clarify coordination responsibilities. |
 | [0034 — Spec and Story Writing Skills](0034-spec-and-story-writing-skills.md) | Two reusable skills: detailed-spec-writing (SMARC + PRD) and user-story-writing (SMARC + anti-patterns). |
 | [0035 — Declarative Sub-Pipelines](0035-declarative-sub-pipelines.md) | YAML configuration for pipeline structure supporting arbitrary multi-phase workflows. |

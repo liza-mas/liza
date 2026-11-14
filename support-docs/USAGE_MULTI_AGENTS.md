@@ -39,6 +39,7 @@ initialization. For setup/configuration details, see
 
 <project>/
 ├── GUARDRAILS.md                  # Project-specific constraints (optional)
+├── INVARIANTS.md                  # Project invariants (created when missing)
 ├── §BRAND_PROJECT_DIRNAME§/
 │   ├── state.yaml                 # Current state
 │   ├── pipeline.yaml              # Frozen pipeline config (validated at init from --config)
@@ -57,9 +58,11 @@ initialization. For setup/configuration details, see
 - **Tier 2 (Strong Defaults)** — Best-effort under pressure
 - **Tier 3 (Preferences)** — Degraded gracefully
 
-**How it's created:** `§BRAND_BINARY_NAME§ init` writes a template with empty tier sections. You can also create it manually.
+**How it's created:** `§BRAND_BINARY_NAME§ init` writes a template with empty tier sections and a Tier 1 `Invariant compliance` rule whose trigger list you fill in. You can also create it manually.
 
 **How to use it:** Fill in the tier sections with project-specific rules. Agents read and enforce `GUARDRAILS.md` automatically during their initialization sequence. If the file doesn't exist, agents are governed by the core contract only.
+
+**Invariants:** `INVARIANTS.md` is the project's home for its invariants: an altitude rule, an `Invariant | Protects against | Enforced` table and a Protection Matrix. `§BRAND_BINARY_NAME§ init` and `§BRAND_BINARY_NAME§ refresh-project` create the skeleton when it is missing and never touch an existing one. Agents read it when the `Invariant compliance` rule's trigger fires, not at initialization. An existing `GUARDRAILS.md` is yours and is never rewritten: when it has no rule naming `INVARIANTS.md`, both commands report a `guardrails.invariant-pointer` check carrying the rule to add and exit 4 until you add it (once, after upgrading an existing project).
 
 ### Quick Start (Target Usage)
 
@@ -172,6 +175,7 @@ cat §BRAND_PROJECT_DIRNAME§/state.yaml
   Codex, OpenCode, Gemini, and Qwen prefer their documented global instruction
   paths; Cursor, Kimi, and Devin use repo-root files
 - `GUARDRAILS.md` — Project-specific constraints template (if not already present)
+- `INVARIANTS.md` — Invariants skeleton (if not already present)
 - `.bash-policy.yaml` and standalone provider hooks when
   `§BRAND_ENV_PREFIX§_ENABLE_BASH_POLICY=1` is set before init, the
   `bash-policy` CLI is installed, and hook setup succeeds

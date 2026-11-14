@@ -3,9 +3,13 @@ package embedded
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/liza-mas/liza/internal/brand"
 	"github.com/liza-mas/liza/internal/paths"
@@ -103,6 +107,91 @@ func WriteGuardrails(projectRoot string) error {
 		return fmt.Errorf("failed to write GUARDRAILS.md: %w", err)
 	}
 	return nil
+}
+
+//go:embed "invariants-template.md"
+var invariantsTemplateContent []byte
+
+// InvariantsFileName is the project-root file holding a project's invariants.
+const InvariantsFileName = "INVARIANTS.md"
+
+const invariantRuleHeading = "### Invariant compliance"
+
+// CreateInvariants creates INVARIANTS.md in the project root from the
+// embedded skeleton, reporting whether it did. It only ever creates: a path
+// that already exists, of any kind, is user-owned and left untouched.
+func CreateInvariants(projectRoot string) (bool, error) {
+	path := filepath.Join(projectRoot, InvariantsFileName)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if errors.Is(err, fs.ErrExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to create %s: %w", path, err)
+	}
+	_, err = file.Write(renderEmbeddedAsset(invariantsTemplateContent))
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return false, fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return true, nil
+}
+
+// GuardrailsPointer describes an existing GUARDRAILS.md that lacks a rule
+// pointing to INVARIANTS.md.
+type GuardrailsPointer struct {
+	// Lacking is true when GUARDRAILS.md exists and never names INVARIANTS.md.
+	Lacking bool
+	// Path is the GUARDRAILS.md path checked.
+	Path string
+	// Rule is the template's invariant-compliance rule section, the text to add.
+	Rule string
+}
+
+// CheckGuardrailsPointer reports whether the project's GUARDRAILS.md lacks a
+// pointer to INVARIANTS.md. Any text naming the file counts as a pointer, so
+// the wording is the user's. An absent GUARDRAILS.md has nothing to point
+// from and is not lacking. It never writes.
+func CheckGuardrailsPointer(projectRoot string) (GuardrailsPointer, error) {
+	path := filepath.Join(projectRoot, "GUARDRAILS.md")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return GuardrailsPointer{Path: path}, nil
+	}
+	if err != nil {
+		return GuardrailsPointer{}, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+	if bytes.Contains(data, []byte(InvariantsFileName)) {
+		return GuardrailsPointer{Path: path}, nil
+	}
+	rule, err := invariantComplianceRule()
+	if err != nil {
+		return GuardrailsPointer{}, err
+	}
+	return GuardrailsPointer{Lacking: true, Path: path, Rule: rule}, nil
+}
+
+// invariantComplianceRule returns the rendered guardrails template's
+// invariant-compliance section: its heading up to the next heading.
+func invariantComplianceRule() (string, error) {
+	lines := strings.Split(string(renderEmbeddedAsset(guardrailsTemplateContent)), "\n")
+	for i, line := range lines {
+		if strings.TrimRight(line, " \t\r") != invariantRuleHeading {
+			continue
+		}
+		end := len(lines)
+		for j := i + 1; j < len(lines); j++ {
+			if strings.HasPrefix(lines[j], "#") {
+				end = j
+				break
+			}
+		}
+		return strings.TrimSpace(strings.Join(lines[i:end], "\n")), nil
+	}
+	return "", fmt.Errorf("embedded guardrails template has no %q section", invariantRuleHeading)
 }
 
 // WriteClaudeIgnore writes the embedded .claudeignore template to the project root.

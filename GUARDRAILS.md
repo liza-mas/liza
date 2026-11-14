@@ -30,6 +30,8 @@ Liza is a **stack-agnostic** multi-agent orchestrator. Projects using Liza may b
 
 When a change touches system state, concurrency, review flow, agent lifecycle, or integration — check the [Protection Matrix](INVARIANTS.md#cross-reference-protection-matrix) in `INVARIANTS.md` to determine whether the change's blast radius intersects a listed threat category. If it does, check the relevant invariant section.
 
+New and amended invariants follow the [Altitude rule](INVARIANTS.md#altitude-rule).
+
 **Tier-aware response to violations:**
 - **Tier 0 invariants** (§1): Non-overridable. Halt per CORE.md — do not ask for confirmation.
 - **Tier 1 invariants** (§2): Require explicit waiver with rationale before proceeding.

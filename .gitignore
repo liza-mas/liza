@@ -35,6 +35,7 @@ internal/embedded/*
 !internal/embedded/*.go
 !internal/embedded/console.sh
 !internal/embedded/guardrails-template.md
+!internal/embedded/invariants-template.md
 !internal/embedded/pipeline.yaml
 !internal/embedded/support.md
 !internal/embedded/bash-policy.yaml

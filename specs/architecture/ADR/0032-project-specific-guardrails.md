@@ -56,5 +56,29 @@ Constraints need enforcement mechanisms, not just documentation. By reusing the 
 - Enforcement relies on agents reading the file (prompt-based, not code-enforced)
 - Currently only one rule (G1.1) — mechanism is proven but lightly used
 
+## Amendment — 2026-11-14: default invariant home
+
+Every initialized project gets a home for its invariants, so the altitude rule and
+the recurring review have somewhere to land outside this repository.
+
+- `init` and `refresh-project` create `INVARIANTS.md` from an embedded skeleton
+  (`internal/embedded/invariants-template.md`) when it is missing: a title and
+  purpose line, the `## Altitude rule` section, a `## Invariants` section holding
+  the ID sentence and a header-only `Invariant | Protects against | Enforced`
+  table, and a `## Protection Matrix` with a header-only table. They never touch
+  an existing `INVARIANTS.md`, whatever it is (file, symlink or directory):
+  creation is exclusive.
+- The guardrails template carries a Tier 1 `### Invariant compliance` rule with a
+  trigger list the project fills in (an unnumbered heading, because the template
+  cannot know the project's rule numbering; stack-agnostic).
+- An existing `GUARDRAILS.md` stays user-owned and is never rewritten. When it
+  lacks any text naming `INVARIANTS.md`, `init` and `refresh-project` report the
+  `guardrails.invariant-pointer` check (`manual`) whose fix carries the template's
+  rule section, so the command exits degraded (4) until the user adds it.
+- `INVARIANTS.md` is read when a rule's trigger fires, never at initialization: no
+  initialization-gate surface names it.
+- Pairing `init` is unchanged; `refresh-project` creates the skeleton in any
+  prepared repository.
+
 ---
 *Reconstructed from commits a29de97, 0a53d76 (2026-03-01 to 2026-03-05)*

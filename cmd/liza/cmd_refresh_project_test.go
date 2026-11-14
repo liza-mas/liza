@@ -43,22 +43,49 @@ func (f *degradedFixture) in(dir string) *degradedFixture {
 	return &c
 }
 
-// refreshChecks returns result.checks of a refresh-project envelope by path.
+// refreshChecks returns the refresh.asset checks of a refresh-project
+// envelope by path. The guardrails.invariant-pointer check is the only other
+// ID refresh-project reports; invariantPointerChecks returns those.
 func refreshChecks(t *testing.T, env map[string]any) map[string]map[string]any {
+	t.Helper()
+	checks := map[string]map[string]any{}
+	for _, check := range envelopeChecks(t, env) {
+		switch check["id"] {
+		case "refresh.asset":
+			path, _ := check["path"].(string)
+			checks[path] = check
+		case "guardrails.invariant-pointer":
+		default:
+			t.Fatalf("unexpected check %v", check)
+		}
+	}
+	return checks
+}
+
+// invariantPointerChecks returns the guardrails.invariant-pointer checks of a
+// refresh-project envelope.
+func invariantPointerChecks(t *testing.T, env map[string]any) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, check := range envelopeChecks(t, env) {
+		if check["id"] == "guardrails.invariant-pointer" {
+			out = append(out, check)
+		}
+	}
+	return out
+}
+
+func envelopeChecks(t *testing.T, env map[string]any) []map[string]any {
 	t.Helper()
 	result, _ := env["result"].(map[string]any)
 	raw, ok := result["checks"].([]any)
 	if !ok {
 		t.Fatalf("envelope has no result.checks list: %v", env)
 	}
-	checks := map[string]map[string]any{}
+	checks := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
 		check, _ := item.(map[string]any)
-		if check["id"] != "refresh.asset" {
-			t.Fatalf("unexpected check %v", check)
-		}
-		path, _ := check["path"].(string)
-		checks[path] = check
+		checks = append(checks, check)
 	}
 	return checks
 }
@@ -141,7 +168,7 @@ func TestRefreshProjectJSONReportsKeptAndRefreshedFiles(t *testing.T) {
 	if readFixtureFile(t, staleGuard) != initGuard {
 		t.Error("git-guard.sh differs from what init wrote")
 	}
-	written := []string{staleGuard, filepath.Join(f.repo, paths.ProjectDirName(), "system-prompt-mode.json")}
+	written := []string{staleGuard, filepath.Join(f.repo, paths.ProjectDirName(), "system-prompt-mode.json"), filepath.Join(f.repo, "INVARIANTS.md")}
 	for _, mode := range []string{"multi_agent", "pairing", "subagent"} {
 		bundle := filepath.Join(f.repo, paths.ProjectDirName(), "system-prompts", mode+".md")
 		written = append(written, bundle)
@@ -156,6 +183,10 @@ func TestRefreshProjectJSONReportsKeptAndRefreshedFiles(t *testing.T) {
 	}
 	if len(checks) != len(links)+len(written) {
 		t.Errorf("got %d checks, want %d: %v", len(checks), len(links)+len(written), checks)
+	}
+	// AND the fixture's GUARDRAILS.md, which does not name INVARIANTS.md, yields one pointer check
+	if pointers := invariantPointerChecks(t, env); len(pointers) != 1 || pointers[0]["status"] != "manual" {
+		t.Errorf("pointer checks = %v, want exactly one manual check", pointers)
 	}
 }
 
@@ -174,8 +205,9 @@ func TestRefreshProjectHumanModeNamesWrittenAndKeptFiles(t *testing.T) {
 	if code != exitDegraded {
 		t.Fatalf("exit = %d, want %d\nstderr:\n%s", code, exitDegraded, stderr)
 	}
-	if !strings.Contains(stdout, "refreshed 1 release-owned project assets in ") || !strings.Contains(stdout, "  "+stale+"\n") {
-		t.Errorf("stdout does not list %s:\n%s", stale, stdout)
+	invariants := filepath.Join(f.repo, "INVARIANTS.md")
+	if !strings.Contains(stdout, "refreshed 2 release-owned project assets in ") || !strings.Contains(stdout, "  "+stale+"\n") || !strings.Contains(stdout, "  "+invariants+"\n") {
+		t.Errorf("stdout does not list %s and %s:\n%s", stale, invariants, stdout)
 	}
 	if !strings.Contains(stderr, "Warning: left "+link+" alone") || !strings.Contains(stderr, "refresh-project completed with 1 degraded check") {
 		t.Errorf("stderr lacks the warning or the degraded summary:\n%s", stderr)
@@ -275,8 +307,12 @@ func TestRefreshProjectRefreshesTheLinkedWorktreeItRunsIn(t *testing.T) {
 		t.Error("refreshing the worktree wrote the main checkout")
 	}
 	checks := refreshChecks(t, decodeSingleEnvelope(t, stdout))
-	if len(checks) != 1 || checks[worktreeGuard] == nil {
-		t.Fatalf("checks = %v, want one for %s", checks, worktreeGuard)
+	worktreeInvariants := filepath.Join(worktree, "INVARIANTS.md")
+	if len(checks) != 2 || checks[worktreeGuard] == nil || checks[worktreeInvariants] == nil {
+		t.Fatalf("checks = %v, want one for %s and one for %s", checks, worktreeGuard, worktreeInvariants)
+	}
+	if _, err := os.Lstat(filepath.Join(f.repo, "INVARIANTS.md")); !os.IsNotExist(err) {
+		t.Errorf("refreshing the worktree created INVARIANTS.md in the main checkout (stat err = %v)", err)
 	}
 }
 
