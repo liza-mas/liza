@@ -55,18 +55,58 @@ func TestGenerateSprintSummary_WithAnomalies(t *testing.T) {
 	}
 }
 
-func TestGenerateSprintSummary_Overdue(t *testing.T) {
+// TestGenerateSprintSummary_Deadline checks optional deadlines and elapsed time.
+func TestGenerateSprintSummary_Deadline(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now().UTC()
-	state := testhelpers.CreateValidState()
-	state.Sprint.Timeline.Started = now.Add(-10 * time.Hour)
-	state.Sprint.Timeline.Deadline = now.Add(-2 * time.Hour) // Overdue
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		deadline time.Time
+		want     string
+	}{
+		{
+			name: "unset",
+			want: "- **Started:** 2026-11-14T10:00:00Z\n" +
+				"- **Elapsed:** 2h 0m\n\n## Task Status\n",
+		},
+		{
+			name:     "future",
+			deadline: time.Date(2026, 11, 14, 14, 0, 0, 0, time.UTC),
+			want: "- **Started:** 2026-11-14T10:00:00Z\n" +
+				"- **Deadline:** 2026-11-14T14:00:00Z\n" +
+				"- **Elapsed:** 2h 0m\n" +
+				"- **Remaining:** 2h 0m\n\n## Task Status\n",
+		},
+		{
+			name:     "past",
+			deadline: time.Date(2026, 11, 14, 11, 0, 0, 0, time.UTC),
+			want: "- **Started:** 2026-11-14T10:00:00Z\n" +
+				"- **Deadline:** 2026-11-14T11:00:00Z\n" +
+				"- **Elapsed:** 2h 0m\n" +
+				"- **Overdue by:** 1h 0m\n\n## Task Status\n",
+		},
+		{
+			name:     "now",
+			deadline: now,
+			want: "- **Started:** 2026-11-14T10:00:00Z\n" +
+				"- **Deadline:** 2026-11-14T12:00:00Z\n" +
+				"- **Elapsed:** 2h 0m\n" +
+				"- **Overdue by:** 0m\n\n## Task Status\n",
+		},
+	}
 
-	report := generateSprintSummary(state, now)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := testhelpers.CreateValidState()
+			state.Sprint.Timeline.Started = time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+			state.Sprint.Timeline.Deadline = tt.deadline
 
-	if !strings.Contains(report, "Overdue") {
-		t.Error("Report should contain 'Overdue' for past deadlines")
+			report := generateSprintSummary(state, now)
+			if !strings.Contains(report, tt.want) {
+				t.Errorf("summary missing expected timeline:\n%s\nreport:\n%s", tt.want, report)
+			}
+		})
 	}
 }
 

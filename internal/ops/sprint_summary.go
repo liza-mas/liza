@@ -36,16 +36,20 @@ func sprintStatusSection(sprint *models.Sprint, timestamp time.Time) string {
 	s += fmt.Sprintf("- **Sprint ID:** %s\n", sprint.ID)
 	s += fmt.Sprintf("- **Status:** %s → %s\n", sprint.Status, models.SprintStatusCheckpoint)
 	s += fmt.Sprintf("- **Started:** %s\n", sprint.Timeline.Started.Format(time.RFC3339))
-	s += fmt.Sprintf("- **Deadline:** %s\n", sprint.Timeline.Deadline.Format(time.RFC3339))
+	if !sprint.Timeline.Deadline.IsZero() {
+		s += fmt.Sprintf("- **Deadline:** %s\n", sprint.Timeline.Deadline.Format(time.RFC3339))
+	}
 
 	elapsed := timestamp.Sub(sprint.Timeline.Started)
 	s += fmt.Sprintf("- **Elapsed:** %s\n", formatDuration(elapsed))
 
-	remaining := sprint.Timeline.Deadline.Sub(timestamp)
-	if remaining > 0 {
-		s += fmt.Sprintf("- **Remaining:** %s\n", formatDuration(remaining))
-	} else {
-		s += fmt.Sprintf("- **Overdue by:** %s\n", formatDuration(-remaining))
+	if !sprint.Timeline.Deadline.IsZero() {
+		remaining := sprint.Timeline.Deadline.Sub(timestamp)
+		if remaining > 0 {
+			s += fmt.Sprintf("- **Remaining:** %s\n", formatDuration(remaining))
+		} else {
+			s += fmt.Sprintf("- **Overdue by:** %s\n", formatDuration(-remaining))
+		}
 	}
 
 	s += "\n"
