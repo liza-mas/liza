@@ -98,7 +98,7 @@
       "role": "code-reviewer",
       "rendered_bytes": 24465,
       "base_prompt_bytes": 9116,
-      "mandatory_read_bytes": 77678,
+      "mandatory_read_bytes": 77337,
       "reads": [
         "skills/code-review/SKILL.md",
         "skills/shared/references/prevention-record.md",
@@ -171,7 +171,7 @@
       "role": "integration-analyst",
       "rendered_bytes": 25959,
       "base_prompt_bytes": 9134,
-      "mandatory_read_bytes": 52857,
+      "mandatory_read_bytes": 52516,
       "reads": [
         "skills/clean-code/SKILL.md",
         "skills/code-review/SKILL.md",
