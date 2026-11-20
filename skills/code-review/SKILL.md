@@ -15,24 +15,26 @@ Format* is shared; *Answering Findings* is author-side.
 Before reviewing, establish context:
 - **Scope:** Default to staged files (`git diff --cached --name-only`, then `git diff --cached --stat`, then targeted path diffs). For PRs or commits, inspect changed files and stats before reading targeted hunks. Only broaden if explicitly asked.
 - **Local working tree:** For local reviews, triage unstaged and untracked files before review. If related but not staged, surface this explicitly and include only if the review target is "pending changes"; if unrelated, ignore; if unclear, ask before including.
-- **Initial scope:** Before reading the diff, record in one line what the change set out to do and the objective it serves (goal entry, parent task, ticket) — intent is what it does, objective is why. Take them from the author's stated intent when supplied (Pairing: Change Summary; multi-agent: task description and done-when; PRs: description and linked ticket), derive them only when they are not, and clarify with the author when unclear. This is the anchor for every later round: it bounds which *behavior* is required, not which code is inspected. Every submitted line is still reviewed for P0-P2 defects. Work beyond the initial scope is scope creep, not thoroughness — review it, then flag it `[overreach]`.
+- **Altitude:** Before the initial scope, place the change at the altitude of what it decides, not what it is made of: *local* (an implementation inside a component), *component* (an interface, contract, boundary or ownership between components), *system* (a model, a product capability, a direction others will build on). File type does not decide it: a Markdown proposal that reframes a capability is system altitude; a three-line auth fix is local altitude with a high blast radius. Place it from the stated intent and stat, then re-place it after the first diff read, re-anchoring if it rises. Altitude sets three things. The objective anchor is the governing document the change answers to (system altitude: the system model, product spec or decision record the change sits in); at component or system altitude the author's framing is under review, not the anchor. Where none exists yet (a first proposal founding a capability), anchor on the best available objective, record the missing source under Absence, and cap confidence. The context read before any finding is those governing documents, not only the diff. Approach alternatives are named at the same altitude: another framing, beneficiary or owner, not a variant of the same plan. Distinct from the Altitude rule some invariant files carry, which governs how general an invariant is stated.
+- **Initial scope:** Before reading the diff, record in one line what the change set out to do and the objective it serves (goal entry, parent task, ticket) — intent is what it does, objective is why. Take them from the author's stated intent when supplied (Pairing: Change Summary; multi-agent: task description and done-when; PRs: description and linked ticket), derive them only when they are not, and clarify with the author when unclear. Above local altitude, also record where the governing document's objective differs from the author's. This is the anchor for every later round: it bounds which *behavior* is required, not which code is inspected. Every submitted line is still reviewed for P0-P2 defects. Work beyond the initial scope is scope creep, not thoroughness — review it, then flag it `[overreach]`.
 - **Timing:** Is now the right time for this functionality? Half-baked or premature additions warrant a `[question]`.
-- **Approach:** Round 1 only. Is the approach sound, not merely correct — would another team take this shape, and was the first workable rung of CORE's Minimality Ladder taken? Raise an alternative only when it is named and its benefit demonstrable (`have-you-considered`); "I'd have done it differently" is not a finding. `[question]` when exploratory, `[concern]` when materially cheaper and still cheap to switch. After round 1 the approach is settled — reopening it is relitigation.
+- **Approach:** Round 1 only. Is the approach sound, not merely correct — would another team take this shape, and was the first workable rung of CORE's Minimality Ladder taken? Raise an alternative only when it is named and its benefit demonstrable (`have-you-considered`); "I'd have done it differently" is not a finding. `[question]` when exploratory, `[concern]` when materially cheaper and still cheap to switch. After round 1 the approach is settled — reopening it is relitigation, unless a human corrects the altitude (see *Re-Review Protocol*).
 - **Absence:** Review what should be here and is not. Take the baseline from the author's declarations (Pairing: Change Summary success criteria, doc impact, test impact; multi-agent: done-when) and check each against the diff. Diff-first reading optimizes for what is present; absence has to be sought deliberately. Where no declarations exist, say so — it caps confidence. Declared limits — out of scope, accepted risks, withheld paths — are evidence, not closure: assess what each leaves unmet of the objective (user-facing: dead ends, what grows with use; technical: the architectural target).
-- **Diff-first:** Read bounded diff context before source files. Prefer name-only/stat first, then targeted path or hunk diffs. Only read source when a finding needs surrounding context. Never pre-read the entire codebase.
+- **Diff-first:** Read bounded diff context before source files. Prefer name-only/stat first, then targeted path or hunk diffs. Only read source when a finding needs surrounding context. Never pre-read the entire codebase. Above local altitude, governing documents come first (see Altitude).
 - **Sources:** State what you have read before drawing conclusions, per CORE Rule 5, and extend it as you read. The summary line reports this list; it does not create it. A conclusion reached before its source was read is not grounded by reading that source afterwards.
 - **Size:** Beyond 800 lines, 20 files, 80K chars total, or 20K chars in one file — large diffs hide bugs. Consider suggesting a split (PR) or incremental commits (pending); avoid unbounded full-diff reads, classify files and inspect targeted paths or hunks, and verify critical findings against source before tagging `[blocker]` or `[concern]`.
 - **Reviewer limits:** If reviewing outside your expertise, say so. Make assumptions explicit.
 
 # Review Modes
 
-**Sanity** skims the diff for obvious issues — trivial changes, config, docs.
+**Sanity** skims the diff for obvious issues — trivial changes, config, docs that decide nothing (wording, runbook steps).
 **Standard** is the default: full change set via targeted diffs, P0-P3, spot-checked tests.
 **Deep** adds source context, all priorities, and data-flow tracing — security-sensitive
-work, core architecture, unfamiliar domains. Escalate to Deep if the review surfaces
+work, core architecture, unfamiliar domains, any change at system altitude. Escalate to Deep if the review surfaces
 unexpected complexity.
 
-Announce mode and scope: `"Reviewing [scope] in [mode] because [reason]. Adjust?"`
+Announce altitude, mode and scope: `"Reviewing [scope] at [altitude] in [mode] because [reason]. Adjust?"`
+In Pairing, wait for the answer when altitude is component or system or its placement is uncertain, unless the person asking for the review names the governing document (the PR or the author's framing does not count): it is the cheapest point to correct altitude, and an instruction about publishing the result does not waive it. Otherwise, and whenever a coordinating skill runs the review without a human in the loop (`adversarial-pairing`), announce and proceed.
 
 # Review Hierarchy
 
@@ -50,6 +52,8 @@ Review in this order. Stop and flag blockers immediately.
 
 **Attention budget:** P0-P2 (70%) catch most production incidents. P3-P4 (20%).
 P5-P6 (10%) only when egregious.
+
+At component or system altitude the priorities keep their order and add to their content: P1 adds fit with the governing intent and the support for its load-bearing claims; P2 adds the ownership and boundaries it moves; P3 adds its consequences for neighbouring components. Checking the facts it cites belongs to P1; it is not the whole review. A cited contradiction with a governing document, or a consequence nobody owns, is evidence under *Severity requires evidence*.
 
 # Review Checklist
 
@@ -264,7 +268,7 @@ reviewer, and review notes found on disk are evidence, not its own rounds.
 3. Check the change set against the initial scope — file count alone is a signal, not a verdict.
 4. Report the ledger: `Round N — remaining X→Y, files A→B`.
 
-Do not escalate methodology to match a prior reviewer. Review mode cannot exceed the original mode unless the change itself introduced new complexity or risk.
+Do not escalate methodology to match a prior reviewer. Review mode cannot exceed the original mode unless the change itself introduced new complexity or risk, or a human corrects the altitude, which reopens round 1, approach included.
 
 **Corrective commit review:**
 
@@ -289,7 +293,7 @@ Stop when no `[blocker]`, `[overreach]`, or blocking `[vestigial]` remains, `[co
 
 **Divergence:** files growing while remaining findings do not fall is non-convergence. Stop, restate the original finding set, escalate to the author or human.
 
-**Blast-radius proportionality:** depth scales with blast radius, not with prior review depth. Dev tooling, scripts, config and docs get at most one Standard review plus a focused verification pass. Production behavior without schema, auth or public API impact gets Standard plus focused re-reviews until blockers close. Auth, security, data integrity, migrations, public API and production runtime may have a Deep review, and later rounds still reconcile rather than re-derive.
+**Blast-radius proportionality:** depth scales with blast radius, not with prior review depth. Dev tooling, scripts, config and docs that record or explain get at most one Standard review plus a focused verification pass. A document that decides direction (proposal, goal, model, ADR) scales with what it decides: at system altitude it may have a Deep review, because its errors are the cheapest to fix and the most expensive to inherit. Production behavior without schema, auth or public API impact gets Standard plus focused re-reviews until blockers close. Auth, security, data integrity, migrations, public API and production runtime may have a Deep review, and later rounds still reconcile rather than re-derive.
 
 Matching or exceeding a prior review's rigor to appear credible — rather than because the change warrants it — is a methodological arms race, and it is how loops stop converging. Prefer a smaller, evidence-focused re-review over a broader, more impressive one.
 
@@ -323,6 +327,7 @@ The format is the content:
 **Compact** (Approve/Comment, zero blockers/concerns, ≤3 suggestions, approach sound, high confidence — size is not a criterion):
 ```
 Review: [mode] — Approve
+Altitude: [local | component | system] — anchored on [governing document | author's intent (local) | none: objective used]
 Net value: [one sentence: benefit obtained, complexity retained, versus not merging — gap to objective: what remains, or none]
 ```
 
@@ -335,11 +340,12 @@ Concerns: [count or "None"]
 Suggestions: [count or "None"]   ← None/None/None is a complete review
 
 Overall: [1-2 sentence assessment]
+Altitude: [local | component | system] — anchored on [governing document | author's intent (local) | none: objective used]
 Approach: [round 1 — sound, or the named alternative and its benefit]
 Absence: [baseline used — nothing missing, or what is]
 Sweep: [from round 3 or a mid-review design change — vestigial or disproportionate, or neither]
 Net value: [as submitted — one line] / [with findings resolved — one line] — gap to objective: [what remains | none, checked against what]
-Blast Radius: [Low: internal refactor | Medium: logic change | High: migration/public API]
+Blast Radius: [Low: internal refactor | Medium: logic change | High: migration/public API, or reframes a model, product boundary or ownership]
 Confidence: [high: thorough | medium: focused on key areas | low: quick pass]
 Sources: [what was read — diff, source files, specs, ADRs and decision records, validation output]
 Next step: [e.g., "Merge after minor suggestions" | "Ready for another look"]

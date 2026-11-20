@@ -42,7 +42,7 @@
 + .liza/skills/code-quality-assessment/references directory 0755 -
 + .liza/skills/code-quality-assessment/references/report-format.md file 0644 c72dd282fbcac5a21f2b07d7a32380e1c67d2cd53b9fbf8e059c181c05f460d2
 + .liza/skills/code-review directory 0755 -
-+ .liza/skills/code-review/SKILL.md file 0644 9137d1e187722032512e87f298e8686cb88e7e00ecb505c2475dcecbca58fd84
++ .liza/skills/code-review/SKILL.md file 0644 45d0df8507efd9d807a42d224769f3715ce566287be12da36e322ad9aa70f041
 + .liza/skills/code-spec-backfill directory 0755 -
 + .liza/skills/code-spec-backfill/SKILL.md file 0644 2edc68d6d2c9513013208a788bef0608d31854fd22b1bf55cef25758240ab9a9
 + .liza/skills/code-spec-backfill/references directory 0755 -
