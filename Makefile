@@ -1,4 +1,4 @@
-.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-core-nosync ci-test-compat-ops-nosync ci-test-compat-oracle-nosync ci-test-compat-cli-nosync ci-test-slow-race-nosync test test-nosync test-par test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen release package build-all tidy run coverage help
+.PHONY: build build-nosync ci-prepare ci-test-nosync ci-test-go-nosync ci-test-core-nosync ci-test-ops-nosync ci-test-oracle-nosync ci-test-integration-nosync ci-test-cli-nosync ci-test-compat-core-nosync ci-test-compat-ops-nosync ci-test-compat-oracle-nosync ci-test-compat-cli-nosync ci-test-slow-race-nosync test test-nosync test-par test-units-nosync test-units-race-nosync test-integration-nosync test-fast test-race test-race-nosync test-e2e test-e2e-nosync test-python-nosync clean install lint lint-nosync lint-archguard vet check-testhelpers check-embedded oracle-check oracle-regen rolebudget-check release package build-all tidy run coverage help
 
 # Windows shell selection. This must come before the first $(shell ...) below:
 # every $(shell) and recipe runs under whatever SHELL is in effect when make
@@ -133,6 +133,11 @@ oracle-check: sync-embedded
 oracle-regen: sync-embedded
 	@env -i HOME="$$HOME" PATH="$$PATH" TMPDIR=/tmp ORACLE_WRITE=1 go test -count=1 $(ORACLE_ASSET_PKGS)
 	@git diff --stat -- internal/oracle
+
+# Check the per-role context budget against its committed baseline
+rolebudget-check: sync-embedded
+	@env -i HOME="$$HOME" PATH="$$PATH" TMPDIR=/tmp go test -count=1 -run 'TestRoleBudget$$' ./internal/prompts/rolebudget/ || \
+		{ echo "Role budget exceeded: trim, or regenerate deliberately with ROLEBUDGET_UPDATE=1 as a scoped decision." >&2; exit 1; }
 
 # Build the binaries
 build: sync-embedded
@@ -437,6 +442,7 @@ help:
 	@echo "  check-embedded     - Verify embedded copies match repo masters"
 	@echo "  oracle-check       - Check oracle goldens for embedded assets, prompts and CLI help"
 	@echo "  oracle-regen       - Regenerate those goldens for review (ORACLE_WRITE=1)"
+	@echo "  rolebudget-check   - Check per-role context budget against its baseline"
 	@echo "  tidy               - Tidy dependencies"
 	@echo "  run                - Build and run the $(BINARY_NAME) binary"
 	@echo "  build-all          - Build $(BINARY_NAME) for multiple platforms"
