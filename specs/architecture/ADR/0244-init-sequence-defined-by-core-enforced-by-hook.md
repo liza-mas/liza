@@ -94,6 +94,15 @@ CORE read only duplicated the system prompt.
 - Step 1 avoids the word "initialization", which the non-default-brand scanners
   flag as a substring match on the default brand name.
 
+## Amendment — 2026-11-21: `$project_dir` is the session checkout
+
+In a MAS session `CLAUDE_PROJECT_DIR` names the parent checkout while the
+agent works in its task worktree. `enforce-init.sh` now resolves `$project_dir`
+as `session-context.sh` does: the git top level of the event `cwd` when an agent
+ID is set. The gate lists and accepts the worktree's GUARDRAILS.md, the copy the
+startup context names; the parent's copy no longer clears it (issue #216). The
+CORE link probe uses the same root, replacing its separate `probe_root`.
+
 ## Related Decisions
 
 - [ADR-0111](0111-capability-aware-global-first-contract-activation.md) —

@@ -810,6 +810,59 @@ func TestEnforceInitHook_ListsPresentGuardrailsInMissingList(t *testing.T) {
 	}
 }
 
+// A MAS session runs in its task worktree while CLAUDE_PROJECT_DIR may still
+// name the parent checkout. The startup context names the worktree's
+// GUARDRAILS.md, so the gate lists and accepts that copy, not the parent's.
+func TestEnforceInitHook_MASSessionReadsGuardrailsFromTaskWorktree(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		t.Run(map[bool]string{false: "bash", true: "native"}[native], func(t *testing.T) {
+			hookPath := writeEnforceInitHook(t)
+			parent := t.TempDir()
+			worktree := t.TempDir()
+			if out, err := exec.Command("git", "init", "-q", worktree).CombinedOutput(); err != nil {
+				t.Fatalf("git init: %v\n%s", err, out)
+			}
+			worktree = gitToplevel(t, worktree)
+			for _, root := range []string{parent, worktree} {
+				if err := os.WriteFile(filepath.Join(root, "GUARDRAILS.md"), []byte("# guardrails\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			sessionID := "mas-worktree-guardrails-" + strings.ReplaceAll(t.Name(), "/", "-") + "-" + time.Now().Format("150405.000000000")
+			stateDir := filepath.Join(os.TempDir(), brand.BinaryName+"-init-gate-"+sessionID)
+			t.Cleanup(func() { os.RemoveAll(stateDir) })
+			env := []string{brand.EnvName("AGENT_ID") + "=coder-1", "CLAUDE_PROJECT_DIR=" + parent}
+			gate := func(payload string, wantCode int) string {
+				return runHookEnv(t, hookPath, payload, env, wantCode)
+			}
+			read := func(path string, wantCode int) {
+				payload := bashPayload(t, sessionID, worktree, "cat "+path)
+				if native {
+					payload = readToolPayload(t, sessionID, worktree, path)
+				}
+				gate(payload, wantCode)
+			}
+			read("~/"+paths.GlobalDirName()+"/AGENT_TOOLS.md", 0)
+			read("~/"+paths.GlobalDirName()+"/MULTI_AGENT_MODE.md", 0)
+
+			parentGuardrails := filepath.ToSlash(parent) + "/GUARDRAILS.md"
+			worktreeGuardrails := worktree + "/GUARDRAILS.md"
+			blocked := gate(bashPayload(t, sessionID, worktree, "git status"), 2)
+			if !strings.Contains(blocked, "  - "+worktreeGuardrails+"\n") || strings.Contains(blocked, parentGuardrails) {
+				t.Fatalf("block should list the worktree's GUARDRAILS.md only, got:\n%s", blocked)
+			}
+
+			// A Bash read the gate does not accept is rejected; a native Read
+			// passes through without counting.
+			read(parentGuardrails, map[bool]int{false: 2, true: 0}[native])
+			gate(bashPayload(t, sessionID, worktree, "git status"), 2)
+
+			read(worktreeGuardrails, 0)
+			gate(bashPayload(t, sessionID, worktree, "git status"), 0)
+		})
+	}
+}
+
 func TestEnforceInitHook_BlocksComplexCodexBashDocReads(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash not available")

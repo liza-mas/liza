@@ -131,26 +131,6 @@ if is_windows_shell; then
   fi
 fi
 
-project_dir="${CLAUDE_PROJECT_DIR:-}"
-if [[ -z "$project_dir" ]]; then
-  if [[ -n "$cwd" ]]; then
-    project_dir=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$cwd")
-  else
-    project_dir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-  fi
-fi
-
-# CLAUDE_PROJECT_DIR is set by the runtime and holds a native path, so it skips
-# the canonicalisation applied to cwd above. The required-document patterns are
-# built from project_dir and matched against reads that have been canonicalised,
-# so leaving it native means an absolute read of GUARDRAILS.md never matches and
-# the gate stays armed after every document has been read. The derived branches
-# above are already forward-slashed — git reports them that way, and cwd was
-# rewritten — which is why only the environment path was exposed.
-if is_windows_shell; then
-  project_dir="${project_dir//\\//}"
-fi
-
 # Fallback: $PPID is the Claude Code process PID (POSIX — the parent that forked this shell).
 # Stable for the session lifetime since all hook invocations share the same parent process.
 state_root="${TMPDIR:-/tmp}"
@@ -167,6 +147,31 @@ fi
 # Fast path: gate already cleared.
 if [[ -f "$STATE_DIR/CLEARED" ]]; then
   exit 0
+fi
+
+# Resolved after the fast path: a cleared session never pays for the git lookup.
+project_dir="${CLAUDE_PROJECT_DIR:-}"
+# MAS sessions run in the task worktree while CLAUDE_PROJECT_DIR may still name
+# the parent checkout. Resolve as session-context.sh does, so the gate accepts
+# and lists the documents the startup context names, and probes that checkout.
+brand_agent_id_var="LIZA""_AGENT_ID"
+if [[ -n "${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}" || -z "$project_dir" ]]; then
+  if [[ -n "$cwd" ]]; then
+    project_dir=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$cwd")
+  else
+    project_dir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  fi
+fi
+
+# CLAUDE_PROJECT_DIR is set by the runtime and holds a native path, so it skips
+# the canonicalisation applied to cwd above. The required-document patterns are
+# built from project_dir and matched against reads that have been canonicalised,
+# so leaving it native means an absolute read of GUARDRAILS.md never matches and
+# the gate stays armed after every document has been read. The derived branches
+# above are already forward-slashed — git reports them that way, and cwd was
+# rewritten — which is why only the environment path was exposed.
+if is_windows_shell; then
+  project_dir="${project_dir//\\//}"
 fi
 
 # The hooks are installed once per CLI; the directory names the one running.
@@ -187,21 +192,9 @@ core_link_loaded() {
   local provider probe
   provider=$(hook_provider)
   [[ -z "$provider" ]] && return 0
-  probe=$(liza contract-active --provider "$provider" --project-root "$probe_root" 2>/dev/null) || return 1
+  probe=$(liza contract-active --provider "$provider" --project-root "$project_dir" 2>/dev/null) || return 1
   [[ "$probe" == "active "* ]]
 }
-
-# The probe resolves the checkout as session-context.sh does: a MAS session
-# runs in its task worktree while CLAUDE_PROJECT_DIR may still name the parent.
-probe_root="$project_dir"
-brand_agent_id_var="LIZA""_AGENT_ID"
-if [[ -n "${!brand_agent_id_var:-${LIZA_AGENT_ID:-}}" ]]; then
-  if [[ -n "$cwd" ]]; then
-    probe_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$cwd")
-  else
-    probe_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-  fi
-fi
 
 # One probe per session, whatever its outcome. A subagent always reads CORE.md:
 # Explore, Plan and custom agents with omitClaudeMd load no CLAUDE.md, and a
